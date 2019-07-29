@@ -7,4 +7,5 @@ members = [
     "sgwallet",
     "channel",
     "switch",
+    "common/logger",
 ]

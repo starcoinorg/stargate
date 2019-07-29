@@ -1,7 +1,7 @@
 [package]
-name = "common"
+name = "failure_macros"
 version = "0.1.0"
-authors = ["fanngyuan@gmail.com"]
+authors = ["Libra Association <opensource@libra.org>"]
 license = "Apache-2.0"
 publish = false
 edition = "2018"
