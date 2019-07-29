@@ -8,5 +8,6 @@ members = [
     "channel",
     "switch",
     "common/logger",
+    "common/crypto",
     "node",
 ]
