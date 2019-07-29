@@ -5,4 +5,6 @@ members = [
     "chain",
     "network",
     "sgwallet",
+    "channel",
+    "switch",
 ]
