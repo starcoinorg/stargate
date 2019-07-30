@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 use crate::error::Error;
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::io::{AsyncRead, AsyncWrite};
-use std::marker::{Unpin, Sized};
+use std::marker::{Unpin};
 use futures::stream::Stream;
 
 pub struct NetConfig {
@@ -24,5 +24,5 @@ pub trait Network {
     fn stop() -> Result<(), Error>;
     fn join(forward: bool, peer_id: String) -> Result<(), Error>;
     fn connect<T>(addr: SocketAddr) -> Result<T, Error> where T: TTcpSteam;
-    fn listen<T>() -> Result<Box<dyn Stream<Item=T>>, Error> where T: TTcpSteam;
+    fn listen<S,T>() -> Result<S , Error> where T: TTcpSteam,S: Stream<Item=T>,Self:Sized;
 }
