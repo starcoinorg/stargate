@@ -1,3 +1,3 @@
-struct SgChannel {
+pub struct SgChannel {
     
 }
