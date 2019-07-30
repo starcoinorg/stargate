@@ -1,4 +1,4 @@
 [submodule "libra"]
 	path = libra
-	url = git@github.com:archnotes/libra.git
-	branch = starcoin
+	url = git@github.com:libra/libra.git
+	branch = master
