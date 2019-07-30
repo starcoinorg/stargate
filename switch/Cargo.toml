@@ -7,3 +7,4 @@ publish = false
 edition = "2018"
 
 [dependencies]
+failure = { package = "channel", path = "../channel" }
