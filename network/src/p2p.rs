@@ -29,6 +29,6 @@ pub trait Network {
     fn start(net_cfg: NetConfig) -> Result<(), Error>;
     fn stop() -> Result<(), Error>;
     fn join(forward: bool, peer_id: String) -> Result<(), Error>;
-    fn connect<T>(addr: SocketAddr) -> Result<Box<dyn Future<Output=T>>, Error> where T: TTcpSteam;
+    fn connect<T, F>(addr: SocketAddr) -> Result<F, Error > where T: TTcpSteam, F: Future < Output = T >;
     fn listen<S, T>() -> Result<S, Error> where T: TTcpSteam, S: Stream<Item=T>;
 }
