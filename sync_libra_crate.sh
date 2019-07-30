@@ -2,7 +2,7 @@
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-declare -a libra_crates=("common/build_helpers" "common/canonical_serialization" "common/failure_ext" "common/grpc_helpers" "common/grpcio-client" "common/grpcio-extras" "common/logger" "common/proptest_helpers" "common/proto_conv" "crypto/legacy_crypto" "crypto/nextgen_crypto")
+declare -a libra_crates=("types/src/proof" "common/build_helpers" "common/canonical_serialization" "common/failure_ext" "common/grpc_helpers" "common/grpcio-client" "common/grpcio-extras" "common/logger" "common/proptest_helpers" "common/proto_conv" "crypto/legacy_crypto" "crypto/nextgen_crypto" "storage/accumulator")
 
 echo "Update git submodule"
 git submodule init
