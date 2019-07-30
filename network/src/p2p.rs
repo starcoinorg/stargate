@@ -1,6 +1,6 @@
 use std::{
     net::SocketAddr,
-    marker::{Unpin, Sized},
+    marker::Unpin,
 };
 
 use futures::{
@@ -29,7 +29,6 @@ pub trait Network {
     fn start(net_cfg: NetConfig) -> Result<(), Error>;
     fn stop() -> Result<(), Error>;
     fn join(forward: bool, peer_id: String) -> Result<(), Error>;
-    fn connect<T>(addr: SocketAddr) -> Result<T, Error> where T: TTcpSteam;
-    fn listen<S,T>() -> Result<S , Error> where T: TTcpSteam,S: Stream<Item=T>,Self:Sized;
-
+    fn connect<T>(addr: SocketAddr) -> Result<Box<dyn Future<Output=T>>, Error> where T: TTcpSteam;
+    fn listen<S, T>() -> Result<S, Error> where T: TTcpSteam, S: Stream<Item=T>;
 }
