@@ -1,6 +1,14 @@
 [workspace]
 
 members = [
+    "common/logger",
+    "common/canonical_serialization",
+    "common/failure_ext",
+    "common/grpcio-client",
+    "common/proptest_helpers",
+    "common/proto_conv",
+    "crypto/legacy_crypto",
+    "crypto/nextgen_crypto",
     "stargate_types",
     "routing",
     "chain",
@@ -8,7 +16,5 @@ members = [
     "sgwallet",
     "channel",
     "switch",
-    "common/logger",
-    "common/crypto",
     "node",
 ]

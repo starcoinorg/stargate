@@ -7,4 +7,4 @@ publish = false
 edition = "2018"
 
 [dependencies]
-crypto = { package = "crypto", path = "../common/crypto" }
+crypto = { package = "crypto", path = "../crypto/legacy_crypto" }

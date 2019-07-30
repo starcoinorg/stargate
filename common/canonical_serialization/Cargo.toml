@@ -1,5 +1,5 @@
 [package]
-name = "crypto"
+name = "canonical_serialization"
 version = "0.1.0"
 authors = ["Libra Association <opensource@libra.org>"]
 license = "Apache-2.0"
@@ -7,4 +7,9 @@ publish = false
 edition = "2018"
 
 [dependencies]
-failure = { package = "failure_ext", path = "../failure_ext" }
+byteorder = "1.3.2"
+
+failure = { path = "../failure_ext", package = "failure_ext" }
+
+[dev-dependencies]
+hex = "0.3"

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crypto::hash::Hash;
+use crypto::hash::HashValue;
 
 type Vertex=[u8; 33];
 
@@ -21,6 +21,6 @@ struct SgNode {
 
 struct SgEdge{
     channel_id:String,
-    chain_hash:Hash,
+    chain_hash:HashValue,
     nodes:[SgNode;2],
 }
