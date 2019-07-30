@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+    "types",
     "routing",
     "chain",
     "network",
