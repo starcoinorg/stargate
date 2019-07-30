@@ -24,8 +24,6 @@ pub mod validator_verifier;
 pub mod vm_error;
 pub mod write_set;
 
-pub mod offchain_transaction;
-
 pub use account_address::AccountAddress as PeerId;
 
 #[cfg(test)]
