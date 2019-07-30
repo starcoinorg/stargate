@@ -1,6 +1,5 @@
 use std::{
     net::SocketAddr,
-    marker::Unpin,
 };
 
 use futures::{
@@ -25,7 +24,7 @@ pub struct TSocket {
 }
 
 
-pub trait TTcpSteam: AsyncWrite + AsyncRead + Unpin {}
+pub trait TTcpSteam: AsyncWrite + AsyncRead {}
 
 pub trait Network<T, S, F>
     where T: TTcpSteam, F: Future<Output=T>, S: Stream<Item=T>
@@ -37,7 +36,7 @@ pub trait Network<T, S, F>
     fn listen() -> Result<S, Error>;
 }
 
-pub fn new_network<'a, T, F, S, N>(net_cfg: NetConfig) -> N
+pub fn new_network<T, F, S, N>(net_cfg: NetConfig) -> N
     where T: TTcpSteam, F: Future<Output=T>, S: Stream<Item=T>, N: Network<T, S, F>
 {
     unimplemented!()
