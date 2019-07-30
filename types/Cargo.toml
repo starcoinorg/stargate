@@ -1,5 +1,5 @@
 [package]
-name = "starget_types"
+name = "types"
 version = "0.1.0"
 authors = ["jolestar <jolestar@gmail.com>"]
 edition = "2018"
