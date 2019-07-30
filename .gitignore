@@ -3,3 +3,9 @@
 .idea
 *.iml
 Cargo.lock
+
+# Ignore generated files in proto folders
+**/proto/*.rs
+!**/proto/mod.rs
+**/proto/*/*.rs
+!**/proto/*/mod.rs

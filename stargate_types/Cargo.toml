@@ -30,3 +30,14 @@ crypto = { path = "../crypto/legacy_crypto" }
 nextgen_crypto = { path = "../crypto/nextgen_crypto" }
 proptest_helpers = { path = "../common/proptest_helpers" }
 proto_conv = { path = "../common/proto_conv", features = ["derive"] }
+
+[build-dependencies]
+build_helpers = { path = "../common/build_helpers" }
+
+[dev-dependencies.nextgen_crypto]
+features = ["testing"]
+path = "../crypto/nextgen_crypto"
+
+[features]
+default = []
+testing = ["nextgen_crypto/testing"]
