@@ -1,3 +1,4 @@
+pub mod account_address;
 pub mod offchain_transaction;
 
 #[cfg(test)]
