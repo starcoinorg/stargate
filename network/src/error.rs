@@ -4,7 +4,6 @@ use std::fmt::Formatter;
 #[derive(Debug)]
 pub enum Error {
     NetworkError,
-
 }
 
 impl fmt::Display for Error {
