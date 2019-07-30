@@ -1,3 +1,4 @@
+#![feature(async_await)]
 mod message;
 mod peer;
 mod error;
