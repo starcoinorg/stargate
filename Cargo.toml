@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-    "types",
+    "stargate_types",
     "routing",
     "chain",
     "network",
