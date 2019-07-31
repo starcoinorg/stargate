@@ -1,4 +1,5 @@
 pub mod offchain_transaction;
+pub mod channel;
 
 #[cfg(test)]
 mod tests {

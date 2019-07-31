@@ -7,5 +7,5 @@ publish = false
 edition = "2018"
 
 [dependencies]
-types = { package = "types", path = "../types" }
+star_types = { package = "star_types", path = "../star_types" }
 network = { package = "network", path = "../network"}
