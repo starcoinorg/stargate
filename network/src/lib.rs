@@ -1,10 +1,10 @@
 #![feature(async_await)]
 
 #[cfg(test)]
-mod message;
-mod peer;
-mod error;
-mod mem_stream;
+pub mod message;
+pub mod peer;
+pub mod error;
+pub mod mem_stream;
 pub mod p2p;
 
 
