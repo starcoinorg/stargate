@@ -7,5 +7,5 @@ publish = false
 edition = "2018"
 
 [dependencies]
-channel = { package = "channel", path = "../channel" }
+types = { package = "types", path = "../types" }
 network = { package = "network", path = "../network"}

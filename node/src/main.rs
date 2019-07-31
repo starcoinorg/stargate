@@ -17,4 +17,5 @@ fn main(){
         MemNetwork,
     >(cfg);
     
+    
 }

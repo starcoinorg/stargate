@@ -23,6 +23,7 @@ pub mod validator_signer;
 pub mod validator_verifier;
 pub mod vm_error;
 pub mod write_set;
+pub mod channel;
 
 pub use account_address::AccountAddress as PeerId;
 
