@@ -15,6 +15,7 @@ mod tests {
     use futures::{Stream, Future,future};
 
     #[test]
+    #[should_panic(expected = "not yet implemente")]
     fn test_new_network() {
         let cfg = NetConfig {
             bootstrap: vec![],
