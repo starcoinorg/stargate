@@ -1,5 +1,5 @@
 use network::p2p::TTcpSteam;
-use star_types::channel::channel::SgChannel;
+use star_types::channel::SgChannel;
 
 pub struct ChannelLink <T:TTcpSteam>{
     id:String,

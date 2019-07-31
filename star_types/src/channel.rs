@@ -5,9 +5,7 @@ use std::pin::Pin;
 
 pub struct SgChannel {}
 
-pub struct SgChannelStream {
-    sg_chan: SgChannel,
-}
+pub struct SgChannelStream;
 
 impl Stream for SgChannelStream {
     type Item = SgChannel;
