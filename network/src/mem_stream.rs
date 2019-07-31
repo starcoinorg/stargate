@@ -16,6 +16,17 @@ pub struct MemTcpStream {}
 
 pub struct MemNetwork {}
 
+pub struct MemListener {}
+
+impl Stream for MemListener {
+    type Item = MemTcpStream;
+    fn poll_next(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>>{
+        unimplemented!()
+    }
+}
 
 impl AsyncWrite for MemTcpStream {
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize>> {
