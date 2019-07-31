@@ -1,6 +1,5 @@
 use std::{pin::Pin, result, net::SocketAddr};
 use futures::{
-    channel::mpsc::{UnboundedReceiver, UnboundedSender},
     io::{AsyncRead, AsyncWrite, Result},
     stream::Stream,
     Future,

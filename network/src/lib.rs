@@ -10,9 +10,9 @@ pub mod p2p;
 
 mod tests {
     use crate::p2p::{new_network, NetConfig};
-    use crate::mem_stream::{MemTcpStream, MemNetwork,MemListener};
+    use crate::mem_stream::{MemTcpStream, MemNetwork, MemListener};
     use std::net::SocketAddr;
-    use futures::{Stream, Future,future};
+    use futures::{Stream, Future, future};
 
     #[test]
     #[should_panic(expected = "not yet implemente")]
@@ -28,6 +28,5 @@ mod tests {
             MemListener,
             MemNetwork,
         >(cfg);
-        
     }
 }
