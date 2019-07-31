@@ -9,3 +9,5 @@ edition = "2018"
 [dependencies]
 failure = { path = "../failure_ext", package = "failure_ext" }
 crypto = { path = "../../crypto/legacy_crypto" }
+sparse_merkle = {path = "../../storage/sparse_merkle"}
+types = { path = "../../types"}

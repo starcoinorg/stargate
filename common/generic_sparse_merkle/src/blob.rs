@@ -4,6 +4,7 @@ use crypto::{
     hash::{AccountStateBlobHasher, CryptoHash, CryptoHasher},
     HashValue,
 };
+use types::account_state_blob::AccountStateBlob;
 use failure::prelude::*;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -18,14 +19,26 @@ impl AsRef<[u8]> for Blob {
 }
 
 impl From<Blob> for Vec<u8> {
-    fn from(account_state_blob: Blob) -> Vec<u8> {
-        account_state_blob.blob
+    fn from(blob: Blob) -> Vec<u8> {
+        blob.blob
     }
 }
 
 impl From<Vec<u8>> for Blob {
     fn from(blob: Vec<u8>) -> Blob {
         Blob { blob }
+    }
+}
+
+impl From<AccountStateBlob> for Blob {
+    fn from(account_state_blob: AccountStateBlob) -> Self {
+        Blob { blob: account_state_blob.into() }
+    }
+}
+
+impl Into<AccountStateBlob> for Blob {
+    fn into(self) -> AccountStateBlob {
+        AccountStateBlob::from(self.blob)
     }
 }
 
@@ -41,7 +54,7 @@ impl CryptoHash for Blob {
 }
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
 
     #[test]
