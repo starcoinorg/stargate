@@ -4,7 +4,7 @@ use futures::{Stream, task::{Context, Poll}};
 use std::pin::Pin;
 use types::account_address::AccountAddress;
 
-pub struct SgChannel {
+pub struct SgChannelInfo {
     pk_first:AccountAddress,
     pk_second:AccountAddress,
     //Capacity 
@@ -13,7 +13,7 @@ pub struct SgChannel {
 pub struct SgChannelStream;
 
 impl Stream for SgChannelStream {
-    type Item = SgChannel;
+    type Item = SgChannelInfo;
 
     fn poll_next(
         self: Pin<&mut Self>,
