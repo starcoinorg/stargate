@@ -11,6 +11,8 @@ grpcio = "0.4.4"
 proto_conv = { path = "../common/proto_conv", features = ["derive"] }
 protobuf = "2.7"
 grpc_helpers = { path = "../common/grpc_helpers" }
+types = { path = "../types" }
+futures = "0.1.28"
 
 [build-dependencies]
 build_helpers = { path = "../common/build_helpers" }
