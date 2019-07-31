@@ -7,3 +7,10 @@ publish = false
 edition = "2018"
 
 [dependencies]
+grpcio = "0.4.4"
+proto_conv = { path = "../common/proto_conv", features = ["derive"] }
+protobuf = "2.7"
+grpc_helpers = { path = "../common/grpc_helpers" }
+
+[build-dependencies]
+build_helpers = { path = "../common/build_helpers" }

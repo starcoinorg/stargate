@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package chain;
+
+import "transaction.proto";
+import "events.proto";
+
+service Chain {
+    rpc WatchTransaction (WatchTransactionRequest) returns (stream WatchTransactionResponse);
+}
+
+message WatchTransactionRequest {
+    bytes address = 1;
+    uint64 start_tx = 2;
+}
+
+message WatchTransactionResponse {
+    types.SignedTransaction signed_txn = 1;
+    repeated types.Event events = 2;
+}
