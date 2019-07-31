@@ -12,7 +12,7 @@ mod tests {
     use crate::p2p::{new_network, NetConfig};
     use crate::mem_stream::{MemTcpStream, MemNetwork};
     use std::net::SocketAddr;
-    use futures::{Stream, Future};
+    use futures::{Stream, Future,future};
 
     #[test]
     fn test_new_network() {
@@ -23,8 +23,8 @@ mod tests {
         };
         let network = new_network::<
             MemTcpStream,
-            Future<Output=MemTcpStream>,
-            Strem<Item=MemTcpStream>,
+            future::Ready<MemTcpStream>,
+            Stream<Item=MemTcpStream>,
             MemNetwork,
         >(cfg);
         
