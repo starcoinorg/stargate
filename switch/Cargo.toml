@@ -9,3 +9,4 @@ edition = "2018"
 [dependencies]
 star_types = { package = "star_types", path = "../star_types" }
 network = { package = "network", path = "../network"}
+types = { package = "types", path = "../types"}
