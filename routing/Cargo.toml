@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 crypto = { package = "crypto", path = "../crypto/legacy_crypto" }
+star_types = { package = "star_types", path = "../star_types" }

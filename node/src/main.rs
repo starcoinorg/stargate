@@ -3,7 +3,6 @@ use network::mem_stream::{MemTcpStream, MemNetwork,MemListener};
 use std::net::SocketAddr;
 use futures::{Stream, Future,future};
 
-
 fn main(){
     let cfg = NetConfig {
         bootstrap: vec![],

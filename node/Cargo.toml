@@ -10,3 +10,6 @@ edition = "2018"
 network = { package = "network", path = "../network"}
 switch = { package = "switch",path="../switch"}
 futures = { version = "0.3.0-alpha.16", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }
+lazy_static = "1.2.0"
+
+logger = { path = "../common/logger" }
