@@ -31,6 +31,7 @@ struct Args {
 fn main(){
     let args = Args::from_args();
     if args.start_client {
+        
     }else {
         let (tx, rx) = std::sync::mpsc::channel();
         ctrlc::set_handler(move || {
