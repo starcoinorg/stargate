@@ -9,3 +9,9 @@ Cargo.lock
 !**/proto/mod.rs
 **/proto/*/*.rs
 !**/proto/*/mod.rs
+
+# Generated Parser File by LALRPOP
+language/compiler/ir_to_bytecode/syntax/src/syntax.rs
+# Older locations for this file.
+language/compiler/ir_to_bytecode/src/parser/syntax.rs
+language/move_ir/
