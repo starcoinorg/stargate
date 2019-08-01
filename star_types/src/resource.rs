@@ -9,6 +9,10 @@ use vm_runtime_types::{loaded_data::struct_def::StructDef, value::MutVal};
 use vm_runtime_types::loaded_data::types::Type;
 use vm_runtime_types::value::Value;
 
+#[derive(
+Clone,
+Debug,
+)]
 pub struct Resource {
     tag: StructTag,
     def: StructDef,
