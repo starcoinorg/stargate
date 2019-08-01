@@ -6,7 +6,9 @@ use crate::proto::chain::{FaucetRequest, FaucetResponse,
                           WatchTransactionRequest, WatchTransactionResponse,
                           SubmitTransactionRequest, SubmitTransactionResponse,
                           StateByAccessPathResponse};
-use types::proto::access_path::AccessPath;
+use types::proto::{access_path::AccessPath};
+use types::transaction::SignedTransaction;
+use proto_conv::{FromProto};
 
 #[derive(Clone)]
 pub struct ChainService;
@@ -14,6 +16,10 @@ pub struct ChainService;
 impl ChainService {
     pub fn new() -> Self {
         ChainService {}
+    }
+
+    pub fn submit_transaction_inner(&self, sign_tx: SignedTransaction) {
+        unimplemented!()
     }
 }
 
@@ -33,7 +39,7 @@ impl Chain for ChainService {
     fn submit_transaction(&mut self, ctx: ::grpcio::RpcContext,
                           req: SubmitTransactionRequest,
                           sink: ::grpcio::UnarySink<SubmitTransactionResponse>) {
-        unimplemented!()
+        self.submit_transaction_inner(SignedTransaction::from_proto(req.signed_txn.unwrap()).unwrap());
     }
 
     fn watch_transaction(&mut self, ctx: ::grpcio::RpcContext,

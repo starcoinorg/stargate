@@ -7,7 +7,6 @@ import "events.proto";
 import "access_path.proto";
 import "star_account.proto";
 import "proof.proto";
-import "google/protobuf/empty.proto";
 
 service Chain {
     rpc Faucet(FaucetRequest) returns (FaucetResponse);

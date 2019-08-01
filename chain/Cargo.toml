@@ -14,6 +14,9 @@ grpc_helpers = { path = "../common/grpc_helpers" }
 types = { path = "../types" }
 futures = "0.1.28"
 star_types = { path = "../star_types" }
+crypto = { path = "../crypto/legacy_crypto" }
+accumulator = { path = "../storage/accumulator" }
+sparse_merkle = { path = "../storage/sparse_merkle" }
 
 [build-dependencies]
 build_helpers = { path = "../common/build_helpers" }
