@@ -13,6 +13,7 @@ protobuf = "2.7"
 grpc_helpers = { path = "../common/grpc_helpers" }
 types = { path = "../types" }
 futures = "0.1.28"
+star_types = { path = "../star_types" }
 
 [build-dependencies]
 build_helpers = { path = "../common/build_helpers" }

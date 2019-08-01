@@ -1,4 +1,7 @@
-use types::proto::{transaction, events};
+extern crate star_types;
+
+use types::proto::{transaction, events, access_path, proof};
+use star_types::proto::star_account;
 use futures::*;
 
 pub mod chain;

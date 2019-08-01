@@ -8,12 +8,10 @@
 
 fn main() {
     let proto_root = "src/proto";
-    let dependent_types = "../types/src/proto";
-    let dependent_star_types = "../star_types/src/proto";
 
     build_helpers::build_helpers::compile_proto(
         proto_root,
-        vec![dependent_types, dependent_star_types], /* dependent roots */
+        vec![], /* dependent roots */
         false,  /* generate_client_stub */
     );
 }

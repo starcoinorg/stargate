@@ -9,3 +9,8 @@ edition = "2018"
 [dependencies]
 futures = { version = "0.3.0-alpha.16", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }
 types = { package = "types", path = "../types"}
+proto_conv = { path = "../common/proto_conv", features = ["derive"] }
+protobuf = "2.7"
+
+[build-dependencies]
+build_helpers = { path = "../common/build_helpers" }
