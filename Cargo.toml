@@ -16,6 +16,7 @@ members = [
     "storage/accumulator",
     "storage/sparse_merkle",
     "storage/state_view",
+    "storage/scratchpad",
     "language/vm",
     "language/vm/serializer_tests",
     "language/vm/vm_runtime",
