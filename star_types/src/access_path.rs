@@ -7,18 +7,20 @@ use std::{
     str::{self, FromStr},
 };
 
+use hex;
+#[cfg(any(test, feature = "testing"))]
+use proptest_derive::Arbitrary;
+use radix_trie::TrieKey;
+use serde::{Deserialize, Serialize};
+
 use canonical_serialization::{
     CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
 };
 use crypto::hash::{CryptoHash, HashValue};
 use failure::prelude::*;
-use hex;
-#[cfg(any(test, feature = "testing"))]
-use proptest_derive::Arbitrary;
 use proto_conv::{FromProto, IntoProto};
-use radix_trie::TrieKey;
-use serde::{Deserialize, Serialize};
-use types::{account_address::AccountAddress, access_path::Access, access_path::Accesses, language_storage::{ModuleId, ResourceKey, StructTag}};
+use types::{access_path::Access, access_path::Accesses, account_address::AccountAddress, language_storage::{ModuleId, ResourceKey, StructTag}};
+use types::account_config::account_struct_tag;
 
 /// SEPARATOR is used as a delimiter between fields. It should not be a legal part of any identifier
 /// in the language
@@ -35,28 +37,36 @@ Ord,
 PartialOrd,
 )]
 pub enum DataPath {
-    Resource{tag: StructTag},
-    Code{module_id: ModuleId},
+    Resource { tag: StructTag },
+    Code { module_id: ModuleId },
 }
 
 impl DataPath {
-
     pub fn to_vec(&self) -> Vec<u8> {
         self.into()
     }
+
+    pub fn account_resource_data_path() -> Self {
+        DataPath::Resource {
+            tag: account_struct_tag(),
+        }
+    }
+
+    pub fn code_data_path(module_id: ModuleId) -> Self {
+        DataPath::Code { module_id }
+    }
 }
 
-impl From<&DataPath> for Vec<u8>{
-
+impl From<&DataPath> for Vec<u8> {
     fn from(path: &DataPath) -> Self {
-        match path{
-            DataPath::Resource {tag} => {
+        match path {
+            DataPath::Resource { tag } => {
                 let mut key = vec![];
                 key.push(AccessPath::RESOURCE_TAG);
                 key.append(&mut tag.hash().to_vec());
                 key
-            },
-            DataPath::Code {module_id} => {
+            }
+            DataPath::Code { module_id } => {
                 let mut key = vec![];
                 key.push(AccessPath::CODE_TAG);
                 key.append(&mut module_id.hash().to_vec());
@@ -87,16 +97,15 @@ impl AccountPath {
     }
 }
 
-impl From<&AccountPath> for Vec<u8>{
-
+impl From<&AccountPath> for Vec<u8> {
     fn from(path: &AccountPath) -> Self {
         let mut key = vec![];
-        match path{
-            AccountPath::Onchain {data_path} => {
+        match path {
+            AccountPath::Onchain { data_path } => {
                 key.push(0u8);
                 key.append(&mut data_path.to_vec());
-            },
-            AccountPath::Offchain {participant,data_path} => {
+            }
+            AccountPath::Offchain { participant, data_path } => {
                 key.push(1u8);
                 key.append(&mut participant.to_vec());
                 key.append(&mut data_path.to_vec());
@@ -128,14 +137,35 @@ impl AccessPath {
     pub const CODE_TAG: u8 = 0;
     pub const RESOURCE_TAG: u8 = 1;
 
-    pub fn from_account_path(address: AccountAddress, path: AccountPath) -> Self {
-        AccessPath { address, path:path.to_vec() }
+    pub fn new_for_account_path(address: AccountAddress, path: AccountPath) -> Self {
+        AccessPath { address, path: path.to_vec() }
     }
 
-    pub fn new(address: AccountAddress, path: Vec<u8>) -> Self{
-        AccessPath { address, path}
+    pub fn new_for_account_resource(address: AccountAddress) -> Self {
+        Self::new_for_account_path(address, AccountPath::Onchain { data_path: DataPath::account_resource_data_path() })
     }
 
+    pub fn new_for_code(address: AccountAddress, module_id: ModuleId) -> Self {
+        Self::new_for_account_path(address, AccountPath::Onchain { data_path: DataPath::code_data_path(module_id) })
+    }
+
+    pub fn new(address: AccountAddress, path: Vec<u8>) -> Self {
+        AccessPath { address, path }
+    }
+
+    pub fn into_libra_access_path(self) -> types::access_path::AccessPath {
+        self.into()
+    }
+}
+
+
+impl Into<types::access_path::AccessPath> for AccessPath {
+    fn into(self) -> types::access_path::AccessPath {
+        types::access_path::AccessPath {
+            address: self.address,
+            path: self.path,
+        }
+    }
 }
 
 
