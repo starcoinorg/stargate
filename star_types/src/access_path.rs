@@ -168,6 +168,14 @@ impl Into<types::access_path::AccessPath> for AccessPath {
     }
 }
 
+impl From<types::access_path::AccessPath> for AccessPath {
+    fn from(access_path: types::access_path::AccessPath) -> Self {
+        Self{
+            address:access_path.address,
+            path:access_path.path,
+        }
+    }
+}
 
 impl fmt::Debug for AccessPath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
