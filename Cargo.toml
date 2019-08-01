@@ -12,6 +12,7 @@ members = [
     "crypto/nextgen_crypto",
     "storage/accumulator",
     "storage/sparse_merkle",
+    "language/vm",
     "types",
     "star_types",
     "routing",
