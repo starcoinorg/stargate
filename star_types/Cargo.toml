@@ -25,3 +25,6 @@ failure = { path = "../common/failure_ext", package = "failure_ext" }
 proptest_helpers = { path = "../common/proptest_helpers" }
 proto_conv = { path = "../common/proto_conv", features = ["derive"] }
 vm_runtime_types = { path = "../language/vm/vm_runtime/vm_runtime_types"}
+
+[build-dependencies]
+build_helpers = { path = "../common/build_helpers" }

@@ -8,4 +8,5 @@ edition = "2018"
 
 [dependencies]
 star_types = { path = "../star_types" }
+crypto = { path = "../crypto/legacy_crypto" }
 futures = { version = "0.3.0-alpha.16", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }

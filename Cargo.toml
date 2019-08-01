@@ -36,4 +36,5 @@ members = [
     "sgwallet",
     "switch",
     "node",
+    "cli",
 ]

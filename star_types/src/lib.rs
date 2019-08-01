@@ -4,6 +4,7 @@ pub mod access_path;
 pub mod resource;
 #[cfg(test)]
 mod resource_test;
+pub mod proto;
 
 #[cfg(test)]
 mod tests {

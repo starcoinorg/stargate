@@ -4,9 +4,37 @@ package chain;
 
 import "transaction.proto";
 import "events.proto";
+import "access_path.proto";
+import "star_account.proto";
+import "proof.proto";
+import "google/protobuf/empty.proto";
 
 service Chain {
+    rpc Faucet(FaucetRequest) returns (FaucetResponse);
+    rpc GetAccountStateWithProofByStateRoot(GetAccountStateWithProofByStateRootRequest) returns (GetAccountStateWithProofByStateRootResponse);
+    rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse);
     rpc WatchTransaction (WatchTransactionRequest) returns (stream WatchTransactionResponse);
+    rpc StateByAccessPath(types.AccessPath) returns (StateByAccessPathResponse);
+}
+
+message FaucetRequest {
+    bytes address = 1;
+}
+
+message FaucetResponse {}
+
+message StateByAccessPathResponse {
+
+}
+
+message GetAccountStateWithProofByStateRootRequest {
+    bytes address = 1;
+    bytes state_root_hash = 2;
+}
+
+message GetAccountStateWithProofByStateRootResponse {
+    star_types.AccountState account_state = 1;
+    types.SparseMerkleProof sparse_merkle_proof = 2;
 }
 
 message WatchTransactionRequest {
@@ -17,4 +45,29 @@ message WatchTransactionRequest {
 message WatchTransactionResponse {
     types.SignedTransaction signed_txn = 1;
     repeated types.Event events = 2;
+}
+
+message SubmitTransactionRequest {
+  types.SignedTransaction signed_txn = 1;
+}
+
+message SubmitTransactionResponse {
+  oneof status {
+    MempoolAddTransactionStatus mempool_status = 3;
+  }
+  bytes validator_id = 4;
+}
+
+enum MempoolAddTransactionStatusCode {
+  Valid = 0;
+  InsufficientBalance = 1;
+  InvalidSeqNumber = 2;
+  MempoolIsFull = 3;
+  TooManyTransactions = 4;
+  InvalidUpdate = 5;
+}
+
+message MempoolAddTransactionStatus {
+  MempoolAddTransactionStatusCode code = 1;
+  string message = 2;
 }

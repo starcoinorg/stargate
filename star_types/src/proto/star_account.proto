@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package star_types;
+
+message ResourceBlob {
+    bytes path = 2;
+    bytes blob = 1;
+}
+
+message AccountState {
+    repeated ResourceBlob states = 1;
+}

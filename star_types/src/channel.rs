@@ -10,6 +10,10 @@ pub struct SgChannelInfo {
     //Capacity 
 }
 
+pub struct SgChannelState {
+
+}
+
 pub struct SgChannelStream;
 
 impl Stream for SgChannelStream {
