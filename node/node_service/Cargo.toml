@@ -8,8 +8,11 @@ edition = "2018"
 
 [dependencies]
 grpcio = "0.4.4"
+futures01 = { package = "futures", version = "0.1.26" }
+futures03 = { package = "futures-preview", version = "=0.3.0-alpha.17", features = ["compat"] }
 
 node_proto = { path = "../node_proto" }
 failure = { path = "../../common/failure_ext", package = "failure_ext" }
 star_types = { path = "../../star_types" }
 proto_conv = { path = "../../common/proto_conv" }
+grpc_helpers = { path = "../../common/grpc_helpers" }
