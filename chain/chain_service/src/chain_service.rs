@@ -1,14 +1,15 @@
 extern crate types;
 
 use chain_proto::proto::chain_grpc::Chain;
-use chain_proto::proto::chain::{FaucetRequest, FaucetResponse,
-                          GetAccountStateWithProofByStateRootRequest, GetAccountStateWithProofByStateRootResponse,
-                          WatchTransactionRequest, WatchTransactionResponse,
-                          SubmitTransactionRequest, SubmitTransactionResponse,
-                          StateByAccessPathResponse};
+use chain_proto::proto::chain::{LeastRootRequest, LeastRootResponse,
+                                FaucetRequest, FaucetResponse,
+                                GetAccountStateWithProofByStateRootRequest, GetAccountStateWithProofByStateRootResponse,
+                                WatchTransactionRequest, WatchTransactionResponse,
+                                SubmitTransactionRequest, SubmitTransactionResponse,
+                                StateByAccessPathResponse};
 use types::proto::{access_path::AccessPath};
 use types::transaction::SignedTransaction;
-use proto_conv::{FromProto};
+use proto_conv::FromProto;
 
 #[derive(Clone)]
 pub struct ChainService {
@@ -26,6 +27,9 @@ impl ChainService {
 }
 
 impl Chain for ChainService {
+    fn least_state_root(&mut self, ctx: ::grpcio::RpcContext, req: LeastRootRequest, sink: ::grpcio::UnarySink<LeastRootResponse>) {
+        unimplemented!()
+    }
     fn faucet(&mut self, ctx: ::grpcio::RpcContext,
               req: FaucetRequest,
               sink: ::grpcio::UnarySink<FaucetResponse>) {
