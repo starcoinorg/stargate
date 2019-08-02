@@ -1,4 +1,5 @@
 #![feature(async_await)]
+pub mod config;
 
 //use config::config::NodeConfig;
 use node_proto::{OpenChannelRequest,OpenChannelResponse,PayRequest,PayResponse};
