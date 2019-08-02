@@ -15,3 +15,9 @@ language/compiler/ir_to_bytecode/syntax/src/syntax.rs
 # Older locations for this file.
 language/compiler/ir_to_bytecode/src/parser/syntax.rs
 language/move_ir/
+
+# macOS Specific ignores
+# General
+.DS_Store
+.AppleDouble
+.LSOverride
