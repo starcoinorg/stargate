@@ -30,6 +30,7 @@ members = [
     "language/compiler",
     "language/compiler/ir_to_bytecode",
     "language/compiler/ir_to_bytecode/syntax",
+    "language/local_vm",
     "types",
     "star_types",
     "routing",
