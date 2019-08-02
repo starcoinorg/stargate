@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package node;
+
+service Node {
+    rpc OpenChannel(OpenChannelRequest) returns (OpenChannelResponse) {}
+  
+    rpc Pay(PayRequest) returns (PayResponse) {}
+  
+    rpc SendOffLineTx(SendOffLineTxRequest) returns (SendOffLineTxResponse) {}
+}
+  
+message OpenChannelRequest {
+    bytes remote_addr=1;
+}
+
+message OpenChannelResponse {
+
+}
+
+message PayRequest {
+    bytes remote_addr=1;
+}
+
+message PayResponse {
+
+}
+
+message SendOffLineTxRequest{
+
+}
+
+message SendOffLineTxResponse {
+
+}

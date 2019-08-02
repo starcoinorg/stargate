@@ -1,4 +1,4 @@
-use chain::chain_node::{ChainNode, ServiceConfig};
+use chain_service::chain_node::{ChainNode, ServiceConfig};
 
 fn main() {
     let service_name = String::from("chain_service");

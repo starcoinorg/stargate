@@ -1,0 +1,21 @@
+[package]
+name = "node_server"
+version = "0.1.0"
+authors = ["Libra Association <opensource@libra.org>"]
+license = "Apache-2.0"
+publish = false
+edition = "2018"
+
+[dependencies]
+grpcio = "0.4.4"
+futures01 = { package = "futures", version = "0.1.26" }
+futures03 = { package = "futures-preview", version = "=0.3.0-alpha.17", features = ["compat"] }
+serde = { version = "1.0.96", features = ["derive"] }
+
+
+node_proto = { path = "../node_proto" }
+failure = { path = "../../common/failure_ext", package = "failure_ext" }
+star_types = { path = "../../star_types" }
+proto_conv = { path = "../../common/proto_conv" }
+grpc_helpers = { path = "../../common/grpc_helpers" }
+node_client = { path = "../node_client" }
