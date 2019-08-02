@@ -12,6 +12,11 @@ grpcio = "0.4.4"
 proptest = "0.9.2"
 proptest-derive = "0.1.0"
 protobuf = "2.7"
+proto_conv = { path = "../../common/proto_conv", features = ["derive"] }
+grpc_helpers = { path = "../../common/grpc_helpers" }
+failure = { path = "../../common/failure_ext", package = "failure_ext" }
+proptest_helpers = { path = "../../common/proptest_helpers" }
+types = { package = "types", path = "../../types"}
 
 [build-dependencies]
 build_helpers = { path = "../../common/build_helpers" }

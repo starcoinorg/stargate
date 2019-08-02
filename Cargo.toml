@@ -39,5 +39,7 @@ members = [
     "switch",
     "node",
     "node/node_proto",
+    "node/node_client",
+    "node/node_service",
     "cli",
 ]

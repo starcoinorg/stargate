@@ -1,0 +1,15 @@
+[package]
+name = "node_client"
+version = "0.1.0"
+authors = ["Libra Association <opensource@libra.org>"]
+license = "Apache-2.0"
+publish = false
+edition = "2018"
+
+[dependencies]
+grpcio = "0.4.4"
+
+node_proto = { path = "../node_proto" }
+failure = { path = "../../common/failure_ext", package = "failure_ext" }
+star_types = { path = "../../star_types" }
+proto_conv = { path = "../../common/proto_conv" }

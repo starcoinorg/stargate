@@ -5,6 +5,6 @@ fn main() {
     build_helpers::build_helpers::compile_proto(
         proto_root,
         vec![],
-        false, /* generate_client_stub */
+        true, /* generate_client_stub */
     );
 }
