@@ -1,7 +1,7 @@
 extern crate types;
 
-use crate::proto::chain_grpc::Chain;
-use crate::proto::chain::{FaucetRequest, FaucetResponse,
+use chain_proto::proto::chain_grpc::Chain;
+use chain_proto::proto::chain::{FaucetRequest, FaucetResponse,
                           GetAccountStateWithProofByStateRootRequest, GetAccountStateWithProofByStateRootResponse,
                           WatchTransactionRequest, WatchTransactionResponse,
                           SubmitTransactionRequest, SubmitTransactionResponse,
@@ -11,7 +11,9 @@ use types::transaction::SignedTransaction;
 use proto_conv::{FromProto};
 
 #[derive(Clone)]
-pub struct ChainService;
+pub struct ChainService {
+//    merkle:
+}
 
 impl ChainService {
     pub fn new() -> Self {

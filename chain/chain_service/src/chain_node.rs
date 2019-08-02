@@ -4,13 +4,12 @@ extern crate types;
 
 use grpcio::Service;
 use grpc_helpers::spawn_service_thread;
-use crate::proto;
 use super::chain_service::ChainService;
 use std::{thread, fs::File, io::prelude::*, path::PathBuf};
 use types::{transaction::{SignedTransaction, TransactionPayload}, write_set::WriteSet};
 use protobuf::parse_from_bytes;
 use proto_conv::{FromProto};
-use crate::proto::chain_grpc::Chain;
+use chain_proto::proto::chain_grpc::Chain;
 
 pub struct ServiceConfig {
     pub service_name: String,
@@ -31,7 +30,7 @@ impl ChainNode {
 
     pub fn run(&self) -> Result<(), ()> {
         println!("{}", "Starting chain Service");
-        let service = proto::chain_grpc::create_chain(self.chain_service.clone());
+        let service = chain_proto::proto::chain_grpc::create_chain(self.chain_service.clone());
         self.genesis();
         let chain_handle = spawn_service_thread(
             service,
@@ -57,7 +56,7 @@ impl ChainNode {
 pub fn genesis_transaction() -> SignedTransaction {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.pop();
-    path.push("chain/genesis.blob");
+    path.push("chain_service/genesis.blob");
 
     let mut f = File::open(&path).unwrap();
     let mut bytes = vec![];
@@ -80,12 +79,12 @@ pub fn genesis_write_set(txn: SignedTransaction) -> WriteSet {
 
 #[cfg(test)]
 mod tests {
-    use crate::chain_node::genesis;
+    use crate::chain_node::genesis_transaction;
 
     #[test]
     fn testxxx() {
         println!("{}", "xxxxxx");
-        genesis();
+        genesis_transaction();
         println!("{}", "yyyyyy");
     }
 }

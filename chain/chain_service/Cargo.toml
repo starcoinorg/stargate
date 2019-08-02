@@ -1,0 +1,20 @@
+[package]
+name = "chain_service"
+version = "0.1.0"
+authors = ["tiangong3624749 <tiangong3624749@163.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+grpcio = "0.4.4"
+proto_conv = { path = "../../common/proto_conv", features = ["derive"] }
+protobuf = "2.7"
+grpc_helpers = { path = "../../common/grpc_helpers" }
+types = { path = "../../types" }
+futures = "0.1.28"
+star_types = { path = "../../star_types" }
+crypto = { path = "../../crypto/legacy_crypto" }
+scratchpad = { path = "../../storage/scratchpad" }
+state_storage = { path = "../../storage/state_storage" }
+chain_proto = { path = "../chain_proto" }
