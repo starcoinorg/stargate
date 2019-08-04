@@ -82,9 +82,7 @@ mod tests {
     use crate::chain_node::genesis_transaction;
 
     #[test]
-    fn testxxx() {
-        println!("{}", "xxxxxx");
+    fn testGenesis() {
         genesis_transaction();
-        println!("{}", "yyyyyy");
     }
 }

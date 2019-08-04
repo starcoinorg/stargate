@@ -18,3 +18,4 @@ crypto = { path = "../../crypto/legacy_crypto" }
 scratchpad = { path = "../../storage/scratchpad" }
 state_storage = { path = "../../storage/state_storage" }
 chain_proto = { path = "../chain_proto" }
+hex = "0.3.2"

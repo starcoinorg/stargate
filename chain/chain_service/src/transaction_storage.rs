@@ -1,11 +1,12 @@
 use crypto::HashValue;
 use scratchpad::Accumulator;
-use std::collections::BTreeMap;
-use types::transaction::{SignedTransaction, TransactionInfo};
+use std::{collections::BTreeMap,sync::{Arc}};
+use types::transaction::{SignedTransaction, TransactionInfo, Version};
 use types::proof::position::Position;
 use crate::storage::TransactionStorage;
 
 struct TransactionStorageImpl {
+//    version:Arc<ReadWriteLock<Version>>,
     signedTxMap: BTreeMap<u64, SignedTransaction>,
     txInfoMap: BTreeMap<u64, TransactionInfo>,
     accumulatorMap: BTreeMap<Position, HashValue>,
