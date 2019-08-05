@@ -7,6 +7,8 @@ use crypto::HashValue;
 use star_types::{proto::star_account::AccountState, channel::SgChannelStream};
 use types::transaction::Version;
 use star_types::resource::Resource;
+use grpcio::{Channel, EnvBuilder, ChannelBuilder};
+use std::sync::Arc;
 
 pub struct ChainClientFacade {
     client: chain_grpc::ChainClient,
@@ -14,8 +16,15 @@ pub struct ChainClientFacade {
 
 impl ChainClientFacade {
 
-    pub fn new() -> ChainClientFacade {
-        unimplemented!()
+    pub fn new(host:&str, port: u32) -> ChainClientFacade {
+        let conn_addr = format!("{}:{}", host, port);
+
+        // Create a GRPC client
+        let env = Arc::new(EnvBuilder::new().name_prefix("grpc-client-").build());
+        let ch = ChannelBuilder::new(env).connect(&conn_addr);
+        Self{
+            client: chain_grpc::ChainClient::new(ch)
+        }
     }
 
     pub fn least_state_root(&self) -> HashValue {
