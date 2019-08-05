@@ -1,3 +1,4 @@
+use failure::prelude::*;
 use chain_proto::proto::{chain_grpc, chain::FaucetRequest};
 use types::{account_address::AccountAddress, access_path::AccessPath, transaction::SignedTransaction};
 use core::borrow::Borrow;
@@ -12,11 +13,16 @@ pub struct ChainClientFacade {
 }
 
 impl ChainClientFacade {
-    fn least_state_root(&mut self) -> HashValue {
+
+    pub fn new() -> ChainClientFacade {
         unimplemented!()
     }
 
-    pub fn faucet(&self, addr_str: String, amount: u64) -> Result<(), Box<std::error::Error>> {
+    pub fn least_state_root(&self) -> HashValue {
+        unimplemented!()
+    }
+
+    pub fn faucet(&self, addr_str: String, amount: u64) -> Result<()> {
         let address = AccountAddress::from_str(&addr_str)?;
         let mut req = FaucetRequest::new();
         req.set_address(address.to_vec());
@@ -25,19 +31,23 @@ impl ChainClientFacade {
         Ok(())
     }
 
-    fn get_account_state_with_proof_by_state_root(&mut self, address: AccountAddress, state_root_hash: HashValue) -> Vec<u8> {
+    pub fn get_account_state_with_proof_by_state_root(&self, address: &AccountAddress, state_root_hash: HashValue) -> Result<Option<Vec<u8>>> {
         unimplemented!()
     }
 
-    fn submit_transaction(&mut self, signedTransaction:SignedTransaction) {
+    pub fn get_account_state(&self, address: &AccountAddress) -> Result<Option<Vec<u8>>> {
         unimplemented!()
     }
 
-    fn watch_transaction(&mut self, address:AccountAddress, ver:Version) -> SgChannelStream {
+    pub fn submit_transaction(&mut self, signed_transaction:SignedTransaction) -> Result<()> {
         unimplemented!()
     }
 
-    fn state_by_access_path(&mut self, path:AccessPath) -> Vec<u8> {
+    pub fn watch_transaction(&self, address:&AccountAddress, ver:Version) -> SgChannelStream {
+        unimplemented!()
+    }
+
+    pub fn get_state_by_access_path(&self, path:&AccessPath) -> Result<Option<Vec<u8>>> {
         unimplemented!()
     }
 }

@@ -16,3 +16,4 @@ futures = "0.1.28"
 star_types = { path = "../../star_types" }
 crypto = { path = "../../crypto/legacy_crypto" }
 chain_proto = { path = "../chain_proto" }
+failure = { path = "../../common/failure_ext", package = "failure_ext" }
