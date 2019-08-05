@@ -26,14 +26,14 @@ impl NodeService {
 
 impl node_proto::proto::node_grpc::Node for NodeService {
     fn open_channel(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::OpenChannelRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::OpenChannelResponse>){
-
+        println!("open channel");
     }
     fn pay(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::PayRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::PayResponse>){
-
+        println!("pay");
     }
 
     fn send_off_line_tx(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::SendOffLineTxRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::SendOffLineTxResponse>){
-
+        println!("send off line tx");
     }  
 }
 
