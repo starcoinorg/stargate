@@ -5,7 +5,7 @@ use node_client::NodeClient;
 use futures01::future::Future;
 use grpcio::EnvBuilder;
 use std::sync::Arc;
-use node_service::config::{NodeConfig,get_test_config};
+use sg_config::config::{NodeConfig,get_test_config};
 use node_proto::{OpenChannelRequest,OpenChannelResponse};
 use types::account_address::AccountAddress;
 
