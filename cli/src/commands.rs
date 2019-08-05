@@ -16,6 +16,12 @@ pub fn get_commands() -> (
     (commands, alias_to_cmd)
 }
 
+/// Parse a cmd string, the first element in the returned vector is the command to run
+pub fn parse_cmd(cmd_str: &str) -> Vec<&str> {
+    let input = &cmd_str[..];
+    input.trim().split(' ').map(str::trim).collect()
+}
+
 pub trait Command {
     /// all commands and aliases this command support.
     fn get_aliases(&self) -> Vec<&'static str>;
