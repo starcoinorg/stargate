@@ -13,3 +13,7 @@ scratchpad = {path = "../scratchpad"}
 types = { path = "../../types"}
 star_types = { path = "../../star_types" }
 canonical_serialization = { path = "../../common/canonical_serialization"}
+nextgen_crypto = { path = "../../crypto/nextgen_crypto"}
+
+[dev-dependencies]
+nextgen_crypto = { path = "../../crypto/nextgen_crypto", features = ["testing"] }

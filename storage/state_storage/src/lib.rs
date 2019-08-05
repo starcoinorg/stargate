@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod state_storage_test;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::rc::Rc;
 
 use crypto::{
@@ -9,7 +9,6 @@ use crypto::{
     HashValue,
 };
 use crypto::hash::CryptoHash;
-use failure::_core::cell::RefCell;
 use failure::prelude::*;
 use scratchpad::{ProofRead, SparseMerkleTree};
 use types::account_address::AccountAddress;
@@ -18,6 +17,8 @@ use types::proof::SparseMerkleProof;
 use types::write_set::{WriteOp, WriteSet};
 use star_types::access_path::AccessPath;
 use types::access_path::Access;
+use std::convert::TryFrom;
+use std::cell::RefCell;
 
 pub struct AccountState {
     state: Rc<RefCell<SparseMerkleTree>>
@@ -29,6 +30,21 @@ impl AccountState {
             state: Rc::new(RefCell::new(SparseMerkleTree::new(*SPARSE_MERKLE_PLACEHOLDER_HASH))),
         }
     }
+
+    pub fn from_account_state_blob(account_state_blob: &AccountStateBlob) -> Result<Self>{
+        let mut state = Self::new();
+        let map = BTreeMap::try_from(account_state_blob)?;
+        Self::update_state(&mut state, map.iter().map(|(k,v)|(k.clone(),v.clone())).collect());
+        Ok(state)
+    }
+
+    fn update_state(state: &mut AccountState, updates: Vec<(Vec<u8>, Vec<u8>)>) -> Result<()>{
+        for (path, value) in updates {
+            state.update(path , value)?;
+        }
+        Ok(())
+    }
+
     /// update path resource and return new root.
     pub fn update(&mut self, path: Vec<u8>, value: Vec<u8>) -> Result<HashValue> {
         let mut tree = self.state.borrow_mut();
