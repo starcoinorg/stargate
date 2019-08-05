@@ -8,6 +8,7 @@ use types::vm_error::VMStatus;
 use vm_runtime::{MoveVM, VMExecutor, VMVerifier};
 use state_view::StateView;
 use std::borrow::Borrow;
+use std::sync::Arc;
 
 lazy_static! {
     static ref VM_CONFIG:VMConfig = VMConfig{
@@ -17,19 +18,19 @@ lazy_static! {
 
 pub struct LocalVM<S> where S:StateView {
     inner: MoveVM,
-    state_view: Box<S>,
+    state_view: Arc<S>,
 }
 
 impl <S> LocalVM<S> where S:StateView {
 
-    pub fn new(state_view: Box<S>) -> Self {
+    pub fn new(state_view: Arc<S>) -> Self {
         Self {
             inner: MoveVM::new(&VM_CONFIG),
             state_view,
         }
     }
 
-    fn validate_transaction(
+    pub fn validate_transaction(
         &self,
         transaction: SignedTransaction,
     ) -> Option<VMStatus> {
@@ -37,7 +38,7 @@ impl <S> LocalVM<S> where S:StateView {
         self.inner.validate_transaction(transaction, self.state_view.as_ref())
     }
 
-    fn execute_transaction(&self, transaction: SignedTransaction) -> TransactionOutput {
+    pub fn execute_transaction(&self, transaction: SignedTransaction) -> TransactionOutput {
         MoveVM::execute_block(vec![transaction], &VM_CONFIG, self.state_view.as_ref()).pop().unwrap()
     }
 }
