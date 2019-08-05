@@ -20,3 +20,7 @@ state_storage = { path = "../../storage/state_storage" }
 chain_proto = { path = "../chain_proto" }
 hex = "0.3.2"
 vm_genesis = { path = "../../language/vm/vm_genesis" }
+tiny-keccak = "1.5.0"
+
+[dependencies.ed25519-dalek]
+version = "1.0.0-pre.1"

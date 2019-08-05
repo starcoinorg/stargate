@@ -72,6 +72,10 @@ impl AccountState {
         //TODO
         unimplemented!()
     }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        unimplemented!()
+    }
 }
 
 
