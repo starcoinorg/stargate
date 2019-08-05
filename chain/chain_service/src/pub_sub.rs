@@ -39,9 +39,7 @@ fn singleton() -> Pub {
 pub fn send(tx: WatchTransactionResponse) -> Result<(), SendError<WatchTransactionResponse>> {
     let p = singleton();
     let senders = p.senders.lock().unwrap();
-    println!("{}:{}", "---------8888888--------", senders.len());
     for (_, sender) in senders.iter() {
-        println!("{}", "---------999999999--------");
         match sender.unbounded_send(tx.clone()) {
             Ok(_) => {}
             Err(err) => return Err(err),

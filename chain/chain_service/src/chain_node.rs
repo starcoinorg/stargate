@@ -8,7 +8,7 @@ use super::chain_service::ChainService;
 use std::{thread, fs::File, io::prelude::*, path::PathBuf};
 use types::{transaction::{SignedTransaction, TransactionPayload}, write_set::WriteSet};
 use protobuf::parse_from_bytes;
-use proto_conv::{FromProto};
+use proto_conv::FromProto;
 use chain_proto::proto::chain_grpc::Chain;
 
 pub struct ServiceConfig {
@@ -18,20 +18,19 @@ pub struct ServiceConfig {
 }
 
 pub struct ChainNode {
-    chain_service: ChainService,
     config: ServiceConfig,
 }
 
 impl ChainNode {
     pub fn new(config: ServiceConfig) -> ChainNode {
-        let chain_service = ChainService::new();
-        ChainNode { chain_service, config }
+        ChainNode { config }
     }
 
     pub fn run(&self) -> Result<(), ()> {
         println!("{}", "Starting chain Service");
-        let service = chain_proto::proto::chain_grpc::create_chain(self.chain_service.clone());
-        self.genesis();
+        let chain_service = ChainService::new();
+        let service = chain_proto::proto::chain_grpc::create_chain(chain_service);
+        //self.genesis();
         let chain_handle = spawn_service_thread(
             service,
             self.config.address.clone(),
@@ -45,11 +44,11 @@ impl ChainNode {
         }
     }
 
-    fn genesis(&self) {
-        let txn = genesis_transaction();
-        let wr = genesis_write_set(txn.clone());
-        self.chain_service.submit_transaction_inner(txn.clone());
-    }
+//    fn genesis(&self) {
+//        let txn = genesis_transaction();
+//        let wr = genesis_write_set(txn.clone());
+//        self.chain_service.submit_transaction_inner(txn.clone());
+//    }
 }
 
 

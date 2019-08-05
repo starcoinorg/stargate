@@ -8,7 +8,7 @@ use chain_proto::proto::chain::{LeastRootRequest, LeastRootResponse,
                                 SubmitTransactionRequest, SubmitTransactionResponse,
                                 StateByAccessPathResponse};
 use types::proto::{access_path::AccessPath};
-use types::{transaction::SignedTransaction, account_address::AccountAddress};
+use types::{transaction::{SignedTransaction, TransactionPayload}, write_set::WriteOp, account_address::AccountAddress};
 use proto_conv::FromProto;
 use futures::sync::mpsc::{unbounded, UnboundedSender, UnboundedReceiver, SendError};
 use super::pub_sub;
@@ -18,35 +18,114 @@ use futures::future::Future;
 use futures::stream::Stream;
 use futures::*;
 use grpcio::WriteFlags;
+//use state_storage::StateStorage;
+use scratchpad::SparseMerkleTree;
+use super::transaction_storage::TransactionStorage;
+use core::borrow::{BorrowMut, Borrow};
+use std::sync::{Arc, RwLock, Mutex};
+use std::rc::Rc;
+use self::types::transaction::{TransactionInfo, Version};
+use std::cell::RefCell;
+use std::thread;
+use crypto::{hash::CryptoHash, HashValue};
+use grpc_helpers::provide_grpc_response;
 
 #[derive(Clone)]
 pub struct ChainService {
-//    merkle:
+    sender: UnboundedSender<SignedTransaction>,
+    //    state_db: Arc<StateStorage>,
+    tx_db: Arc<Mutex<TransactionStorage>>,
 }
 
 impl ChainService {
     pub fn new() -> Self {
-        ChainService {}
+        let (sender, mut receiver) = unbounded::<SignedTransaction>();
+        let tx_db = Arc::new(Mutex::new(TransactionStorage::new()));
+        let chain_service = ChainService { sender, tx_db };
+        let chain_service_clone = chain_service.clone();
+        thread::spawn(move || {
+            loop {
+                while let msg = receiver.poll() {
+                    match msg {
+                        Ok(async_result) => {
+                            match async_result {
+                                Async::Ready(option_result) => {
+                                    match option_result {
+                                        Some(tx) => {
+                                            chain_service_clone.submit_transaction_real(tx);
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        });
+        chain_service
+    }
+
+    fn submit_transaction_real(&self, sign_tx: SignedTransaction) {
+        let signed_tx_hash = sign_tx.clone().hash();
+        let mut tx_db = self.tx_db.lock().unwrap();
+        let exist_flag = tx_db.exist_signed_transaction(signed_tx_hash);
+        if exist_flag {
+            // 1. state_root
+            let payload = sign_tx.payload().clone();
+            match payload {
+                TransactionPayload::WriteSet(ws) => {
+                    //TODO
+//                    let mut state_db = self.state_db;
+//                    let state_hash = state_db.apply_write_set(&ws).unwrap();
+                    let state_hash = SparseMerkleTree::default().root_hash();
+//                    // 2. add signed_tx
+//                    let version = tx_db.insert_signed_transaction(sign_tx.clone());
+//
+//                    // 3. tx_info
+//                    let tx_info = TransactionInfo::new(signed_tx_hash, state_hash, HashValue::random(), 0);
+//                    tx_db.insert_transaction_info(tx_info.clone());
+//
+//                    // 4. accumulator hash，store Version-HASH
+//                    let hash_root = tx_db.accumulator_append(tx_info);
+//                    tx_db.insert_ledger_info(hash_root);
+
+                    tx_db.insertAll(state_hash, sign_tx);
+                }
+                TransactionPayload::Program(_p) => {
+                    panic!("Program Payload Err")
+                }
+            }
+        }
     }
 
     pub fn submit_transaction_inner(&self, sign_tx: SignedTransaction) {
-        unimplemented!()
+        self.sender.unbounded_send(sign_tx);
     }
 
-    pub fn watch_transaction_inner(&self, address:Vec<u8>) -> UnboundedReceiver<WatchTransactionResponse> {
+    pub fn watch_transaction_inner(&self, address: Vec<u8>) -> UnboundedReceiver<WatchTransactionResponse> {
         let (mut sender, receiver) = unbounded::<WatchTransactionResponse>();
         let id = hex::encode(address);
-        println!("{}:{:?}", "---------0000-------", id);
         pub_sub::subscribe(id, sender.clone());
 
         receiver
+    }
+
+    pub fn least_state_root_inner(&self) -> HashValue {
+        self.tx_db.lock().unwrap().least_hash_root()
     }
 }
 
 impl Chain for ChainService {
     fn least_state_root(&mut self, ctx: ::grpcio::RpcContext, req: LeastRootRequest, sink: ::grpcio::UnarySink<LeastRootResponse>) {
-        unimplemented!()
+        let least_hash_root = self.least_state_root_inner();
+        let mut resp = LeastRootResponse::new();
+        resp.set_state_root_hash(least_hash_root.to_vec());
+        provide_grpc_response(Ok(resp), ctx, sink);
     }
+
     fn faucet(&mut self, ctx: ::grpcio::RpcContext,
               req: FaucetRequest,
               sink: ::grpcio::UnarySink<FaucetResponse>) {
