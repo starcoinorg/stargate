@@ -12,7 +12,7 @@ use cli::{commands::*,client_proxy::ClientProxy};
 struct Args {
     /// Admission Control port to connect to.
     #[structopt(short = "p", long = "port", default_value = "30307")]
-    pub port: String,
+    pub port: u16,
     /// Host address/name to connect to.
     #[structopt(short = "a", long = "host")]
     pub host: String,
@@ -35,7 +35,7 @@ fn main() -> std::io::Result<()>{
     
     let mut client_proxy = ClientProxy::new(
         &args.host,
-        &args.port,
+        args.port,
         &faucet_account_file,
     )
     .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, &format!("{}", e)[..]))?;
