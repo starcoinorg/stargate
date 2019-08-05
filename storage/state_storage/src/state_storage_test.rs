@@ -2,6 +2,7 @@ use canonical_serialization::{CanonicalSerialize, SimpleSerializer};
 use types::account_config::AccountResource;
 
 use super::*;
+use std::thread;
 
 #[test]
 fn test_state_storage() {
@@ -17,4 +18,12 @@ fn test_state_storage() {
     let account_state = storage.get_account_state(&account_address).unwrap();
     let bytes2 = account_state.get(&access_path.path).expect("get fail.");
     assert_eq!(bytes, bytes2);
+}
+
+#[test]
+fn test_multi_thread(){
+    let mut storage = StateStorage::new();
+    thread::spawn(move ||{
+        println!("{:#?}", storage.root_hash())
+    });
 }

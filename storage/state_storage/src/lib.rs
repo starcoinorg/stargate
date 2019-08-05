@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod state_storage_test;
+pub mod sparse_merkle;
 
 use std::collections::{HashMap, BTreeMap};
 use std::rc::Rc;
@@ -10,7 +11,6 @@ use crypto::{
 };
 use crypto::hash::CryptoHash;
 use failure::prelude::*;
-use scratchpad::{ProofRead, SparseMerkleTree};
 use types::account_address::AccountAddress;
 use types::account_state_blob::AccountStateBlob;
 use types::proof::SparseMerkleProof;
@@ -20,15 +20,18 @@ use types::access_path::Access;
 use std::convert::TryFrom;
 use std::cell::RefCell;
 use itertools::Itertools;
+use std::sync::Arc;
+use crate::sparse_merkle::{SparseMerkleTree,ProofRead};
+use atomic_refcell::AtomicRefCell;
 
 pub struct AccountState {
-    state: Rc<RefCell<SparseMerkleTree>>
+    state: Arc<AtomicRefCell<SparseMerkleTree>>
 }
 
 impl AccountState {
     pub fn new() -> Self {
         Self {
-            state: Rc::new(RefCell::new(SparseMerkleTree::new(*SPARSE_MERKLE_PLACEHOLDER_HASH))),
+            state: Arc::new(AtomicRefCell::new(SparseMerkleTree::new(*SPARSE_MERKLE_PLACEHOLDER_HASH))),
         }
     }
 
@@ -60,7 +63,7 @@ impl AccountState {
     pub fn get(&self, path: &Vec<u8>) -> Option<Vec<u8>> {
         let hash = AccountStateBlob::from(path.clone()).hash();
         match self.state.borrow().get(hash) {
-            scratchpad::AccountState::ExistsInScratchPad(blob) => Some(blob.into()),
+            sparse_merkle::AccountState::ExistsInScratchPad(blob) => Some(blob.into()),
             _ => None
         }
     }
@@ -88,7 +91,7 @@ impl ProofRead for ProofReader {
 }
 
 pub struct StateStorage {
-    global_state: Rc<RefCell<SparseMerkleTree>>,
+    global_state: Arc<AtomicRefCell<SparseMerkleTree>>,
     account_states: HashMap<AccountAddress, AccountState>,
 }
 
@@ -97,7 +100,7 @@ impl StateStorage {
         let mut account_states = HashMap::new();
         account_states.insert(AccountAddress::default(), AccountState::new());
         Self {
-            global_state: Rc::new(RefCell::new(SparseMerkleTree::new(*SPARSE_MERKLE_PLACEHOLDER_HASH))),
+            global_state: Arc::new(AtomicRefCell::new(SparseMerkleTree::new(*SPARSE_MERKLE_PLACEHOLDER_HASH))),
             account_states,
         }
     }
