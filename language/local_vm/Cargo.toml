@@ -16,3 +16,6 @@ failure = { path = "../../common/failure_ext", package = "failure_ext" }
 config = { path = "../../config"}
 types = { path = "../../types" }
 state_view = { path = "../../storage/state_view"}
+
+[dev-dependencies]
+nextgen_crypto = { path = "../../crypto/nextgen_crypto", features = ["testing"] }
