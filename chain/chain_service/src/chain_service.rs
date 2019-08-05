@@ -8,7 +8,7 @@ use chain_proto::proto::chain::{LeastRootRequest, LeastRootResponse,
                                 SubmitTransactionRequest, SubmitTransactionResponse,
                                 StateByAccessPathResponse};
 use types::proto::{access_path::AccessPath};
-use types::{transaction::{SignedTransaction, TransactionPayload}, write_set::WriteOp, account_address::AccountAddress};
+use types::{transaction::{SignedTransaction, TransactionPayload}, write_set::{WriteOp, WriteSet}, account_address::AccountAddress};
 use proto_conv::FromProto;
 use futures::sync::mpsc::{unbounded, UnboundedSender, UnboundedReceiver, SendError};
 use super::pub_sub;
@@ -26,9 +26,11 @@ use std::sync::{Arc, RwLock, Mutex};
 use std::rc::Rc;
 use self::types::transaction::{TransactionInfo, Version};
 use std::cell::RefCell;
-use std::thread;
 use crypto::{hash::CryptoHash, HashValue};
 use grpc_helpers::provide_grpc_response;
+use std::{thread, fs::File, io::prelude::*, path::PathBuf};
+use protobuf::parse_from_bytes;
+use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR};
 
 #[derive(Clone)]
 pub struct ChainService {
@@ -41,7 +43,7 @@ impl ChainService {
     pub fn new() -> Self {
         let (sender, mut receiver) = unbounded::<SignedTransaction>();
         let tx_db = Arc::new(Mutex::new(TransactionStorage::new()));
-        let chain_service = ChainService { sender, tx_db };
+        let chain_service = ChainService { sender:sender.clone(), tx_db };
         let chain_service_clone = chain_service.clone();
         thread::spawn(move || {
             loop {
@@ -65,6 +67,12 @@ impl ChainService {
                 }
             }
         });
+
+        //let genesis_txn = genesis_transaction();
+        let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
+        let genesis_txn = genesis_checked_txn.into_inner();
+        sender.unbounded_send(genesis_txn);
+
         chain_service
     }
 
@@ -117,6 +125,30 @@ impl ChainService {
         self.tx_db.lock().unwrap().least_hash_root()
     }
 }
+
+//pub fn genesis_transaction() -> SignedTransaction {
+//    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+//    path.pop();
+//    path.push("chain_service/genesis.blob");
+//
+//    let mut f = File::open(&path).unwrap();
+//    let mut bytes = vec![];
+//    f.read_to_end(&mut bytes).unwrap();
+//    let txn = SignedTransaction::from_proto(parse_from_bytes(&bytes).unwrap()).unwrap();
+//    println!("{:?}", txn);
+//    txn
+//}
+//
+//pub fn genesis_write_set(txn: SignedTransaction) -> WriteSet {
+//    let GENESIS_WRITE_SET: WriteSet = {
+//        match txn.payload() {
+//            TransactionPayload::WriteSet(ws) => ws.clone(),
+//            _ => panic!("Expected writeset txn in genesis txn"),
+//        }
+//    };
+//
+//    GENESIS_WRITE_SET
+//}
 
 impl Chain for ChainService {
     fn least_state_root(&mut self, ctx: ::grpcio::RpcContext, req: LeastRootRequest, sink: ::grpcio::UnarySink<LeastRootResponse>) {
@@ -172,3 +204,14 @@ impl Chain for ChainService {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR};
+
+    #[test]
+    fn testGenesis() {
+        let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
+        let genesis_txn = genesis_checked_txn.into_inner();
+        println!("{:?}", txn);
+    }
+}
