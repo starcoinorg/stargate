@@ -11,7 +11,7 @@ grpcio = "0.4.4"
 futures01 = { package = "futures", version = "0.1.26" }
 futures03 = { package = "futures-preview", version = "=0.3.0-alpha.17", features = ["compat"] }
 serde = { version = "1.0.96", features = ["derive"] }
-
+rand = "0.6.5"
 
 node_proto = { path = "../node_proto" }
 failure = { path = "../../common/failure_ext", package = "failure_ext" }
@@ -19,3 +19,6 @@ star_types = { path = "../../star_types" }
 proto_conv = { path = "../../common/proto_conv" }
 grpc_helpers = { path = "../../common/grpc_helpers" }
 node_client = { path = "../node_client" }
+nextgen_crypto = { path = "../../crypto/nextgen_crypto" }
+types = { package = "types", path = "../../types"}
+sg_config = {path="../../sgconfig"}

@@ -3,6 +3,8 @@ use network::mem_stream::{MemTcpStream, MemNetwork,MemListener};
 use std::net::SocketAddr;
 use futures::{Stream, Future,future};
 use structopt::StructOpt;
+use node_service::{setup_node_service};
+use sg_config::config::{NodeConfig,NetworkConfig};
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -11,25 +13,37 @@ use structopt::StructOpt;
     about = "stargate local node "
 )]
 struct Args {
-    /// Enable logging
     #[structopt(short = "l", long = "enable_logging")]
     pub enable_logging: bool,
-    /// Start client
     #[structopt(short = "s", long = "start_client")]
     pub start_client: bool,
-    /// Directory used by launch_swarm to output LibraNodes' config files, logs, libradb, etc,
-    /// such that user can still inspect them after exit.
-    /// If unspecified, a temporary dir will be used and auto deleted.
     #[structopt(short = "c", long = "config_dir")]
     pub config_dir: Option<String>,
-    /// If specified, load faucet key from this file. Otherwise generate new keypair file.
     #[structopt(short = "f", long = "faucet_key_path")]
     pub faucet_key_path: Option<String>,
 }
 
+pub struct Swarm {
+    pub config: NodeConfig,
+    tee_logs: bool,
+}
+
+fn launch_swarm(args:Args)->Swarm{
+    Swarm{
+        config:NodeConfig{
+            network:NetworkConfig{
+                address:"localhost".to_string(),
+                port:8080
+            }
+        },
+        tee_logs:true,
+    }
+}
 
 fn main(){
     let args = Args::from_args();
+    
+    
     if args.start_client {
         
     }else {
