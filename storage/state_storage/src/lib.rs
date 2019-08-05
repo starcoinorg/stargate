@@ -19,6 +19,7 @@ use star_types::access_path::AccessPath;
 use types::access_path::Access;
 use std::convert::TryFrom;
 use std::cell::RefCell;
+use itertools::Itertools;
 
 pub struct AccountState {
     state: Rc<RefCell<SparseMerkleTree>>
@@ -31,10 +32,11 @@ impl AccountState {
         }
     }
 
-    pub fn from_account_state_blob(account_state_blob: &AccountStateBlob) -> Result<Self>{
+    pub fn from_account_state_blob(account_state_blob: Vec<u8>) -> Result<Self>{
         let mut state = Self::new();
-        let map = BTreeMap::try_from(account_state_blob)?;
-        Self::update_state(&mut state, map.iter().map(|(k,v)|(k.clone(),v.clone())).collect());
+        let bmap = BTreeMap::try_from(&AccountStateBlob::from(account_state_blob))?;
+        let updates = bmap.iter().map(|(k,v)|(k.clone(),v.clone())).collect();
+        Self::update_state(&mut state, updates);
         Ok(state)
     }
 
