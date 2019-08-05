@@ -6,7 +6,7 @@ declare -a libra_crates=("types" "config" "common/build_helpers" "common/canonic
 
 echo "Update git submodule"
 git submodule init
-git submodule update
+#git submodule update
 
 git submodule foreach git pull origin master
 
