@@ -34,3 +34,4 @@ metrics = { path = "../common/metrics" }
 proto_conv = { path = "../common/proto_conv" }
 types = { path = "../types" }
 vm_genesis = { path = "../language/vm/vm_genesis" }
+node_client = { path = "../node/node_client"}
