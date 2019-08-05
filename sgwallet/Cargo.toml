@@ -7,11 +7,16 @@ publish = false
 edition = "2018"
 
 [dependencies]
+rand = "0.6.5"
+failure = { path = "../common/failure_ext", package = "failure_ext" }
+types = { path = "../types" }
 star_types = { path = "../star_types" }
 local_vm = { path = "../language/local_vm"}
 crypto = { path = "../crypto/legacy_crypto" }
 futures = { version = "0.3.0-alpha.16", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }
 nextgen_crypto = { path = "../crypto/nextgen_crypto"}
+local_state_storage = { path = "./local_state_storage"}
+chain_client = { path = "../chain/chain_client"}
 
 [dev-dependencies]
 nextgen_crypto = { path = "../crypto/nextgen_crypto", features = ["testing"] }
