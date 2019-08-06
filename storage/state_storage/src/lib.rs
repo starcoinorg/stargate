@@ -6,10 +6,9 @@ use std::collections::{HashMap, BTreeMap};
 use std::rc::Rc;
 
 use crypto::{
-    hash::{HashValueBitIterator, SPARSE_MERKLE_PLACEHOLDER_HASH},
+    hash::{AccountStateBlobHasher, CryptoHash, CryptoHasher, SPARSE_MERKLE_PLACEHOLDER_HASH},
     HashValue,
 };
-use crypto::hash::CryptoHash;
 use failure::prelude::*;
 use types::account_address::AccountAddress;
 use types::account_state_blob::AccountStateBlob;
@@ -23,15 +22,16 @@ use itertools::Itertools;
 use std::sync::Arc;
 use crate::sparse_merkle::{SparseMerkleTree,ProofRead};
 use atomic_refcell::AtomicRefCell;
+use std::ops::Deref;
 
 pub struct AccountState {
-    state: Arc<AtomicRefCell<SparseMerkleTree>>
+    state: Arc<AtomicRefCell<BTreeMap<Vec<u8>,Vec<u8>>>>
 }
 
 impl AccountState {
     pub fn new() -> Self {
         Self {
-            state: Arc::new(AtomicRefCell::new(SparseMerkleTree::new(*SPARSE_MERKLE_PLACEHOLDER_HASH))),
+            state: Arc::new(AtomicRefCell::new(BTreeMap::new())),
         }
     }
 
@@ -52,29 +52,43 @@ impl AccountState {
 
     /// update path resource and return new root.
     pub fn update(&mut self, path: Vec<u8>, value: Vec<u8>) -> Result<HashValue> {
-        let mut tree = self.state.borrow_mut();
-        let blob = AccountStateBlob::from(value);
-        //TODO use another hasher.
-        let hash = AccountStateBlob::from(path).hash();
-        *tree = tree.update(vec![(hash, blob)], &ProofReader::default()).unwrap();
-        Ok(tree.root_hash())
+        self.state.borrow_mut().insert(path, value);
+        Ok(self.root_hash())
     }
 
     pub fn get(&self, path: &Vec<u8>) -> Option<Vec<u8>> {
-        let hash = AccountStateBlob::from(path.clone()).hash();
-        match self.state.borrow().get(hash) {
-            sparse_merkle::AccountState::ExistsInScratchPad(blob) => Some(blob.into()),
-            _ => None
-        }
+        self.state.borrow().get(path).cloned()
     }
 
     pub fn delete(&mut self, path: &Vec<u8>) -> Result<HashValue> {
-        //TODO
-        unimplemented!()
+        self.state.borrow_mut().remove(path);
+        Ok(self.root_hash())
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        unimplemented!()
+       self.into()
+    }
+
+    pub fn root_hash(&self) -> HashValue{
+        //TODO use another hasher.
+        let blob:AccountStateBlob = self.into();
+        blob.hash()
+    }
+}
+
+impl Into<Vec<u8>> for &AccountState {
+
+    fn into(self) -> Vec<u8> {
+        let blob:AccountStateBlob = self.into();
+        blob.into()
+    }
+
+}
+
+impl Into<AccountStateBlob> for &AccountState{
+
+    fn into(self) -> AccountStateBlob {
+        AccountStateBlob::try_from(&*self.state.borrow()).expect("serialize account fail.")
     }
 }
 
