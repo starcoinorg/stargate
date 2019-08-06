@@ -40,9 +40,7 @@ impl Drop for InteractiveClient {
 impl InteractiveClient {
     pub fn new_with_inherit_io(
         port: u16,
-        faucet_key_file_path: &Path,
-        mnemonic_file_path: &Path,
-        validator_set_file: String,
+        //faucet_key_file_path: &Path,
     ) -> Self {
         // We need to call canonicalize on the path because we are running client from
         // workspace root and the function calling new_with_inherit_io isn't necessarily
@@ -50,30 +48,22 @@ impl InteractiveClient {
         // unless we convert it to an absolute path
         Self {
             client: Some(
-                Command::new(utils::get_bin("client"))
+                Command::new(utils::get_bin("cli"))
                     .current_dir(utils::workspace_root())
                     .arg("-p")
                     .arg(port.to_string())
                     .arg("-m")
-                    .arg(
-                        faucet_key_file_path
-                            .canonicalize()
-                            .expect("Unable to get canonical path of faucet key file")
-                            .to_str()
-                            .unwrap(),
-                    )
+                    // .arg(
+                    //     faucet_key_file_path
+                    //         .canonicalize()
+                    //         .expect("Unable to get canonical path of faucet key file")
+                    //         .to_str()
+                    //         .unwrap(),
+                    // )
                     .arg("-n")
-                    .arg(
-                        mnemonic_file_path
-                            .canonicalize()
-                            .expect("Unable to get canonical path of mnemonic file")
-                            .to_str()
-                            .unwrap(),
-                    )
                     .arg("-a")
                     .arg("localhost")
                     .arg("-s")
-                    .arg(validator_set_file)
                     .stdin(Stdio::inherit())
                     .stdout(Stdio::inherit())
                     .stderr(Stdio::inherit())
@@ -94,7 +84,7 @@ impl InteractiveClient {
             /// from the client CLI. Comment the stdout/stderr lines below
             /// and enjoy pretty Matrix-style output.
             client: Some(
-                Command::new(utils::get_bin("client"))
+                Command::new(utils::get_bin("cli"))
                     .current_dir(utils::workspace_root())
                     .arg("-p")
                     .arg(port.to_string())

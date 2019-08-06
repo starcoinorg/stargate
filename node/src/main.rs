@@ -5,6 +5,7 @@ use futures::{Stream, Future,future};
 use structopt::StructOpt;
 use node_service::{setup_node_service};
 use sg_config::config::{NodeConfig,NetworkConfig};
+use node::client;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -28,7 +29,7 @@ pub struct Swarm {
     tee_logs: bool,
 }
 
-fn launch_swarm(args:Args)->Swarm{
+fn launch_swarm(args:&Args)->Swarm{
     Swarm{
         config:NodeConfig{
             network:NetworkConfig{
@@ -42,10 +43,19 @@ fn launch_swarm(args:Args)->Swarm{
 
 fn main(){
     let args = Args::from_args();
-    
+    let swarm = launch_swarm(&args);
+
+    let mut node_server = setup_node_service(&swarm.config);
+    node_server.start();
     
     if args.start_client {
-        
+        let client = client::InteractiveClient::new_with_inherit_io(
+            swarm.config.network.port
+            //Path::new(&faucet_key_file_path),
+        );
+        println!("Loading client...");
+        let _output = client.output().expect("Failed to wait on child");
+        println!("Exit client.");        
     }else {
         let (tx, rx) = std::sync::mpsc::channel();
         ctrlc::set_handler(move || {
