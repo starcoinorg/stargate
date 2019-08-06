@@ -22,6 +22,6 @@ impl StateView for MockStateView{
 
 #[test]
 fn test_local_vm(){
-    let mock_view = Box::new(MockStateView{});
+    let mock_view = Arc::new(MockStateView{});
     let vm = LocalVM::new(mock_view);
 }
