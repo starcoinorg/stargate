@@ -38,6 +38,7 @@ members = [
     "chain/chain_client",
     "chain/chain_service",
     "network",
+    "network/memsocket",
     "sgwallet",
     "sgwallet/local_state_storage",
     "switch",

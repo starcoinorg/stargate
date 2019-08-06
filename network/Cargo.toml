@@ -10,3 +10,4 @@ edition = "2018"
 libp2p = "0.11.0"
 tokio = {version = "0.1.22"}
 futures = { version = "0.3.0-alpha.16", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }
+memsocket = { path = "memsocket" }
