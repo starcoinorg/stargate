@@ -2,6 +2,9 @@ syntax = "proto3";
 
 package node;
 
+import "transaction.proto";
+import "off_chain_transaction.proto";
+
 message OpenChannelNodeNegotiateMessage {
     bytes sender_addr = 1;
     bytes sender_resource_type_hash = 2 ;
@@ -14,11 +17,11 @@ message OpenChannelNodeNegotiateMessage {
 }
 
 message OpenChannelTransactionMessage {
-    bytes transaction = 1;
+    types.SignedTransaction transaction = 1;
 }
 
 message OfflinePayMessage {
-    bytes transaction = 1;
+    star_types.OffChainTransaction transaction = 1;
 }
 
 message StructTag {
