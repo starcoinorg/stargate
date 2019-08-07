@@ -54,7 +54,7 @@ impl TransactionStorage {
     }
 
     pub fn least_version(&self) -> Version {
-        (self.signed_tx_vec.len()) as u64
+        (self.signed_tx_vec.len() - 1) as u64
     }
 
     pub fn least_hash_root(&self) -> HashValue {

@@ -1,9 +1,7 @@
 extern crate grpc_helpers;
-extern crate types;
 
 use grpc_helpers::spawn_service_thread;
 use super::chain_service::ChainService;
-use std::thread;
 use tokio::{runtime::Runtime};
 use futures::future::Future;
 
@@ -34,10 +32,7 @@ impl ChainNode {
             self.config.service_name.clone(),
         );
 
-        rt.shutdown_on_idle().wait().unwrap();
         println!("{}", "Started chain Service");
-//        loop {
-//            thread::park();
-//        }
+        rt.shutdown_on_idle().wait().unwrap();
     }
 }

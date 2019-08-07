@@ -116,8 +116,8 @@ impl ChainService {
         receiver
     }
 
-    pub fn least_state_root_inner(&self) -> u64 {
-        self.tx_db.lock().unwrap().least_version()
+    pub fn least_state_root_inner(&self) -> HashValue {
+        self.tx_db.lock().unwrap().least_hash_root()
     }
 
     pub fn get_account_state_with_proof_by_state_root_inner(&self, account_address: AccountAddress) -> Vec<u8> {
@@ -135,11 +135,10 @@ impl ChainService {
 
 impl Chain for ChainService {
     fn least_state_root(&mut self, ctx: ::grpcio::RpcContext, _req: LeastRootRequest, sink: ::grpcio::UnarySink<LeastRootResponse>) {
-//        let least_hash_root = self.least_state_root_inner();
-//        let mut resp = LeastRootResponse::new();
-//        resp.set_state_root_hash(least_hash_root.to_vec());
-//        provide_grpc_response(Ok(resp), ctx, sink);
-        unimplemented!()
+        let least_hash_root = self.least_state_root_inner();
+        let mut resp = LeastRootResponse::new();
+        resp.set_state_root_hash(least_hash_root.to_vec());
+        provide_grpc_response(Ok(resp), ctx, sink);
     }
 
     fn faucet(&mut self, ctx: ::grpcio::RpcContext,
@@ -264,7 +263,7 @@ mod tests {
             let ten_millis = time::Duration::from_millis(100);
             thread::sleep(ten_millis);
             let root = chain_service.least_state_root_inner();
-            println!("{}", root);
+            println!("{:?}", root);
         };
         rt.block_on(print_future.boxed().unit_error().compat()).unwrap();
     }
