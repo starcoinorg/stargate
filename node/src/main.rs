@@ -1,17 +1,17 @@
-use network::p2p::{new_network,NetConfig};
-use network::mem_stream::{MemTcpStream, MemNetwork,MemListener};
+use network::p2p::{new_network, NetConfig};
+use network::mem_stream::{MemTcpStream, MemNetwork, MemListener};
 use std::net::SocketAddr;
-use futures::{Stream, Future,future};
+use futures::{Stream, Future, future};
 use structopt::StructOpt;
-use node_service::{setup_node_service};
-use sg_config::config::{NodeConfig,NetworkConfig};
+use node_service::setup_node_service;
+use sg_config::config::{NodeConfig, NetworkConfig, NodeNetworkConfig};
 use node::client;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
-    name = "stargate",
-    author = "star-team",
-    about = "stargate local node "
+name = "stargate",
+author = "star-team",
+about = "stargate local node "
 )]
 struct Args {
     #[structopt(short = "l", long = "enable_logging")]
@@ -29,25 +29,31 @@ pub struct Swarm {
     tee_logs: bool,
 }
 
-fn launch_swarm(args:&Args)->Swarm{
-    Swarm{
-        config:NodeConfig{
-            network:NetworkConfig{
-                address:"localhost".to_string(),
-                port:8080
-            }
+fn launch_swarm(args: &Args) -> Swarm {
+    Swarm {
+        config: NodeConfig {
+            network: NetworkConfig {
+                address: "localhost".to_string(),
+                port: 8080,
+            },
+            node_net_work: NodeNetworkConfig {
+                addr: String::from("127.0.0.1:8000"),
+                max_sockets: 0,
+                memory_stream: false,
+                seeds: vec![String::from("127.0.0.1:8001")],
+            },
         },
-        tee_logs:true,
+        tee_logs: true,
     }
 }
 
-fn main(){
+fn main() {
     let args = Args::from_args();
     let swarm = launch_swarm(&args);
 
     let mut node_server = setup_node_service(&swarm.config);
     node_server.start();
-    
+
     if args.start_client {
         let client = client::InteractiveClient::new_with_inherit_io(
             swarm.config.network.port
@@ -55,23 +61,24 @@ fn main(){
         );
         println!("Loading client...");
         let _output = client.output().expect("Failed to wait on child");
-        println!("Exit client.");        
-    }else {
+        println!("Exit client.");
+    } else {
         let (tx, rx) = std::sync::mpsc::channel();
         ctrlc::set_handler(move || {
             tx.send(())
                 .expect("failed to send unit when handling CTRL-C");
         })
-        .expect("failed to set CTRL-C handler");
+            .expect("failed to set CTRL-C handler");
         println!("CTRL-C to exit.");
         rx.recv()
             .expect("failed to receive unit when handling CTRL-C");
     }
 
-    let cfg = NetConfig {
-        bootstrap: vec![],
+    let cfg = NodeNetworkConfig {
+        addr: "".to_string(),
         max_sockets: 0,
         memory_stream: false,
+        seeds: vec![]
     };
     let network = new_network::<
         MemTcpStream,
@@ -79,6 +86,4 @@ fn main(){
         MemListener,
         MemNetwork,
     >(cfg);
-    
-    
 }

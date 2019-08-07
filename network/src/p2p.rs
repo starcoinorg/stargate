@@ -10,9 +10,9 @@ use futures::{
 };
 
 use crate::error::Error;
-use sg_config::config::NetworkConfig;
+use sg_config::config::NodeNetworkConfig;
 
-pub type NetConfig = NetworkConfig;
+pub type NetConfig = NodeNetworkConfig;
 
 
 pub struct TSocket {
