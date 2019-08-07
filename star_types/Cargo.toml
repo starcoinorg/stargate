@@ -28,3 +28,6 @@ vm_runtime_types = { path = "../language/vm/vm_runtime/vm_runtime_types"}
 
 [build-dependencies]
 build_helpers = { path = "../common/build_helpers" }
+
+[dev-dependencies]
+nextgen_crypto = { path = "../crypto/nextgen_crypto", features = ["testing"] }

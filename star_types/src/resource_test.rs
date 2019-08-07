@@ -17,9 +17,7 @@ fn test_resource() {
     let out: Vec<u8> = serializer.get_output();
     println!("resource hex: {}", hex::encode(&out));
 
-    let mut deserializer = SimpleDeserializer::new(out.as_slice());
-
-    let resource = Resource::decode(account_struct_tag(), get_account_struct_def(), &mut deserializer).expect("decode fail.");
+    let resource = Resource::decode(account_struct_tag(), get_account_struct_def(), &out).expect("decode fail.");
     println!("resource:{:#?}", resource);
     let mut serializer = SimpleSerializer::new();
     resource.serialize(&mut serializer).expect("serialize resource fail.");

@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use itertools::Itertools;
 
-use canonical_serialization::{CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer};
+use canonical_serialization::{CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer, SimpleDeserializer};
 use failure::prelude::*;
 use types::language_storage::StructTag;
 use vm_runtime_types::{loaded_data::struct_def::StructDef, value::MutVal};
@@ -29,8 +29,9 @@ impl Resource {
         }
     }
 
-    pub fn decode(tag: StructTag, def: StructDef, deserializer: &mut impl CanonicalDeserializer) -> Result<Self> {
-        let fields = Self::decode_fields(deserializer, &def)?;
+    pub fn decode(tag: StructTag, def: StructDef, bytes: &Vec<u8>) -> Result<Self> {
+        let mut deserializer = SimpleDeserializer::new(bytes.as_slice());
+        let fields = Self::decode_fields(&mut deserializer, &def)?;
         Ok(Self {
             tag,
             def,
