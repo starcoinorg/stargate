@@ -2,14 +2,18 @@ use chain_client::ChainClientFacade;
 use failure::prelude::*;
 use state_storage::AccountState;
 use state_view::StateView;
-use types::access_path::AccessPath;
+use types::access_path::{AccessPath, Access};
 use types::account_address::AccountAddress;
 use std::sync::Arc;
+use std::collections::HashMap;
+use star_types::offchain_transaction::OffChainTransaction;
+use types::write_set::{WriteSet, WriteOp};
 
 pub struct LocalStateStorage {
     account: AccountAddress,
     state: AccountState,
     client: Arc<ChainClientFacade>,
+    channels: HashMap<AccountAddress, AccountState>
 }
 
 impl LocalStateStorage {
@@ -20,7 +24,61 @@ impl LocalStateStorage {
             account,
             state,
             client,
+            channels: HashMap::new(),
         })
+    }
+
+    pub fn apply_txn(&mut self, txn: &OffChainTransaction) {
+        let output = txn.output();
+        let write_set = output.write_set();
+        self.apply_write_set(write_set);
+    }
+
+    fn update(&mut self, access_path: &AccessPath, value: &Vec<u8>){
+        if self.account == access_path.address {
+            self.state.update(access_path.path.clone(), value.clone());
+        }else{
+            //TODO check channel
+            match self.channels.get_mut(&access_path.address){
+                Some(channel_state) => {
+                    channel_state.update(access_path.path.clone(), value.clone());
+                },
+                None => {
+                    let mut channel_state = AccountState::new();
+                    channel_state.update(access_path.path.clone(), value.clone());
+                    self.channels.insert(access_path.address, channel_state);
+                }
+            }
+        }
+    }
+
+    fn delete(&mut self, access_path: &AccessPath){
+        if self.account == access_path.address {
+            self.state.delete(&access_path.path);
+        }else{
+            //TODO check channel
+            match self.channels.get_mut(&access_path.address){
+                Some(channel_state) => {
+                    channel_state.delete(&access_path.path);
+                },
+                None => {
+                    //no nothing
+                }
+            }
+        }
+    }
+
+    pub fn apply_write_set(&mut self, write_set: &WriteSet) {
+        for (access_path, op) in write_set {
+            match op {
+                WriteOp::Value(value) => {
+                    self.update(access_path, value);
+                },
+                WriteOp::Deletion => {
+                    self.delete(access_path);
+                }
+            };
+        }
     }
 }
 
@@ -30,8 +88,13 @@ impl StateView for LocalStateStorage {
         if address == &self.account {
             Ok(self.state.get(path))
         } else {
-            //TODO cache
-            self.client.get_state_by_access_path(access_path)
+            match self.channels.get(address){
+                Some(channel_state) =>  {
+                    Ok(channel_state.get(path))
+                },
+                //TODO chache
+                None => self.client.get_state_by_access_path(access_path)
+            }
         }
     }
 

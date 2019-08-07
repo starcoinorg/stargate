@@ -13,13 +13,17 @@ fn test_state_storage() {
     let mut serializer = SimpleSerializer::new();
     resource.serialize(&mut serializer);
     let resource_bytes: Vec<u8> = serializer.get_output();
-    let access_path = AccessPath::new_for_account_resource(account_address.clone());
-    let root_hash = storage.update(access_path.clone(), resource_bytes.clone()).expect("update fail.");
+    let access_path = AccessPath::new_for_account(account_address);//new_for_account_resource(account_address.clone());
+    let root_hash = storage.update(&access_path, resource_bytes.clone()).expect("update fail.");
+    assert_eq!(root_hash, storage.root_hash());
+
     let account_state = storage.get_account_state(&account_address).unwrap();
     let resource_bytes2 = account_state.get(&access_path.path).expect("get fail.");
     assert_eq!(resource_bytes, resource_bytes2);
     let account_bytes = account_state.to_bytes();
     debug_assert!(account_bytes.len() > 0);
+
+    storage.delete(&access_path).unwrap();
 }
 
 #[test]

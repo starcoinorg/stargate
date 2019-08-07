@@ -14,7 +14,7 @@ use types::account_address::AccountAddress;
 use types::account_state_blob::AccountStateBlob;
 use types::proof::SparseMerkleProof;
 use types::write_set::{WriteOp, WriteSet};
-use star_types::access_path::AccessPath;
+use types::access_path::AccessPath;
 use types::access_path::Access;
 use std::convert::TryFrom;
 use std::cell::RefCell;
@@ -23,6 +23,7 @@ use std::sync::Arc;
 use crate::sparse_merkle::{SparseMerkleTree,ProofRead};
 use atomic_refcell::AtomicRefCell;
 use std::ops::Deref;
+use star_types::offchain_transaction::OffChainTransaction;
 
 pub struct AccountState {
     state: Arc<AtomicRefCell<BTreeMap<Vec<u8>,Vec<u8>>>>
@@ -140,21 +141,25 @@ impl StateStorage {
         self.account_states.get_mut(address)
     }
 
+    pub fn apply_txn(&mut self, txn: &OffChainTransaction) -> Result<HashValue>{
+        self.apply_write_set(txn.output().write_set())
+    }
+
     pub fn apply_write_set(&mut self, write_set: &WriteSet) -> Result<HashValue> {
         for (access_path, op) in write_set {
             match op {
                 WriteOp::Value(value) => {
-                    self.update(access_path.clone().into(), value.clone())?;
+                    self.update(access_path, value.clone())?;
                 },
                 WriteOp::Deletion => {
-                    self.delete(access_path.clone().into())?;
+                    self.delete(access_path)?;
                 }
             };
         }
         Ok(self.global_state.borrow().root_hash())
     }
 
-    pub fn update(&mut self, access_path: AccessPath, value: Vec<u8>) -> Result<HashValue> {
+    pub fn update(&mut self, access_path: &AccessPath, value: Vec<u8>) -> Result<HashValue> {
         let account_state = self.get_account_state_mut(&access_path.address);
         match account_state {
             Some(account_state) => {
@@ -167,8 +172,17 @@ impl StateStorage {
         Ok(self.global_state.borrow().root_hash())
     }
 
-    pub fn delete(&mut self, path: AccessPath) -> Result<HashValue> {
-        unimplemented!()
+    pub fn delete(&mut self, access_path: &AccessPath) -> Result<HashValue> {
+        let account_state = self.get_account_state_mut(&access_path.address);
+        match account_state {
+            Some(account_state) => {
+                let account_root_hash = account_state.delete(&access_path.path)?;
+                let mut global_state = self.global_state.borrow_mut();
+                *global_state = global_state.update(vec![(access_path.address.hash(), AccountStateBlob::from(account_root_hash.to_vec()))], &ProofReader::default()).unwrap();
+            }
+            None => { return bail!("can not find account by address:{}", access_path.address); }
+        };
+        Ok(self.global_state.borrow().root_hash())
     }
 }
 
