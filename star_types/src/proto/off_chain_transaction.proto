@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package star_types;
+
+import "transaction.proto";
+
+message TransactionOutput {
+    types.WriteSet write_set = 1;
+}
+
+message OffChainTransaction {
+    bytes receiver = 1;
+    types.SignedTransaction transaction = 2;
+    TransactionOutput transaction_output= 3;
+    repeated bytes output_signatures = 4;
+}
