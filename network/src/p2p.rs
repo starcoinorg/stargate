@@ -10,12 +10,10 @@ use futures::{
 };
 
 use crate::error::Error;
+use sg_config::config::NetworkConfig;
 
-pub struct NetConfig {
-    pub bootstrap: Vec<SocketAddr>,
-    pub max_sockets: u64,
-    pub memory_stream: bool,
-}
+pub type NetConfig = NetworkConfig;
+
 
 pub struct TSocket {
     incoming: UnboundedReceiver<Vec<u8>>,
