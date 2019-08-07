@@ -38,6 +38,7 @@ members = [
     "chain/chain_proto",
     "chain/chain_client",
     "chain/chain_service",
+    "chain/mock_chain_client",
     "network",
     "network/memsocket",
     "sgwallet",

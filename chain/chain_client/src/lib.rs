@@ -19,7 +19,7 @@ pub mod watch_transaction_stream;
 pub trait ChainClient {
     fn least_state_root(&self) -> Result<HashValue>;
     fn get_account_state(&self, address: &AccountAddress)  -> Result<Option<Vec<u8>>>;
-    fn get_state_by_access_path(&self, path: &AccessPath) -> Result<Option<Vec<u8>>>;
+    fn get_state_by_access_path(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>>;
 }
 
 pub struct RpcChainClient {

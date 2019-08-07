@@ -1,0 +1,18 @@
+[package]
+name = "mock_chain_client"
+version = "0.1.0"
+authors = ["jolestar <jolestar@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = "0.1.22"
+types = { path = "../../types" }
+star_types = { path = "../../star_types" }
+failure = { path = "../../common/failure_ext", package = "failure_ext" }
+chain_client = {path = "../chain_client"}
+chain_service = {path = "../chain_service"}
+
+[dev-dependencies]
+nextgen_crypto = { path = "../../crypto/nextgen_crypto", features = ["testing"] }
