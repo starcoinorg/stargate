@@ -43,6 +43,22 @@ impl OffChainTransaction {
         self.output_signatures.push(signature);
         Ok(())
     }
+
+    pub fn txn(&self) -> &SignedTransaction {
+        &self.txn
+    }
+
+    pub fn receiver(&self) -> AccountAddress {
+        self.receiver
+    }
+
+    pub fn output(&self) -> &TransactionOutput {
+        &self.output
+    }
+
+    pub fn output_signatures(&self) -> &Vec<Ed25519Signature> {
+        &self.output_signatures
+    }
 }
 
 pub struct OffChainTransactionInput {}
