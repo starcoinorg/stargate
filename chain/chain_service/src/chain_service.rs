@@ -256,6 +256,6 @@ mod tests {
     fn testGenesis() {
         let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
         let genesis_txn = genesis_checked_txn.into_inner();
-        println!("{:?}", txn);
+        println!("{:?}", genesis_txn);
     }
 }
