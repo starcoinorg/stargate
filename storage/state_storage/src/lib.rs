@@ -1,4 +1,4 @@
-#[cfg(test)]
+//#[cfg(test)]
 mod state_storage_test;
 pub mod sparse_merkle;
 

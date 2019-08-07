@@ -1,30 +1,35 @@
-use chain_client::ChainClientFacade;
+use std::sync::Arc;
+
+use chain_client::{ChainClient, RpcChainClient};
 use failure::prelude::*;
 use local_state_storage::LocalStateStorage;
 use local_vm::LocalVM;
 use nextgen_crypto::{test_utils::KeyPair};
 use nextgen_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
 use star_types::{channel::SgChannelStream};
+use star_types::offchain_transaction::{OffChainTransaction, SignOffChainTransaction};
+use star_types::resource::Resource;
 use types::account_address::AccountAddress;
 use types::transaction::{SignedTransaction, TransactionOutput};
 use types::vm_error::*;
 
-use star_types::offchain_transaction::{OffChainTransaction, SignOffChainTransaction};
-use star_types::resource::Resource;
-use std::sync::Arc;
-
-pub struct Wallet {
+pub struct Wallet<C> where C: ChainClient {
     account_address: AccountAddress,
     keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
-    client: Arc<ChainClientFacade>,
-    storage: Arc<LocalStateStorage>,
-    vm: LocalVM<LocalStateStorage>,
+    client: Arc<C>,
+    storage: Arc<LocalStateStorage<C>>,
+    vm: LocalVM<LocalStateStorage<C>>,
 }
 
-impl Wallet {
-    pub fn new(keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>, rpc_host: &str, rpc_port: u32) -> Result<Self> {
+impl<C> Wallet<C> where C: ChainClient {
+    pub fn new(keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>, rpc_host: &str, rpc_port: u32) -> Result<Wallet<RpcChainClient>> {
         let account_address = AccountAddress::from_public_key(&keypair.public_key);
-        let client = Arc::new(ChainClientFacade::new(rpc_host, rpc_port));
+        let client = Arc::new(RpcChainClient::new(rpc_host, rpc_port));
+        Wallet::new_with_client(keypair, client)
+    }
+
+    pub fn new_with_client(keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>, client: Arc<C>) -> Result<Self> {
+        let account_address = AccountAddress::from_public_key(&keypair.public_key);
         let storage = Arc::new(LocalStateStorage::new(account_address.clone(), client.clone())?);
         let vm = LocalVM::new(storage.clone());
         Ok(Self {

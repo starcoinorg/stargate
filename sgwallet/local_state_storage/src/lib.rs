@@ -1,4 +1,4 @@
-use chain_client::ChainClientFacade;
+use chain_client::{RpcChainClient, ChainClient};
 use failure::prelude::*;
 use state_storage::AccountState;
 use state_view::StateView;
@@ -9,15 +9,15 @@ use std::collections::HashMap;
 use star_types::offchain_transaction::OffChainTransaction;
 use types::write_set::{WriteSet, WriteOp};
 
-pub struct LocalStateStorage {
+pub struct LocalStateStorage<C> where C:ChainClient {
     account: AccountAddress,
     state: AccountState,
-    client: Arc<ChainClientFacade>,
+    client: Arc<C>,
     channels: HashMap<AccountAddress, AccountState>
 }
 
-impl LocalStateStorage {
-    pub fn new(account: AccountAddress, client: Arc<ChainClientFacade>) -> Result<Self> {
+impl <C> LocalStateStorage<C> where C:ChainClient {
+    pub fn new(account: AccountAddress, client: Arc<C>) -> Result<Self> {
         let state_blob = client.get_account_state(&account).and_then(|state|state.ok_or(bail!("can not find account by address:{}", account)))?;
         let state = AccountState::from_account_state_blob(state_blob)?;
         Ok(Self {
@@ -82,7 +82,7 @@ impl LocalStateStorage {
     }
 }
 
-impl StateView for LocalStateStorage {
+impl <C> StateView for LocalStateStorage<C> where C:ChainClient {
     fn get(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
         let AccessPath { address, path } = access_path;
         if address == &self.account {

@@ -16,13 +16,19 @@ use watch_transaction_stream::WatchTransactionStream;
 
 pub mod watch_transaction_stream;
 
-pub struct ChainClientFacade {
+pub trait ChainClient {
+    fn least_state_root(&self) -> Result<HashValue>;
+    fn get_account_state(&self, address: &AccountAddress)  -> Result<Option<Vec<u8>>>;
+    fn get_state_by_access_path(&self, path: &AccessPath) -> Result<Option<Vec<u8>>>;
+}
+
+pub struct RpcChainClient {
     conn_addr: String,
     client: chain_grpc::ChainClient,
 }
 
-impl ChainClientFacade {
-    pub fn new(host: &str, port: u32) -> ChainClientFacade {
+impl RpcChainClient {
+    pub fn new(host: &str, port: u32) -> RpcChainClient {
         let conn_addr = format!("{}:{}", host, port);
 
         // Create a GRPC client
@@ -34,11 +40,7 @@ impl ChainClientFacade {
         }
     }
 
-    pub fn least_state_root(&self) -> HashValue {
-        let req = LeastRootRequest::new();
-        let resp = self.client.least_state_root(&req);
-        HashValue::from_slice(resp.unwrap().state_root_hash.as_slice()).unwrap()
-    }
+
 
     pub fn faucet(&self, addr_str: String, amount: u64) -> Result<()> {
         let address = AccountAddress::from_str(&addr_str)?;
@@ -51,14 +53,6 @@ impl ChainClientFacade {
 
     pub fn get_account_state_with_proof_by_state_root(&self, address: &AccountAddress, state_root_hash: HashValue) -> Result<Option<Vec<u8>>> {
         self.get_account_state(address)
-    }
-
-    pub fn get_account_state(&self, address: &AccountAddress) -> Result<Option<Vec<u8>>> {
-        let mut req = GetAccountStateWithProofByStateRootRequest::new();
-        req.set_address(address.to_vec());
-        let resp = self.client.get_account_state_with_proof_by_state_root(&req);
-        let result = resp.unwrap().account_state_blob;
-        Ok(Some(result))
     }
 
     pub fn submit_transaction(&mut self, signed_transaction: SignedTransaction) -> Result<()> {
@@ -88,7 +82,26 @@ impl ChainClientFacade {
         //thread::spawn(print_data);
     }
 
-    pub fn get_state_by_access_path(&self, path: &AccessPath) -> Result<Option<Vec<u8>>> {
+
+}
+
+impl ChainClient for RpcChainClient {
+
+    fn least_state_root(&self) -> Result<HashValue> {
+        let req = LeastRootRequest::new();
+        let resp = self.client.least_state_root(&req)?;
+        HashValue::from_slice(resp.state_root_hash.as_slice())
+    }
+
+    fn get_account_state(&self, address: &AccountAddress) -> Result<Option<Vec<u8>>> {
+        let mut req = GetAccountStateWithProofByStateRootRequest::new();
+        req.set_address(address.to_vec());
+        let resp = self.client.get_account_state_with_proof_by_state_root(&req);
+        let result = resp.unwrap().account_state_blob;
+        Ok(Some(result))
+    }
+
+    fn get_state_by_access_path(&self, path: &AccessPath) -> Result<Option<Vec<u8>>> {
         let mut req = AccessPathProto::new();
         req.set_address(path.address.to_vec());
         req.set_path(path.path.to_vec());
