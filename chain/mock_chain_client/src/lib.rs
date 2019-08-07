@@ -3,7 +3,7 @@ use chain_service::chain_service::ChainService;
 use chain_client::ChainClient;
 use types::account_address::AccountAddress;
 use types::access_path::AccessPath;
-use nextgen_crypto::HashValue;
+use crypto::HashValue;
 use tokio::runtime::Runtime;
 
 pub struct MockChainClient {

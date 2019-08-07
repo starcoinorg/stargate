@@ -13,6 +13,7 @@ star_types = { path = "../../star_types" }
 failure = { path = "../../common/failure_ext", package = "failure_ext" }
 chain_client = {path = "../chain_client"}
 chain_service = {path = "../chain_service"}
+crypto = { path = "../../crypto/legacy_crypto" }
 
 [dev-dependencies]
 nextgen_crypto = { path = "../../crypto/nextgen_crypto", features = ["testing"] }
