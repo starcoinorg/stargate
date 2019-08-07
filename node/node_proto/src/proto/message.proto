@@ -2,31 +2,21 @@ syntax = "proto3";
 
 package node;
 
-message OpenChannelNodeNegotiateRequest {
-    bytes local_addr = 1;
-    bytes remote_addr= 2;    
+message OpenChannelNodeNegotiateMessage {
+    bytes sender_addr = 1;
+    bytes sender_resource_type_hash = 2 ;
+    int64 sender_amount = 3 ;
+    bytes receiver_addr= 4;
+    bytes receiver_resource_type_hash = 5 ;
+    int64 receiver_amount = 6 ;
+    bytes sender_sign = 7 ;
+    bytes receiver_sign = 8 ;
 }
 
-message OpenChannelNodeNegotiateResponse {
-    bool confirmed = 1;
-}
-
-message OpenChannelTransactionRequest {
-    bytes local_addr = 1;
-    bytes remote_addr= 2;    
-    bytes transaction = 3;
-}
-
-message OpenChannelTransactionResponse {
-    bytes local_addr = 1;
-    bytes remote_addr= 2;    
-    bytes transaction = 3;
-}
-
-message OfflinePayRequest {
+message OpenChannelTransactionMessage {
     bytes transaction = 1;
 }
 
-message OfflinePayResponse {
+message OfflinePayMessage {
     bytes transaction = 1;
 }
