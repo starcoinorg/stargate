@@ -1,35 +1,29 @@
 extern crate types;
 extern crate channel;
 extern crate metrics;
+extern crate tokio;
 
 use chain_proto::proto::chain_grpc::Chain;
 use chain_proto::proto::chain::{LeastRootRequest, LeastRootResponse,
                                 FaucetRequest, FaucetResponse,
                                 GetAccountStateWithProofByStateRootRequest, GetAccountStateWithProofByStateRootResponse,
                                 WatchTransactionRequest, WatchTransactionResponse,
+                                MempoolAddTransactionStatus, MempoolAddTransactionStatusCode,
                                 SubmitTransactionRequest, SubmitTransactionResponse,
-                                StateByAccessPathResponse};
+                                StateByAccessPathResponse, };
 use types::proto::{access_path::AccessPath};
 use types::{transaction::{SignedTransaction, RawTransaction, TransactionPayload}, write_set::{WriteOp, WriteSet}, account_address::AccountAddress};
 use proto_conv::FromProto;
-use futures::sync::mpsc::{unbounded, UnboundedSender, UnboundedReceiver, SendError};
+use futures::sync::mpsc::{unbounded, UnboundedReceiver};
 use super::pub_sub;
 use hex;
-use futures::{MapErr, future::Future, sink::Sink, stream::Stream};
-//use futures::*;
+use futures::{future::Future, sink::Sink, stream::Stream};
 use grpcio::WriteFlags;
-use state_storage::{StateStorage, AccountState};
-use scratchpad::SparseMerkleTree;
+use state_storage::StateStorage;
 use super::transaction_storage::TransactionStorage;
-use core::borrow::{BorrowMut, Borrow};
-use std::sync::{Arc, RwLock, Mutex};
-use std::rc::Rc;
-use self::types::transaction::{TransactionInfo, Version};
-use std::cell::RefCell;
+use std::{sync::{Arc, Mutex}, thread};
 use crypto::{hash::CryptoHash, HashValue};
 use grpc_helpers::provide_grpc_response;
-use std::{thread, fs::File, io::prelude::*, path::PathBuf};
-use protobuf::parse_from_bytes;
 use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR};
 use ed25519_dalek::PublicKey;
 use tiny_keccak::Keccak;
@@ -41,6 +35,7 @@ use futures03::{
     sink::SinkExt,
     executor::block_on,
 };
+use tokio::{runtime::Runtime};
 
 #[derive(Clone)]
 pub struct ChainService {
@@ -63,12 +58,13 @@ impl ChainService {
                 chain_service_clone.submit_transaction_real(tx);
             }
         };
-        thread::spawn(|| { receiver_future.boxed().unit_error().compat() });
+        let mut rt = Runtime::new().unwrap();
+        rt.spawn(receiver_future.boxed().unit_error().compat());
 
         let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
         let genesis_txn = genesis_checked_txn.into_inner();
         let genesis_future = async {
-            tx_sender.send(genesis_txn).await
+            tx_sender.send(genesis_txn).await.unwrap();
         };
         block_on(genesis_future);
 
@@ -109,7 +105,7 @@ impl ChainService {
     }
 
     pub async fn submit_transaction_inner(&self, mut sender: channel::Sender<SignedTransaction>, sign_tx: SignedTransaction) {
-        sender.send(sign_tx).await;
+        sender.send(sign_tx).await.unwrap();
     }
 
     pub fn watch_transaction_inner(&self, address: Vec<u8>) -> UnboundedReceiver<WatchTransactionResponse> {
@@ -130,7 +126,7 @@ impl ChainService {
         a_s.to_bytes()
     }
 
-    pub fn state_by_access_path_inner(&self, account_address: AccountAddress, path:Vec<u8>) -> Option<Vec<u8>> {
+    pub fn state_by_access_path_inner(&self, account_address: AccountAddress, path: Vec<u8>) -> Option<Vec<u8>> {
         let state_db = self.state_db.lock().unwrap();
         let a_s = state_db.get_account_state(&account_address).unwrap();
         a_s.get(&path)
@@ -138,7 +134,7 @@ impl ChainService {
 }
 
 impl Chain for ChainService {
-    fn least_state_root(&mut self, ctx: ::grpcio::RpcContext, req: LeastRootRequest, sink: ::grpcio::UnarySink<LeastRootResponse>) {
+    fn least_state_root(&mut self, ctx: ::grpcio::RpcContext, _req: LeastRootRequest, sink: ::grpcio::UnarySink<LeastRootResponse>) {
         let least_hash_root = self.least_state_root_inner();
         let mut resp = LeastRootResponse::new();
         resp.set_state_root_hash(least_hash_root.to_vec());
@@ -190,6 +186,11 @@ impl Chain for ChainService {
         pub_sub::send(wt_resp).unwrap();
 
         block_on(self.submit_transaction_inner(self.sender.clone(), SignedTransaction::from_proto(req.signed_txn.unwrap()).unwrap()));
+        let mut resp = SubmitTransactionResponse::new();
+        let mut state = MempoolAddTransactionStatus::new();
+        state.set_code(MempoolAddTransactionStatusCode::Valid);
+        resp.set_mempool_status(state);
+        provide_grpc_response(Ok(resp), ctx, sink);
     }
 
     fn watch_transaction(&mut self, ctx: ::grpcio::RpcContext,

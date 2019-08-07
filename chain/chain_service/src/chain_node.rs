@@ -1,12 +1,8 @@
-extern crate grpcio;
 extern crate grpc_helpers;
 extern crate types;
 
-use grpcio::Service;
 use grpc_helpers::spawn_service_thread;
 use super::chain_service::ChainService;
-use proto_conv::FromProto;
-use chain_proto::proto::chain_grpc::Chain;
 use std::thread;
 
 pub struct ServiceConfig {
@@ -28,7 +24,7 @@ impl ChainNode {
         println!("{}", "Starting chain Service");
         let chain_service = ChainService::new();
         let service = chain_proto::proto::chain_grpc::create_chain(chain_service);
-        let chain_handle = spawn_service_thread(
+        let _chain_handle = spawn_service_thread(
             service,
             self.config.address.clone(),
             self.config.port.clone(),

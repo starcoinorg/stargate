@@ -61,7 +61,6 @@ message SubmitTransactionResponse {
   oneof status {
     MempoolAddTransactionStatus mempool_status = 3;
   }
-  bytes validator_id = 4;
 }
 
 enum MempoolAddTransactionStatusCode {

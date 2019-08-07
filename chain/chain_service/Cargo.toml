@@ -24,6 +24,7 @@ tiny-keccak = "1.5.0"
 channel = { path = "../../common/channel" }
 metrics = { path = "../../common/metrics" }
 futures03 = { package = "futures-preview", version = "=0.3.0-alpha.17", features = ["async-await", "nightly", "io-compat", "compat"] }
+tokio = "0.1.22"
 
 [dependencies.ed25519-dalek]
 version = "1.0.0-pre.1"

@@ -1,11 +1,8 @@
 use crypto::HashValue;
 use scratchpad::Accumulator;
-use std::{collections::{BTreeMap, HashMap}, sync::Arc};
+use std::{collections::{HashMap}};
 use types::transaction::{SignedTransaction, TransactionInfo, Version};
-use types::proof::position::Position;
-use std::sync::RwLock;
 use crypto::hash::{CryptoHash, TransactionInfoHasher};
-use core::borrow::BorrowMut;
 
 pub struct TransactionStorage {
     signed_tx_vec: Vec<SignedTransaction>,
