@@ -8,6 +8,7 @@ members = [
     "common/proptest_helpers",
     "common/proto_conv",
     "common/generic_sparse_merkle",
+    "common/channel",
     "config",
     "config/config_builder",
     "config/generate_keypair",
