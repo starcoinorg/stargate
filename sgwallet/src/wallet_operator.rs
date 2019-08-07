@@ -5,9 +5,9 @@ use star_types::{channel::SgChannelState, offchain_transaction::{OffChainTransac
 use crypto::PublicKey;
 
 pub trait WalletOperator {
-    fn createAccount() -> PublicKey;
+    fn create_account() -> PublicKey;
     fn sign(tx: OffChainTransaction) -> SignOffChainTransaction;
-    fn executeTx(input: OffChainTransactionInput) -> OffChainTransactionOutput;
-    fn applyTx(sign: SignOffChainTransaction);
-    fn channelState() -> SgChannelState;
+    fn execute_tx(input: OffChainTransactionInput) -> OffChainTransactionOutput;
+    fn apply_tx(sign: SignOffChainTransaction);
+    fn channel_state() -> SgChannelState;
 }

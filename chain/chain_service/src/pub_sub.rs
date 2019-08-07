@@ -1,17 +1,8 @@
-extern crate grpcio;
-
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
-use std::time;
-use types::proto::transaction::TransactionToCommit;
 use std::sync::Once;
 use std::mem::transmute;
-use core::borrow::Borrow;
-use futures::sync::mpsc::{unbounded, UnboundedSender, UnboundedReceiver, SendError};
-use futures::{stream::Stream, Poll};
-use grpcio::WriteFlags;
-use core::pin::Pin;
-use core::task::Context;
+use futures::sync::mpsc::{UnboundedSender, SendError};
 use chain_proto::proto::chain::WatchTransactionResponse;
 
 #[derive(Clone)]

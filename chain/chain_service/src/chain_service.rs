@@ -1,35 +1,29 @@
 extern crate types;
 extern crate channel;
 extern crate metrics;
+extern crate tokio;
 
 use chain_proto::proto::chain_grpc::Chain;
 use chain_proto::proto::chain::{LeastRootRequest, LeastRootResponse,
                                 FaucetRequest, FaucetResponse,
                                 GetAccountStateWithProofByStateRootRequest, GetAccountStateWithProofByStateRootResponse,
                                 WatchTransactionRequest, WatchTransactionResponse,
+                                MempoolAddTransactionStatus, MempoolAddTransactionStatusCode,
                                 SubmitTransactionRequest, SubmitTransactionResponse,
-                                StateByAccessPathResponse};
+                                StateByAccessPathResponse, };
 use types::proto::{access_path::AccessPath};
 use types::{transaction::{SignedTransaction, RawTransaction, TransactionPayload}, write_set::{WriteOp, WriteSet}, account_address::AccountAddress};
 use proto_conv::FromProto;
-use futures::sync::mpsc::{unbounded, UnboundedSender, UnboundedReceiver, SendError};
+use futures::sync::mpsc::{unbounded, UnboundedReceiver};
 use super::pub_sub;
 use hex;
-use futures::{MapErr, future::Future, sink::Sink, stream::Stream};
-//use futures::*;
+use futures::{future::Future, sink::Sink, stream::Stream};
 use grpcio::WriteFlags;
-use state_storage::{StateStorage, AccountState};
-use scratchpad::SparseMerkleTree;
+use state_storage::StateStorage;
 use super::transaction_storage::TransactionStorage;
-use core::borrow::{BorrowMut, Borrow};
-use std::sync::{Arc, RwLock, Mutex};
-use std::rc::Rc;
-use self::types::transaction::{TransactionInfo, Version};
-use std::cell::RefCell;
+use std::{sync::{Arc, Mutex}, thread};
 use crypto::{hash::CryptoHash, HashValue};
 use grpc_helpers::provide_grpc_response;
-use std::{thread, fs::File, io::prelude::*, path::PathBuf};
-use protobuf::parse_from_bytes;
 use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR};
 use ed25519_dalek::PublicKey;
 use tiny_keccak::Keccak;
@@ -41,6 +35,7 @@ use futures03::{
     sink::SinkExt,
     executor::block_on,
 };
+use tokio::{runtime::Runtime};
 
 #[derive(Clone)]
 pub struct ChainService {
@@ -50,7 +45,7 @@ pub struct ChainService {
 }
 
 impl ChainService {
-    pub fn new() -> Self {
+    pub fn new(rt:&mut Runtime) -> Self {
         let gauge = IntGauge::new("receive_transaction_channel_counter", "receive transaction channel").unwrap();
         let (mut tx_sender, mut tx_receiver) = channel::new(1_024, &gauge);
         let tx_db = Arc::new(Mutex::new(TransactionStorage::new()));
@@ -63,14 +58,15 @@ impl ChainService {
                 chain_service_clone.submit_transaction_real(tx);
             }
         };
-        thread::spawn(|| { receiver_future.boxed().unit_error().compat() });
+        rt.spawn(receiver_future.boxed().unit_error().compat());
 
         let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
         let genesis_txn = genesis_checked_txn.into_inner();
-        let genesis_future = async {
-            tx_sender.send(genesis_txn).await
+        let mut tx_sender_2 = tx_sender.clone();
+        let genesis_future = async move {
+            tx_sender_2.send(genesis_txn).await.unwrap();
         };
-        block_on(genesis_future);
+        rt.spawn(genesis_future.boxed().unit_error().compat());
 
         chain_service
     }
@@ -79,7 +75,7 @@ impl ChainService {
         let signed_tx_hash = sign_tx.clone().hash();
         let mut tx_db = self.tx_db.lock().unwrap();
         let exist_flag = tx_db.exist_signed_transaction(signed_tx_hash);
-        if exist_flag {
+        if !exist_flag {
             // 1. state_root
             let payload = sign_tx.payload().clone();
             match payload {
@@ -109,7 +105,7 @@ impl ChainService {
     }
 
     pub async fn submit_transaction_inner(&self, mut sender: channel::Sender<SignedTransaction>, sign_tx: SignedTransaction) {
-        sender.send(sign_tx).await;
+        sender.send(sign_tx).await.unwrap();
     }
 
     pub fn watch_transaction_inner(&self, address: Vec<u8>) -> UnboundedReceiver<WatchTransactionResponse> {
@@ -120,8 +116,8 @@ impl ChainService {
         receiver
     }
 
-    pub fn least_state_root_inner(&self) -> HashValue {
-        self.tx_db.lock().unwrap().least_hash_root()
+    pub fn least_state_root_inner(&self) -> u64 {
+        self.tx_db.lock().unwrap().least_version()
     }
 
     pub fn get_account_state_with_proof_by_state_root_inner(&self, account_address: AccountAddress) -> Vec<u8> {
@@ -130,7 +126,7 @@ impl ChainService {
         a_s.to_bytes()
     }
 
-    pub fn state_by_access_path_inner(&self, account_address: AccountAddress, path:Vec<u8>) -> Option<Vec<u8>> {
+    pub fn state_by_access_path_inner(&self, account_address: AccountAddress, path: Vec<u8>) -> Option<Vec<u8>> {
         let state_db = self.state_db.lock().unwrap();
         let a_s = state_db.get_account_state(&account_address).unwrap();
         a_s.get(&path)
@@ -138,11 +134,12 @@ impl ChainService {
 }
 
 impl Chain for ChainService {
-    fn least_state_root(&mut self, ctx: ::grpcio::RpcContext, req: LeastRootRequest, sink: ::grpcio::UnarySink<LeastRootResponse>) {
-        let least_hash_root = self.least_state_root_inner();
-        let mut resp = LeastRootResponse::new();
-        resp.set_state_root_hash(least_hash_root.to_vec());
-        provide_grpc_response(Ok(resp), ctx, sink);
+    fn least_state_root(&mut self, ctx: ::grpcio::RpcContext, _req: LeastRootRequest, sink: ::grpcio::UnarySink<LeastRootResponse>) {
+//        let least_hash_root = self.least_state_root_inner();
+//        let mut resp = LeastRootResponse::new();
+//        resp.set_state_root_hash(least_hash_root.to_vec());
+//        provide_grpc_response(Ok(resp), ctx, sink);
+        unimplemented!()
     }
 
     fn faucet(&mut self, ctx: ::grpcio::RpcContext,
@@ -190,6 +187,11 @@ impl Chain for ChainService {
         pub_sub::send(wt_resp).unwrap();
 
         block_on(self.submit_transaction_inner(self.sender.clone(), SignedTransaction::from_proto(req.signed_txn.unwrap()).unwrap()));
+        let mut resp = SubmitTransactionResponse::new();
+        let mut state = MempoolAddTransactionStatus::new();
+        state.set_code(MempoolAddTransactionStatusCode::Valid);
+        resp.set_mempool_status(state);
+        provide_grpc_response(Ok(resp), ctx, sink);
     }
 
     fn watch_transaction(&mut self, ctx: ::grpcio::RpcContext,
@@ -236,11 +238,34 @@ pub fn get_address(public_key: PublicKey) -> Result<AccountAddress, Box<std::err
 #[cfg(test)]
 mod tests {
     use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR};
+    use crate::chain_service::ChainService;
+    use tokio::runtime::Runtime;
+    use futures::future::Future;
+    use futures03::{
+        future::{FutureExt, TryFutureExt},
+        stream::StreamExt,
+        sink::SinkExt,
+        executor::block_on,
+    };
+    use std::{thread, time};
 
     #[test]
     fn testGenesis() {
         let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
         let genesis_txn = genesis_checked_txn.into_inner();
         println!("{:?}", genesis_txn);
+    }
+
+    #[test]
+    fn testChainService() {
+        let mut rt = Runtime::new().unwrap();
+        let chain_service = ChainService::new(&mut rt);
+        let print_future = async move {
+            let ten_millis = time::Duration::from_millis(100);
+            thread::sleep(ten_millis);
+            let root = chain_service.least_state_root_inner();
+            println!("{}", root);
+        };
+        rt.block_on(print_future.boxed().unit_error().compat()).unwrap();
     }
 }

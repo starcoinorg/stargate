@@ -1,13 +1,11 @@
-extern crate grpcio;
 extern crate grpc_helpers;
 extern crate types;
 
-use grpcio::Service;
 use grpc_helpers::spawn_service_thread;
 use super::chain_service::ChainService;
-use proto_conv::FromProto;
-use chain_proto::proto::chain_grpc::Chain;
 use std::thread;
+use tokio::{runtime::Runtime};
+use futures::future::Future;
 
 pub struct ServiceConfig {
     pub service_name: String,
@@ -24,20 +22,22 @@ impl ChainNode {
         ChainNode { config }
     }
 
-    pub fn run(&self) -> Result<(), ()> {
+    pub fn run(&self) -> () {
         println!("{}", "Starting chain Service");
-        let chain_service = ChainService::new();
+        let mut rt = Runtime::new().unwrap();
+        let chain_service = ChainService::new(&mut rt);
         let service = chain_proto::proto::chain_grpc::create_chain(chain_service);
-        let chain_handle = spawn_service_thread(
+        let _chain_handle = spawn_service_thread(
             service,
             self.config.address.clone(),
             self.config.port.clone(),
             self.config.service_name.clone(),
         );
 
+        rt.shutdown_on_idle().wait().unwrap();
         println!("{}", "Started chain Service");
-        loop {
-            thread::park();
-        }
+//        loop {
+//            thread::park();
+//        }
     }
 }

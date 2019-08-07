@@ -1,11 +1,8 @@
 use crypto::HashValue;
 use scratchpad::Accumulator;
-use std::{collections::{BTreeMap, HashMap}, sync::Arc};
+use std::{collections::{HashMap}};
 use types::transaction::{SignedTransaction, TransactionInfo, Version};
-use types::proof::position::Position;
-use std::sync::RwLock;
 use crypto::hash::{CryptoHash, TransactionInfoHasher};
-use core::borrow::BorrowMut;
 
 pub struct TransactionStorage {
     signed_tx_vec: Vec<SignedTransaction>,
@@ -57,7 +54,7 @@ impl TransactionStorage {
     }
 
     pub fn least_version(&self) -> Version {
-        (self.signed_tx_vec.len() - 1) as u64
+        (self.signed_tx_vec.len()) as u64
     }
 
     pub fn least_hash_root(&self) -> HashValue {
