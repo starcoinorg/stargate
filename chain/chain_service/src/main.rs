@@ -6,5 +6,5 @@ fn main() {
     let port:u16 = 8080;
     let conf = ServiceConfig { service_name, address, port };
     let node = ChainNode::new(conf);
-    node.run().unwrap();
+    node.run();
 }

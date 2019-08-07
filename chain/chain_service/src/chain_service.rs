@@ -45,7 +45,7 @@ pub struct ChainService {
 }
 
 impl ChainService {
-    pub fn new() -> Self {
+    pub fn new(rt:&mut Runtime) -> Self {
         let gauge = IntGauge::new("receive_transaction_channel_counter", "receive transaction channel").unwrap();
         let (mut tx_sender, mut tx_receiver) = channel::new(1_024, &gauge);
         let tx_db = Arc::new(Mutex::new(TransactionStorage::new()));
@@ -58,15 +58,15 @@ impl ChainService {
                 chain_service_clone.submit_transaction_real(tx);
             }
         };
-        let mut rt = Runtime::new().unwrap();
         rt.spawn(receiver_future.boxed().unit_error().compat());
 
         let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
         let genesis_txn = genesis_checked_txn.into_inner();
-        let genesis_future = async {
-            tx_sender.send(genesis_txn).await.unwrap();
+        let mut tx_sender_2 = tx_sender.clone();
+        let genesis_future = async move {
+            tx_sender_2.send(genesis_txn).await.unwrap();
         };
-        block_on(genesis_future);
+        rt.spawn(genesis_future.boxed().unit_error().compat());
 
         chain_service
     }
@@ -75,7 +75,7 @@ impl ChainService {
         let signed_tx_hash = sign_tx.clone().hash();
         let mut tx_db = self.tx_db.lock().unwrap();
         let exist_flag = tx_db.exist_signed_transaction(signed_tx_hash);
-        if exist_flag {
+        if !exist_flag {
             // 1. state_root
             let payload = sign_tx.payload().clone();
             match payload {
@@ -116,8 +116,8 @@ impl ChainService {
         receiver
     }
 
-    pub fn least_state_root_inner(&self) -> HashValue {
-        self.tx_db.lock().unwrap().least_hash_root()
+    pub fn least_state_root_inner(&self) -> u64 {
+        self.tx_db.lock().unwrap().least_version()
     }
 
     pub fn get_account_state_with_proof_by_state_root_inner(&self, account_address: AccountAddress) -> Vec<u8> {
@@ -135,10 +135,11 @@ impl ChainService {
 
 impl Chain for ChainService {
     fn least_state_root(&mut self, ctx: ::grpcio::RpcContext, _req: LeastRootRequest, sink: ::grpcio::UnarySink<LeastRootResponse>) {
-        let least_hash_root = self.least_state_root_inner();
-        let mut resp = LeastRootResponse::new();
-        resp.set_state_root_hash(least_hash_root.to_vec());
-        provide_grpc_response(Ok(resp), ctx, sink);
+//        let least_hash_root = self.least_state_root_inner();
+//        let mut resp = LeastRootResponse::new();
+//        resp.set_state_root_hash(least_hash_root.to_vec());
+//        provide_grpc_response(Ok(resp), ctx, sink);
+        unimplemented!()
     }
 
     fn faucet(&mut self, ctx: ::grpcio::RpcContext,
@@ -237,11 +238,34 @@ pub fn get_address(public_key: PublicKey) -> Result<AccountAddress, Box<std::err
 #[cfg(test)]
 mod tests {
     use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR};
+    use crate::chain_service::ChainService;
+    use tokio::runtime::Runtime;
+    use futures::future::Future;
+    use futures03::{
+        future::{FutureExt, TryFutureExt},
+        stream::StreamExt,
+        sink::SinkExt,
+        executor::block_on,
+    };
+    use std::{thread, time};
 
     #[test]
     fn testGenesis() {
         let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
         let genesis_txn = genesis_checked_txn.into_inner();
         println!("{:?}", genesis_txn);
+    }
+
+    #[test]
+    fn testChainService() {
+        let mut rt = Runtime::new().unwrap();
+        let chain_service = ChainService::new(&mut rt);
+        let print_future = async move {
+            let ten_millis = time::Duration::from_millis(100);
+            thread::sleep(ten_millis);
+            let root = chain_service.least_state_root_inner();
+            println!("{}", root);
+        };
+        rt.block_on(print_future.boxed().unit_error().compat()).unwrap();
     }
 }
