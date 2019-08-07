@@ -5,14 +5,12 @@ use std::pin::Pin;
 use types::account_address::AccountAddress;
 
 pub struct SgChannelInfo {
-    pk_first:AccountAddress,
-    pk_second:AccountAddress,
+    addr_first: AccountAddress,
+    addr_second: AccountAddress,
     //Capacity 
 }
 
-pub struct SgChannelState {
-
-}
+pub struct SgChannelState {}
 
 pub struct SgChannelStream;
 

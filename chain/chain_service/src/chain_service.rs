@@ -1,4 +1,6 @@
 extern crate types;
+extern crate channel;
+extern crate metrics;
 
 use chain_proto::proto::chain_grpc::Chain;
 use chain_proto::proto::chain::{LeastRootRequest, LeastRootResponse,
@@ -13,10 +15,8 @@ use proto_conv::FromProto;
 use futures::sync::mpsc::{unbounded, UnboundedSender, UnboundedReceiver, SendError};
 use super::pub_sub;
 use hex;
-use futures::MapErr;
-use futures::future::Future;
-use futures::stream::Stream;
-use futures::*;
+use futures::{MapErr, future::Future, sink::Sink, stream::Stream};
+//use futures::*;
 use grpcio::WriteFlags;
 use state_storage::{StateStorage, AccountState};
 use scratchpad::SparseMerkleTree;
@@ -34,48 +34,43 @@ use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR};
 use ed25519_dalek::PublicKey;
 use tiny_keccak::Keccak;
 use std::convert::TryFrom;
+use metrics::IntGauge;
+use futures03::{
+    future::{FutureExt, TryFutureExt},
+    stream::StreamExt,
+    sink::SinkExt,
+    executor::block_on,
+};
 
 #[derive(Clone)]
 pub struct ChainService {
-    sender: UnboundedSender<SignedTransaction>,
+    sender: channel::Sender<SignedTransaction>,
     state_db: Arc<Mutex<StateStorage>>,
     tx_db: Arc<Mutex<TransactionStorage>>,
 }
 
 impl ChainService {
     pub fn new() -> Self {
-        let (sender, mut receiver) = unbounded::<SignedTransaction>();
+        let gauge = IntGauge::new("receive_transaction_channel_counter", "receive transaction channel").unwrap();
+        let (mut tx_sender, mut tx_receiver) = channel::new(1_024, &gauge);
         let tx_db = Arc::new(Mutex::new(TransactionStorage::new()));
         let state_db = Arc::new(Mutex::new(StateStorage::new()));
-        let chain_service = ChainService { sender: sender.clone(), state_db, tx_db };
+        let chain_service = ChainService { sender: tx_sender.clone(), state_db, tx_db };
         let chain_service_clone = chain_service.clone();
-        thread::spawn(move || {
-            loop {
-                while let msg = receiver.poll() {
-                    match msg {
-                        Ok(async_result) => {
-                            match async_result {
-                                Async::Ready(option_result) => {
-                                    match option_result {
-                                        Some(tx) => {
-                                            chain_service_clone.submit_transaction_real(tx);
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                                _ => {}
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        });
 
-        //let genesis_txn = genesis_transaction();
+        let receiver_future = async move {
+            while let Some(tx) = tx_receiver.next().await {
+                chain_service_clone.submit_transaction_real(tx);
+            }
+        };
+        thread::spawn(|| {receiver_future.boxed().unit_error().compat()});
+
         let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
         let genesis_txn = genesis_checked_txn.into_inner();
-        sender.unbounded_send(genesis_txn).unwrap();
+        let genesis_future = async {
+            tx_sender.send(genesis_txn).await
+        };
+        block_on(genesis_future);
 
         chain_service
     }
@@ -113,8 +108,8 @@ impl ChainService {
         }
     }
 
-    pub fn submit_transaction_inner(&self, sign_tx: SignedTransaction) {
-        self.sender.unbounded_send(sign_tx).unwrap();
+    pub async fn submit_transaction_inner(&self, mut sender: channel::Sender<SignedTransaction>, sign_tx: SignedTransaction) {
+        sender.send(sign_tx).await;
     }
 
     pub fn watch_transaction_inner(&self, address: Vec<u8>) -> UnboundedReceiver<WatchTransactionResponse> {
@@ -182,7 +177,6 @@ impl Chain for ChainService {
             _ => {}
         }
 
-
 //        let a = SignedTransaction
 
 //        let a = RawTransaction::new();
@@ -208,7 +202,7 @@ impl Chain for ChainService {
         wt_resp.set_signed_txn(signed_txn);
         pub_sub::send(wt_resp).unwrap();
 
-        self.submit_transaction_inner(SignedTransaction::from_proto(req.signed_txn.unwrap()).unwrap());
+        block_on(self.submit_transaction_inner(self.sender.clone(), SignedTransaction::from_proto(req.signed_txn.unwrap()).unwrap()));
     }
 
     fn watch_transaction(&mut self, ctx: ::grpcio::RpcContext,

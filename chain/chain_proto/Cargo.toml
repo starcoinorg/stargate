@@ -17,3 +17,6 @@ futures = "0.1.28"
 
 [build-dependencies]
 build_helpers = { path = "../../common/build_helpers" }
+
+[dev-dependencies]
+nextgen_crypto = { path = "../../crypto/nextgen_crypto", features = ["testing"] }

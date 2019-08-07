@@ -1,3 +1,5 @@
+#![feature(async_await)]
+
 pub mod chain_node;
 mod transaction_storage;
 mod chain_service;

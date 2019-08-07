@@ -1,5 +1,5 @@
 use failure::prelude::*;
-use chain_proto::proto::{chain_grpc, chain::{FaucetRequest, LeastRootRequest, GetAccountStateWithProofByStateRootRequest, SubmitTransactionRequest, WatchTransactionRequest}};
+use chain_proto::proto::{chain_grpc, chain::{FaucetRequest, LeastRootRequest, GetAccountStateWithProofByStateRootRequest, SubmitTransactionRequest, WatchTransactionRequest, WatchTransactionResponse}};
 use types::{account_address::AccountAddress, access_path::AccessPath, transaction::SignedTransaction};
 use types::proto::{transaction::SignedTransaction as SignedTransactionProto, access_path::AccessPath as AccessPathProto};
 use core::borrow::Borrow;
@@ -12,9 +12,12 @@ use grpcio::{Channel, EnvBuilder, ChannelBuilder};
 use std::{sync::Arc, thread};
 use proto_conv::IntoProto;
 use futures::{Future, Stream};
+use watch_transaction_stream::WatchTransactionStream;
+
+pub mod watch_transaction_stream;
 
 pub struct ChainClientFacade {
-    conn_addr:String,
+    conn_addr: String,
     client: chain_grpc::ChainClient,
 }
 
@@ -27,7 +30,7 @@ impl ChainClientFacade {
         let ch = ChannelBuilder::new(env).connect(&conn_addr);
         Self {
             conn_addr,
-            client: chain_grpc::ChainClient::new(ch)
+            client: chain_grpc::ChainClient::new(ch),
         }
     }
 
@@ -66,23 +69,23 @@ impl ChainClientFacade {
     }
 
     //TODO
-    pub fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> SgChannelStream {
+    pub fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> WatchTransactionStream {
         let watch_channel = ChannelBuilder::new(Arc::new(EnvBuilder::new().build())).connect(&self.conn_addr);
         let watch_client = chain_grpc::ChainClient::new(watch_channel);
 
-        let print_data = move || {
-            let mut req = WatchTransactionRequest::new();
-            req.set_address(address.to_vec());
-            let items_stream = watch_client.watch_transaction(&req).unwrap();
-            let f = items_stream.for_each(|item| {
-                println!("received sign {:?}", item);
-                Ok(())
-            });
-            f.wait().unwrap();
-        };
+//        let print_data = move || {
+        let mut req = WatchTransactionRequest::new();
+        req.set_address(address.to_vec());
+        let items_stream = watch_client.watch_transaction(&req).unwrap();
+        WatchTransactionStream::new(items_stream)
+//            let f = items_stream.for_each(|item| {
+//                println!("received sign {:?}", item);
+//                Ok(())
+//            });
+//            f.wait().unwrap();
+//        };
 
         //thread::spawn(print_data);
-        unimplemented!()
     }
 
     pub fn get_state_by_access_path(&self, path: &AccessPath) -> Result<Option<Vec<u8>>> {
