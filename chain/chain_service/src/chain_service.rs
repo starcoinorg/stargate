@@ -63,7 +63,7 @@ impl ChainService {
                 chain_service_clone.submit_transaction_real(tx);
             }
         };
-        thread::spawn(|| {receiver_future.boxed().unit_error().compat()});
+        thread::spawn(|| { receiver_future.boxed().unit_error().compat() });
 
         let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
         let genesis_txn = genesis_checked_txn.into_inner();
@@ -123,31 +123,19 @@ impl ChainService {
     pub fn least_state_root_inner(&self) -> HashValue {
         self.tx_db.lock().unwrap().least_hash_root()
     }
-}
 
-//pub fn genesis_transaction() -> SignedTransaction {
-//    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-//    path.pop();
-//    path.push("chain_service/genesis.blob");
-//
-//    let mut f = File::open(&path).unwrap();
-//    let mut bytes = vec![];
-//    f.read_to_end(&mut bytes).unwrap();
-//    let txn = SignedTransaction::from_proto(parse_from_bytes(&bytes).unwrap()).unwrap();
-//    println!("{:?}", txn);
-//    txn
-//}
-//
-//pub fn genesis_write_set(txn: SignedTransaction) -> WriteSet {
-//    let GENESIS_WRITE_SET: WriteSet = {
-//        match txn.payload() {
-//            TransactionPayload::WriteSet(ws) => ws.clone(),
-//            _ => panic!("Expected writeset txn in genesis txn"),
-//        }
-//    };
-//
-//    GENESIS_WRITE_SET
-//}
+    pub fn get_account_state_with_proof_by_state_root_inner(&self, account_address: AccountAddress) -> Vec<u8> {
+        let state_db = self.state_db.lock().unwrap();
+        let a_s = state_db.get_account_state(&account_address).unwrap();
+        a_s.to_bytes()
+    }
+
+    pub fn state_by_access_path_inner(&self, account_address: AccountAddress, path:Vec<u8>) -> Option<Vec<u8>> {
+        let state_db = self.state_db.lock().unwrap();
+        let a_s = state_db.get_account_state(&account_address).unwrap();
+        a_s.get(&path)
+    }
+}
 
 impl Chain for ChainService {
     fn least_state_root(&mut self, ctx: ::grpcio::RpcContext, req: LeastRootRequest, sink: ::grpcio::UnarySink<LeastRootResponse>) {
@@ -187,10 +175,9 @@ impl Chain for ChainService {
                                                   req: GetAccountStateWithProofByStateRootRequest,
                                                   sink: ::grpcio::UnarySink<GetAccountStateWithProofByStateRootResponse>) {
         let account_address = AccountAddress::try_from(req.address.to_vec()).unwrap();
-        let state_db = self.state_db.lock().unwrap();
-        let a_s = state_db.get_account_state(&account_address).unwrap();
+        let a_s_bytes = self.get_account_state_with_proof_by_state_root_inner(account_address);
         let mut resp = GetAccountStateWithProofByStateRootResponse::new();
-        resp.set_account_state_blob((*a_s).to_bytes());
+        resp.set_account_state_blob(a_s_bytes);
         provide_grpc_response(Ok(resp), ctx, sink);
     }
 
@@ -225,9 +212,7 @@ impl Chain for ChainService {
                             req: AccessPath,
                             sink: ::grpcio::UnarySink<StateByAccessPathResponse>) {
         let account_address = AccountAddress::try_from(req.address.to_vec()).unwrap();
-        let state_db = self.state_db.lock().unwrap();
-        let a_s = state_db.get_account_state(&account_address).unwrap();
-        let resource = a_s.get(&req.path.to_vec());
+        let resource = self.state_by_access_path_inner(account_address, req.path);
         let mut resp = StateByAccessPathResponse::new();
         match resource {
             Some(re) => {
@@ -256,6 +241,6 @@ mod tests {
     fn testGenesis() {
         let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
         let genesis_txn = genesis_checked_txn.into_inner();
-        println!("{:?}", txn);
+        println!("{:?}", genesis_txn);
     }
 }

@@ -2,7 +2,7 @@ use node_proto::proto::node_grpc::create_node;
 use node_service::NodeService;
 use grpc_helpers::ServerHandle;
 use grpcio::{EnvBuilder, ServerBuilder};
-use node_service::config::{NodeConfig};
+use sg_config::config::{NodeConfig};
 use std::{sync::Arc};
 use nextgen_crypto::{
      ed25519::*,
