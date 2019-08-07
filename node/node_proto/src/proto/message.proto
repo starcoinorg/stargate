@@ -20,3 +20,10 @@ message OpenChannelTransactionMessage {
 message OfflinePayMessage {
     bytes transaction = 1;
 }
+
+message StructTag {
+    bytes account_addr = 1;
+    string module = 2;
+    string name =3;
+    repeated StructTag type_params = 4;
+}
