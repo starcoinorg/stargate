@@ -120,16 +120,14 @@ impl ChainService {
         self.tx_db.lock().unwrap().least_hash_root()
     }
 
-    pub fn get_account_state_with_proof_by_state_root_inner(&self, account_address: AccountAddress) -> Vec<u8> {
+    pub fn get_account_state_with_proof_by_state_root_inner(&self, account_address: AccountAddress) -> Option<Vec<u8>> {
         let state_db = self.state_db.lock().unwrap();
-        let a_s = state_db.get_account_state(&account_address).unwrap();
-        a_s.to_bytes()
+        state_db.get_account_state(&account_address).map(|state|state.to_bytes())
     }
 
     pub fn state_by_access_path_inner(&self, account_address: AccountAddress, path: Vec<u8>) -> Option<Vec<u8>> {
         let state_db = self.state_db.lock().unwrap();
-        let a_s = state_db.get_account_state(&account_address).unwrap();
-        a_s.get(&path)
+        state_db.get_account_state(&account_address).and_then(|state|state.get(&path))
     }
 }
 
@@ -173,7 +171,8 @@ impl Chain for ChainService {
         let account_address = AccountAddress::try_from(req.address.to_vec()).unwrap();
         let a_s_bytes = self.get_account_state_with_proof_by_state_root_inner(account_address);
         let mut resp = GetAccountStateWithProofByStateRootResponse::new();
-        resp.set_account_state_blob(a_s_bytes);
+        //FIXME do not use unwrap
+        resp.set_account_state_blob(a_s_bytes.unwrap());
         provide_grpc_response(Ok(resp), ctx, sink);
     }
 
