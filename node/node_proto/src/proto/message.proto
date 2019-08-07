@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package node;
+
+message OpenChannelNodeNegotiateRequest {
+    bytes local_addr = 1;
+    bytes remote_addr= 2;    
+}
+
+message OpenChannelNodeNegotiateResponse {
+    bool confirmed = 1;
+}
+
+message OpenChannelTransactionRequest {
+    bytes local_addr = 1;
+    bytes remote_addr= 2;    
+    bytes transaction = 3;
+}
+
+message OpenChannelTransactionResponse {
+    bytes local_addr = 1;
+    bytes remote_addr= 2;    
+    bytes transaction = 3;
+}
+
+message OfflinePayRequest {
+    bytes transaction = 1;
+}
+
+message OfflinePayResponse {
+    bytes transaction = 1;
+}
