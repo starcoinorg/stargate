@@ -17,6 +17,12 @@ pub struct Node <S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static>{
 
 impl<S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static> Node<S>{
 
+    pub fn new(switch:Switch<S>)->Self{
+        Self{
+            switch
+        }
+    }
+
     pub fn start_server<T, L, I, E>(self,
         executor: &TaskExecutor,
         transport: T,
@@ -47,8 +53,8 @@ async fn start_listen<L, I, E,S>(mut server_listener: L,switch:Switch<S>)
         let stream = f_stream.await.unwrap();
         let mut stream = Framed::new(stream.compat(), LengthDelimitedCodec::new()).sink_compat();
 
-        while let Some(_) = stream.next().await {
-
+        while let Some(Ok(data)) = stream.next().await {            
+            stream.send(bytes::Bytes::from(data)).await;
         }
         stream.close().await.unwrap();
     }
