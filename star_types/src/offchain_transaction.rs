@@ -78,7 +78,7 @@ impl FromProto for OffChainTransaction {
     fn from_proto(mut object: Self::ProtoType) -> Result<Self> {    
         let signed_tnx = SignedTransaction::from_proto(object.take_transaction()).unwrap();
         let account_address = AccountAddress::from_proto(object.get_receiver().to_vec()).unwrap();
-        let transaction_output = crate::transaction_output_helper::from_pb(object.take_transaction_output());
+        let transaction_output = crate::transaction_output_helper::from_pb(object.take_transaction_output())?;
         let sign_array = object.get_output_signatures();
         let mut sign_vec : Vec<Ed25519Signature> = vec![];
         for sign_bytes in sign_array.iter() {
