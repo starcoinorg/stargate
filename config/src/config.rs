@@ -11,9 +11,13 @@ use std::{
     string::ToString,
 };
 
-use crypto::x25519::{self, X25519PrivateKey, X25519PublicKey};
 use logger::LoggerType;
-use nextgen_crypto::ed25519::*;
+use nextgen_crypto::{
+    ed25519::*,
+    test_utils::TEST_SEED,
+    x25519::{self, X25519StaticPrivateKey, X25519StaticPublicKey},
+};
+use rand::{rngs::StdRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use toml;
@@ -69,6 +73,8 @@ pub struct NodeConfig {
     pub consensus: ConsensusConfig,
     #[serde(default)]
     pub mempool: MempoolConfig,
+    #[serde(default)]
+    pub state_sync: StateSyncConfig,
     #[serde(default)]
     pub log_collector: LoggerConfig,
     #[serde(default)]
@@ -144,10 +150,10 @@ pub struct KeyPairs {
 
     #[serde(serialize_with = "serialize_legacy_key")]
     #[serde(deserialize_with = "deserialize_legacy_key")]
-    network_identity_private_key: X25519PrivateKey,
+    network_identity_private_key: X25519StaticPrivateKey,
     #[serde(serialize_with = "serialize_legacy_key")]
     #[serde(deserialize_with = "deserialize_legacy_key")]
-    network_identity_public_key: X25519PublicKey,
+    network_identity_public_key: X25519StaticPublicKey,
 
     #[serde(serialize_with = "serialize_opt_key")]
     #[serde(deserialize_with = "deserialize_opt_key")]
@@ -160,9 +166,10 @@ pub struct KeyPairs {
 // required for serialization
 impl Default for KeyPairs {
     fn default() -> Self {
-        let (net_private_sig, net_public_sig) = compat::generate_keypair(None);
-        let (consensus_private_sig, consensus_public_sig) = compat::generate_keypair(None);
-        let (private_kex, public_kex) = x25519::generate_keypair();
+        let mut rng = StdRng::from_seed(TEST_SEED);
+        let (net_private_sig, net_public_sig) = compat::generate_keypair(&mut rng);
+        let (consensus_private_sig, consensus_public_sig) = compat::generate_keypair(&mut rng);
+        let (private_kex, public_kex) = x25519::compat::generate_keypair(&mut rng);
         Self {
             network_signing_private_key: Some(net_private_sig),
             network_signing_public_key: net_public_sig,
@@ -222,7 +229,7 @@ impl KeyPairs {
     pub fn get_network_signing_private(&self) -> &Option<Ed25519PrivateKey> {
         &self.network_signing_private_key
     }
-    pub fn get_network_identity_private(&self) -> X25519PrivateKey {
+    pub fn get_network_identity_private(&self) -> X25519StaticPrivateKey {
         self.network_identity_private_key.clone()
     }
     pub fn get_consensus_private(&self) -> &Option<Ed25519PrivateKey> {
@@ -237,17 +244,17 @@ impl KeyPairs {
     pub fn get_network_signing_public(&self) -> &Ed25519PublicKey {
         &self.network_signing_public_key
     }
-    pub fn get_network_identity_public(&self) -> X25519PublicKey {
-        self.network_identity_public_key
+    pub fn get_network_identity_public(&self) -> &X25519StaticPublicKey {
+        &self.network_identity_public_key
     }
     pub fn get_consensus_public(&self) -> &Ed25519PublicKey {
         &self.consensus_public_key
     }
     // getters for keypairs
-    pub fn get_network_identity_keypair(&self) -> (X25519PrivateKey, X25519PublicKey) {
+    pub fn get_network_identity_keypair(&self) -> (X25519StaticPrivateKey, X25519StaticPublicKey) {
         (
             self.get_network_identity_private(),
-            self.get_network_identity_public(),
+            self.get_network_identity_public().clone(),
         )
     }
 }
@@ -356,7 +363,7 @@ impl Default for ExecutionConfig {
     fn default() -> ExecutionConfig {
         ExecutionConfig {
             address: "localhost".to_string(),
-            port: 55558,
+            port: 6183,
             testnet_genesis: false,
             genesis_file_location: "genesis.blob".to_string(),
         }
@@ -420,7 +427,7 @@ impl Default for SecretServiceConfig {
     fn default() -> SecretServiceConfig {
         SecretServiceConfig {
             address: "localhost".to_string(),
-            secret_service_port: 30333,
+            secret_service_port: 6185,
         }
     }
 }
@@ -437,7 +444,7 @@ impl Default for AdmissionControlConfig {
     fn default() -> AdmissionControlConfig {
         AdmissionControlConfig {
             address: "0.0.0.0".to_string(),
-            admission_control_service_port: 30307,
+            admission_control_service_port: 8000,
             need_to_check_mempool_before_validation: false,
         }
     }
@@ -457,10 +464,10 @@ pub struct DebugInterfaceConfig {
 impl Default for DebugInterfaceConfig {
     fn default() -> DebugInterfaceConfig {
         DebugInterfaceConfig {
-            admission_control_node_debug_port: 50313,
-            storage_node_debug_port: 50315,
-            secret_service_node_debug_port: 50316,
-            metrics_server_port: 14297,
+            admission_control_node_debug_port: 6191,
+            storage_node_debug_port: 6194,
+            secret_service_node_debug_port: 6195,
+            metrics_server_port: 9101,
             address: "localhost".to_string(),
         }
     }
@@ -485,7 +492,7 @@ impl Default for StorageConfig {
     fn default() -> StorageConfig {
         StorageConfig {
             address: "localhost".to_string(),
-            port: 30305,
+            port: 6184,
             dir: PathBuf::from("libradb"),
             grpc_max_receive_len: Some(100_000_000),
         }
@@ -513,8 +520,8 @@ impl Default for NetworkConfig {
         NetworkConfig {
             seed_peers_file: "seed_peers.config.toml".to_string(),
             seed_peers: SeedPeersConfig::default(),
-            listen_address: "/ip4/0.0.0.0/tcp/30303".parse::<Multiaddr>().unwrap(),
-            advertised_address: "/ip4/127.0.0.1/tcp/30303".parse::<Multiaddr>().unwrap(),
+            listen_address: "/ip4/0.0.0.0/tcp/6180".parse::<Multiaddr>().unwrap(),
+            advertised_address: "/ip4/127.0.0.1/tcp/6180".parse::<Multiaddr>().unwrap(),
             discovery_interval_ms: 1000,
             connectivity_check_interval_ms: 5000,
             enable_encryption_and_authentication: true,
@@ -607,8 +614,24 @@ impl Default for MempoolConfig {
             sequence_cache_capacity: 1000,
             system_transaction_timeout_secs: 86400,
             address: "localhost".to_string(),
-            mempool_service_port: 55555,
+            mempool_service_port: 6182,
             system_transaction_gc_interval_ms: 180_000,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub struct StateSyncConfig {
+    pub address: String,
+    pub service_port: u16,
+}
+
+impl Default for StateSyncConfig {
+    fn default() -> Self {
+        Self {
+            address: "localhost".to_string(),
+            service_port: 55557,
         }
     }
 }
@@ -801,6 +824,7 @@ impl NodeConfigHelpers {
         config.mempool.mempool_service_port = get_available_port();
         config.network.advertised_address = randomize_tcp_port(&config.network.advertised_address);
         config.network.listen_address = randomize_tcp_port(&config.network.listen_address);
+        config.state_sync.service_port = get_available_port();
         config.secret_service.secret_service_port = get_available_port();
         config.storage.port = get_available_port();
     }
