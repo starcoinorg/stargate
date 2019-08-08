@@ -28,11 +28,7 @@ fn start_server_test() -> Result<()> {
     let node = Node::new(switch);
 
     node.start_server(&executor,MemoryTransport::default(),"/memory/10".parse().unwrap());
-    
-    //let ten_millis = time::Duration::from_millis(1000);
-
-    //thread::sleep(ten_millis);
-    
+        
     let mut dialer=MemorySocket::connect(10).unwrap();
     let mut stream = Framed::new(dialer.compat(), LengthDelimitedCodec::new()).sink_compat();
 
