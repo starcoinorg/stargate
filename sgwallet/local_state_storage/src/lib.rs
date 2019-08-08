@@ -1,24 +1,32 @@
-use chain_client::{RpcChainClient, ChainClient};
+use chain_client::{ChainClient, RpcChainClient};
 use failure::prelude::*;
+use star_types::offchain_transaction::OffChainTransaction;
 use state_storage::AccountState;
 use state_view::StateView;
-use types::access_path::{AccessPath, Access};
-use types::account_address::AccountAddress;
-use std::sync::Arc;
 use std::collections::HashMap;
-use star_types::offchain_transaction::OffChainTransaction;
-use types::write_set::{WriteSet, WriteOp};
+use std::sync::Arc;
+use types::access_path::{Access, AccessPath};
+use types::account_address::AccountAddress;
+use types::write_set::{WriteOp, WriteSet};
 
-pub struct LocalStateStorage<C> where C:ChainClient {
+pub struct LocalStateStorage<C>
+where
+    C: ChainClient,
+{
     account: AccountAddress,
     state: AccountState,
     client: Arc<C>,
-    channels: HashMap<AccountAddress, AccountState>
+    channels: HashMap<AccountAddress, AccountState>,
 }
 
-impl <C> LocalStateStorage<C> where C:ChainClient {
+impl<C> LocalStateStorage<C>
+where
+    C: ChainClient,
+{
     pub fn new(account: AccountAddress, client: Arc<C>) -> Result<Self> {
-        let state_blob = client.get_account_state(&account).and_then(|state|state.ok_or(format_err!("can not find account by address:{}", account)))?;
+        let state_blob = client.get_account_state(&account).and_then(|state| {
+            state.ok_or(format_err!("can not find account by address:{}", account))
+        })?;
         let state = AccountState::from_account_state_blob(state_blob)?;
         Ok(Self {
             account,
@@ -34,15 +42,19 @@ impl <C> LocalStateStorage<C> where C:ChainClient {
         self.apply_write_set(write_set);
     }
 
-    fn update(&mut self, access_path: &AccessPath, value: &Vec<u8>){
+    pub fn get_by_path(&self, path: &Vec<u8>) -> Option<Vec<u8>> {
+        self.state.get(path)
+    }
+
+    fn update(&mut self, access_path: &AccessPath, value: &Vec<u8>) {
         if self.account == access_path.address {
             self.state.update(access_path.path.clone(), value.clone());
-        }else{
+        } else {
             //TODO check channel
-            match self.channels.get_mut(&access_path.address){
+            match self.channels.get_mut(&access_path.address) {
                 Some(channel_state) => {
                     channel_state.update(access_path.path.clone(), value.clone());
-                },
+                }
                 None => {
                     let mut channel_state = AccountState::new();
                     channel_state.update(access_path.path.clone(), value.clone());
@@ -52,15 +64,15 @@ impl <C> LocalStateStorage<C> where C:ChainClient {
         }
     }
 
-    fn delete(&mut self, access_path: &AccessPath){
+    fn delete(&mut self, access_path: &AccessPath) {
         if self.account == access_path.address {
             self.state.delete(&access_path.path);
-        }else{
+        } else {
             //TODO check channel
-            match self.channels.get_mut(&access_path.address){
+            match self.channels.get_mut(&access_path.address) {
                 Some(channel_state) => {
                     channel_state.delete(&access_path.path);
-                },
+                }
                 None => {
                     //no nothing
                 }
@@ -73,7 +85,7 @@ impl <C> LocalStateStorage<C> where C:ChainClient {
             match op {
                 WriteOp::Value(value) => {
                     self.update(access_path, value);
-                },
+                }
                 WriteOp::Deletion => {
                     self.delete(access_path);
                 }
@@ -82,18 +94,19 @@ impl <C> LocalStateStorage<C> where C:ChainClient {
     }
 }
 
-impl <C> StateView for LocalStateStorage<C> where C:ChainClient {
+impl<C> StateView for LocalStateStorage<C>
+where
+    C: ChainClient,
+{
     fn get(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
         let AccessPath { address, path } = access_path;
         if address == &self.account {
             Ok(self.state.get(path))
         } else {
-            match self.channels.get(address){
-                Some(channel_state) =>  {
-                    Ok(channel_state.get(path))
-                },
+            match self.channels.get(address) {
+                Some(channel_state) => Ok(channel_state.get(path)),
                 //TODO chache
-                None => self.client.get_state_by_access_path(access_path)
+                None => self.client.get_state_by_access_path(access_path),
             }
         }
     }

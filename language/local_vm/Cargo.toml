@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 rental = "0.5.4"
+atomic_refcell = "0.1.3"
 
 vm_runtime = {path="../vm/vm_runtime"}
 vm_cache_map = {path="../vm/vm_runtime/vm_cache_map"}

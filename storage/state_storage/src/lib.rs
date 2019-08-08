@@ -141,7 +141,7 @@ impl StateStorage {
         }
         println!("create account:{}", address);
         let mut state = AccountState::new();
-        let account_resource = AccountResource::new(init_amount, 0, ByteArray::new(vec![]), 0, 0, false);
+        let account_resource = AccountResource::new(init_amount, 0, ByteArray::new(address.to_vec()), 0, 0, false);
         let mut serializer = SimpleSerializer::new();
         account_resource.serialize(&mut serializer);
         let value:Vec<u8> = serializer.get_output();

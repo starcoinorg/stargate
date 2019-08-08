@@ -8,6 +8,8 @@ edition = "2018"
 
 [dependencies]
 rand = "0.6.5"
+protobuf = "2.7"
+atomic_refcell = "0.1.3"
 failure = { path = "../common/failure_ext", package = "failure_ext" }
 types = { path = "../types" }
 star_types = { path = "../star_types" }
@@ -17,6 +19,7 @@ futures = { version = "0.3.0-alpha.16", package = "futures-preview", features = 
 nextgen_crypto = { path = "../crypto/nextgen_crypto"}
 local_state_storage = { path = "./local_state_storage"}
 chain_client = { path = "../chain/chain_client"}
+vm_genesis = { path = "../language/vm/vm_genesis" }
 
 [dev-dependencies]
 nextgen_crypto = { path = "../crypto/nextgen_crypto", features = ["testing"] }
