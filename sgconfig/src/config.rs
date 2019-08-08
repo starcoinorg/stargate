@@ -11,7 +11,7 @@ pub struct NodeConfig {
 pub struct NodeNetworkConfig {
     pub addr: String,
     pub max_sockets: u64,
-    pub memory_stream: bool,
+    pub in_memory: bool,
     pub seeds: Vec<String>,
 }
 
@@ -37,7 +37,7 @@ pub fn get_test_config(addr: String, port: u16) -> (NodeConfig) {
     let node_network = NodeNetworkConfig {
         addr: String::from("127.0.0.1:8000"),
         max_sockets: 0,
-        memory_stream: false,
+        in_memory: false,
         seeds: vec![String::from("127.0.0.1:8001")],
     };
     NodeConfig {

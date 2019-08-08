@@ -41,6 +41,7 @@ members = [
     "chain/mock_chain_client",
     "network",
     "network/memsocket",
+    "network/netcore",
     "sgwallet",
     "sgwallet/local_state_storage",
     "switch",

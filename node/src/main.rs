@@ -39,7 +39,7 @@ fn launch_swarm(args: &Args) -> Swarm {
             node_net_work: NodeNetworkConfig {
                 addr: String::from("127.0.0.1:8000"),
                 max_sockets: 0,
-                memory_stream: false,
+                in_memory: false,
                 seeds: vec![String::from("127.0.0.1:8001")],
             },
         },
@@ -77,7 +77,7 @@ fn main() {
     let cfg = NodeNetworkConfig {
         addr: "".to_string(),
         max_sockets: 0,
-        memory_stream: false,
+        in_memory: false,
         seeds: vec![]
     };
     let network = new_network::<

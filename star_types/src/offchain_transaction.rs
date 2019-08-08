@@ -8,12 +8,14 @@ use types::transaction::{RawTransaction, SignedTransaction, TransactionStatus, T
 use types::contract_event::ContractEvent;
 use types::write_set::WriteSet;
 use types::vm_error::VMStatus;
+use proto_conv::{FromProto, IntoProto};
+use core::convert::TryFrom;
 
 pub trait TransactionOutputSigner {
     fn sign_txn_output(&self, txn_output: &TransactionOutput) -> Result<Ed25519Signature>;
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq,Debug)]
 pub struct OffChainTransaction {
     /// The sender signed transaction
     txn: SignedTransaction,
@@ -68,4 +70,29 @@ pub struct OffChainTransactionOutput {}
 pub struct SignOffChainTransaction {
     sign: Signature,
     data: OffChainTransaction,
+}
+
+impl FromProto for OffChainTransaction {
+    type ProtoType = crate::proto::off_chain_transaction::OffChainTransaction;
+
+    fn from_proto(mut object: Self::ProtoType) -> Result<Self> {    
+        let signed_tnx = SignedTransaction.from_proto(object.take_transaction()).unwrap();
+        let account_address = AccountAddress.from_proto(object.get_receiver().to_vec()).unwrap();
+        let transaction_output = TransactionOutput.from_proto(object.get_transaction_output()).unwrap();
+        let sign_array = object.get_output_signatures();
+        let sign_vec : Vec<Ed25519Signature> = vec![];
+        for sign_bytes in sign_array.iter() {
+            sign_vec.push(Ed25519Signature::try_from(object.get_receiver_sign()).unwrap());
+        }
+        OffChainTransaction::new(signed_tnx,account_address,transaction_output, sign_vec)
+    }
+}
+
+impl IntoProto for OffChainTransaction {
+    type ProtoType = crate::proto::off_chain_transaction::OffChainTransaction;
+
+    fn into_proto(self) -> Self::ProtoType {
+        let mut out = Self::ProtoType::new();
+        out
+    }
 }

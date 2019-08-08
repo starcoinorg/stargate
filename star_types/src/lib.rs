@@ -8,6 +8,7 @@ pub mod resource;
 mod resource_test;
 pub mod proto;
 pub mod transaction_output_helper;
+pub mod message;
 
 #[cfg(test)]
 mod tests {
