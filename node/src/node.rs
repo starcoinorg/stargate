@@ -10,12 +10,11 @@ use futures::{
     prelude::*,
 };
 
-pub struct Node <S:AsyncRead + AsyncWrite,T:Transport>{
+pub struct Node <S:AsyncRead + AsyncWrite>{
     switch:Switch<S>,
-    transport:T,
 }
 
-impl<S:AsyncRead + AsyncWrite,T:Transport> Node<S,T>{
+impl<S:AsyncRead + AsyncWrite> Node<S>{
 
 }
 
