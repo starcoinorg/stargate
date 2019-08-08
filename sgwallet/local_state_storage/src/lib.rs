@@ -18,7 +18,7 @@ pub struct LocalStateStorage<C> where C:ChainClient {
 
 impl <C> LocalStateStorage<C> where C:ChainClient {
     pub fn new(account: AccountAddress, client: Arc<C>) -> Result<Self> {
-        let state_blob = client.get_account_state(&account).and_then(|state|state.ok_or(bail!("can not find account by address:{}", account)))?;
+        let state_blob = client.get_account_state(&account).and_then(|state|state.ok_or(format_err!("can not find account by address:{}", account)))?;
         let state = AccountState::from_account_state_blob(state_blob)?;
         Ok(Self {
             account,

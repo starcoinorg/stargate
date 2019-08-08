@@ -20,3 +20,4 @@ chain_client = { path = "../chain/chain_client"}
 
 [dev-dependencies]
 nextgen_crypto = { path = "../crypto/nextgen_crypto", features = ["testing"] }
+mock_chain_client = { path = "../chain/mock_chain_client" }

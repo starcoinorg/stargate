@@ -22,15 +22,13 @@ pub struct Wallet<C> where C: ChainClient {
 }
 
 impl<C> Wallet<C> where C: ChainClient {
-    pub fn new(keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>, rpc_host: &str, rpc_port: u32) -> Result<Wallet<RpcChainClient>> {
-        let account_address = AccountAddress::from_public_key(&keypair.public_key);
+    pub fn new(account_address: AccountAddress, keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>, rpc_host: &str, rpc_port: u32) -> Result<Wallet<RpcChainClient>> {
         let client = Arc::new(RpcChainClient::new(rpc_host, rpc_port));
-        Wallet::new_with_client(keypair, client)
+        Wallet::new_with_client(account_address, keypair, client)
     }
 
-    pub fn new_with_client(keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>, client: Arc<C>) -> Result<Self> {
-        let account_address = AccountAddress::from_public_key(&keypair.public_key);
-        let storage = Arc::new(LocalStateStorage::new(account_address.clone(), client.clone())?);
+    pub fn new_with_client(account_address: AccountAddress, keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>, client: Arc<C>) -> Result<Self> {
+        let storage = Arc::new(LocalStateStorage::new(account_address, client.clone())?);
         let vm = LocalVM::new(storage.clone());
         Ok(Self {
             account_address,
