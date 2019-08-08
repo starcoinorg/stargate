@@ -9,25 +9,21 @@ pub mod p2p;
 pub mod net;
 
 mod tests {
-    use crate::p2p::{new_network, NetConfig};
-    use crate::mem_stream::{MemTcpStream, MemNetwork, MemListener};
-    use std::net::SocketAddr;
+    use crate::net::build_network;
     use futures::{Stream, Future, future};
+    use sg_config::config::NodeNetworkConfig;
+    use parity_multiaddr::Multiaddr;
+    use memsocket::MemoryListener;
+
 
     #[test]
-    #[should_panic(expected = "not yet implemente")]
     fn test_new_network() {
-        let cfg = NetConfig {
+        let cfg = NodeNetworkConfig {
             addr: "".to_string(),
             max_sockets: 0,
-            memory_stream: false,
-            seeds: vec![]
+            in_memory: true,
+            seeds: vec![],
         };
-        let network = new_network::<
-            MemTcpStream,
-            future::Ready<MemTcpStream>,
-            MemListener,
-            MemNetwork,
-        >(cfg);
+        let network = build_network(cfg).unwrap();
     }
 }
