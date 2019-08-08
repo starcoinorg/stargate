@@ -1,4 +1,6 @@
-use network::p2p::TTcpSteam;
+use futures::{
+    io::{AsyncRead, AsyncWrite},
+};
 use types::account_address::AccountAddress;
 
 pub struct SgChannel{
@@ -6,7 +8,7 @@ pub struct SgChannel{
     remote_addr:AccountAddress,
 }
 
-pub struct ChannelLink <T:TTcpSteam>{
+pub struct ChannelLink <T:AsyncRead+AsyncWrite>{
     id:String,
     sg_channel:SgChannel,
     up_stream: T,

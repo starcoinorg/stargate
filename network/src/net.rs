@@ -7,7 +7,7 @@ use sg_config::config::{NodeNetworkConfig, NetworkConfig};
 
 pub struct Network<TTransport>
     where TTransport: Transport {
-    transport: TTransport
+    pub transport: TTransport
 }
 
 impl<TTransport> Network<TTransport>

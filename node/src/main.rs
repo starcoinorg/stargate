@@ -1,4 +1,4 @@
-use network::p2p::{new_network, NetConfig};
+use network::net::build_network;
 use network::mem_stream::{MemTcpStream, MemNetwork, MemListener};
 use std::net::SocketAddr;
 use futures::{Stream, Future, future};
@@ -54,6 +54,14 @@ fn main() {
     let mut node_server = setup_node_service(&swarm.config);
     node_server.start();
 
+    let cfg = NodeNetworkConfig {
+        addr: "".to_string(),
+        max_sockets: 0,
+        in_memory: false,
+        seeds: vec![]
+    };
+    let network = build_network(cfg);
+
     if args.start_client {
         let client = client::InteractiveClient::new_with_inherit_io(
             swarm.config.network.port
@@ -73,17 +81,4 @@ fn main() {
         rx.recv()
             .expect("failed to receive unit when handling CTRL-C");
     }
-
-    let cfg = NodeNetworkConfig {
-        addr: "".to_string(),
-        max_sockets: 0,
-        in_memory: false,
-        seeds: vec![]
-    };
-    let network = new_network::<
-        MemTcpStream,
-        future::Ready<MemTcpStream>,
-        MemListener,
-        MemNetwork,
-    >(cfg);
 }
