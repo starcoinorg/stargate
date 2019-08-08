@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Once;
 use std::mem::transmute;
 use futures::sync::mpsc::{UnboundedSender, SendError};
-use chain_proto::proto::chain::WatchTransactionResponse;
+use star_types::proto::chain::WatchTransactionResponse;
 
 #[derive(Clone)]
 struct Pub {

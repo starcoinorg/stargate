@@ -1,12 +1,4 @@
 use failure::prelude::*;
-use chain_proto::proto::chain_grpc::Chain;
-use chain_proto::proto::chain::{LeastRootRequest, LeastRootResponse,
-                                FaucetRequest, FaucetResponse,
-                                GetAccountStateWithProofByStateRootRequest, GetAccountStateWithProofByStateRootResponse,
-                                WatchTransactionRequest, WatchTransactionResponse,
-                                MempoolAddTransactionStatus, MempoolAddTransactionStatusCode,
-                                SubmitTransactionRequest, SubmitTransactionResponse,
-                                StateByAccessPathResponse, };
 use types::proto::{access_path::AccessPath};
 use types::{transaction::{SignedTransaction, RawTransaction, TransactionPayload}, write_set::{WriteOp, WriteSet}, account_address::AccountAddress};
 use proto_conv::FromProto;
@@ -32,6 +24,13 @@ use futures03::{
     executor::block_on,
 };
 use tokio::{runtime::Runtime};
+use star_types::proto::{chain_grpc::Chain, chain::{LeastRootRequest, LeastRootResponse,
+                                                   FaucetRequest, FaucetResponse,
+                                                   GetAccountStateWithProofByStateRootRequest, GetAccountStateWithProofByStateRootResponse,
+                                                   WatchTransactionRequest, WatchTransactionResponse,
+                                                   MempoolAddTransactionStatus, MempoolAddTransactionStatusCode,
+                                                   SubmitTransactionRequest, SubmitTransactionResponse,
+                                                   StateByAccessPathResponse, }};
 
 #[derive(Clone)]
 pub struct ChainService {
@@ -41,7 +40,7 @@ pub struct ChainService {
 }
 
 impl ChainService {
-    pub fn new(rt:&mut Runtime) -> Self {
+    pub fn new(rt: &mut Runtime) -> Self {
         let gauge = IntGauge::new("receive_transaction_channel_counter", "receive transaction channel").unwrap();
         let (mut tx_sender, mut tx_receiver) = channel::new(1_024, &gauge);
         let tx_db = Arc::new(Mutex::new(TransactionStorage::new()));
@@ -118,12 +117,12 @@ impl ChainService {
 
     pub fn get_account_state_with_proof_by_state_root_inner(&self, account_address: AccountAddress) -> Option<Vec<u8>> {
         let state_db = self.state_db.lock().unwrap();
-        state_db.get_account_state(&account_address).map(|state|state.to_bytes())
+        state_db.get_account_state(&account_address).map(|state| state.to_bytes())
     }
 
     pub fn state_by_access_path_inner(&self, account_address: AccountAddress, path: Vec<u8>) -> Option<Vec<u8>> {
         let state_db = self.state_db.lock().unwrap();
-        state_db.get_account_state(&account_address).and_then(|state|state.get(&path))
+        state_db.get_account_state(&account_address).and_then(|state| state.get(&path))
     }
 
     pub fn faucet_inner(&self, account_address: AccountAddress, amount: u64) -> Result<HashValue> {

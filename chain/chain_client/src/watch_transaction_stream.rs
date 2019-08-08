@@ -1,7 +1,7 @@
 extern crate grpcio;
 
 use grpcio::ClientSStreamReceiver;
-use chain_proto::proto::chain::WatchTransactionResponse;
+use star_types::proto::chain::WatchTransactionResponse;
 use futures::{Stream, Poll, Async};
 use types::transaction::SignedTransaction;
 use proto_conv::FromProto;

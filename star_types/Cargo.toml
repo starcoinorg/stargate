@@ -16,7 +16,7 @@ serde = { version = "1.0.96", features = ["derive"] }
 itertools = "0.8.0"
 hex = "0.3.2"
 grpcio = "0.4.4"
-futures = { version = "0.3.0-alpha.16", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }
+futures03 = { version = "0.3.0-alpha.16", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }
 types = { package = "types", path = "../types"}
 canonical_serialization = { path = "../common/canonical_serialization"}
 crypto = { path = "../crypto/legacy_crypto" }
@@ -25,6 +25,7 @@ failure = { path = "../common/failure_ext", package = "failure_ext" }
 proptest_helpers = { path = "../common/proptest_helpers" }
 proto_conv = { path = "../common/proto_conv", features = ["derive"] }
 vm_runtime_types = { path = "../language/vm/vm_runtime/vm_runtime_types"}
+futures = "0.1.28"
 
 [build-dependencies]
 build_helpers = { path = "../common/build_helpers" }

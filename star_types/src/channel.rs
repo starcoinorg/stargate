@@ -1,6 +1,6 @@
 extern crate futures;
 
-use futures::{Stream, task::{Context, Poll}};
+use futures03::{Stream, task::{Context, Poll}};
 use std::pin::Pin;
 use types::account_address::AccountAddress;
 

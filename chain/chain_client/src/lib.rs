@@ -1,5 +1,4 @@
 use failure::prelude::*;
-use chain_proto::proto::{chain_grpc, chain::{FaucetRequest, LeastRootRequest, GetAccountStateWithProofByStateRootRequest, SubmitTransactionRequest, WatchTransactionRequest, WatchTransactionResponse}};
 use types::{account_address::AccountAddress, access_path::AccessPath, transaction::SignedTransaction};
 use types::proto::{transaction::SignedTransaction as SignedTransactionProto, access_path::AccessPath as AccessPathProto};
 use core::borrow::Borrow;
@@ -7,7 +6,7 @@ use std::str::FromStr;
 use crypto::HashValue;
 use star_types::{proto::star_account::AccountState, channel::SgChannelStream};
 use types::transaction::Version;
-use star_types::resource::Resource;
+use star_types::{proto::{chain_grpc, chain::{FaucetRequest, LeastRootRequest, GetAccountStateWithProofByStateRootRequest, SubmitTransactionRequest, WatchTransactionRequest, WatchTransactionResponse}}, resource::Resource};
 use grpcio::{Channel, EnvBuilder, ChannelBuilder};
 use std::{sync::Arc, thread};
 use proto_conv::IntoProto;

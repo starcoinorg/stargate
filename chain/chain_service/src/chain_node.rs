@@ -24,7 +24,7 @@ impl ChainNode {
         println!("{}", "Starting chain Service");
         let mut rt = Runtime::new().unwrap();
         let chain_service = ChainService::new(&mut rt);
-        let service = chain_proto::proto::chain_grpc::create_chain(chain_service);
+        let service = star_types::proto::chain_grpc::create_chain(chain_service);
         let _chain_handle = spawn_service_thread(
             service,
             self.config.address.clone(),
