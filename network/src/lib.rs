@@ -6,7 +6,7 @@ pub mod peer;
 pub mod error;
 pub mod mem_stream;
 pub mod p2p;
-
+pub mod net;
 
 mod tests {
     use crate::p2p::{new_network, NetConfig};
@@ -18,9 +18,10 @@ mod tests {
     #[should_panic(expected = "not yet implemente")]
     fn test_new_network() {
         let cfg = NetConfig {
-            bootstrap: vec![],
+            addr: "".to_string(),
             max_sockets: 0,
             memory_stream: false,
+            seeds: vec![]
         };
         let network = new_network::<
             MemTcpStream,
