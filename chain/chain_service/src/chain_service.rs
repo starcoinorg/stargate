@@ -1,8 +1,4 @@
-extern crate types;
-extern crate channel;
-extern crate metrics;
-extern crate tokio;
-
+use failure::prelude::*;
 use chain_proto::proto::chain_grpc::Chain;
 use chain_proto::proto::chain::{LeastRootRequest, LeastRootResponse,
                                 FaucetRequest, FaucetResponse,
@@ -129,6 +125,11 @@ impl ChainService {
         let state_db = self.state_db.lock().unwrap();
         state_db.get_account_state(&account_address).and_then(|state|state.get(&path))
     }
+
+    pub fn faucet_inner(&self, account_address: AccountAddress, amount: u64) -> Result<HashValue> {
+        let mut state_db = self.state_db.lock().unwrap();
+        state_db.create_account(account_address, amount)
+    }
 }
 
 impl Chain for ChainService {
@@ -142,27 +143,12 @@ impl Chain for ChainService {
     fn faucet(&mut self, ctx: ::grpcio::RpcContext,
               req: FaucetRequest,
               sink: ::grpcio::UnarySink<FaucetResponse>) {
-        let mut state_db = self.state_db.lock().unwrap();
-        let account_address = AccountAddress::try_from(req.address.to_vec());
-        match account_address {
-            Ok(account) => {
-                let account_state = state_db.get_account_state(&account);
-                match account_state {
-                    Some(a_s) => {}
-                    _ => {
-                        state_db.create_account(account);
-                    }
-                }
-
-                //TODO
-            }
-            _ => {}
-        }
-
-//        let a = SignedTransaction
-
-//        let a = RawTransaction::new();
-        unimplemented!()
+        let resp = AccountAddress::try_from(req.address.to_vec()).and_then(|account_address|{
+            self.faucet_inner(account_address, req.amount)
+        }).and_then(|_root_hash|{
+            Ok(FaucetResponse::new())
+        });
+        provide_grpc_response(resp, ctx, sink);
     }
 
     fn get_account_state_with_proof_by_state_root(&mut self, ctx: ::grpcio::RpcContext,
@@ -222,15 +208,6 @@ impl Chain for ChainService {
         }
         provide_grpc_response(Ok(resp), ctx, sink);
     }
-}
-
-pub fn get_address(public_key: PublicKey) -> Result<AccountAddress, Box<std::error::Error>> {
-    let mut keccak = Keccak::new_sha3_256();
-    let mut hash = [0u8; 32];
-    keccak.update(&public_key.to_bytes());
-    keccak.finalize(&mut hash);
-    let addr = AccountAddress::try_from(&hash[..])?;
-    Ok(addr)
 }
 
 #[cfg(test)]

@@ -20,6 +20,7 @@ pub trait ChainClient {
     fn least_state_root(&self) -> Result<HashValue>;
     fn get_account_state(&self, address: &AccountAddress)  -> Result<Option<Vec<u8>>>;
     fn get_state_by_access_path(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>>;
+    fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()>;
 }
 
 pub struct RpcChainClient {
@@ -38,17 +39,6 @@ impl RpcChainClient {
             conn_addr,
             client: chain_grpc::ChainClient::new(ch),
         }
-    }
-
-
-
-    pub fn faucet(&self, addr_str: String, amount: u64) -> Result<()> {
-        let address = AccountAddress::from_str(&addr_str)?;
-        let mut req = FaucetRequest::new();
-        req.set_address(address.to_vec());
-        req.set_amount(amount);
-        let resp = self.client.faucet(&req);
-        Ok(())
     }
 
     pub fn get_account_state_with_proof_by_state_root(&self, address: &AccountAddress, state_root_hash: HashValue) -> Result<Option<Vec<u8>>> {
@@ -108,5 +98,13 @@ impl ChainClient for RpcChainClient {
         let resp = self.client.state_by_access_path(&req);
         let resource = resp.unwrap().resource;
         Ok(Some(resource))
+    }
+
+    fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()> {
+        let mut req = FaucetRequest::new();
+        req.set_address(address.to_vec());
+        req.set_amount(amount);
+        let resp = self.client.faucet(&req)?;
+        Ok(())
     }
 }
