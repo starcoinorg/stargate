@@ -76,15 +76,20 @@ impl FromProto for OffChainTransaction {
     type ProtoType = crate::proto::off_chain_transaction::OffChainTransaction;
 
     fn from_proto(mut object: Self::ProtoType) -> Result<Self> {    
-        let signed_tnx = SignedTransaction.from_proto(object.take_transaction()).unwrap();
-        let account_address = AccountAddress.from_proto(object.get_receiver().to_vec()).unwrap();
-        let transaction_output = TransactionOutput.from_proto(object.get_transaction_output()).unwrap();
+        let signed_tnx = SignedTransaction::from_proto(object.take_transaction()).unwrap();
+        let account_address = AccountAddress::from_proto(object.get_receiver().to_vec()).unwrap();
+        let transaction_output = crate::transaction_output_helper::from_pb(object.take_transaction_output());
         let sign_array = object.get_output_signatures();
-        let sign_vec : Vec<Ed25519Signature> = vec![];
+        let mut sign_vec : Vec<Ed25519Signature> = vec![];
         for sign_bytes in sign_array.iter() {
-            sign_vec.push(Ed25519Signature::try_from(object.get_receiver_sign()).unwrap());
+            sign_vec.push(Ed25519Signature::try_from(sign_bytes.as_slice()).unwrap());
         }
-        OffChainTransaction::new(signed_tnx,account_address,transaction_output, sign_vec)
+        Ok(OffChainTransaction{
+            txn:signed_tnx,
+            receiver:account_address,
+            output:transaction_output, 
+            output_signatures:sign_vec
+        })
     }
 }
 
