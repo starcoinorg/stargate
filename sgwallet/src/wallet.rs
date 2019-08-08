@@ -152,7 +152,7 @@ impl<C> TransactionOutputSigner for Wallet<C>
         C: ChainClient,
 {
     fn sign_txn_output(&self, txn_output: &TransactionOutput) -> Result<Ed25519Signature> {
-        let bytes = vec![];//transaction_output_helper::into_pb(txn_output.clone()).write_to_bytes()?;
+        let bytes = transaction_output_helper::into_pb(txn_output.clone()).unwrap().write_to_bytes()?;
         //TODO use another hash.
         let hash = RawTransactionBytes(&bytes).hash();
         let signature = self.keypair.private_key.sign_message(&hash);
