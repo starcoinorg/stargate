@@ -19,7 +19,6 @@ scratchpad = { path = "../../storage/scratchpad" }
 state_storage = { path = "../../storage/state_storage" }
 hex = "0.3.2"
 vm_genesis = { path = "../../language/vm/vm_genesis" }
-tiny-keccak = "1.5.0"
 channel = { path = "../../common/channel" }
 metrics = { path = "../../common/metrics" }
 futures03 = { package = "futures-preview", version = "=0.3.0-alpha.17", features = ["async-await", "nightly", "io-compat", "compat"] }

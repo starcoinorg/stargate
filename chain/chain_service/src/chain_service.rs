@@ -1,6 +1,6 @@
 use failure::prelude::*;
 use types::proto::{access_path::AccessPath};
-use types::{transaction::{SignedTransaction, RawTransaction, TransactionPayload}, write_set::{WriteOp, WriteSet}, account_address::AccountAddress};
+use types::{transaction::{SignedTransaction, TransactionPayload}, account_address::AccountAddress};
 use proto_conv::FromProto;
 use futures::sync::mpsc::{unbounded, UnboundedReceiver};
 use super::pub_sub;
@@ -9,12 +9,10 @@ use futures::{future::Future, sink::Sink, stream::Stream};
 use grpcio::WriteFlags;
 use state_storage::StateStorage;
 use super::transaction_storage::TransactionStorage;
-use std::{sync::{Arc, Mutex}, thread};
+use std::{sync::{Arc, Mutex}};
 use crypto::{hash::CryptoHash, HashValue};
 use grpc_helpers::provide_grpc_response;
 use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR};
-use ed25519_dalek::PublicKey;
-use tiny_keccak::Keccak;
 use std::convert::TryFrom;
 use metrics::IntGauge;
 use futures03::{
@@ -24,19 +22,31 @@ use futures03::{
     executor::block_on,
 };
 use tokio::{runtime::Runtime};
-use star_types::proto::{chain_grpc::Chain, chain::{LeastRootRequest, LeastRootResponse,
-                                                   FaucetRequest, FaucetResponse,
-                                                   GetAccountStateWithProofByStateRootRequest, GetAccountStateWithProofByStateRootResponse,
-                                                   WatchTransactionRequest, WatchTransactionResponse,
-                                                   MempoolAddTransactionStatus, MempoolAddTransactionStatusCode,
-                                                   SubmitTransactionRequest, SubmitTransactionResponse,
-                                                   StateByAccessPathResponse, }};
+use star_types::{offchain_transaction::OffChainTransaction,
+                 proto::{chain_grpc::Chain,
+                         chain::{LeastRootRequest, LeastRootResponse,
+                                 FaucetRequest, FaucetResponse,
+                                 GetAccountStateWithProofByStateRootRequest, GetAccountStateWithProofByStateRootResponse,
+                                 WatchTransactionRequest, WatchTransactionResponse,
+                                 MempoolAddTransactionStatus, MempoolAddTransactionStatusCode,
+                                 SubmitTransactionRequest, SubmitTransactionResponse,
+                                 StateByAccessPathResponse,
+                         },
+                         off_chain_transaction::OffChainTransaction as OffChainTransactionProto,
+                 }};
+
 
 #[derive(Clone)]
 pub struct ChainService {
-    sender: channel::Sender<SignedTransaction>,
+    sender: channel::Sender<TransactionInner>,
     state_db: Arc<Mutex<StateStorage>>,
     tx_db: Arc<Mutex<TransactionStorage>>,
+}
+
+#[derive(Clone, Debug)]
+pub enum TransactionInner {
+    OnChain(SignedTransaction),
+    OffChain(OffChainTransaction),
 }
 
 impl ChainService {
@@ -59,14 +69,25 @@ impl ChainService {
         let genesis_txn = genesis_checked_txn.into_inner();
         let mut tx_sender_2 = tx_sender.clone();
         let genesis_future = async move {
-            tx_sender_2.send(genesis_txn).await.unwrap();
+            tx_sender_2.send(TransactionInner::OnChain(genesis_txn)).await.unwrap();
         };
         rt.spawn(genesis_future.boxed().unit_error().compat());
 
         chain_service
     }
 
-    fn submit_transaction_real(&self, sign_tx: SignedTransaction) {
+    fn submit_transaction_real(&self, tx: TransactionInner) {
+        match tx {
+            TransactionInner::OnChain(on_chain_tx) => {
+                self.submit_on_chain_transaction(on_chain_tx)
+            }
+            TransactionInner::OffChain(off_chain_tx) => {
+                //TODO
+            }
+        }
+    }
+
+    fn submit_on_chain_transaction(&self, sign_tx: SignedTransaction) {
         let signed_tx_hash = sign_tx.clone().hash();
         let mut tx_db = self.tx_db.lock().unwrap();
         let exist_flag = tx_db.exist_signed_transaction(signed_tx_hash);
@@ -99,8 +120,8 @@ impl ChainService {
         }
     }
 
-    pub async fn submit_transaction_inner(&self, mut sender: channel::Sender<SignedTransaction>, sign_tx: SignedTransaction) {
-        sender.send(sign_tx).await.unwrap();
+    pub async fn submit_transaction_inner(&self, mut sender: channel::Sender<TransactionInner>, sign_tx: SignedTransaction) {
+        sender.send(TransactionInner::OnChain(sign_tx)).await.unwrap();
     }
 
     pub fn watch_transaction_inner(&self, address: Vec<u8>) -> UnboundedReceiver<WatchTransactionResponse> {
@@ -142,9 +163,9 @@ impl Chain for ChainService {
     fn faucet(&mut self, ctx: ::grpcio::RpcContext,
               req: FaucetRequest,
               sink: ::grpcio::UnarySink<FaucetResponse>) {
-        let resp = AccountAddress::try_from(req.address.to_vec()).and_then(|account_address|{
+        let resp = AccountAddress::try_from(req.address.to_vec()).and_then(|account_address| {
             self.faucet_inner(account_address, req.amount)
-        }).and_then(|_root_hash|{
+        }).and_then(|_root_hash| {
             Ok(FaucetResponse::new())
         });
         provide_grpc_response(resp, ctx, sink);
@@ -175,6 +196,11 @@ impl Chain for ChainService {
         state.set_code(MempoolAddTransactionStatusCode::Valid);
         resp.set_mempool_status(state);
         provide_grpc_response(Ok(resp), ctx, sink);
+    }
+
+    fn submit_off_chain_transaction(&mut self, ctx: ::grpcio::RpcContext, req: OffChainTransactionProto,
+                                    sink: ::grpcio::UnarySink<SubmitTransactionResponse>) {
+        unimplemented!()
     }
 
     fn watch_transaction(&mut self, ctx: ::grpcio::RpcContext,
