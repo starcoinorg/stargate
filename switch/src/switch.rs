@@ -5,13 +5,13 @@ use futures::{
     io::{AsyncRead, AsyncWrite},
 };
 
-pub struct Switch<T:AsyncRead+AsyncWrite>{
+pub struct Switch<T:AsyncRead+AsyncWrite+Send>{
     lock:Arc<Mutex<u32>>,
     links:HashMap<String,ChannelLink<T>>,
     pending_links:HashMap<String,ChannelLink<T>>,
 }
 
-impl<T:AsyncRead+AsyncWrite> Switch<T>{
+impl<T:AsyncRead+AsyncWrite+Send> Switch<T>{
     fn addLink(link:ChannelLink<T>){
 
     }

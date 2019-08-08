@@ -8,7 +8,7 @@ pub struct SgChannel{
     remote_addr:AccountAddress,
 }
 
-pub struct ChannelLink <T:AsyncRead+AsyncWrite>{
+pub struct ChannelLink <T:AsyncRead+AsyncWrite+Send>{
     id:String,
     sg_channel:SgChannel,
     up_stream: T,
