@@ -24,6 +24,9 @@ use crate::sparse_merkle::{SparseMerkleTree,ProofRead};
 use atomic_refcell::AtomicRefCell;
 use std::ops::Deref;
 use star_types::offchain_transaction::OffChainTransaction;
+use types::account_config::{AccountResource, account_resource_path};
+use types::byte_array::ByteArray;
+use canonical_serialization::{SimpleSerializer, CanonicalSerialize};
 
 pub struct AccountState {
     state: Arc<AtomicRefCell<BTreeMap<Vec<u8>,Vec<u8>>>>
@@ -128,8 +131,32 @@ impl StateStorage {
         self.global_state.borrow().root_hash()
     }
 
-    pub fn create_account(&mut self, address: AccountAddress) {
-        self.account_states.insert(address, AccountState::new());
+    pub fn exist_account(&self, address: &AccountAddress) -> bool {
+        self.get_account_state(address).is_some()
+    }
+
+    pub fn create_account(&mut self, address: AccountAddress, init_amount: u64) -> Result<HashValue> {
+        if self.exist_account(&address) {
+            bail!("account with address: {} already exist.", address);
+        }
+        println!("create account:{}", address);
+        let mut state = AccountState::new();
+        let account_resource = AccountResource::new(init_amount, 0, ByteArray::new(vec![]), 0, 0, false);
+        let mut serializer = SimpleSerializer::new();
+        account_resource.serialize(&mut serializer);
+        let value:Vec<u8> = serializer.get_output();
+        state.update(account_resource_path(), value);
+        self.update_account(address, state)
+    }
+
+    pub fn update_account(&mut self, address: AccountAddress, account_state: AccountState) -> Result<HashValue> {
+        {
+            let account_root_hash = account_state.root_hash();
+            self.account_states.insert(address, account_state);
+            let mut global_state = self.global_state.borrow_mut();
+            *global_state = global_state.update(vec![(address.hash(), AccountStateBlob::from(account_root_hash.to_vec()))], &ProofReader::default()).unwrap();
+        }
+        return Ok(self.root_hash());
     }
 
     //TODO get with proof
@@ -139,6 +166,10 @@ impl StateStorage {
 
     fn get_account_state_mut(&mut self, address: &AccountAddress) -> Option<&mut AccountState> {
         self.account_states.get_mut(address)
+    }
+
+    fn get_by_access_path(&self, access_path: &AccessPath) -> Option<Vec<u8>> {
+        self.get_account_state(&access_path.address).and_then(|state|state.get(&access_path.path))
     }
 
     pub fn apply_txn(&mut self, txn: &OffChainTransaction) -> Result<HashValue>{
