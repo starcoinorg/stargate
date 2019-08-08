@@ -13,7 +13,7 @@ pub trait TransactionOutputSigner {
     fn sign_txn_output(&self, txn_output: &TransactionOutput) -> Result<Ed25519Signature>;
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq,Debug)]
 pub struct OffChainTransaction {
     /// The sender signed transaction
     txn: SignedTransaction,

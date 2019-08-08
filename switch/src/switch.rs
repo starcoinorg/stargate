@@ -33,4 +33,8 @@ impl<T:TTcpSteam> Switch<T>{
     fn route(){
 
     }
+
+    fn sendMessage(){
+
+    }
 }
