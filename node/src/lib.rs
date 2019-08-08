@@ -2,4 +2,4 @@
 
 pub mod client;
 pub mod utils;
-mod node;
+pub mod node;

@@ -9,7 +9,6 @@ use core::convert::TryFrom;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 //#[ProtoType(crate::proto::message::OpenChannelNodeNegotiateMessage)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct OpenChannelNodeNegotiateMessage {
     pub sender_addr: AccountAddress,
     pub sender_resource_type :StructTag ,
@@ -61,7 +60,6 @@ impl IntoProto for OpenChannelNodeNegotiateMessage {
 
 #[derive(Clone, Debug, Eq, PartialEq, FromProto, IntoProto)]
 #[ProtoType(crate::proto::message::StructTag)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct StructTag {
     pub account_addr: AccountAddress,
     pub module:String,
@@ -84,7 +82,6 @@ impl StructTag {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 //#[ProtoType(crate::proto::message::OfflinePayMessage)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct OfflinePayMessage {
     pub offchain_transaction: OffChainTransaction,
 }
