@@ -19,18 +19,24 @@ use nextgen_crypto::test_utils::KeyPair;
 use tokio::sync::mpsc::{channel,Sender,Receiver};
 use star_types::message::{*};
 use proto_conv::{IntoProtoBytes,FromProto,FromProtoBytes,IntoProto};
+use std::collections::HashMap;
 
 pub struct Node <S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static,C: ChainClient>{
     switch:Switch<S>,
     wallet:Wallet<C>,
     keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
+    send_map:HashMap<Multiaddr,S>,
+    recv_map:HashMap<Multiaddr,S>,
 }
 
 impl<S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static,C:ChainClient> Node<S,C>{
 
     pub fn new(switch:Switch<S>,wallet:Wallet<C>,keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>)->Self{
         Self{
-            switch,wallet,keypair
+            switch:switch,
+            wallet,keypair,
+            send_map:HashMap::new(),
+            recv_map:HashMap::new(),
         }
     }
 
@@ -44,13 +50,27 @@ impl<S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static,C:ChainClient> Node<S,C>{
     I: Future<Output = Result<S, E>> + Send + 'static,
     E: ::std::error::Error + Send + Sync + 'static{
         let (listener, server_addr) = transport.listen_on(listen_addr).unwrap();
+        let (tx, rx) = channel(100);
         executor.spawn(
-            start_listen(listener,self.switch)
+            start_listen(listener,tx)
             .boxed()
             .unit_error()
             .compat(),
         );
+
+        let executor=executor.clone();
+        self.handle_incomming(&executor,rx);
         server_addr
+    }
+
+    fn handle_incomming(self,executor: &TaskExecutor,rx:Receiver<bytes::Bytes>){
+        let mut rx = rx.compat();
+        let receive_future=async move{
+            while let Some(Ok(data)) = rx.next().await {            
+
+            }            
+        };
+        executor.spawn(receive_future.boxed().unit_error().compat());
     }
 
     pub fn connect<T, L, I, E,O>(self,executor: &TaskExecutor,transport: T,addr: Multiaddr)->Result<Sender<bytes::Bytes>,std::io::Error>
@@ -69,7 +89,7 @@ impl<S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static,C:ChainClient> Node<S,C>{
                 let mut rx =  rx.compat();
 
                 while let Some(Ok(data)) = rx.next().await {
-                    stream.send(data).await;
+                    stream.send(data).await.unwrap();
                 }
             };
 
@@ -90,7 +110,7 @@ impl<S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static,C:ChainClient> Node<S,C>{
     pub fn send_message(self,executor: &TaskExecutor,tx:Sender<bytes::Bytes>,msg:Vec<u8>){
         let mut tx = tx.clone().sink_compat();
         let sender_future = async move{        
-            tx.send(bytes::Bytes::from(msg)).await;
+            tx.send(bytes::Bytes::from(msg)).await.unwrap();
         };
         executor.spawn(sender_future.boxed().unit_error().compat());
     }
@@ -99,9 +119,10 @@ impl<S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static,C:ChainClient> Node<S,C>{
         let msg=pay_message.into_proto_bytes().unwrap();
         self.send_message(executor, tx,msg);
     }
+
 }
 
-async fn start_listen<L, I, E,S>(mut server_listener: L,switch:Switch<S>)
+async fn start_listen<L, I, E,S>(mut server_listener: L,tx:Sender<bytes::Bytes>)
     where
         L: Stream<Item = Result<(I, Multiaddr), E>> +Unpin,
         I: Future<Output = Result<S, E>>,
@@ -111,10 +132,15 @@ async fn start_listen<L, I, E,S>(mut server_listener: L,switch:Switch<S>)
         let stream = f_stream.await.unwrap();
         let mut stream = Framed::new(stream.compat(), LengthDelimitedCodec::new()).sink_compat();
 
+        let mut tx_sink=tx.clone().sink_compat();
         while let Some(Ok(data)) = stream.next().await {            
-            stream.send(bytes::Bytes::from(data)).await;
+            tx_sink.send(bytes::Bytes::from(data)).await;
         }
         stream.close().await.unwrap();
     }
+
+}
+
+async fn parse_message_type(data:bytes::Bytes){
 
 }
