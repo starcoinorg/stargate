@@ -129,7 +129,7 @@ impl Default for BaseConfig {
             trusted_peers_file: "trusted_peers.config.toml".to_string(),
             trusted_peers: TrustedPeersConfig::default(),
             node_sync_batch_size: 1000,
-            node_sync_retries: 3,
+            node_sync_retries: 7,
             node_sync_channel_buffer_size: 10,
             node_async_log_chan_size: 256,
         }
@@ -631,7 +631,7 @@ impl Default for StateSyncConfig {
     fn default() -> Self {
         Self {
             address: "localhost".to_string(),
-            service_port: 55557,
+            service_port: 6186,
         }
     }
 }
