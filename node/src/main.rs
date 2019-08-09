@@ -1,5 +1,4 @@
 use network::net::build_network;
-use network::mem_stream::{MemTcpStream, MemNetwork, MemListener};
 use std::net::SocketAddr;
 use futures::{Stream, Future, future};
 use structopt::StructOpt;

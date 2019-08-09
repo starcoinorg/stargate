@@ -1,6 +1,6 @@
 use std::{pin::Pin, result, net::SocketAddr};
 use futures::{
-    io::{AsyncRead, AsyncWrite, Result},
+    io::{AsyncRead, AsyncWrite, Result, Error},
     stream::Stream,
     Future,
     Poll,
@@ -8,7 +8,6 @@ use futures::{
 };
 use crate::{
     p2p::{TTcpSteam, Network, NetConfig},
-    error::Error,
 };
 
 pub struct MemTcpStream {}
@@ -22,7 +21,7 @@ impl Stream for MemListener {
     fn poll_next(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<Self::Item>>{
+    ) -> Poll<Option<Self::Item>> {
         unimplemented!()
     }
 }

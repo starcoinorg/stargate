@@ -4,12 +4,11 @@ use std::{
 
 use futures::{
     channel::mpsc::{UnboundedReceiver, UnboundedSender},
-    io::{AsyncRead, AsyncWrite},
+    io::{AsyncRead, AsyncWrite,Error},
     stream::Stream,
     Future,
 };
 
-use crate::error::Error;
 use sg_config::config::NodeNetworkConfig;
 
 pub type NetConfig = NodeNetworkConfig;
