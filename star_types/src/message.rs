@@ -80,18 +80,34 @@ impl StructTag {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-//#[ProtoType(crate::proto::message::OfflinePayMessage)]
-pub struct OfflinePayMessage {
-    pub offchain_transaction: OffChainTransaction,
+#[derive(Clone, Debug, Eq, PartialEq,FromProto, IntoProto)]
+#[ProtoType(crate::proto::message::OffChainPayMessage)]
+pub struct OffChainPayMessage {
+    pub transaction: OffChainTransaction,
 }
 
-impl OfflinePayMessage {
+impl OffChainPayMessage {
     pub fn new(
-        offchain_transaction: OffChainTransaction,
+        transaction: OffChainTransaction,
     ) -> Self {
-        OfflinePayMessage {
-            offchain_transaction,
+        OffChainPayMessage {
+            transaction,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq,FromProto, IntoProto)]
+#[ProtoType(crate::proto::message::OffChainPayMessage)]
+pub struct OpenChannelTransactionMessage {
+    pub transaction: OffChainTransaction,
+}
+
+impl OpenChannelTransactionMessage {
+    pub fn new(
+        transaction: OffChainTransaction,
+    ) -> Self {
+        OpenChannelTransactionMessage {
+            transaction,
         }
     }
 }

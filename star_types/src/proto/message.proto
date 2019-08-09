@@ -20,7 +20,7 @@ message OpenChannelTransactionMessage {
     star_types.OffChainTransaction transaction = 1;
 }
 
-message OfflinePayMessage {
+message OffChainPayMessage {
     star_types.OffChainTransaction transaction = 1;
 }
 

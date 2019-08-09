@@ -16,13 +16,35 @@ use switch::{switch::Switch};
 use tokio::codec::{Framed,LengthDelimitedCodec};
 use bytes::Bytes;
 
+use std::sync::Arc;
+
+use rand::prelude::*;
+
+use chain_client::{ChainClient, RpcChainClient};
+use mock_chain_client::MockChainClient;
+use nextgen_crypto::test_utils::KeyPair;
+use nextgen_crypto::Uniform;
+use types::account_address::AccountAddress;
+
+use sgwallet::wallet::*;
+
 #[test]
 fn start_server_test() -> Result<()> {
     let mut rt = Runtime::new().unwrap();
     let executor = rt.executor();
 
     let switch:Switch<MemorySocket> = Switch::new();
-    let node = Node::new(switch);
+
+    let amount: u64 = 1_000_000_000;
+    let mut rng: StdRng = SeedableRng::from_seed([0; 32]);
+    let keypair = KeyPair::generate_for_testing(&mut rng);
+    let client = Arc::new(MockChainClient::new());
+    let account_address = AccountAddress::from_public_key(&keypair.public_key);
+    println!("account_address: {}", account_address);
+    client.faucet(account_address, amount).unwrap();
+    let mut wallet = Wallet::new_with_client(account_address, keypair.clone(), client).unwrap();
+
+    let node = Node::new(switch,wallet,keypair.clone());
 
     node.start_server(&executor,MemoryTransport::default(),"/memory/10".parse().unwrap());
         

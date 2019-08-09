@@ -20,7 +20,16 @@ structopt = "0.2.15"
 parity-multiaddr = "0.4.0"
 tokio = "0.1.22"
 bytes = "0.4.12"
+rand = "0.6.5"
 
 logger = { path = "../common/logger" }
 node_service = { path = "./node_service"}
 sg_config = { path = "../sgconfig"}
+sgwallet = { path="../sgwallet"}
+chain_client = { path = "../chain/chain_client"}
+types = { path = "../types" }
+star_types = { path = "../star_types" }
+
+nextgen_crypto = { path = "../crypto/nextgen_crypto", features = ["testing"] }
+mock_chain_client = { path = "../chain/mock_chain_client" }
+proto_conv = { path = "../common/proto_conv", features = ["derive"] }
