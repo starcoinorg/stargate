@@ -7,21 +7,24 @@ import "off_chain_transaction.proto";
 
 message OpenChannelNodeNegotiateMessage {
     bytes sender_addr = 1;
-    StructTag sender_resource_type = 2 ;
+    StructTag resource_type = 2 ;
     int64 sender_amount = 3 ;
     bytes receiver_addr= 4;
-    StructTag receiver_resource_type = 5 ;
-    int64 receiver_amount = 6 ;
-    bytes sender_sign = 7 ;
-    bytes receiver_sign = 8 ;
+    int64 receiver_amount = 5 ;
+    bytes sender_sign = 6 ;
+    ReceiveSignMessage receiver_sign = 7 ;
 }
 
 message OpenChannelTransactionMessage {
     star_types.OffChainTransaction transaction = 1;
 }
 
-message OfflinePayMessage {
+message OffChainPayMessage {
     star_types.OffChainTransaction transaction = 1;
+}
+
+message ReceiveSignMessage {
+    bytes receiver_sign = 1 ;
 }
 
 message StructTag {

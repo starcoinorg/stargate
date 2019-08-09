@@ -1,3 +1,4 @@
+#![feature(custom_attribute)]
 pub mod access_path;
 #[cfg(test)]
 mod access_path_test;

@@ -10,6 +10,8 @@ use types::write_set::WriteSet;
 use types::vm_error::VMStatus;
 use proto_conv::{FromProto, IntoProto};
 use core::convert::TryFrom;
+use super::transaction_output_helper;
+use protobuf::RepeatedField;
 
 pub trait TransactionOutputSigner {
     fn sign_txn_output(&self, txn_output: &TransactionOutput) -> Result<Ed25519Signature>;
@@ -98,6 +100,14 @@ impl IntoProto for OffChainTransaction {
 
     fn into_proto(self) -> Self::ProtoType {
         let mut out = Self::ProtoType::new();
+        out.set_transaction(self.txn.into_proto());
+        out.set_receiver(self.receiver.into_proto());
+        out.set_transaction_output(transaction_output_helper::into_pb(self.output).unwrap());
+        let mut signs:Vec<Vec<u8>> = vec![];
+        for sign in self.output_signatures {
+            signs.push(sign.to_bytes().to_vec());
+        }
+        out.set_output_signatures(RepeatedField::from_vec(signs));
         out
     }
 }

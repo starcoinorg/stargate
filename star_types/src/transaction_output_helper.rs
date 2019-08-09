@@ -41,7 +41,7 @@ pub fn into_pb(mut tx_output: TransactionOutput) -> Result<TransactionOutputProt
     let mut output = TransactionOutputProto::new();
 
     let mut events: Vec<Event> = vec![];
-    for e in (tx_output.events()) {
+    for e in tx_output.events() {
         let tmp = e.clone();
         events.push(ContractEvent::into_proto(tmp));
     }
