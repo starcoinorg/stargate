@@ -42,7 +42,7 @@ message GetAccountStateWithProofByStateRootRequest {
 }
 
 message GetAccountStateWithProofByStateRootResponse {
-    bytes account_state_blob = 1;
+    Blob account_state_blob = 1;
 }
 
 message WatchTransactionRequest {
@@ -77,4 +77,9 @@ enum MempoolAddTransactionStatusCode {
 message MempoolAddTransactionStatus {
   MempoolAddTransactionStatusCode code = 1;
   string message = 2;
+}
+
+//AccountStateBlob
+message Blob {
+    bytes blob = 1;
 }

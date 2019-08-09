@@ -26,7 +26,7 @@ use star_types::{offchain_transaction::OffChainTransaction,
                  proto::{chain_grpc::Chain,
                          chain::{LeastRootRequest, LeastRootResponse,
                                  FaucetRequest, FaucetResponse,
-                                 GetAccountStateWithProofByStateRootRequest, GetAccountStateWithProofByStateRootResponse,
+                                 GetAccountStateWithProofByStateRootRequest, GetAccountStateWithProofByStateRootResponse, Blob,
                                  WatchTransactionRequest, WatchTransactionResponse,
                                  MempoolAddTransactionStatus, MempoolAddTransactionStatusCode,
                                  SubmitTransactionRequest, SubmitTransactionResponse,
@@ -163,8 +163,8 @@ impl Chain for ChainService {
     fn faucet(&mut self, ctx: ::grpcio::RpcContext,
               req: FaucetRequest,
               sink: ::grpcio::UnarySink<FaucetResponse>) {
-        let resp = AccountAddress::try_from(req.address.to_vec()).and_then(|account_address| {
-            self.faucet_inner(account_address, req.amount)
+        let resp = AccountAddress::try_from(req.get_address().to_vec()).and_then(|account_address| {
+            self.faucet_inner(account_address, req.get_amount())
         }).and_then(|_root_hash| {
             Ok(FaucetResponse::new())
         });
@@ -174,28 +174,41 @@ impl Chain for ChainService {
     fn get_account_state_with_proof_by_state_root(&mut self, ctx: ::grpcio::RpcContext,
                                                   req: GetAccountStateWithProofByStateRootRequest,
                                                   sink: ::grpcio::UnarySink<GetAccountStateWithProofByStateRootResponse>) {
-        let account_address = AccountAddress::try_from(req.address.to_vec()).unwrap();
-        let a_s_bytes = self.get_account_state_with_proof_by_state_root_inner(account_address);
-        let mut resp = GetAccountStateWithProofByStateRootResponse::new();
-        //FIXME do not use unwrap
-        resp.set_account_state_blob(a_s_bytes.unwrap());
-        provide_grpc_response(Ok(resp), ctx, sink);
+        let resp = AccountAddress::try_from(req.get_address().to_vec()).and_then(|account_address| {
+            Ok(self.get_account_state_with_proof_by_state_root_inner(account_address))
+        }).and_then(|a_s_bytes| {
+            let mut get_resp = GetAccountStateWithProofByStateRootResponse::new();
+            match a_s_bytes {
+                Some(a_s) => {
+                    let mut blob = Blob::new();
+                    blob.set_blob(a_s);
+                    get_resp.set_account_state_blob(blob);
+                }
+                None => {}
+            };
+            Ok(get_resp)
+        });
+        provide_grpc_response(resp, ctx, sink);
     }
 
     fn submit_transaction(&mut self, ctx: ::grpcio::RpcContext,
                           req: SubmitTransactionRequest,
                           sink: ::grpcio::UnarySink<SubmitTransactionResponse>) {
-        let signed_txn = req.signed_txn.clone().unwrap();
-        let mut wt_resp = WatchTransactionResponse::new();
-        wt_resp.set_signed_txn(signed_txn);
-        pub_sub::send(wt_resp).unwrap();
+        let submit_txn = req.signed_txn.clone().unwrap();
+        let resp = SignedTransaction::from_proto(req.signed_txn.clone().unwrap()).and_then(|signed_txn| {
+            block_on(self.submit_transaction_inner(self.sender.clone(), signed_txn.clone()));
+            let mut wt_resp = WatchTransactionResponse::new();
+            wt_resp.set_signed_txn(submit_txn);
+            pub_sub::send(wt_resp)?;
 
-        block_on(self.submit_transaction_inner(self.sender.clone(), SignedTransaction::from_proto(req.signed_txn.unwrap()).unwrap()));
-        let mut resp = SubmitTransactionResponse::new();
-        let mut state = MempoolAddTransactionStatus::new();
-        state.set_code(MempoolAddTransactionStatusCode::Valid);
-        resp.set_mempool_status(state);
-        provide_grpc_response(Ok(resp), ctx, sink);
+            let mut submit_resp = SubmitTransactionResponse::new();
+            let mut state = MempoolAddTransactionStatus::new();
+            state.set_code(MempoolAddTransactionStatusCode::Valid);
+            submit_resp.set_mempool_status(state);
+            Ok(submit_resp)
+        });
+
+        provide_grpc_response(resp, ctx, sink);
     }
 
     fn submit_off_chain_transaction(&mut self, ctx: ::grpcio::RpcContext, req: OffChainTransactionProto,
