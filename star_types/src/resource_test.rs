@@ -12,16 +12,13 @@ use super::*;
 #[test]
 fn test_resource() {
     let account_resource = AccountResource::new(100, 1, types::byte_array::ByteArray::new(vec![]), 0, 0, false);
-    let mut serializer = SimpleSerializer::new();
-    account_resource.serialize(&mut serializer).unwrap();
-    let out: Vec<u8> = serializer.get_output();
+
+    let out: Vec<u8> = SimpleSerializer::serialize(&account_resource).unwrap();
     println!("resource hex: {}", hex::encode(&out));
 
     let resource = Resource::decode(account_struct_tag(), get_account_struct_def(), &out).expect("decode fail.");
     println!("resource:{:#?}", resource);
-    let mut serializer = SimpleSerializer::new();
-    resource.serialize(&mut serializer).expect("serialize resource fail.");
-    let out2: Vec<u8> = serializer.get_output();
+    let out2: Vec<u8> = resource.encode().unwrap();
     assert_eq!(out, out2)
 }
 

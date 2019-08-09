@@ -10,6 +10,9 @@ pub mod resource;
 #[cfg(test)]
 mod resource_test;
 pub mod transaction_output_helper;
+pub mod change_set;
+#[cfg(test)]
+mod change_set_test;
 
 #[cfg(test)]
 mod tests {
