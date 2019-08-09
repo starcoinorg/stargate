@@ -41,6 +41,8 @@ members = [
     "network",
     "network/memsocket",
     "network/netcore",
+    "network-libp2p",
+    "network-libp2p/peerset",
     "sgwallet",
     "sgwallet/local_state_storage",
     "switch",
