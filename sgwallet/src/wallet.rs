@@ -19,7 +19,8 @@ use star_types::offchain_transaction::{
 };
 use star_types::resource::Resource;
 use types::account_address::AccountAddress;
-use types::account_config::{account_resource_path, AccountResource};
+use types::account_config::{account_resource_path, AccountResource, coin_struct_tag};
+use types::language_storage::StructTag;
 use types::transaction::{Program, RawTransaction, RawTransactionBytes, SignedTransaction, TransactionOutput, TransactionStatus};
 use types::transaction_helpers::TransactionSigner;
 use types::vm_error::*;
@@ -81,8 +82,12 @@ impl<C> Wallet<C>
         unimplemented!()
     }
 
-    pub fn transfer(&self, receiver_address: AccountAddress, amount: u64) -> Result<OffChainTransaction> {
-        let program = vm_genesis::encode_transfer_program(&receiver_address, amount);
+    pub fn transfer(&self, coin_resource_tag: StructTag, receiver_address: AccountAddress, amount: u64) -> Result<OffChainTransaction> {
+        let program = if coin_resource_tag == coin_struct_tag() {
+            vm_genesis::encode_transfer_program(&receiver_address, amount)
+        } else {
+            bail!("unsupported coin resource: {:#?}", coin_resource_tag)
+        };
         let txn = self.create_signed_txn(program)?;
         let output = self.execute_transaction(txn.clone());
         match output.status() {
