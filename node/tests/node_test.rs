@@ -1,22 +1,19 @@
 #![feature(async_await)]
 
 use futures::{
-    executor::block_on,
-    io::{AsyncReadExt, AsyncWriteExt,AsyncWrite},
-    sink::{Sink,SinkExt},
-    stream::StreamExt,
+    io::{AsyncReadExt},
+    sink::{SinkExt},
     future::{FutureExt},
-    compat::{Sink01CompatExt, Compat01As03Sink,Compat01As03} ,
+    compat::{Sink01CompatExt} ,
     prelude::*,
 };
-use memsocket::{MemoryListener, MemorySocket};
-use netcore::transport::{Transport,memory::MemoryTransport};
+use memsocket::{MemorySocket};
+use netcore::transport::{memory::MemoryTransport};
 use std::io::Result;
-use tokio::runtime::{Runtime,TaskExecutor};
+use tokio::runtime::{Runtime};
 use node::node::Node;
 use switch::{switch::Switch};
-use std::{thread, time};
-use tokio::codec::{Framed,LengthDelimitedCodec, Decoder};
+use tokio::codec::{Framed,LengthDelimitedCodec};
 use bytes::Bytes;
 
 #[test]

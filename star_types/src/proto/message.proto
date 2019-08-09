@@ -17,7 +17,7 @@ message OpenChannelNodeNegotiateMessage {
 }
 
 message OpenChannelTransactionMessage {
-    types.SignedTransaction transaction = 1;
+    star_types.OffChainTransaction transaction = 1;
 }
 
 message OfflinePayMessage {
