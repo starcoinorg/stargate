@@ -21,7 +21,7 @@ use star_types::message::{*};
 use proto_conv::{IntoProtoBytes,FromProto,FromProtoBytes,IntoProto};
 use std::collections::HashMap;
 
-pub struct Node <S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static,C: ChainClient>{
+pub struct Node <S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static,C: ChainClient+Send+Sync+'static>{
     switch:Switch<S>,
     wallet:Wallet<C>,
     keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
@@ -29,7 +29,7 @@ pub struct Node <S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static,C: ChainClient
     recv_map:HashMap<Multiaddr,S>,
 }
 
-impl<S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static,C:ChainClient> Node<S,C>{
+impl<S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static,C:ChainClient+Send+Sync+'static> Node<S,C>{
 
     pub fn new(switch:Switch<S>,wallet:Wallet<C>,keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>)->Self{
         Self{
@@ -67,10 +67,27 @@ impl<S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static,C:ChainClient> Node<S,C>{
         let mut rx = rx.compat();
         let receive_future=async move{
             while let Some(Ok(data)) = rx.next().await {            
-
+                let msg_type=parse_message_type(&data);
+                match msg_type {
+                    MessageType::OpenChannelNodeNegotiateMessage => self.handle_open_channel_negotiate(data[2..].to_vec()),
+                    MessageType::OpenChannelTransactionMessage => self.handle_open_channel(data[2..].to_vec()),
+                    MessageType::OffChainPayMessage => self.handle_off_chain_pay(data[2..].to_vec()),
+                };
             }            
         };
         executor.spawn(receive_future.boxed().unit_error().compat());
+    }
+
+    fn handle_open_channel_negotiate(&self,data:Vec<u8>){
+
+    }
+
+    fn handle_open_channel(&self,data:Vec<u8>){
+
+    }
+
+    fn handle_off_chain_pay(&self,data:Vec<u8>){
+
     }
 
     pub fn connect<T, L, I, E,O>(self,executor: &TaskExecutor,transport: T,addr: Multiaddr)->Result<Sender<bytes::Bytes>,std::io::Error>
@@ -141,7 +158,7 @@ async fn start_listen<L, I, E,S>(mut server_listener: L,tx:Sender<bytes::Bytes>)
 
 }
 
-fn parse_message_type(data:bytes::Bytes)->MessageType{
+fn parse_message_type(data:&bytes::Bytes)->MessageType{
     let data_slice = &data[0..2];
     let type_u16=u16::from_be_bytes([data_slice[0],data_slice[1]]);
     MessageType::from_type(type_u16).unwrap()
