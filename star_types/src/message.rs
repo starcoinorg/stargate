@@ -136,3 +136,29 @@ impl OpenChannelTransactionMessage {
         }
     }
 }
+
+pub enum MessageType {
+    OpenChannelNodeNegotiateMessage,
+    OpenChannelTransactionMessage,
+    OffChainPayMessage,
+}
+
+impl MessageType {
+
+    pub fn get_type(self)->u16{
+        match self {
+            MessageType::OpenChannelNodeNegotiateMessage => 1,
+            MessageType::OpenChannelTransactionMessage => 2,
+            MessageType::OffChainPayMessage => 3,
+        }
+    }
+
+    pub fn from_type(msg_type:u16)->Result<Self>{
+        match msg_type {
+            1 => Ok(MessageType::OpenChannelNodeNegotiateMessage),
+            2 => Ok(MessageType::OpenChannelTransactionMessage),
+            3 => Ok(MessageType::OffChainPayMessage),
+            _ => bail!("no such type"),
+        }
+    }
+}

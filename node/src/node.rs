@@ -141,6 +141,16 @@ async fn start_listen<L, I, E,S>(mut server_listener: L,tx:Sender<bytes::Bytes>)
 
 }
 
-async fn parse_message_type(data:bytes::Bytes){
+fn parse_message_type(data:bytes::Bytes)->MessageType{
+    let data_slice = &data[0..2];
+    let type_u16=u16::from_be_bytes([data_slice[0],data_slice[1]]);
+    MessageType::from_type(type_u16).unwrap()
+}
 
+fn add_message_type(data:bytes::Bytes,messaget_type:MessageType)->bytes::Bytes{
+    let len =u16::to_be_bytes(messaget_type.get_type());
+    let mut result_vec = Vec::new();
+    result_vec.extend_from_slice(&len);
+    result_vec.extend_from_slice(&data[..]);
+    bytes::Bytes::from(result_vec)
 }
