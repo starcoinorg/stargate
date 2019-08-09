@@ -1,3 +1,4 @@
+#![allow(bare_trait_objects)]
 use types::proto::{transaction, events, vm_errors, access_path, proof};
 
 pub mod star_account;
