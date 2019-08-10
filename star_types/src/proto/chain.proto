@@ -32,8 +32,12 @@ message FaucetRequest {
 
 message FaucetResponse {}
 
-message StateByAccessPathResponse {
+message AccountResource {
     bytes resource = 1;
+}
+
+message StateByAccessPathResponse {
+    AccountResource account_resource = 1;
 }
 
 message GetAccountStateWithProofByStateRootRequest {

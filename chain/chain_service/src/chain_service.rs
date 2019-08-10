@@ -30,7 +30,7 @@ use star_types::{offchain_transaction::OffChainTransaction,
                                  WatchTransactionRequest, WatchTransactionResponse,
                                  MempoolAddTransactionStatus, MempoolAddTransactionStatusCode,
                                  SubmitTransactionRequest, SubmitTransactionResponse,
-                                 StateByAccessPathResponse,
+                                 StateByAccessPathResponse, AccountResource,
                          },
                          off_chain_transaction::OffChainTransaction as OffChainTransactionProto,
                  }};
@@ -194,11 +194,13 @@ impl Chain for ChainService {
     fn submit_transaction(&mut self, ctx: ::grpcio::RpcContext,
                           req: SubmitTransactionRequest,
                           sink: ::grpcio::UnarySink<SubmitTransactionResponse>) {
-        let submit_txn = req.signed_txn.clone().unwrap();
         let resp = SignedTransaction::from_proto(req.signed_txn.clone().unwrap()).and_then(|signed_txn| {
+            let submit_txn_pb = req.signed_txn.clone().unwrap();
+            Ok((signed_txn, submit_txn_pb))
+        }).and_then(|(signed_txn, submit_txn_pb)| {
             block_on(self.submit_transaction_inner(self.sender.clone(), signed_txn.clone()));
             let mut wt_resp = WatchTransactionResponse::new();
-            wt_resp.set_signed_txn(submit_txn);
+            wt_resp.set_signed_txn(submit_txn_pb);
             pub_sub::send(wt_resp)?;
 
             let mut submit_resp = SubmitTransactionResponse::new();
@@ -235,16 +237,22 @@ impl Chain for ChainService {
     fn state_by_access_path(&mut self, ctx: ::grpcio::RpcContext,
                             req: AccessPath,
                             sink: ::grpcio::UnarySink<StateByAccessPathResponse>) {
-        let account_address = AccountAddress::try_from(req.address.to_vec()).unwrap();
-        let resource = self.state_by_access_path_inner(account_address, req.path);
-        let mut resp = StateByAccessPathResponse::new();
-        match resource {
-            Some(re) => {
-                resp.set_resource(re);
-            }
-            _ => {}
-        }
-        provide_grpc_response(Ok(resp), ctx, sink);
+        let resp = AccountAddress::try_from(req.get_address().to_vec()).and_then(|account_address| {
+            Ok(self.state_by_access_path_inner(account_address, req.path))
+        }).and_then(|resource| {
+            let mut state_resp = StateByAccessPathResponse::new();
+            match resource {
+                Some(re) => {
+                    let mut a_r = AccountResource::new();
+                    a_r.set_resource(re);
+                    state_resp.set_account_resource(a_r);
+                }
+                _ => {}
+            };
+            Ok(state_resp)
+        });
+
+        provide_grpc_response(resp, ctx, sink);
     }
 }
 

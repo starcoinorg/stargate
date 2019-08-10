@@ -101,9 +101,16 @@ impl ChainClient for RpcChainClient {
         let mut req = AccessPathProto::new();
         req.set_address(path.address.to_vec());
         req.set_path(path.path.to_vec());
-        let resp = self.client.state_by_access_path(&req);
-        let resource = resp.unwrap().resource;
-        Ok(Some(resource))
+        self.client.state_by_access_path(&req).map_err(|e|{
+            format_err!("{:?}", e)
+        }).and_then(|resp| {
+            let a_r = resp.account_resource.into_option();
+            let result = match a_r {
+                Some(resource) => { Some(resource.resource) }
+                None => { None }
+            };
+            Ok(result)
+        })
     }
 
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()> {
