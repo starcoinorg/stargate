@@ -1,11 +1,10 @@
 use failure::prelude::*;
 use types::proto::{access_path::AccessPath};
-use types::{transaction::{SignedTransaction, TransactionPayload}, account_address::AccountAddress};
+use types::{transaction::{SignedTransaction, TransactionPayload}, write_set::WriteSet, account_address::AccountAddress, vm_error::VMStatus};
 use proto_conv::FromProto;
-use futures::sync::mpsc::{unbounded, UnboundedReceiver};
+use futures::{sync::mpsc::{unbounded, UnboundedReceiver}, future::Future, sink::Sink, stream::Stream};
 use super::pub_sub;
 use hex;
-use futures::{future::Future, sink::Sink, stream::Stream};
 use grpcio::WriteFlags;
 use state_storage::StateStorage;
 use super::transaction_storage::TransactionStorage;
@@ -34,13 +33,22 @@ use star_types::{offchain_transaction::OffChainTransaction,
                          },
                          off_chain_transaction::OffChainTransaction as OffChainTransactionProto,
                  }};
+use vm_runtime::{MoveVM, VMVerifier, VMExecutor};
+use lazy_static::lazy_static;
+use config::config::{VMConfig,VMPublishingOption};
 
+lazy_static! {
+    static ref VM_CONFIG:VMConfig = VMConfig{
+        publishing_options: VMPublishingOption::Open
+    };
+}
 
 #[derive(Clone)]
 pub struct ChainService {
     sender: channel::Sender<TransactionInner>,
     state_db: Arc<Mutex<StateStorage>>,
     tx_db: Arc<Mutex<TransactionStorage>>,
+    vm: Arc<Mutex<MoveVM>>,
 }
 
 #[derive(Clone, Debug)]
@@ -55,7 +63,8 @@ impl ChainService {
         let (mut tx_sender, mut tx_receiver) = channel::new(1_024, &gauge);
         let tx_db = Arc::new(Mutex::new(TransactionStorage::new()));
         let state_db = Arc::new(Mutex::new(StateStorage::new()));
-        let chain_service = ChainService { sender: tx_sender.clone(), state_db, tx_db };
+        let vm = Arc::new(Mutex::new(MoveVM::new(&VM_CONFIG)));
+        let chain_service = ChainService { sender: tx_sender.clone(), state_db, tx_db, vm };
         let chain_service_clone = chain_service.clone();
 
         let receiver_future = async move {
@@ -93,7 +102,7 @@ impl ChainService {
         let exist_flag = tx_db.exist_signed_transaction(signed_tx_hash);
         if !exist_flag {
             // 1. state_root
-            let payload = sign_tx.payload().clone();
+            let payload = sign_tx.clone().payload().clone();
             match payload {
                 TransactionPayload::WriteSet(ws) => {
                     let mut state_db = self.state_db.lock().unwrap();
@@ -113,8 +122,15 @@ impl ChainService {
 
                     tx_db.insert_all(state_hash, sign_tx);
                 }
-                TransactionPayload::Program(_p) => {
-                    panic!("Program Payload Err")
+                TransactionPayload::Program(program) => {
+                    let mut state_db = self.state_db.lock().unwrap();
+                    let mut output_vec = MoveVM::execute_block(vec![sign_tx.clone()], &VM_CONFIG, &*state_db);
+
+                    output_vec.pop().and_then(|output| {
+                        let state_hash = state_db.apply_write_set(&output.write_set()).unwrap();
+                        tx_db.insert_all(state_hash, sign_tx);
+                        Some(())
+                    });
                 }
             }
         }

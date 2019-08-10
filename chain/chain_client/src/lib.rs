@@ -51,7 +51,6 @@ impl RpcChainClient {
         Ok(())
     }
 
-    //TODO
     pub fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> WatchTransactionStream {
         let watch_channel = ChannelBuilder::new(Arc::new(EnvBuilder::new().build())).connect(&self.conn_addr);
         let watch_client = chain_grpc::ChainClient::new(watch_channel);

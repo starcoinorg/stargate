@@ -20,16 +20,17 @@ use std::convert::TryFrom;
 use std::cell::RefCell;
 use itertools::Itertools;
 use std::sync::Arc;
-use crate::sparse_merkle::{SparseMerkleTree,ProofRead};
+use crate::sparse_merkle::{SparseMerkleTree, ProofRead};
 use atomic_refcell::AtomicRefCell;
 use std::ops::Deref;
 use star_types::offchain_transaction::OffChainTransaction;
 use types::account_config::{AccountResource, account_resource_path};
 use types::byte_array::ByteArray;
 use canonical_serialization::{SimpleSerializer, CanonicalSerialize};
+use state_view::StateView;
 
 pub struct AccountState {
-    state: Arc<AtomicRefCell<BTreeMap<Vec<u8>,Vec<u8>>>>
+    state: Arc<AtomicRefCell<BTreeMap<Vec<u8>, Vec<u8>>>>
 }
 
 impl AccountState {
@@ -39,17 +40,17 @@ impl AccountState {
         }
     }
 
-    pub fn from_account_state_blob(account_state_blob: Vec<u8>) -> Result<Self>{
+    pub fn from_account_state_blob(account_state_blob: Vec<u8>) -> Result<Self> {
         let mut state = Self::new();
         let bmap = BTreeMap::try_from(&AccountStateBlob::from(account_state_blob))?;
-        let updates = bmap.iter().map(|(k,v)|(k.clone(),v.clone())).collect();
+        let updates = bmap.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
         Self::update_state(&mut state, updates);
         Ok(state)
     }
 
-    fn update_state(state: &mut AccountState, updates: Vec<(Vec<u8>, Vec<u8>)>) -> Result<()>{
+    fn update_state(state: &mut AccountState, updates: Vec<(Vec<u8>, Vec<u8>)>) -> Result<()> {
         for (path, value) in updates {
-            state.update(path , value)?;
+            state.update(path, value)?;
         }
         Ok(())
     }
@@ -70,27 +71,24 @@ impl AccountState {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-       self.into()
+        self.into()
     }
 
-    pub fn root_hash(&self) -> HashValue{
+    pub fn root_hash(&self) -> HashValue {
         //TODO use another hasher.
-        let blob:AccountStateBlob = self.into();
+        let blob: AccountStateBlob = self.into();
         blob.hash()
     }
 }
 
 impl Into<Vec<u8>> for &AccountState {
-
     fn into(self) -> Vec<u8> {
-        let blob:AccountStateBlob = self.into();
+        let blob: AccountStateBlob = self.into();
         blob.into()
     }
-
 }
 
-impl Into<AccountStateBlob> for &AccountState{
-
+impl Into<AccountStateBlob> for &AccountState {
     fn into(self) -> AccountStateBlob {
         AccountStateBlob::try_from(&*self.state.borrow()).expect("serialize account fail.")
     }
@@ -144,7 +142,7 @@ impl StateStorage {
         let account_resource = AccountResource::new(init_amount, 0, ByteArray::new(address.to_vec()), 0, 0, false);
         let mut serializer = SimpleSerializer::new();
         account_resource.serialize(&mut serializer);
-        let value:Vec<u8> = serializer.get_output();
+        let value: Vec<u8> = serializer.get_output();
         state.update(account_resource_path(), value);
         self.update_account(address, state)
     }
@@ -169,10 +167,10 @@ impl StateStorage {
     }
 
     fn get_by_access_path(&self, access_path: &AccessPath) -> Option<Vec<u8>> {
-        self.get_account_state(&access_path.address).and_then(|state|state.get(&access_path.path))
+        self.get_account_state(&access_path.address).and_then(|state| state.get(&access_path.path))
     }
 
-    pub fn apply_txn(&mut self, txn: &OffChainTransaction) -> Result<HashValue>{
+    pub fn apply_txn(&mut self, txn: &OffChainTransaction) -> Result<HashValue> {
         self.apply_write_set(txn.output().write_set())
     }
 
@@ -181,7 +179,7 @@ impl StateStorage {
             match op {
                 WriteOp::Value(value) => {
                     self.update(access_path, value.clone())?;
-                },
+                }
                 WriteOp::Deletion => {
                     self.delete(access_path)?;
                 }
@@ -214,6 +212,22 @@ impl StateStorage {
             None => { return bail!("can not find account by address:{}", access_path.address); }
         };
         Ok(self.global_state.borrow().root_hash())
+    }
+}
+
+impl StateView for StateStorage {
+    fn get(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
+        Ok(self.get_by_access_path(access_path))
+    }
+
+    fn multi_get(&self, access_paths: &[AccessPath]) -> Result<Vec<Option<Vec<u8>>>> {
+        Ok(access_paths.iter().map(|path| -> Option<Vec<u8>> {
+            self.get_by_access_path(path)
+        }).collect())
+    }
+
+    fn is_genesis(&self) -> bool {
+        false
     }
 }
 
