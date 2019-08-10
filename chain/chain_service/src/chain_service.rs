@@ -1,11 +1,10 @@
 use failure::prelude::*;
 use types::proto::{access_path::AccessPath};
-use types::{transaction::{SignedTransaction, TransactionPayload}, account_address::AccountAddress};
+use types::{transaction::{SignedTransaction, TransactionPayload}, write_set::WriteSet, account_address::AccountAddress, vm_error::VMStatus};
 use proto_conv::FromProto;
-use futures::sync::mpsc::{unbounded, UnboundedReceiver};
+use futures::{sync::mpsc::{unbounded, UnboundedReceiver}, future::Future, sink::Sink, stream::Stream};
 use super::pub_sub;
 use hex;
-use futures::{future::Future, sink::Sink, stream::Stream};
 use grpcio::WriteFlags;
 use state_storage::StateStorage;
 use super::transaction_storage::TransactionStorage;
@@ -26,21 +25,30 @@ use star_types::{offchain_transaction::OffChainTransaction,
                  proto::{chain_grpc::Chain,
                          chain::{LeastRootRequest, LeastRootResponse,
                                  FaucetRequest, FaucetResponse,
-                                 GetAccountStateWithProofByStateRootRequest, GetAccountStateWithProofByStateRootResponse,
+                                 GetAccountStateWithProofByStateRootRequest, GetAccountStateWithProofByStateRootResponse, Blob,
                                  WatchTransactionRequest, WatchTransactionResponse,
                                  MempoolAddTransactionStatus, MempoolAddTransactionStatusCode,
                                  SubmitTransactionRequest, SubmitTransactionResponse,
-                                 StateByAccessPathResponse,
+                                 StateByAccessPathResponse, AccountResource,
                          },
                          off_chain_transaction::OffChainTransaction as OffChainTransactionProto,
                  }};
+use vm_runtime::{MoveVM, VMVerifier, VMExecutor};
+use lazy_static::lazy_static;
+use config::config::{VMConfig,VMPublishingOption};
 
+lazy_static! {
+    static ref VM_CONFIG:VMConfig = VMConfig{
+        publishing_options: VMPublishingOption::Open
+    };
+}
 
 #[derive(Clone)]
 pub struct ChainService {
     sender: channel::Sender<TransactionInner>,
     state_db: Arc<Mutex<StateStorage>>,
     tx_db: Arc<Mutex<TransactionStorage>>,
+    vm: Arc<Mutex<MoveVM>>,
 }
 
 #[derive(Clone, Debug)]
@@ -55,7 +63,8 @@ impl ChainService {
         let (mut tx_sender, mut tx_receiver) = channel::new(1_024, &gauge);
         let tx_db = Arc::new(Mutex::new(TransactionStorage::new()));
         let state_db = Arc::new(Mutex::new(StateStorage::new()));
-        let chain_service = ChainService { sender: tx_sender.clone(), state_db, tx_db };
+        let vm = Arc::new(Mutex::new(MoveVM::new(&VM_CONFIG)));
+        let chain_service = ChainService { sender: tx_sender.clone(), state_db, tx_db, vm };
         let chain_service_clone = chain_service.clone();
 
         let receiver_future = async move {
@@ -93,7 +102,7 @@ impl ChainService {
         let exist_flag = tx_db.exist_signed_transaction(signed_tx_hash);
         if !exist_flag {
             // 1. state_root
-            let payload = sign_tx.payload().clone();
+            let payload = sign_tx.clone().payload().clone();
             match payload {
                 TransactionPayload::WriteSet(ws) => {
                     let mut state_db = self.state_db.lock().unwrap();
@@ -113,8 +122,15 @@ impl ChainService {
 
                     tx_db.insert_all(state_hash, sign_tx);
                 }
-                TransactionPayload::Program(_p) => {
-                    panic!("Program Payload Err")
+                TransactionPayload::Program(program) => {
+                    let mut state_db = self.state_db.lock().unwrap();
+                    let mut output_vec = MoveVM::execute_block(vec![sign_tx.clone()], &VM_CONFIG, &*state_db);
+
+                    output_vec.pop().and_then(|output| {
+                        let state_hash = state_db.apply_write_set(&output.write_set()).unwrap();
+                        tx_db.insert_all(state_hash, sign_tx);
+                        Some(())
+                    });
                 }
             }
         }
@@ -163,8 +179,8 @@ impl Chain for ChainService {
     fn faucet(&mut self, ctx: ::grpcio::RpcContext,
               req: FaucetRequest,
               sink: ::grpcio::UnarySink<FaucetResponse>) {
-        let resp = AccountAddress::try_from(req.address.to_vec()).and_then(|account_address| {
-            self.faucet_inner(account_address, req.amount)
+        let resp = AccountAddress::try_from(req.get_address().to_vec()).and_then(|account_address| {
+            self.faucet_inner(account_address, req.get_amount())
         }).and_then(|_root_hash| {
             Ok(FaucetResponse::new())
         });
@@ -174,28 +190,43 @@ impl Chain for ChainService {
     fn get_account_state_with_proof_by_state_root(&mut self, ctx: ::grpcio::RpcContext,
                                                   req: GetAccountStateWithProofByStateRootRequest,
                                                   sink: ::grpcio::UnarySink<GetAccountStateWithProofByStateRootResponse>) {
-        let account_address = AccountAddress::try_from(req.address.to_vec()).unwrap();
-        let a_s_bytes = self.get_account_state_with_proof_by_state_root_inner(account_address);
-        let mut resp = GetAccountStateWithProofByStateRootResponse::new();
-        //FIXME do not use unwrap
-        resp.set_account_state_blob(a_s_bytes.unwrap());
-        provide_grpc_response(Ok(resp), ctx, sink);
+        let resp = AccountAddress::try_from(req.get_address().to_vec()).and_then(|account_address| {
+            Ok(self.get_account_state_with_proof_by_state_root_inner(account_address))
+        }).and_then(|a_s_bytes| {
+            let mut get_resp = GetAccountStateWithProofByStateRootResponse::new();
+            match a_s_bytes {
+                Some(a_s) => {
+                    let mut blob = Blob::new();
+                    blob.set_blob(a_s);
+                    get_resp.set_account_state_blob(blob);
+                }
+                None => {}
+            };
+            Ok(get_resp)
+        });
+        provide_grpc_response(resp, ctx, sink);
     }
 
     fn submit_transaction(&mut self, ctx: ::grpcio::RpcContext,
                           req: SubmitTransactionRequest,
                           sink: ::grpcio::UnarySink<SubmitTransactionResponse>) {
-        let signed_txn = req.signed_txn.clone().unwrap();
-        let mut wt_resp = WatchTransactionResponse::new();
-        wt_resp.set_signed_txn(signed_txn);
-        pub_sub::send(wt_resp).unwrap();
+        let resp = SignedTransaction::from_proto(req.signed_txn.clone().unwrap()).and_then(|signed_txn| {
+            let submit_txn_pb = req.signed_txn.clone().unwrap();
+            Ok((signed_txn, submit_txn_pb))
+        }).and_then(|(signed_txn, submit_txn_pb)| {
+            block_on(self.submit_transaction_inner(self.sender.clone(), signed_txn.clone()));
+            let mut wt_resp = WatchTransactionResponse::new();
+            wt_resp.set_signed_txn(submit_txn_pb);
+            pub_sub::send(wt_resp)?;
 
-        block_on(self.submit_transaction_inner(self.sender.clone(), SignedTransaction::from_proto(req.signed_txn.unwrap()).unwrap()));
-        let mut resp = SubmitTransactionResponse::new();
-        let mut state = MempoolAddTransactionStatus::new();
-        state.set_code(MempoolAddTransactionStatusCode::Valid);
-        resp.set_mempool_status(state);
-        provide_grpc_response(Ok(resp), ctx, sink);
+            let mut submit_resp = SubmitTransactionResponse::new();
+            let mut state = MempoolAddTransactionStatus::new();
+            state.set_code(MempoolAddTransactionStatusCode::Valid);
+            submit_resp.set_mempool_status(state);
+            Ok(submit_resp)
+        });
+
+        provide_grpc_response(resp, ctx, sink);
     }
 
     fn submit_off_chain_transaction(&mut self, ctx: ::grpcio::RpcContext, req: OffChainTransactionProto,
@@ -222,16 +253,22 @@ impl Chain for ChainService {
     fn state_by_access_path(&mut self, ctx: ::grpcio::RpcContext,
                             req: AccessPath,
                             sink: ::grpcio::UnarySink<StateByAccessPathResponse>) {
-        let account_address = AccountAddress::try_from(req.address.to_vec()).unwrap();
-        let resource = self.state_by_access_path_inner(account_address, req.path);
-        let mut resp = StateByAccessPathResponse::new();
-        match resource {
-            Some(re) => {
-                resp.set_resource(re);
-            }
-            _ => {}
-        }
-        provide_grpc_response(Ok(resp), ctx, sink);
+        let resp = AccountAddress::try_from(req.get_address().to_vec()).and_then(|account_address| {
+            Ok(self.state_by_access_path_inner(account_address, req.path))
+        }).and_then(|resource| {
+            let mut state_resp = StateByAccessPathResponse::new();
+            match resource {
+                Some(re) => {
+                    let mut a_r = AccountResource::new();
+                    a_r.set_resource(re);
+                    state_resp.set_account_resource(a_r);
+                }
+                _ => {}
+            };
+            Ok(state_resp)
+        });
+
+        provide_grpc_response(resp, ctx, sink);
     }
 }
 

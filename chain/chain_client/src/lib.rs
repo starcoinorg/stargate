@@ -17,7 +17,7 @@ pub mod watch_transaction_stream;
 
 pub trait ChainClient {
     fn least_state_root(&self) -> Result<HashValue>;
-    fn get_account_state(&self, address: &AccountAddress)  -> Result<Option<Vec<u8>>>;
+    fn get_account_state(&self, address: &AccountAddress) -> Result<Option<Vec<u8>>>;
     fn get_state_by_access_path(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>>;
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()>;
 }
@@ -51,7 +51,6 @@ impl RpcChainClient {
         Ok(())
     }
 
-    //TODO
     pub fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> WatchTransactionStream {
         let watch_channel = ChannelBuilder::new(Arc::new(EnvBuilder::new().build())).connect(&self.conn_addr);
         let watch_client = chain_grpc::ChainClient::new(watch_channel);
@@ -70,12 +69,9 @@ impl RpcChainClient {
 
         //thread::spawn(print_data);
     }
-
-
 }
 
 impl ChainClient for RpcChainClient {
-
     fn least_state_root(&self) -> Result<HashValue> {
         let req = LeastRootRequest::new();
         let resp = self.client.least_state_root(&req)?;
@@ -85,18 +81,35 @@ impl ChainClient for RpcChainClient {
     fn get_account_state(&self, address: &AccountAddress) -> Result<Option<Vec<u8>>> {
         let mut req = GetAccountStateWithProofByStateRootRequest::new();
         req.set_address(address.to_vec());
-        let resp = self.client.get_account_state_with_proof_by_state_root(&req);
-        let result = resp.unwrap().account_state_blob;
-        Ok(Some(result))
+        self.client.get_account_state_with_proof_by_state_root(&req).map_err(|e| {
+            format_err!("{:?}", e)
+        }).and_then(|resp| {
+            let tmp = match resp.account_state_blob.into_option() {
+                Some(blob) => {
+                    Some(blob.blob)
+                }
+                _ => {
+                    None
+                }
+            };
+            Ok(tmp)
+        })
     }
 
     fn get_state_by_access_path(&self, path: &AccessPath) -> Result<Option<Vec<u8>>> {
         let mut req = AccessPathProto::new();
         req.set_address(path.address.to_vec());
         req.set_path(path.path.to_vec());
-        let resp = self.client.state_by_access_path(&req);
-        let resource = resp.unwrap().resource;
-        Ok(Some(resource))
+        self.client.state_by_access_path(&req).map_err(|e|{
+            format_err!("{:?}", e)
+        }).and_then(|resp| {
+            let a_r = resp.account_resource.into_option();
+            let result = match a_r {
+                Some(resource) => { Some(resource.resource) }
+                None => { None }
+            };
+            Ok(result)
+        })
     }
 
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()> {

@@ -1,5 +1,3 @@
-extern crate grpc_helpers;
-
 use grpc_helpers::spawn_service_thread;
 use super::chain_service::ChainService;
 use tokio::{runtime::Runtime};

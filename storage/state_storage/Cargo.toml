@@ -15,6 +15,7 @@ star_types = { path = "../../star_types" }
 canonical_serialization = { path = "../../common/canonical_serialization"}
 nextgen_crypto = { path = "../../crypto/nextgen_crypto"}
 atomic_refcell = "0.1.3"
+state_view = { path = "../state_view" }
 
 [dev-dependencies]
 nextgen_crypto = { path = "../../crypto/nextgen_crypto", features = ["testing"] }
