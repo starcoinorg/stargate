@@ -27,6 +27,10 @@ message OffChainPayMessage {
     star_types.OffChainTransaction transaction = 1;
 }
 
+message AddressMessage {
+    bytes addr = 1;
+}
+
 message ReceiveSignMessage {
     bytes receiver_sign = 1 ;
 }

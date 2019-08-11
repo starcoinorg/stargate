@@ -3,12 +3,13 @@ use netcore::transport::{Transport};
 use parity_multiaddr::Multiaddr;
 use tokio::{codec::{Framed,LengthDelimitedCodec}, runtime::TaskExecutor};
 use futures::{
-    compat::{Sink01CompatExt,Stream01CompatExt,Compat01As03Sink},
+    compat::{Sink01CompatExt,Stream01CompatExt,Compat01As03Sink,Compat01As03},
     future::{FutureExt},
-    stream::Stream,
+    stream::{Stream,Fuse,StreamExt},
     io::{AsyncRead, AsyncWrite},
     prelude::*,
     sink::{SinkExt},
+    channel::mpsc::{UnboundedReceiver,UnboundedSender},
 };
 use std::sync::{Arc,Mutex};
 use sgwallet::wallet::Wallet;
@@ -33,7 +34,7 @@ struct NodeInner<C: ChainClient> {
     wallet:Wallet<C>,
     keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
     sender_map:HashMap<AccountAddress,Sender<bytes::Bytes>>,
-    //recv_map:HashMap<Multiaddr,S>,
+    //addr_map:HashMap<Multiaddr,Sender<bytes::Bytes>>,    
 }
 
 impl<S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static,C:ChainClient+Send+Sync+'static> Node<S,C>{
@@ -60,19 +61,20 @@ impl<S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static,C:ChainClient+Send+Sync+'s
     I: Future<Output = Result<S, E>> + Send + 'static,
     E: ::std::error::Error + Send + Sync + 'static{
         let (listener, server_addr) = transport.listen_on(listen_addr).unwrap();
-        let (tx, rx) = channel(100);
+
+        let executor = self.executor.clone();
         self.executor.spawn(
-            start_listen(listener,tx)
+            start_listen(listener,executor)
             .boxed()
             .unit_error()
             .compat(),
         );
 
-        self.handle_incomming(rx);
+        //self.handle_incomming(rx);
         server_addr
     }
 
-    fn handle_incomming(&self,rx:Receiver<bytes::Bytes>){
+    fn handle_incomming(&self,rx:Receiver<bytes::Bytes>,tx:Sender<bytes::Bytes>){
         let node_inner = self.node_inner.clone();
         let receive_future=async move{
             let mut rx = rx.compat();
@@ -82,6 +84,7 @@ impl<S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static,C:ChainClient+Send+Sync+'s
                     MessageType::OpenChannelNodeNegotiateMessage => Self::handle_open_channel_negotiate(data[2..].to_vec(),node_inner.clone()),
                     MessageType::OpenChannelTransactionMessage => Self::handle_open_channel(data[2..].to_vec(),node_inner.clone()),
                     MessageType::OffChainPayMessage => Self::handle_off_chain_pay(data[2..].to_vec(),node_inner.clone()),
+                    MessageType::AddressMessage => Self::handle_addr(data[2..].to_vec(),node_inner.clone()),                    
                 };
              };            
         };
@@ -126,7 +129,10 @@ impl<S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static,C:ChainClient+Send+Sync+'s
         }
     }
 
-    pub fn connect<T, L, I, E,O>(self,executor: &TaskExecutor,transport: T,addr: Multiaddr)->Result<Sender<bytes::Bytes>,std::io::Error>
+    fn handle_addr(data:Vec<u8>,node_data:Arc<Mutex<NodeInner<C>>>){    
+    }
+
+    pub fn connect<T, L, I, E,O>(&self,transport: T,addr: Multiaddr,remote_addr:AccountAddress)->Result<Sender<bytes::Bytes>,std::io::Error>
     where
         T: Transport<Output = S,Error = E, Listener = L, Inbound = I,Outbound= O>,
         L: Stream<Item = Result<(I, Multiaddr), E>> + Unpin + Send + 'static,
@@ -134,20 +140,28 @@ impl<S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static,C:ChainClient+Send+Sync+'s
         O: Future<Output = Result<S, E>> + Send + 'static,
         E: ::std::error::Error + Send + Sync + 'static{
             let (tx, rx) = channel(100);
-            let outbound = transport.dial(addr).unwrap();
+            let outbound = transport.dial(addr).unwrap();        
 
+            let local_addr=self.node_inner.clone().lock().unwrap().wallet.get_address().clone();
+            let node_inner = self.node_inner.clone();
+            let tx_clone = tx.clone();
             let dialer = async move {
                 let mut socket = outbound.await.unwrap();
+
                 let mut stream = Framed::new(socket.compat(), LengthDelimitedCodec::new()).sink_compat();
                 let mut rx =  rx.compat();
 
+                let addr_msg_bytes=AddressMessage::new(local_addr).into_proto_bytes().unwrap();                
+                stream.send(bytes::Bytes::from(addr_msg_bytes)).await.unwrap();
+                node_inner.lock().unwrap().sender_map.insert(remote_addr,tx_clone);
+                
                 while let Some(Ok(data)) = rx.next().await {
                     stream.send(data).await.unwrap();
                 }
             };
 
-            executor.spawn(dialer.boxed().unit_error().compat());
-            Ok(tx)
+            self.executor.spawn(dialer.boxed().unit_error().compat());
+            Ok(tx.clone())
     }
 
     pub fn open_channel_negotiate(&self,negotiate_message:OpenChannelNodeNegotiateMessage){
@@ -190,25 +204,80 @@ impl<S:AsyncRead + AsyncWrite+Send+Sync+Unpin+'static,C:ChainClient+Send+Sync+'s
 
 }
 
-async fn start_listen<L, I, E,S>(mut server_listener: L,tx:Sender<bytes::Bytes>)
+async fn start_listen<L, I, E,S>(mut server_listener: L,executor:TaskExecutor)
     where
         L: Stream<Item = Result<(I, Multiaddr), E>> +Unpin,
-        I: Future<Output = Result<S, E>>,
-        S: AsyncRead + AsyncWrite +Send+Unpin,
+        I: Future<Output = Result<S, E>>+Send,
+        S: AsyncRead + AsyncWrite +Send+Unpin+'static,
         E: ::std::error::Error, {
     while let Some(Ok((f_stream, _client_addr))) = server_listener.next().await {
         let stream = f_stream.await.unwrap();
-        let mut stream = Framed::new(stream.compat(), LengthDelimitedCodec::new()).sink_compat();
+        //let mut stream = Framed::new(stream.compat(), LengthDelimitedCodec::new());
 
-        let mut tx_sink=tx.clone().sink_compat();
-        while let Some(Ok(data)) = stream.next().await {            
-            tx_sink.send(bytes::Bytes::from(data)).await;
+        //let (mut sink,stream) = Framed::new(f_stream, LengthDelimitedCodec::new()).split();
+        
+        //let mut tx_sink=tx.clone().sink_compat();
+
+        //let (mut tx,rx) = channel(1000);
+/*         let stream_compat = stream.compat();
+        let mut stream_sink = Framed::new(stream_compat, LengthDelimitedCodec::new()).sink_compat();
+        let mut tx_sink=tx.sink_compat();
+        
+        executor.spawn(handle_send(stream,tx).boxed().unit_error().compat());
+        
+        while let Some(Ok(data)) = stream_sink.next().await {            
+            tx_sink.send(bytes::Bytes::from(data)).await;        
         }
-        stream.close().await.unwrap();
+        stream.close().await.unwrap();    
+ */
+        let (mut tx_h,  rx_h) = futures::channel::mpsc::unbounded();
+        let (mut tx_g,  rx_g) = futures::channel::mpsc::unbounded();
+        executor.spawn(handle_receive2(stream,tx_g,rx_h).boxed().unit_error().compat())
     }
 
 }
 
+async fn handle_receive<S>(stream:S,mut tx:Sender<bytes::Bytes>)
+where S: AsyncRead + AsyncWrite +Send+Unpin+'static,{    
+    let mut stream = Framed::new(stream.compat(), LengthDelimitedCodec::new()).sink_compat();
+    let mut tx_sink=tx.sink_compat();
+    while let Some(Ok(data)) = stream.next().await {            
+        tx_sink.send(bytes::Bytes::from(data)).await;        
+    }
+    stream.close().await.unwrap();    
+}
+
+async fn handle_receive2<S>(stream:S,mut tx:UnboundedSender<bytes::Bytes>,mut rx:UnboundedReceiver<bytes::Bytes>)
+where S: AsyncRead + AsyncWrite +Send+Unpin+'static,{    
+    let mut stream = Framed::new(stream.compat(), LengthDelimitedCodec::new()).sink_compat().fuse();
+    //let mut tx_sink=tx.sink_compat();
+    loop {
+        futures::select! {
+            data=stream.select_next_some()=>{
+                println!("{:?}",data);
+                let data = data.unwrap();
+                tx.unbounded_send(bytes::Bytes::from(data));
+                //tx.clone().unbounded_send(data);
+            },
+            data=rx.select_next_some()=>{
+                println!("{:?}",data);
+                stream.send(data).await.unwrap();
+            },
+        }
+    }
+    stream.close().await.unwrap();    
+}
+
+/* async fn handle_send<S>(stream:Compat01As03<S>,mut rx:Sender<bytes::Bytes>)
+where S: AsyncRead + AsyncWrite +Send+Unpin+'static,{    
+    //let mut stream = Framed::new(stream.compat(), LengthDelimitedCodec::new()).sink_compat();
+    //let mut tx_sink=tx.sink_compat();
+    while let Some(Ok(data)) = stream.next().await {            
+        //tx_sink.send(bytes::Bytes::from(data)).await;        
+    }
+    stream.close().await.unwrap();    
+}
+ */
 fn parse_message_type(data:&bytes::Bytes)->MessageType{
     let data_slice = &data[0..2];
     let type_u16=u16::from_be_bytes([data_slice[0],data_slice[1]]);

@@ -140,10 +140,25 @@ impl OpenChannelTransactionMessage {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq,FromProto, IntoProto)]
+#[ProtoType(crate::proto::message::AddressMessage)]
+pub struct AddressMessage {
+    pub addr: AccountAddress,
+}
+
+impl AddressMessage {
+    pub fn new(addr:AccountAddress)->Self{
+        Self{
+            addr
+        }
+    }
+}
+
 pub enum MessageType {
     OpenChannelNodeNegotiateMessage,
     OpenChannelTransactionMessage,
     OffChainPayMessage,
+    AddressMessage,
 }
 
 impl MessageType {
@@ -153,6 +168,7 @@ impl MessageType {
             MessageType::OpenChannelNodeNegotiateMessage => 1,
             MessageType::OpenChannelTransactionMessage => 2,
             MessageType::OffChainPayMessage => 3,
+            MessageType::AddressMessage => 4,
         }
     }
 
@@ -161,6 +177,7 @@ impl MessageType {
             1 => Ok(MessageType::OpenChannelNodeNegotiateMessage),
             2 => Ok(MessageType::OpenChannelTransactionMessage),
             3 => Ok(MessageType::OffChainPayMessage),
+            4 => Ok(MessageType::AddressMessage),
             _ => bail!("no such type"),
         }
     }
