@@ -140,6 +140,10 @@ impl<C> Wallet<C>
             Self::TXN_EXPIRATION,
         )
     }
+
+    pub fn get_address(&self)->AccountAddress{
+        self.account_address
+    }
 }
 
 impl<C> TransactionSigner for Wallet<C>

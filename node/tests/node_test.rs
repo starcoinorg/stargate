@@ -44,9 +44,9 @@ fn start_server_test() -> Result<()> {
     client.faucet(account_address, amount).unwrap();
     let mut wallet = Wallet::new_with_client(account_address, keypair.clone(), client).unwrap();
 
-    let node = Node::new(switch,wallet,keypair.clone());
+    let node = Node::new(executor.clone(),switch,wallet,keypair.clone());
 
-    node.start_server(&executor,MemoryTransport::default(),"/memory/10".parse().unwrap());
+    node.start_server(MemoryTransport::default(),"/memory/10".parse().unwrap());
         
     let mut dialer=MemorySocket::connect(10).unwrap();
     let mut stream = Framed::new(dialer.compat(), LengthDelimitedCodec::new()).sink_compat();

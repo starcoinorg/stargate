@@ -5,14 +5,18 @@ package star_types;
 import "transaction.proto";
 import "off_chain_transaction.proto";
 
-message OpenChannelNodeNegotiateMessage {
+message RawNegotiateMessage {
     bytes sender_addr = 1;
     StructTag resource_type = 2 ;
     int64 sender_amount = 3 ;
     bytes receiver_addr= 4;
     int64 receiver_amount = 5 ;
-    bytes sender_sign = 6 ;
-    ReceiveSignMessage receiver_sign = 7 ;
+}
+
+message OpenChannelNodeNegotiateMessage {
+    RawNegotiateMessage raw_message = 1;
+    bytes sender_sign = 2 ;
+    ReceiveSignMessage receiver_sign = 3 ;
 }
 
 message OpenChannelTransactionMessage {

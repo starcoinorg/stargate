@@ -11,27 +11,38 @@ use crate::proto::message::ReceiveSignMessage;
 #[derive(Clone, Debug, Eq, PartialEq)]
 //#[ProtoType(crate::proto::message::OpenChannelNodeNegotiateMessage)]
 pub struct OpenChannelNodeNegotiateMessage {
+    pub raw_negotiate_message : RawNegotiateMessage,
+    pub sender_sign: Ed25519Signature,
+    pub receiver_sign: Option<Ed25519Signature>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq,FromProto,IntoProto)]
+#[ProtoType(crate::proto::message::RawNegotiateMessage)]
+pub struct RawNegotiateMessage {
     pub sender_addr: AccountAddress,
     pub resource_type: StructTag,
     pub sender_amount: i64,
     pub receiver_addr: AccountAddress,
     pub receiver_amount: i64,
-    pub sender_sign: Ed25519Signature,
-    pub receiver_sign: Option<Ed25519Signature>,
 }
 
-impl OpenChannelNodeNegotiateMessage {
-    pub fn new(
-        sender_addr: AccountAddress, resource_type: StructTag, sender_amount: i64,
-        receiver_addr: AccountAddress, receiver_amount: i64,
-        sender_sign: Ed25519Signature, receiver_sign: Option<Ed25519Signature>,
-    ) -> Self {
-        OpenChannelNodeNegotiateMessage {
+impl RawNegotiateMessage {
+    pub fn new(sender_addr:AccountAddress,resource_type:StructTag,sender_amount:i64,receiver_addr:AccountAddress,receiver_amount:i64)->Self{
+        RawNegotiateMessage{
             sender_addr,
             resource_type,
             sender_amount,
             receiver_addr,
             receiver_amount,
+        }
+    }    
+}
+
+impl OpenChannelNodeNegotiateMessage {
+    pub fn new(raw_negotiate_message:RawNegotiateMessage,sender_sign: Ed25519Signature, receiver_sign: Option<Ed25519Signature>,
+    ) -> Self {
+        OpenChannelNodeNegotiateMessage {
+            raw_negotiate_message,
             sender_sign,
             receiver_sign,
         }
@@ -42,19 +53,15 @@ impl FromProto for OpenChannelNodeNegotiateMessage {
     type ProtoType = crate::proto::message::OpenChannelNodeNegotiateMessage;
 
     fn from_proto(mut object: Self::ProtoType) -> Result<Self> {
-        let sender_addr = AccountAddress::from_proto(object.get_sender_addr().to_vec())?;
-        let resource_type = StructTag::from_proto(object.take_resource_type())?;
-        let receiver_addr = AccountAddress::from_proto(object.get_receiver_addr().to_vec())?;
-        let sender_sign = Ed25519Signature::try_from(object.get_sender_sign())?;
-
+        let raw = RawNegotiateMessage::from_proto(object.take_raw_message())?;
+        let sender_sign =Ed25519Signature::try_from(object.get_sender_sign())?;
         let receiver_sign = if object.has_receiver_sign() {
             Option::Some(Ed25519Signature::try_from(object.get_receiver_sign().get_receiver_sign())?)
         } else {
             Option::None
         };
 
-        Ok(OpenChannelNodeNegotiateMessage::new(sender_addr, resource_type, object.get_sender_amount(),
-                                                receiver_addr, object.get_receiver_amount(), sender_sign, receiver_sign))
+        Ok(OpenChannelNodeNegotiateMessage::new(raw, sender_sign, receiver_sign))
     }
 }
 
@@ -63,11 +70,7 @@ impl IntoProto for OpenChannelNodeNegotiateMessage {
 
     fn into_proto(self) -> Self::ProtoType {
         let mut out = Self::ProtoType::new();
-        out.set_sender_addr(self.sender_addr.into_proto());
-        out.set_resource_type(self.resource_type.into_proto());
-        out.set_sender_amount(self.sender_amount);
-        out.set_receiver_addr(self.receiver_addr.into_proto());
-        out.set_receiver_amount(self.receiver_amount);
+        out.set_raw_message(self.raw_negotiate_message.into_proto());
         out.set_sender_sign(self.sender_sign.to_bytes().to_vec());
         match self.receiver_sign {
             Some(sign) => {
