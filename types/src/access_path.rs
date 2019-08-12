@@ -63,6 +63,7 @@ use std::{
     str::{self, FromStr},
 };
 use crate::account_config::account_struct_tag;
+use std::convert::TryFrom;
 
 #[derive(Default, Serialize, Deserialize, Debug, PartialEq, Hash, Eq, Clone, Ord, PartialOrd)]
 pub struct Field(String);
@@ -259,8 +260,24 @@ impl DataPath {
     pub const ON_CHAIN_RESOURCE_TAG: u8 = 1;
     pub const OFF_CHAIN_RESOURCE_TAG: u8 =2;
 
-    pub fn to_vec(self) -> Vec<u8> {
-        self.into()
+    pub fn from(path: &[u8]) -> Result<Self> {
+        match path[0]{
+            DataPath::CODE_TAG => {
+                Ok(DataPath::Code {module_id: SimpleDeserializer::deserialize(&path[1..])?})
+            },
+            DataPath::ON_CHAIN_RESOURCE_TAG => {
+                Ok(DataPath::OnChainResource {tag: SimpleDeserializer::deserialize(&path[1..])?})
+            },
+            DataPath::OFF_CHAIN_RESOURCE_TAG => {
+                let parts = path[1..].split(|byte|*byte == b'/').collect::<Vec<&[u8]>>();
+                if parts.len() < 2 {
+                    bail!("invalid access path.");
+                }else {
+                    Ok(DataPath::OffChainResource { participant: AccountAddress::try_from(parts[0])?, tag: SimpleDeserializer::deserialize(parts[1])?})
+                }
+            }
+            _ => bail!("invalid access path.")
+        }
     }
 
     pub fn account_resource_data_path() -> Self {
@@ -283,21 +300,46 @@ impl DataPath {
             tag,
         }
     }
+
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.into()
+    }
+
+    pub fn is_code(&self) -> bool {
+        match self {
+            DataPath::Code {..} => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_on_chain_resource(&self) -> bool {
+        match self {
+            DataPath::OnChainResource {..} => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_off_chain_resource(&self) -> bool {
+        match self {
+            DataPath::OffChainResource {..} => true,
+            _ => false,
+        }
+    }
 }
 
-impl From<DataPath> for Vec<u8> {
-    fn from(path: DataPath) -> Self {
+impl From<&DataPath> for Vec<u8> {
+    fn from(path: &DataPath) -> Self {
         match path {
             DataPath::Code { module_id } => {
                 let mut key = vec![];
                 key.push(DataPath::CODE_TAG);
-                key.append(&mut SimpleSerializer::serialize(&module_id).unwrap());
+                key.append(&mut SimpleSerializer::serialize(module_id).unwrap());
                 key
             },
             DataPath::OnChainResource { tag } => {
                 let mut key = vec![];
                 key.push(DataPath::ON_CHAIN_RESOURCE_TAG);
-                key.append(&mut SimpleSerializer::serialize(&tag).unwrap());
+                key.append(&mut SimpleSerializer::serialize(tag).unwrap());
                 key
             },
             DataPath::OffChainResource {participant, tag} => {
@@ -305,13 +347,18 @@ impl From<DataPath> for Vec<u8> {
                 key.push(DataPath::OFF_CHAIN_RESOURCE_TAG);
                 key.append(&mut participant.to_vec());
                 key.push(b'/');
-                key.append(&mut SimpleSerializer::serialize(&tag).unwrap());
+                key.append(&mut SimpleSerializer::serialize(tag).unwrap());
                 key
             }
         }
     }
 }
 
+impl From<DataPath> for Vec<u8> {
+    fn from(path: DataPath) -> Self {
+        Self::from(&path)
+    }
+}
 #[derive(
     Clone,
     Eq,
@@ -427,7 +474,12 @@ impl AccessPath {
         !self.path.is_empty() && self.path[0] == DataPath::OFF_CHAIN_RESOURCE_TAG
     }
 
-    //pub fn data_path(&self) -> DataPath {}
+    pub fn data_path(&self) -> Option<DataPath> {
+        if self.path.is_empty() {
+            return None;
+        }
+        DataPath::from(self.path.as_slice()).ok()
+    }
 
     pub fn resource_tag(&self) -> Option<StructTag>{
         if self.path.is_empty() {
@@ -441,7 +493,7 @@ impl AccessPath {
                 if parts.len() < 2 {
                     None
                 }else {
-                    Some(SimpleDeserializer::deserialize(parts[1]).expect("invalid access path"))
+                    SimpleDeserializer::deserialize(parts[1]).ok()
                 }
             }
             _ => None
