@@ -13,9 +13,7 @@ use proptest_derive::Arbitrary;
 use radix_trie::TrieKey;
 use serde::{Deserialize, Serialize};
 
-use canonical_serialization::{
-    CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
-};
+use canonical_serialization::{CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer, SimpleSerializer, SimpleDeserializer};
 use crypto::hash::{CryptoHash, HashValue};
 use failure::prelude::*;
 use proto_conv::{FromProto, IntoProto};
@@ -154,20 +152,14 @@ impl From<Vec<u8>> for Accesses {
     }
 }
 
-#[derive(
-Clone,
-Eq,
-PartialEq,
-Ord,
-PartialOrd,
-)]
-pub enum DataPath<'a> {
-    Code { module_id: &'a ModuleId },
-    OnChainResource { tag: &'a StructTag },
-    OffChainResource { participant: AccountAddress, tag: &'a StructTag },
+#[derive(Clone, Eq, PartialEq, Default, Hash, Serialize, Deserialize, Ord, PartialOrd, )]
+pub enum DataPath {
+    Code { module_id: ModuleId },
+    OnChainResource { tag: StructTag },
+    OffChainResource { participant: AccountAddress, tag: StructTag },
 }
 
-impl <'a> DataPath<'a> {
+impl DataPath {
     //TODO get index by enum
     pub const CODE_TAG: u8 = 0;
     pub const ON_CHAIN_RESOURCE_TAG: u8 = 1;
@@ -178,20 +170,20 @@ impl <'a> DataPath<'a> {
     }
 
     pub fn account_resource_data_path() -> Self {
-        Self::on_chain_resource_path(&ACCOUNT_STRUCT_TAG)
+        Self::on_chain_resource_path(ACCOUNT_STRUCT_TAG.clone())
     }
 
-    pub fn code_data_path(module_id: &'a ModuleId) -> Self {
+    pub fn code_data_path(module_id: ModuleId) -> Self {
         DataPath::Code { module_id }
     }
 
-    pub fn on_chain_resource_path(tag: &'a StructTag) -> Self{
+    pub fn on_chain_resource_path(tag: StructTag) -> Self{
         DataPath::OnChainResource {
             tag,
         }
     }
 
-    pub fn off_chain_resource_path(participant: AccountAddress, tag: &'a StructTag) -> Self{
+    pub fn off_chain_resource_path(participant: AccountAddress, tag: StructTag) -> Self{
         DataPath::OffChainResource {
             participant,
             tag,
@@ -199,44 +191,34 @@ impl <'a> DataPath<'a> {
     }
 }
 
-impl <'a> From<DataPath<'a>> for Vec<u8> {
-    fn from(path: DataPath<'a>) -> Self {
+impl From<DataPath> for Vec<u8> {
+    fn from(path: DataPath) -> Self {
         match path {
             DataPath::Code { module_id } => {
                 let mut key = vec![];
                 key.push(DataPath::CODE_TAG);
-                key.append(&mut module_id.hash().to_vec());
+                key.append(&mut SimpleSerializer::serialize(&module_id).unwrap());
                 key
             },
             DataPath::OnChainResource { tag } => {
                 let mut key = vec![];
                 key.push(DataPath::ON_CHAIN_RESOURCE_TAG);
-                key.append(&mut tag.hash().to_vec());
+                key.append(&mut SimpleSerializer::serialize(&tag).unwrap());
                 key
             },
             DataPath::OffChainResource {participant, tag} => {
                 let mut key = vec![];
                 key.push(DataPath::OFF_CHAIN_RESOURCE_TAG);
-                key.append(&mut participant.hash().to_vec());
+                key.append(&mut participant.to_vec());
                 key.push(b'/');
-                key.append(&mut tag.hash().to_vec());
+                key.append(&mut SimpleSerializer::serialize(&tag).unwrap());
                 key
             }
         }
     }
 }
 
-#[derive(
-Clone,
-Eq,
-PartialEq,
-Default,
-Hash,
-Serialize,
-Deserialize,
-Ord,
-PartialOrd,
-)]
+#[derive(Clone, Eq, PartialEq, Default, Hash, Serialize, Deserialize, Ord, PartialOrd, )]
 //#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 //#[ProtoType(crate::proto::access_path::AccessPath)]
 pub struct AccessPath {
@@ -254,23 +236,19 @@ impl AccessPath {
         Self::new_for_data_path(address, DataPath::account_resource_data_path() )
     }
 
-    pub fn new_for_code(address: AccountAddress, module_id: &ModuleId) -> Self {
-        Self::new_for_data_path(address, DataPath::code_data_path(module_id) )
-    }
-
     pub fn new(address: AccountAddress, path: Vec<u8>) -> Self {
         AccessPath { address, path }
     }
 
     pub fn code_access_path(key: &ModuleId) -> AccessPath {
-        Self::new_for_data_path(*key.address(), DataPath::code_data_path(key))
+        Self::new_for_data_path(*key.address(), DataPath::code_data_path(key.clone()))
     }
 
     pub fn resource_access_path(key: &ResourceKey) -> AccessPath {
-        Self::new_for_data_path(key.address(), DataPath::on_chain_resource_path(key.type_()))
+        Self::new_for_data_path(key.address(), DataPath::on_chain_resource_path(key.type_().clone()))
     }
 
-    pub fn off_chain_resource_access_path(account: AccountAddress, participant: AccountAddress, tag: &StructTag) -> AccessPath {
+    pub fn off_chain_resource_access_path(account: AccountAddress, participant: AccountAddress, tag: StructTag) -> AccessPath {
         Self::new_for_data_path(account, DataPath::off_chain_resource_path(participant, tag))
     }
 
@@ -290,19 +268,19 @@ impl AccessPath {
         !self.path.is_empty() && self.path[0] == DataPath::OFF_CHAIN_RESOURCE_TAG
     }
 
-    pub fn resource_tag_hash(&self) -> Option<HashValue>{
+    pub fn resource_tag(&self) -> Option<StructTag>{
         if self.path.is_empty() {
             return None;
         }
         match self.path[0]{
             DataPath::CODE_TAG => None,
-            DataPath::ON_CHAIN_RESOURCE_TAG => Some(HashValue::from_slice(&self.path.as_slice()[1..]).expect("invalid access path.")),
+            DataPath::ON_CHAIN_RESOURCE_TAG => Some(SimpleDeserializer::deserialize(&self.path.as_slice()[1..]).expect("invalid access path.")),
             DataPath::OFF_CHAIN_RESOURCE_TAG => {
                 let parts = self.path.split(|byte|*byte == b'/').collect::<Vec<&[u8]>>();
                 if parts.len() < 2 {
                     None
                 }else {
-                    HashValue::from_slice(parts[1]).ok()
+                    Some(SimpleDeserializer::deserialize(parts[1]).expect("invalid access path"))
                 }
             }
             _ => None
