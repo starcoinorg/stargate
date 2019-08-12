@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use failure::prelude::*;
 use proto_conv::{FromProto, IntoProto};
-use types::access_path::{AccessPath, Accesses};
+use crate::access_path::{AccessPath, Accesses};
 use vm_runtime_types::value::Value;
 use std::mem;
 

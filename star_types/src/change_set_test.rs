@@ -1,6 +1,6 @@
 use super::*;
 use crate::change_set::{ChangeSet, ChangeSetMut, ChangeOp, FieldChanges};
-use types::access_path::{AccessPath, Accesses, Field};
+use crate::access_path::{AccessPath, Accesses};
 use types::language_storage::ResourceKey;
 use types::account_address::AccountAddress;
 use types::account_config::account_struct_tag;
@@ -26,7 +26,7 @@ fn test_change_set_merge(){
     accesses.add_index_to_back(1);
     //coin value filed.
     accesses.add_index_to_back(0);
-    let access_path = AccessPath::resource_access_path(&resource_key, &Accesses::empty());
+    let access_path = AccessPath::resource_access_path(&resource_key);
 
     let change_set0 = ChangeSetMut::new(vec![(access_path.clone(), FieldChanges::new(vec![(accesses.clone(),ChangeOp::Plus(100))]))]);
     let change_set1 = ChangeSetMut::new(vec![(access_path.clone(), FieldChanges::new(vec![(accesses.clone(),ChangeOp::Plus(100))]))]);
