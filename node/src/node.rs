@@ -36,9 +36,7 @@ struct NodeInner<C: ChainClient+ Send+Sync+'static,TTransport:Transport+ Send+Sy
 where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
     executor:TaskExecutor,
     transport: TTransport,
-    //addr_map:HashMap<Multiaddr,Sender<bytes::Bytes>>,  
     node_data : Arc<Mutex<NodeData<C>>>,  
-    dial_request_rx: UnboundedReceiver<Multiaddr>,
     keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
 }
 
@@ -52,7 +50,7 @@ impl<C:ChainClient+ Send+Sync +'static,TTransport:Transport+ Send+Sync+'static> 
 where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
 
     pub fn new(executor: TaskExecutor,wallet:Wallet<C>,keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
-        transport:TTransport,dial_request_rx:UnboundedReceiver<Multiaddr>)->Self{
+        transport:TTransport)->Self{
         let executor_clone = executor.clone();
         let node_data = NodeData {
                 wallet,
@@ -63,7 +61,6 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
                 executor:executor_clone,                
                 transport,
                 node_data:Arc::new(Mutex::new(node_data)),
-                dial_request_rx,
                 keypair,
             };
         Self{
@@ -89,37 +86,16 @@ impl<C: ChainClient+ Send+Sync+'static,TTransport:Transport+ Send+Sync+'static> 
 where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
 
     async fn start_listen(mut self, listen_addr: Multiaddr){
-        let (listener, listen_addr) = self.transport
+        let (mut listener, listen_addr) = self.transport
             .listen_on(listen_addr)
             .expect("Transport listen on fails");
 
-        let mut listener = listener.fuse();        
-        loop {
-            futures::select! {
-                dial_request = self.dial_request_rx.select_next_some() => {
-                    //if let Some(fut) = self.dial_peer(dial_request) {
-                        //pending_outbound_connections.push(fut);
-                    //}
-                },
-                incoming_connection = listener.select_next_some() => {
-                    match incoming_connection {
-                        Ok((upgrade, addr)) => {
-                            //debug!("Incoming connection from {}", addr);
-                            //pending_inbound_connections.push(upgrade.map(|out| (out, addr)));
-                            let (mut tx,  rx) = futures::channel::mpsc::unbounded();
-                            let node_data = self.node_data.clone();
-                            node_data.lock().unwrap().sender_map.insert(addr.clone(),tx);
-                            self.executor.spawn(Self::handle_stream(upgrade.await.unwrap(),addr.clone(),rx,node_data).boxed().unit_error().compat());                                                        
-                        }
-                        Err(e) => {
-                            //warn!("Incoming connection error {}", e);
-                        }
-                    }
-                },
-                complete => break,
-            }
-        };
-
+        while let Some(Ok((f_stream, addr))) = listener.next().await {
+            let (mut tx,  rx) = futures::channel::mpsc::unbounded();
+            let node_data = self.node_data.clone();
+            node_data.lock().unwrap().sender_map.insert(addr.clone(),tx);
+            self.executor.spawn(Self::handle_stream(f_stream.await.unwrap(),addr.clone(),rx,node_data).boxed().unit_error().compat());                                                        
+        }
     }
 
     async fn handle_stream<S>(output:S,addr:Multiaddr,mut rx:UnboundedReceiver<bytes::Bytes>,node_data:Arc<Mutex<NodeData<C>>>)
