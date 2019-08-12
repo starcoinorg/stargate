@@ -110,19 +110,12 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
                             let node_data = self.node_data.clone();
                             node_data.lock().unwrap().sender_map.insert(addr.clone(),tx);
                             self.executor.spawn(Self::handle_stream(upgrade.await.unwrap(),addr.clone(),rx,node_data).boxed().unit_error().compat());                                                        
-                            //self.handle_incomming(upgrade.await.unwrap(),addr,rx).await;
                         }
                         Err(e) => {
                             //warn!("Incoming connection error {}", e);
                         }
                     }
                 },
-                // (upgrade, addr,response_tx) = pending_outbound_connections.select_next_some() => {
-                //     //self.handle_completed_outbound_upgrade(upgrade, addr, peer_id, response_tx).await;
-                // },
-                //(upgrade, addr) = pending_inbound_connections.select_next_some() => {
-                //     self.handle_completed_inbound_upgrade(upgrade, addr).await;
-                //},
                 complete => break,
             }
         };
