@@ -47,9 +47,7 @@ use crate::{
     language_storage::{ModuleId, ResourceKey, StructTag},
     validator_set::validator_set_path,
 };
-use canonical_serialization::{
-    CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
-};
+use canonical_serialization::{CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer, SimpleSerializer, SimpleDeserializer};
 use crypto::hash::{CryptoHash, HashValue};
 use failure::prelude::*;
 use hex;
@@ -64,6 +62,7 @@ use std::{
     slice::Iter,
     str::{self, FromStr},
 };
+use crate::account_config::account_struct_tag;
 
 #[derive(Default, Serialize, Deserialize, Debug, PartialEq, Hash, Eq, Clone, Ord, PartialOrd)]
 pub struct Field(String);
@@ -99,6 +98,10 @@ pub enum Access {
 impl Access {
     pub fn new(s: &str) -> Self {
         Access::Field(Field::new(s))
+    }
+
+    pub fn new_with_index(idx: u64) -> Self {
+        Access::Index(idx)
     }
 }
 
@@ -138,6 +141,10 @@ impl Accesses {
 
     pub fn new(field: Field) -> Self {
         Accesses(vec![Access::Field(field)])
+    }
+
+    pub fn new_with_index(idx: u64) -> Self{
+        Accesses(vec![Access::Index(idx)])
     }
 
     /// Add a field to the end of the sequence
@@ -238,6 +245,73 @@ lazy_static! {
         AccessPath::new(association_address(), validator_set_path());
 }
 
+
+#[derive(Clone, Eq, PartialEq, Hash, Serialize, Deserialize, Ord, PartialOrd, )]
+pub enum DataPath {
+    Code { module_id: ModuleId },
+    OnChainResource { tag: StructTag },
+    OffChainResource { participant: AccountAddress, tag: StructTag },
+}
+
+impl DataPath {
+    //TODO get index by enum
+    pub const CODE_TAG: u8 = 0;
+    pub const ON_CHAIN_RESOURCE_TAG: u8 = 1;
+    pub const OFF_CHAIN_RESOURCE_TAG: u8 =2;
+
+    pub fn to_vec(self) -> Vec<u8> {
+        self.into()
+    }
+
+    pub fn account_resource_data_path() -> Self {
+        Self::on_chain_resource_path(account_struct_tag())
+    }
+
+    pub fn code_data_path(module_id: ModuleId) -> Self {
+        DataPath::Code { module_id }
+    }
+
+    pub fn on_chain_resource_path(tag: StructTag) -> Self{
+        DataPath::OnChainResource {
+            tag,
+        }
+    }
+
+    pub fn off_chain_resource_path(participant: AccountAddress, tag: StructTag) -> Self{
+        DataPath::OffChainResource {
+            participant,
+            tag,
+        }
+    }
+}
+
+impl From<DataPath> for Vec<u8> {
+    fn from(path: DataPath) -> Self {
+        match path {
+            DataPath::Code { module_id } => {
+                let mut key = vec![];
+                key.push(DataPath::CODE_TAG);
+                key.append(&mut SimpleSerializer::serialize(&module_id).unwrap());
+                key
+            },
+            DataPath::OnChainResource { tag } => {
+                let mut key = vec![];
+                key.push(DataPath::ON_CHAIN_RESOURCE_TAG);
+                key.append(&mut SimpleSerializer::serialize(&tag).unwrap());
+                key
+            },
+            DataPath::OffChainResource {participant, tag} => {
+                let mut key = vec![];
+                key.push(DataPath::OFF_CHAIN_RESOURCE_TAG);
+                key.append(&mut participant.to_vec());
+                key.push(b'/');
+                key.append(&mut SimpleSerializer::serialize(&tag).unwrap());
+                key
+            }
+        }
+    }
+}
+
 #[derive(
     Clone,
     Eq,
@@ -259,8 +333,8 @@ pub struct AccessPath {
 }
 
 impl AccessPath {
-    const CODE_TAG: u8 = 0;
-    const RESOURCE_TAG: u8 = 1;
+    //const CODE_TAG: u8 = 0;
+    //const RESOURCE_TAG: u8 = 1;
 
     pub fn new(address: AccountAddress, path: Vec<u8>) -> Self {
         AccessPath { address, path }
@@ -302,10 +376,8 @@ impl AccessPath {
     }
 
     pub fn resource_access_vec(tag: &StructTag, accesses: &Accesses) -> Vec<u8> {
-        let mut key = vec![];
-        key.push(Self::RESOURCE_TAG);
 
-        key.append(&mut tag.hash().to_vec());
+        let mut key:Vec<u8> = DataPath::on_chain_resource_path(tag.clone()).into();
 
         // We don't need accesses in production right now. Accesses are appended here just for
         // passing the old tests.
@@ -323,18 +395,56 @@ impl AccessPath {
         }
     }
 
-    fn code_access_path_vec(key: &ModuleId) -> Vec<u8> {
-        let mut root = vec![];
-        root.push(Self::CODE_TAG);
-        root.append(&mut key.hash().to_vec());
-        root
+    pub fn new_for_data_path(address: AccountAddress, path: DataPath) -> Self {
+        AccessPath { address, path: path.to_vec() }
+    }
+
+    pub fn new_for_account_resource(address: AccountAddress) -> Self {
+        Self::new_for_data_path(address, DataPath::account_resource_data_path() )
     }
 
     pub fn code_access_path(key: &ModuleId) -> AccessPath {
-        let path = AccessPath::code_access_path_vec(key);
-        AccessPath {
-            address: *key.address(),
-            path,
+        Self::new_for_data_path(*key.address(), DataPath::code_data_path(key.clone()))
+    }
+
+    pub fn on_chain_resource_access_path(key: &ResourceKey) -> AccessPath {
+        Self::new_for_data_path(key.address(), DataPath::on_chain_resource_path(key.type_().clone()))
+    }
+
+    pub fn off_chain_resource_access_path(account: AccountAddress, participant: AccountAddress, tag: StructTag) -> AccessPath {
+        Self::new_for_data_path(account, DataPath::off_chain_resource_path(participant, tag))
+    }
+
+    pub fn is_code(&self) -> bool {
+        !self.path.is_empty() && self.path[0] == DataPath::CODE_TAG
+    }
+
+    pub fn is_on_chain_resource(&self) -> bool {
+        !self.path.is_empty() && self.path[0] == DataPath::ON_CHAIN_RESOURCE_TAG
+    }
+
+    pub fn is_off_chain_resource(&self) -> bool {
+        !self.path.is_empty() && self.path[0] == DataPath::OFF_CHAIN_RESOURCE_TAG
+    }
+
+    //pub fn data_path(&self) -> DataPath {}
+
+    pub fn resource_tag(&self) -> Option<StructTag>{
+        if self.path.is_empty() {
+            return None;
+        }
+        match self.path[0]{
+            DataPath::CODE_TAG => None,
+            DataPath::ON_CHAIN_RESOURCE_TAG => Some(SimpleDeserializer::deserialize(&self.path.as_slice()[1..]).expect("invalid access path.")),
+            DataPath::OFF_CHAIN_RESOURCE_TAG => {
+                let parts = self.path.split(|byte|*byte == b'/').collect::<Vec<&[u8]>>();
+                if parts.len() < 2 {
+                    None
+                }else {
+                    Some(SimpleDeserializer::deserialize(parts[1]).expect("invalid access path"))
+                }
+            }
+            _ => None
         }
     }
 }
@@ -357,8 +467,9 @@ impl fmt::Display for AccessPath {
         } else {
             write!(f, "AccessPath {{ address: {:x}, ", self.address)?;
             match self.path[0] {
-                Self::RESOURCE_TAG => write!(f, "type: Resource, ")?,
-                Self::CODE_TAG => write!(f, "type: Module, ")?,
+                DataPath::ON_CHAIN_RESOURCE_TAG => write!(f, "type: OnChain Resource, ")?,
+                DataPath::OFF_CHAIN_RESOURCE_TAG => write!(f, "type: OffChain Resource, ")?,
+                DataPath::CODE_TAG => write!(f, "type: Module, ")?,
                 tag => write!(f, "type: {:?}, ", tag)?,
             };
             write!(

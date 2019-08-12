@@ -7,6 +7,7 @@ use crate::{
 };
 use proptest::prelude::*;
 use proto_conv::{test_helper::assert_protobuf_encode_decode, FromProto, IntoProto};
+use crate::account_config::account_struct_tag;
 
 #[test]
 fn access_path_ord() {
@@ -59,4 +60,13 @@ proptest! {
     fn test_access_path_to_protobuf_roundtrip(access_path in any::<AccessPath>()) {
         assert_protobuf_encode_decode(&access_path);
     }
+}
+
+#[test]
+fn test_access_path_resource_tag() {
+    let access_path = AccessPath::new_for_account_resource(AccountAddress::random());
+    println!("{:#?}", access_path);
+
+    let resource_tag = access_path.resource_tag().unwrap();
+    assert_eq!(resource_tag, account_struct_tag());
 }

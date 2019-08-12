@@ -1,7 +1,4 @@
 #![feature(custom_attribute)]
-pub mod access_path;
-#[cfg(test)]
-mod access_path_test;
 pub mod account_resource_ext;
 pub mod channel;
 pub mod message;

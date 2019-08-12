@@ -4,7 +4,7 @@ use itertools::Itertools;
 
 use canonical_serialization::{CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer, SimpleDeserializer, SimpleSerializer};
 use failure::prelude::*;
-use crate::access_path::{Accesses};
+use types::access_path::{Accesses};
 use types::account_config::{account_struct_tag, AccountResource};
 use types::language_storage::StructTag;
 use vm_runtime_types::{loaded_data::struct_def::StructDef, value::MutVal};

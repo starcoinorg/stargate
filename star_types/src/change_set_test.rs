@@ -1,6 +1,6 @@
 use super::*;
 use crate::change_set::{ChangeSet, ChangeSetMut, ChangeOp, FieldChanges};
-use crate::access_path::{AccessPath, Accesses};
+use types::access_path::{AccessPath, Accesses};
 use types::language_storage::ResourceKey;
 use types::account_address::AccountAddress;
 use types::account_config::account_struct_tag;
