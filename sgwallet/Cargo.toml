@@ -20,6 +20,7 @@ nextgen_crypto = { path = "../crypto/nextgen_crypto"}
 local_state_storage = { path = "./local_state_storage"}
 chain_client = { path = "../chain/chain_client"}
 vm_genesis = { path = "../language/vm/vm_genesis" }
+logger = { path = "../common/logger"}
 
 [dev-dependencies]
 nextgen_crypto = { path = "../crypto/nextgen_crypto", features = ["testing"] }

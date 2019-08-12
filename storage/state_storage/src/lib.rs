@@ -28,6 +28,7 @@ use types::account_config::{AccountResource, account_resource_path};
 use types::byte_array::ByteArray;
 use canonical_serialization::{SimpleSerializer, CanonicalSerialize};
 use state_view::StateView;
+use logger::prelude::*;
 
 pub struct AccountState {
     state: Arc<AtomicRefCell<BTreeMap<Vec<u8>, Vec<u8>>>>
@@ -137,7 +138,7 @@ impl StateStorage {
         if self.exist_account(&address) {
             bail!("account with address: {} already exist.", address);
         }
-        println!("create account:{}", address);
+        info!("create account:{}", address);
         let mut state = AccountState::new();
         let account_resource = AccountResource::new(init_amount, 0, ByteArray::new(address.to_vec()), 0, 0, false);
         let mut serializer = SimpleSerializer::new();
