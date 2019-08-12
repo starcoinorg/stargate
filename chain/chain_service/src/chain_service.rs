@@ -1,6 +1,6 @@
 use failure::prelude::*;
 use types::proto::{access_path::AccessPath};
-use types::{transaction::{SignedTransaction, TransactionPayload}, write_set::WriteSet, account_address::AccountAddress, vm_error::VMStatus};
+use types::{transaction::{SignedTransaction, TransactionPayload, Program}, write_set::WriteSet, account_address::AccountAddress, vm_error::VMStatus};
 use proto_conv::FromProto;
 use futures::{sync::mpsc::{unbounded, UnboundedReceiver}, future::Future, sink::Sink, stream::Stream};
 use super::pub_sub;
@@ -35,7 +35,9 @@ use star_types::{offchain_transaction::OffChainTransaction,
                  }};
 use vm_runtime::{MoveVM, VMVerifier, VMExecutor};
 use lazy_static::lazy_static;
-use config::config::{VMConfig,VMPublishingOption};
+use config::config::{VMConfig, VMPublishingOption};
+use super::struct_storage::StructStorage;
+use vm::file_format::CompiledModule;
 
 lazy_static! {
     static ref VM_CONFIG:VMConfig = VMConfig{
@@ -49,6 +51,7 @@ pub struct ChainService {
     state_db: Arc<Mutex<StateStorage>>,
     tx_db: Arc<Mutex<TransactionStorage>>,
     vm: Arc<Mutex<MoveVM>>,
+    struct_db: Arc<Mutex<StructStorage>>,
 }
 
 #[derive(Clone, Debug)]
@@ -64,7 +67,8 @@ impl ChainService {
         let tx_db = Arc::new(Mutex::new(TransactionStorage::new()));
         let state_db = Arc::new(Mutex::new(StateStorage::new()));
         let vm = Arc::new(Mutex::new(MoveVM::new(&VM_CONFIG)));
-        let chain_service = ChainService { sender: tx_sender.clone(), state_db, tx_db, vm };
+        let struct_db = Arc::new(Mutex::new(StructStorage::new()));
+        let chain_service = ChainService { sender: tx_sender.clone(), state_db, tx_db, vm, struct_db };
         let chain_service_clone = chain_service.clone();
 
         let receiver_future = async move {
@@ -165,6 +169,29 @@ impl ChainService {
     pub fn faucet_inner(&self, account_address: AccountAddress, amount: u64) -> Result<HashValue> {
         let mut state_db = self.state_db.lock().unwrap();
         state_db.create_account(account_address, amount)
+    }
+
+    fn test(self,path_vec:Vec<u8>, program: Program) {
+        //序列化&反序列化
+        let modules: Vec<CompiledModule> = match program
+            .modules()
+            .iter()
+            .map(|module_blob| CompiledModule::deserialize(&module_blob))
+            .collect() {
+            Ok(modules) => modules,
+            Err(ref err) => {
+                println!("[VM] module deserialization failed {:?}", err);
+                return ();
+            }
+        };
+
+        //判断HASH是否存储，如果不存在
+
+
+        //into_compiled_program_and_deps
+        //获取到StructTag和StructDef
+
+        //存储
     }
 }
 
@@ -285,16 +312,19 @@ mod tests {
         executor::block_on,
     };
     use std::{thread, time};
+    use compiler::Compiler;
+    use types::{account_address::AccountAddress, transaction::{Program, RawTransaction}};
+    use std::{time::Duration};
 
     #[test]
-    fn testGenesis() {
+    fn test_genesis() {
         let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
         let genesis_txn = genesis_checked_txn.into_inner();
         println!("{:?}", genesis_txn);
     }
 
     #[test]
-    fn testChainService() {
+    fn test_chain_service() {
         let mut rt = Runtime::new().unwrap();
         let chain_service = ChainService::new(&mut rt);
         let print_future = async move {
@@ -304,5 +334,48 @@ mod tests {
             println!("{:?}", root);
         };
         rt.block_on(print_future.boxed().unit_error().compat()).unwrap();
+    }
+
+    #[test]
+    fn test_program() {
+        let code =
+            "
+            main() {
+                let x: u64;
+                if (42 > 0) {
+                    x = 1;
+                } else {
+                    return;
+                }
+                return;
+            }
+            ";
+
+        let compiler = Compiler {
+            code,
+            ..Compiler::default()
+        };
+//        let program_bytes = compiler.into_script_blob().unwrap();
+//
+//        let program = Program::new(program_bytes, vec![], vec![]);
+
+        let program = compiler.into_program(vec![]).unwrap();
+
+        let account_address = AccountAddress::random();
+
+        let signed_tx = RawTransaction::new(
+            account_address,
+            1 as u64,
+            program,
+            10_000 as u64,
+            1 as u64,
+            Duration::from_secs(u64::max_value()),
+        ).sign(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone())
+            .unwrap()
+            .into_inner();
+
+        let mut rt = Runtime::new().unwrap();
+        let chain_service = ChainService::new(&mut rt);
+        chain_service.submit_on_chain_transaction(signed_tx);
     }
 }
