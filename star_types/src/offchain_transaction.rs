@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 
 use failure::prelude::*;
-use crypto::Signature;
 use nextgen_crypto::ed25519::{Ed25519PublicKey, Ed25519Signature};
 use types::account_address::AccountAddress;
 use types::transaction::{RawTransaction, SignedTransaction, TransactionStatus, TransactionOutput};
@@ -63,15 +62,6 @@ impl OffChainTransaction {
     pub fn output_signatures(&self) -> &Vec<Ed25519Signature> {
         &self.output_signatures
     }
-}
-
-pub struct OffChainTransactionInput {}
-
-pub struct OffChainTransactionOutput {}
-
-pub struct SignOffChainTransaction {
-    sign: Signature,
-    data: OffChainTransaction,
 }
 
 impl FromProto for OffChainTransaction {

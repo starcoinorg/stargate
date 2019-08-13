@@ -15,7 +15,7 @@ use nextgen_crypto::SigningKey;
 use nextgen_crypto::test_utils::KeyPair;
 use star_types::{account_resource_ext, channel::SgChannelStream, transaction_output_helper};
 use star_types::offchain_transaction::{
-    OffChainTransaction, SignOffChainTransaction, TransactionOutputSigner,
+    OffChainTransaction, TransactionOutputSigner,
 };
 use star_types::resource::Resource;
 use types::account_address::AccountAddress;

@@ -1,6 +1,8 @@
-use crypto::signing::KeyPair;
+use nextgen_crypto::test_utils::KeyPair;
 use serde::{Deserialize, Serialize};
 use types::account_address::AccountAddress;
+use nextgen_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
+use nextgen_crypto::ValidKeyStringExt;
 
 pub mod commands;
 pub mod client_proxy;
@@ -13,7 +15,7 @@ pub struct AccountData {
     /// Address of the account.
     pub address: AccountAddress,
     /// (private_key, public_key) pair if the account is not managed by wallet.
-    pub key_pair: Option<KeyPair>,
+    pub key_pair: Option<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
     /// Latest sequence number maintained by client, it can be different from validator.
     pub sequence_number: u64,
     /// Whether the account is initialized on chain, cached local only, or status unknown.
@@ -37,8 +39,8 @@ impl AccountData {
     pub fn keypair_as_string(&self) -> Option<(String, String)> {
         match &self.key_pair {
             Some(key_pair) => Some((
-                crypto::utils::encode_to_string(&key_pair.private_key()),
-                crypto::utils::encode_to_string(&key_pair.public_key()),
+                key_pair.private_key.to_encoded_string().unwrap(),
+                key_pair.public_key.to_encoded_string().unwrap(),
             )),
             None => None,
         }
