@@ -5,8 +5,9 @@ use proptest_derive::Arbitrary;
 use proto_conv::{FromProto, IntoProto};
 use crate::offchain_transaction::OffChainTransaction;
 use nextgen_crypto::ed25519::Ed25519Signature;
-use core::convert::TryFrom;
+use std::convert::{TryFrom};
 use crate::proto::message::ReceiveSignMessage;
+use parity_multiaddr::Multiaddr;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 //#[ProtoType(crate::proto::message::OpenChannelNodeNegotiateMessage)]
@@ -140,17 +141,39 @@ impl OpenChannelTransactionMessage {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq,FromProto, IntoProto)]
-#[ProtoType(crate::proto::message::AddressMessage)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AddressMessage {
     pub addr: AccountAddress,
+    pub ip_addr:Multiaddr,
 }
 
 impl AddressMessage {
-    pub fn new(addr:AccountAddress)->Self{
+    pub fn new(addr:AccountAddress,ip_addr:Multiaddr)->Self{
         Self{
-            addr
+            addr,
+            ip_addr,
         }
+    }
+}
+
+impl FromProto for AddressMessage {
+    type ProtoType = crate::proto::message::AddressMessage;
+
+    fn from_proto(mut object: Self::ProtoType) -> Result<Self> {
+        let addr = AccountAddress::from_proto(object.get_addr().to_vec())?;
+        let ip_addr = Multiaddr::try_from(object.get_ip_addr().to_vec())?;
+        Ok(AddressMessage::new(addr,ip_addr))
+    }
+}
+
+impl IntoProto for AddressMessage {
+    type ProtoType = crate::proto::message::AddressMessage;
+
+    fn into_proto(self) -> Self::ProtoType {
+        let mut out = Self::ProtoType::new();
+        out.set_addr(self.addr.into_proto());
+        out.set_ip_addr(self.ip_addr.to_vec());
+        out
     }
 }
 

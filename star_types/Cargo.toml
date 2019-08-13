@@ -27,6 +27,7 @@ proptest_helpers = { path = "../common/proptest_helpers" }
 proto_conv = { path = "../common/proto_conv", features = ["derive"] }
 vm_runtime_types = { path = "../language/vm/vm_runtime/vm_runtime_types"}
 futures = "0.1.28"
+parity-multiaddr = "0.4.0"
 
 [build-dependencies]
 build_helpers = { path = "../common/build_helpers" }

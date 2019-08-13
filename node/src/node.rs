@@ -23,7 +23,7 @@ use proto_conv::{IntoProtoBytes,FromProto,FromProtoBytes,IntoProto};
 use std::collections::HashMap;
 use types::account_address::AccountAddress;
 use failure::prelude::*;
-
+use std::{thread, time};
 
 pub struct Node <C: ChainClient+ Send+Sync+'static,TTransport:Transport+Sync+Send+'static>
     where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
@@ -49,6 +49,7 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
 }
 
 struct NodeData<C: ChainClient+ Send+Sync+'static> {
+    local_addr:Option<Multiaddr>,
     wallet:Wallet<C>,
     sender_map:HashMap<Multiaddr,UnboundedSender<bytes::Bytes>>,   
     addr_sender_map:HashMap<AccountAddress,Multiaddr>,
@@ -69,6 +70,7 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
                 wallet,
                 sender_map:HashMap::new(),
                 addr_sender_map:HashMap::new(),
+                local_addr:None,             
         };
         let node_inner=NodeInner{
                 executor:executor_clone,                
@@ -78,7 +80,7 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
                 dial_request_rx:rx,
                 open_channel_message_rx:rx_oc,
                 open_channel_negotiate_rx:rx_on,
-                off_chain_pay_message_rx:rx_op,                
+                off_chain_pay_message_rx:rx_op,
             };
         Self{
             executor,
@@ -103,6 +105,8 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
 
     pub fn connect(&self,addr: Multiaddr,remote_addr:AccountAddress){
         self.dial_request_tx.unbounded_send((addr,remote_addr));
+        let ten_millis = time::Duration::from_micros(3000);  
+        thread::sleep(ten_millis);
     }
 
     pub fn open_channel_negotiate(&self,negotiate_message:OpenChannelNodeNegotiateMessage){
@@ -124,11 +128,11 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
 
     async fn start_listen(mut self, listen_addr: Multiaddr){
         let (mut listener, listen_addr) = self.transport
-            .listen_on(listen_addr)
+            .listen_on(listen_addr.clone())
             .expect("Transport listen on fails");
 
         let mut listener = listener.fuse();
-
+        self.node_data.clone().lock().unwrap().local_addr = Some(listen_addr);
         loop {
             futures::select! {
                 (addr,account_addr) = self.dial_request_rx.select_next_some() => {
@@ -139,8 +143,7 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
                         Ok((f_stream, addr)) => {
                             let (mut tx,  rx) = futures::channel::mpsc::unbounded();
                             let node_data = self.node_data.clone();
-                            node_data.lock().unwrap().sender_map.insert(addr.clone(),tx);
-                            self.executor.spawn(Self::handle_stream(f_stream.await.unwrap(),addr.clone(),rx,node_data).boxed().unit_error().compat());                                                        
+                            self.executor.spawn(Self::handle_stream(f_stream.await.unwrap(),addr.clone(),tx,rx,node_data).boxed().unit_error().compat());                                                        
                         }
                         Err(e) => {
                             println!("Incoming connection error {}", e);
@@ -164,7 +167,7 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
         }
     }
 
-    async fn handle_stream<S>(output:S,addr:Multiaddr,mut rx:UnboundedReceiver<bytes::Bytes>,node_data:Arc<Mutex<NodeData<C>>>)
+    async fn handle_stream<S>(output:S,addr:Multiaddr,tx:UnboundedSender<bytes::Bytes>,mut rx:UnboundedReceiver<bytes::Bytes>,node_data:Arc<Mutex<NodeData<C>>>)
     where S:AsyncRead+AsyncWrite+Unpin+Send,{
         let mut f_stream = Framed::new(output.compat(), LengthDelimitedCodec::new()).sink_compat().fuse();
         loop {
@@ -176,10 +179,11 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
                         MessageType::OpenChannelNodeNegotiateMessage =>  Self::handle_open_channel_negotiate(data[2..].to_vec(),node_data.clone()),
                         MessageType::OpenChannelTransactionMessage => Self::handle_open_channel(data[2..].to_vec(),node_data.clone()),
                         MessageType::OffChainPayMessage => Self::handle_off_chain_pay(data[2..].to_vec(),node_data.clone()),
-                        MessageType::AddressMessage => Self::handle_addr(data[2..].to_vec(),node_data.clone()),
+                        MessageType::AddressMessage => Self::handle_addr(data[2..].to_vec(),tx.clone(),node_data.clone()),
                     };                                        
                 },
                 data = rx.select_next_some() => {//send data
+                    println!("send real data");
                     f_stream.send(data).await;
                 },
                 complete => break,
@@ -188,21 +192,26 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
 
     }
 
-    fn send_message(account_addr:&AccountAddress,msg:Vec<u8>,node_data:Arc<Mutex<NodeData<C>>>){
-        match node_data.lock().unwrap().addr_sender_map.get(account_addr) {
+    fn send_message(account_addr:&AccountAddress,msg:bytes::Bytes,node_data:Arc<Mutex<NodeData<C>>>){
+        let nd=node_data.lock().unwrap();
+        match nd.addr_sender_map.get(account_addr) {
             Some(addr) => {
-                match node_data.lock().unwrap().sender_map.get(addr){
+                match nd.sender_map.get(addr){
                     Some(sender) => {
-                        sender.unbounded_send(bytes::Bytes::from(msg));
+                        sender.unbounded_send(msg);
                     },
                     _ => println!("Don't have Ashley's number."),
                 }
             },
-            _ => println!("Don't have Ashley's number."),
+            _ => println!("Don't have ABC's number."),
         }        
     }
 
-    fn handle_addr(data:Vec<u8>,node_data:Arc<Mutex<NodeData<C>>>){    
+    fn handle_addr(data:Vec<u8>,tx:UnboundedSender<bytes::Bytes>,node_data:Arc<Mutex<NodeData<C>>>){
+        let account_addr = AddressMessage::from_proto_bytes(&data).unwrap();        
+        println!("{:?}",account_addr);
+        node_data.lock().unwrap().addr_sender_map.insert(account_addr.addr.clone(),account_addr.ip_addr.clone());
+        node_data.lock().unwrap().sender_map.insert(account_addr.ip_addr,tx);
     }
 
     fn handle_open_channel_negotiate(data:Vec<u8>,node_data:Arc<Mutex<NodeData<C>>>){
@@ -211,14 +220,15 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
         if (raw_message.sender_addr == node_data.lock().unwrap().wallet.get_address()){
             match negotiate_message.receiver_sign {
                 Some(sign)=>{
-                    println!("sign");
+                    println!("receive 2 sign");
                     // TODO send open channel msg
                 },
                 None=>println!("none"),
             }
         }
         if (raw_message.receiver_addr == node_data.lock().unwrap().wallet.get_address()){
-            // sign message ,verify messsage,send back    
+            // sign message ,verify messsage,send back
+            println!("receive sender neg msg");    
         }
     }
 
@@ -250,35 +260,43 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
         let local_addr=self.node_data.clone().lock().unwrap().wallet.get_address().clone();
         let node_data = self.node_data.clone();
         let tx_clone = tx.clone();
-        let executor = self.executor.clone();
+        let executor = self.executor.clone();        
+
         let dialer = async move {
             let mut socket = outbound.await.unwrap();
 
-            let addr_msg_bytes=AddressMessage::new(local_addr).into_proto_bytes().unwrap();                
-            tx.clone().unbounded_send(bytes::Bytes::from(addr_msg_bytes));
+            let addr_msg_bytes=AddressMessage::new(local_addr,node_data.lock().unwrap().local_addr.as_ref().unwrap().clone()).into_proto_bytes().unwrap();
+            let addr_msg_bytes = add_message_type(addr_msg_bytes,MessageType::AddressMessage);                
             node_data.lock().unwrap().sender_map.insert(addr.clone(),tx_clone);
             node_data.lock().unwrap().addr_sender_map.insert(remote_addr,addr.clone());
+
+            tx.clone().unbounded_send(addr_msg_bytes);
         
-            executor.spawn(Self::handle_stream(socket,addr.clone(),rx,node_data).boxed().unit_error().compat());                                                        
+            executor.spawn(Self::handle_stream(socket,addr.clone(),tx.clone(),rx,node_data).boxed().unit_error().compat());                                                        
         };
 
         self.executor.spawn(dialer.boxed().unit_error().compat());        
     }
 
-    fn open_channel_negotiate(&self,negotiate_message:OpenChannelNodeNegotiateMessage)->Result<()>{        
+    fn open_channel_negotiate(&self,negotiate_message:OpenChannelNodeNegotiateMessage)->Result<()>{  
         let addr = negotiate_message.raw_negotiate_message.receiver_addr;
         let msg = negotiate_message.into_proto_bytes()?;
+        let msg = add_message_type(msg, MessageType::OpenChannelNodeNegotiateMessage);
         Self::send_message(&addr,msg,self.node_data.clone());
         Ok(())
     }
 
     fn open_channel(&self,open_channel_message:OpenChannelTransactionMessage)->Result<()>{
-        Self::send_message( &open_channel_message.transaction.receiver(),open_channel_message.into_proto_bytes()?,self.node_data.clone());
+        let addr = &open_channel_message.transaction.receiver();
+        let msg = add_message_type(open_channel_message.into_proto_bytes()?, MessageType::OpenChannelTransactionMessage);
+        Self::send_message( addr,msg,self.node_data.clone());
         Ok(())
     }
 
     fn off_chain_pay(&self,off_chain_pay_message:OffChainPayMessage)->Result<()>{
-        Self::send_message( &off_chain_pay_message.transaction.receiver(),off_chain_pay_message.into_proto_bytes()?,self.node_data.clone());
+        let addr=&off_chain_pay_message.transaction.receiver();
+        let msg = add_message_type(off_chain_pay_message.into_proto_bytes()?, MessageType::OpenChannelTransactionMessage);
+        Self::send_message(addr ,msg,self.node_data.clone());
         Ok(())
     }
 
@@ -290,11 +308,10 @@ fn parse_message_type(data:&bytes::Bytes)->MessageType{
     MessageType::from_type(type_u16).unwrap()
 }
 
-fn add_message_type(data:bytes::Bytes,messaget_type:MessageType)->bytes::Bytes{
+fn add_message_type(data:Vec<u8>,messaget_type:MessageType)->bytes::Bytes{
     let len =u16::to_be_bytes(messaget_type.get_type());
-    println!("{:?}",len);
     let mut result_vec = Vec::new();
     result_vec.extend_from_slice(&len);
-    result_vec.extend_from_slice(&data[..]);
+    result_vec.extend_from_slice(&data);
     bytes::Bytes::from(result_vec)
 }
