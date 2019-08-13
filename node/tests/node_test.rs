@@ -16,8 +16,6 @@ use switch::{switch::Switch};
 use tokio::codec::{Framed,LengthDelimitedCodec};
 use bytes::Bytes;
 
-use std::sync::Arc;
-
 use rand::prelude::*;
 
 use chain_client::{ChainClient, RpcChainClient};
@@ -31,6 +29,7 @@ use crypto::hash::{CryptoHasher, TestOnlyHasher};
 use proto_conv::{IntoProtoBytes,FromProto,FromProtoBytes,IntoProto};
 use nextgen_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
 use nextgen_crypto::traits::SigningKey;
+use std::sync::{Arc,Mutex};
 
 
 #[test]
@@ -38,14 +37,15 @@ fn start_server_test() -> Result<()> {
     let mut rt = Runtime::new().unwrap();
     let executor = rt.executor();
 
-    let (node1,addr1,keypair1) = gen_node(executor.clone());
-    node1.start_server(MemoryTransport::default(),"/memory/10".parse().unwrap());
+    let (mut node1,addr1,keypair1) = gen_node(executor.clone());
+    //let node1 = Arc::new(Mutex::new(node1));    
+    node1.start_server("/memory/10".parse().unwrap());
         
-    let (node2,addr2,keypair2) = gen_node(executor.clone());
-    node2.start_server(MemoryTransport::default(),"/memory/20".parse().unwrap());
+    let (mut node2,addr2,keypair2) = gen_node(executor.clone());
+    //let node2 = Arc::new(Mutex::new(node2));    
+    node2.start_server("/memory/20".parse().unwrap());
 
-    let transport = MemoryTransport::default();
-    node2.connect(transport,"/memory/10".parse().unwrap());
+    node2.connect("/memory/10".parse().unwrap(),addr2);
 
     let neg_msg = create_negotiate_message(addr2,addr1 ,keypair2.private_key);
     node2.open_channel_negotiate(neg_msg);
@@ -70,7 +70,7 @@ fn start_server_test() -> Result<()> {
     Ok(())
 }
 
-fn gen_node(executor:TaskExecutor)->(Node<MemorySocket,MockChainClient>,AccountAddress,KeyPair<Ed25519PrivateKey,Ed25519PublicKey>){
+fn gen_node(executor:TaskExecutor)->(Node<MockChainClient,MemoryTransport>,AccountAddress,KeyPair<Ed25519PrivateKey,Ed25519PublicKey>){
     let switch:Switch<MemorySocket> = Switch::new();
 
     let amount: u64 = 1_000_000_000;
@@ -82,7 +82,7 @@ fn gen_node(executor:TaskExecutor)->(Node<MemorySocket,MockChainClient>,AccountA
     client.faucet(account_address, amount).unwrap();
     let mut wallet = Wallet::new_with_client(account_address, keypair.clone(), client).unwrap();
 
-    (Node::new(executor.clone(),switch,wallet,keypair.clone()),account_address,keypair)
+    (Node::new(executor.clone(),wallet,keypair.clone(),MemoryTransport::default()),account_address,keypair)
 }
 
 fn create_negotiate_message(sender_addr:AccountAddress,receiver_addr:AccountAddress,private_key:Ed25519PrivateKey)->OpenChannelNodeNegotiateMessage{

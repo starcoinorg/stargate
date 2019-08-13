@@ -27,6 +27,13 @@ failure = { path = "../../common/failure_ext", package = "failure_ext" }
 vm_runtime = { path = "../../language/vm/vm_runtime" }
 lazy_static = "1.3.0"
 config = { path = "../../config"}
+vm_cache_map = { path = "../../language/vm/vm_runtime/vm_cache_map" }
+rental = "0.5.4"
+compiler = { path = "../../language/compiler" }
+vm_runtime_types = { path = "../../language/vm/vm_runtime/vm_runtime_types" }
+vm = { path = "../../language/vm" }
+state_view = { path = "../../storage/state_view" }
+bytecode_verifier = { path = "../../language/bytecode_verifier" }
 
 [dependencies.ed25519-dalek]
 version = "1.0.0-pre.1"
