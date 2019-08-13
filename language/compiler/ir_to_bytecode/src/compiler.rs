@@ -4,11 +4,10 @@
 use crate::{
     errors::*,
     parser::ast::{
-        self, BinOp, Block, Builtin, Cmd, CopyableVal, Exp, Field, Function, FunctionBody,
-        FunctionCall, FunctionSignature as AstFunctionSignature, FunctionVisibility, IfElse, Loop,
+        BinOp, Block, Builtin, Cmd, CopyableVal, Exp, Field, Function, FunctionBody, FunctionCall,
+        FunctionSignature as AstFunctionSignature, FunctionVisibility, IfElse, Loop,
         ModuleDefinition, ModuleIdent, ModuleName, Program, Statement,
-        StructDefinition as MoveStruct, StructDefinitionFields, Tag, Type, UnaryOp, Var, Var_,
-        While,
+        StructDefinition as MoveStruct, StructDefinitionFields, Type, UnaryOp, Var, Var_, While,
     },
 };
 
@@ -27,7 +26,7 @@ use vm::{
         AddressPoolIndex, ByteArrayPoolIndex, Bytecode, CodeUnit, CompiledModule,
         CompiledModuleMut, CompiledProgram, CompiledScriptMut, FieldDefinition,
         FieldDefinitionIndex, FunctionDefinition, FunctionDefinitionIndex, FunctionHandle,
-        FunctionHandleIndex, FunctionSignature, FunctionSignatureIndex, Kind, LocalsSignature,
+        FunctionHandleIndex, FunctionSignature, FunctionSignatureIndex, LocalsSignature,
         LocalsSignatureIndex, MemberCount, ModuleHandle, ModuleHandleIndex, SignatureToken,
         StringPoolIndex, StructDefinition, StructDefinitionIndex, StructFieldInformation,
         StructHandle, StructHandleIndex, TableIndex, TypeSignature, TypeSignatureIndex,
@@ -254,9 +253,14 @@ type FieldMap = HashMap<String, FieldDefinitionIndex>;
 struct CompilationScope<'a> {
     // maps from handles in the compilation unit (reference) to the definitions
     // in the imported unit (definitions).
+    //
+    // TODO: module handle indices should not appear here as it only makes sense within the context
+    //       of the module currently being compiled (leaky abstraction)
     imported_modules: HashMap<String, (ModuleIndex, ModuleHandleIndex)>,
     function_definitions:
         HashMap<ModuleHandleIndex, HashMap<String, (ModuleIndex, FunctionDefinitionIndex)>>,
+    struct_definitions: HashMap<ModuleIndex, HashMap<String, StructDefinitionIndex>>,
+
     // imported modules (external contracts you compile
     pub modules: Vec<&'a CompiledModule>,
 }
@@ -266,6 +270,7 @@ impl<'a> CompilationScope<'a> {
         CompilationScope {
             imported_modules: HashMap::new(),
             function_definitions: HashMap::new(),
+            struct_definitions: HashMap::new(),
             modules: modules.into_iter().collect(),
         }
     }
@@ -283,6 +288,23 @@ impl<'a> CompilationScope<'a> {
             if self.modules[idx].name() == module_name && self.modules[idx].address() == addr {
                 self.imported_modules
                     .insert(import_name.to_string(), (idx as u8, mh_idx));
+
+                self.struct_definitions.insert(
+                    idx as ModuleIndex,
+                    self.modules[idx]
+                        .struct_defs()
+                        .iter()
+                        .enumerate()
+                        .map(|(sd_idx, def)| {
+                            let sh = self.modules[idx].struct_handle_at(def.struct_handle);
+                            let name = self.modules[idx].string_at(sh.name);
+                            (
+                                name.to_string(),
+                                StructDefinitionIndex::new(sd_idx as TableIndex),
+                            )
+                        })
+                        .collect::<HashMap<_, _>>(),
+                );
                 return Ok(());
             }
         }
@@ -308,16 +330,16 @@ impl<'a> CompilationScope<'a> {
         Ok(())
     }
 
-    fn get_imported_module_impl(&self, name: &str) -> Result<(&CompiledModule, ModuleHandleIndex)> {
+    fn get_imported_module_impl(&self, name: &str) -> Result<(ModuleIndex, ModuleHandleIndex)> {
         match self.imported_modules.get(name) {
             None => bail!("no module named {}", name),
-            Some((module_index, mh_idx)) => Ok((self.modules[*module_index as usize], *mh_idx)),
+            Some(res) => Ok(*res),
         }
     }
 
     fn get_imported_module(&self, name: &str) -> Result<&CompiledModule> {
-        let (module, _) = self.get_imported_module_impl(name)?;
-        Ok(module)
+        let (idx, _) = self.get_imported_module_impl(name)?;
+        Ok(&self.modules[idx as usize])
     }
 
     fn get_imported_module_handle(&self, name: &str) -> Result<ModuleHandleIndex> {
@@ -348,6 +370,27 @@ impl<'a> CompilationScope<'a> {
         let fh = module.function_handle_at(fh_idx);
         Ok(module.function_signature_at(fh.signature))
     }
+
+    fn get_struct_def(&self, module_name: &str, struct_name: &str) -> Result<&StructDefinition> {
+        // find the module by name
+        let (idx, _) = self.get_imported_module_impl(module_name)?;
+        let module = &self.modules[idx as usize];
+
+        // find the sub hash map of the given module
+        let struct_map = match self.struct_definitions.get(&idx) {
+            Some(struct_map) => struct_map,
+            None => bail!(
+                "impossible, module {} does not have a struct map",
+                module_name
+            ),
+        };
+
+        // find the struct definition by name
+        match struct_map.get(struct_name) {
+            Some(idx) => Ok(module.struct_def_at(*idx)),
+            None => bail!("no struct named {} in module {}", struct_name, module_name),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -355,9 +398,10 @@ struct ModuleScope<'a> {
     // parent scope, the global module scope
     pub compilation_scope: CompilationScope<'a>,
     // builds a struct map based on handles and signatures
-    struct_definitions: HashMap<String, (Kind, StructDefinitionIndex)>,
+    struct_definitions: HashMap<String, (bool, StructDefinitionIndex)>,
     field_definitions: HashMap<StructHandleIndex, FieldMap>,
     function_definitions: HashMap<String, FunctionDefinitionIndex>,
+    struct_handles: HashMap<(ModuleHandleIndex, String), StructHandleIndex>,
     // the module being compiled
     pub module: CompiledModuleMut,
 }
@@ -372,6 +416,7 @@ impl<'a> ModuleScope<'a> {
             struct_definitions: HashMap::new(),
             field_definitions: HashMap::new(),
             function_definitions: HashMap::new(),
+            struct_handles: HashMap::new(),
             module,
         }
     }
@@ -381,6 +426,7 @@ impl<'a> ModuleScope<'a> {
 struct ScriptScope<'a> {
     // parent scope, the global module scope
     compilation_scope: CompilationScope<'a>,
+    struct_handles: HashMap<(ModuleHandleIndex, String), StructHandleIndex>,
     pub script: CompiledScriptMut,
 }
 
@@ -391,6 +437,7 @@ impl<'a> ScriptScope<'a> {
     ) -> Self {
         ScriptScope {
             compilation_scope: CompilationScope::new(modules),
+            struct_handles: HashMap::new(),
             script,
         }
     }
@@ -422,7 +469,7 @@ trait Scope {
         &mut self,
         module_idx: ModuleHandleIndex,
         name_idx: StringPoolIndex,
-        kind: Kind,
+        is_always_resource: bool,
     ) -> Result<StructHandleIndex>;
     fn make_function_handle(
         &mut self,
@@ -434,7 +481,7 @@ trait Scope {
     fn publish_struct_def(
         &mut self,
         name: &str,
-        kind: Kind,
+        is_always_resource: bool,
         struct_def: StructDefinition,
     ) -> Result<StructDefinitionIndex>;
     fn publish_function_def(
@@ -467,7 +514,18 @@ trait Scope {
     fn get_imported_module(&self, name: &str) -> Result<&CompiledModule>;
     fn get_imported_module_handle(&self, name: &str) -> Result<ModuleHandleIndex>;
     fn get_next_field_definition_index(&mut self) -> Result<FieldDefinitionIndex>;
-    fn get_struct_def(&self, name: &str) -> Result<(Kind, StructDefinitionIndex)>;
+    fn get_struct_def(&self, name: &str) -> Result<(bool, StructDefinitionIndex)>;
+    fn get_external_struct_def(
+        &self,
+        module_name: &str,
+        struct_name: &str,
+    ) -> Result<&StructDefinition>;
+    fn get_struct_handle(
+        &self,
+        mh_idx: ModuleHandleIndex,
+        struct_name: &str,
+    ) -> Result<&StructHandle>;
+    fn get_string_at(&self, idx: StringPoolIndex) -> Result<&String>;
     fn get_field_def(&self, sh_idx: StructHandleIndex, name: &str) -> Result<FieldDefinitionIndex>;
     fn get_field_type(&self, sh_idx: StructHandleIndex, name: &str) -> Result<&TypeSignature>;
     fn get_function_signature(
@@ -528,20 +586,25 @@ impl<'a> Scope for ModuleScope<'a> {
         &mut self,
         module_idx: ModuleHandleIndex,
         name_idx: StringPoolIndex,
-        kind: Kind,
+        is_nominal_resource: bool,
     ) -> Result<StructHandleIndex> {
         let sh = StructHandle {
             module: module_idx,
             name: name_idx,
-            kind,
-            kind_constraints: vec![],
+            is_nominal_resource,
+            type_parameters: vec![],
         };
         let size = self.module.struct_handles.len();
         if size >= TABLE_MAX_SIZE {
             bail!("Max table size reached!")
         }
         self.module.struct_handles.push(sh);
-        Ok(StructHandleIndex::new(size as u16))
+        let sh_idx = StructHandleIndex::new(size as u16);
+        self.struct_handles.insert(
+            (module_idx, self.get_string_at(name_idx)?.to_string()),
+            sh_idx,
+        );
+        Ok(sh_idx)
     }
 
     fn make_function_handle(
@@ -561,7 +624,7 @@ impl<'a> Scope for ModuleScope<'a> {
     fn publish_struct_def(
         &mut self,
         name: &str,
-        kind: Kind,
+        is_always_resource: bool,
         struct_def: StructDefinition,
     ) -> Result<StructDefinitionIndex> {
         let idx = self.module.struct_defs.len();
@@ -571,7 +634,7 @@ impl<'a> Scope for ModuleScope<'a> {
         let sd_idx = StructDefinitionIndex::new(idx as TableIndex);
         self.module.struct_defs.push(struct_def);
         self.struct_definitions
-            .insert(name.to_string(), (kind, sd_idx));
+            .insert(name.to_string(), (is_always_resource, sd_idx));
         Ok(sd_idx)
     }
 
@@ -585,16 +648,6 @@ impl<'a> Scope for ModuleScope<'a> {
         }
         let fd_idx = FunctionDefinitionIndex::new(idx as TableIndex);
         self.module.function_defs.push(function_def);
-        Ok(fd_idx)
-    }
-
-    /// Compute the index of the next field definition
-    fn get_next_field_definition_index(&mut self) -> Result<FieldDefinitionIndex> {
-        let idx = self.module.field_defs.len();
-        if idx >= FIELDS_MAX_SIZE {
-            bail!("Max number of fields reached")
-        }
-        let fd_idx = FieldDefinitionIndex::new(idx as TableIndex);
         Ok(fd_idx)
     }
 
@@ -666,11 +719,49 @@ impl<'a> Scope for ModuleScope<'a> {
         self.compilation_scope.get_imported_module_handle(name)
     }
 
-    fn get_struct_def(&self, name: &str) -> Result<(Kind, StructDefinitionIndex)> {
+    /// Compute the index of the next field definition
+    fn get_next_field_definition_index(&mut self) -> Result<FieldDefinitionIndex> {
+        let idx = self.module.field_defs.len();
+        if idx >= FIELDS_MAX_SIZE {
+            bail!("Max number of fields reached")
+        }
+        let fd_idx = FieldDefinitionIndex::new(idx as TableIndex);
+        Ok(fd_idx)
+    }
+
+    fn get_struct_def(&self, name: &str) -> Result<(bool, StructDefinitionIndex)> {
         match self.struct_definitions.get(name) {
             None => bail!("No struct definition for name {}", name),
-            Some((kind, def_idx)) => Ok((*kind, *def_idx)),
+            Some((is_always_resource, def_idx)) => Ok((*is_always_resource, *def_idx)),
         }
+    }
+
+    fn get_external_struct_def(
+        &self,
+        module_name: &str,
+        struct_name: &str,
+    ) -> Result<&StructDefinition> {
+        self.compilation_scope
+            .get_struct_def(module_name, struct_name)
+    }
+
+    fn get_struct_handle(
+        &self,
+        mh_idx: ModuleHandleIndex,
+        struct_name: &str,
+    ) -> Result<&StructHandle> {
+        match self.struct_handles.get(&(mh_idx, struct_name.to_string())) {
+            Some(sh_idx) => Ok(&self.module.struct_handles[sh_idx.0 as usize]),
+            None => bail!(
+                "no struct handle with module handle index {} named {}",
+                mh_idx,
+                struct_name
+            ),
+        }
+    }
+
+    fn get_string_at(&self, idx: StringPoolIndex) -> Result<&String> {
+        self.module.get_string_at(idx)
     }
 
     fn get_field_def(&self, sh_idx: StructHandleIndex, name: &str) -> Result<FieldDefinitionIndex> {
@@ -782,20 +873,25 @@ impl<'a> Scope for ScriptScope<'a> {
         &mut self,
         module_idx: ModuleHandleIndex,
         name_idx: StringPoolIndex,
-        kind: Kind,
+        is_nominal_resource: bool,
     ) -> Result<StructHandleIndex> {
         let sh = StructHandle {
             module: module_idx,
             name: name_idx,
-            kind,
-            kind_constraints: vec![],
+            is_nominal_resource,
+            type_parameters: vec![],
         };
         let size = self.script.struct_handles.len();
         if size >= TABLE_MAX_SIZE {
             bail!("Max table size reached!")
         }
         self.script.struct_handles.push(sh);
-        Ok(StructHandleIndex::new(size as u16))
+        let sh_idx = StructHandleIndex::new(size as u16);
+        self.struct_handles.insert(
+            (module_idx, self.get_string_at(name_idx)?.to_string()),
+            sh_idx,
+        );
+        Ok(sh_idx)
     }
 
     fn make_function_handle(
@@ -815,7 +911,7 @@ impl<'a> Scope for ScriptScope<'a> {
     fn publish_struct_def(
         &mut self,
         _name: &str,
-        _kind: Kind,
+        _is_always_resource: bool,
         _struct_def: StructDefinition,
     ) -> Result<StructDefinitionIndex> {
         bail!("Cannot publish structs in scripts")
@@ -878,8 +974,36 @@ impl<'a> Scope for ScriptScope<'a> {
         bail!("no field definition referencing in scripts")
     }
 
-    fn get_struct_def(&self, _name: &str) -> Result<(Kind, StructDefinitionIndex)> {
+    fn get_struct_def(&self, _name: &str) -> Result<(bool, StructDefinitionIndex)> {
         bail!("no struct definition referencing in scripts")
+    }
+
+    fn get_external_struct_def(
+        &self,
+        module_name: &str,
+        struct_name: &str,
+    ) -> Result<&StructDefinition> {
+        self.compilation_scope
+            .get_struct_def(module_name, struct_name)
+    }
+
+    fn get_struct_handle(
+        &self,
+        mh_idx: ModuleHandleIndex,
+        struct_name: &str,
+    ) -> Result<&StructHandle> {
+        match self.struct_handles.get(&(mh_idx, struct_name.to_string())) {
+            Some(sh_idx) => Ok(&self.script.struct_handles[sh_idx.0 as usize]),
+            None => bail!(
+                "no struct handle with module handle index {} named {}",
+                mh_idx,
+                struct_name
+            ),
+        }
+    }
+
+    fn get_string_at(&self, idx: StringPoolIndex) -> Result<&String> {
+        self.script.get_string_at(idx)
     }
 
     fn get_field_def(
@@ -960,14 +1084,14 @@ fn compile_module_impl<'a>(
     // Create an empty locals signature with index 0.
     // This is required by the current implementation of generics.
     let locals_empty_idx = compiler.make_locals_signature(&LocalsSignature(vec![]))?;
-    assert!(locals_empty_idx.0 == 0);
+    assert_eq!(locals_empty_idx.0, 0);
 
     // Create a module handle for the current module.
     // It is required this be first entry in the table.
     let addr_idx = compiler.make_address(&address)?;
     let name_idx = compiler.make_string(module.name.name_ref())?;
     let mh_idx = compiler.make_module_handle(addr_idx, name_idx)?;
-    assert!(mh_idx.0 == 0);
+    assert_eq!(mh_idx.0, 0);
 
     for import in &module.imports {
         compiler.import_module(
@@ -979,9 +1103,7 @@ fn compile_module_impl<'a>(
             &import.alias,
         )?;
     }
-    for struct_ in &module.structs {
-        compiler.define_struct(mh_idx, &struct_)?;
-    }
+    compiler.define_structs(mh_idx, &module.structs)?;
     for (name, function) in &module.functions {
         compiler.define_function(name.name_ref(), &function)?;
     }
@@ -1050,14 +1172,14 @@ fn compile_program_impl(
     // Create an empty locals signature with index 0.
     // This is required by the current implementation of generics.
     let locals_empty_idx = compiler.make_locals_signature(&LocalsSignature(vec![]))?;
-    assert!(locals_empty_idx.0 == 0);
+    assert_eq!(locals_empty_idx.0, 0);
 
     // Create a module handle for the script.
     // It is required this be first entry in the table.
     let addr_idx = compiler.make_address(&address)?;
     let name_idx = compiler.make_string(SELF_MODULE_NAME)?;
     let mh_idx = compiler.make_module_handle(addr_idx, name_idx)?;
-    assert!(mh_idx.0 == 0);
+    assert_eq!(mh_idx.0, 0);
 
     for import in &program.script.imports {
         compiler.import_module(
@@ -1128,7 +1250,7 @@ impl<S: Scope + Sized> Compiler<S> {
                 let module = self.scope.get_imported_module(module_name)?;
                 let struct_handle = module.struct_handle_at(sh_idx);
                 let defining_module_handle = module.module_handle_at(struct_handle.module);
-                let kind = struct_handle.kind;
+                let is_nominal_resource = struct_handle.is_nominal_resource;
 
                 let struct_name = module.string_at(struct_handle.name).to_string();
                 let defining_module_name =
@@ -1141,8 +1263,11 @@ impl<S: Scope + Sized> Compiler<S> {
                 let defining_module_handle_idx =
                     self.make_module_handle(defining_module_addr_idx, defining_module_name_idx)?;
 
-                let local_sh_idx =
-                    self.make_struct_handle(defining_module_handle_idx, name_idx, kind)?;
+                let local_sh_idx = self.make_struct_handle(
+                    defining_module_handle_idx,
+                    name_idx,
+                    is_nominal_resource,
+                )?;
                 Ok(SignatureToken::Struct(local_sh_idx, vec![]))
             }
             SignatureToken::Reference(sub_sig_token) => Ok(SignatureToken::Reference(Box::new(
@@ -1175,33 +1300,32 @@ impl<S: Scope + Sized> Compiler<S> {
             Ok(FunctionSignature {
                 return_types,
                 arg_types,
-                kind_constraints: vec![],
+                type_parameters: vec![],
             })
         }
     }
 
-    fn define_struct(&mut self, module_idx: ModuleHandleIndex, struct_: &MoveStruct) -> Result<()> {
-        let name = struct_.name.name_ref();
-        let name_idx = self.make_string(name)?;
-        let sh_idx = self.make_struct_handle(
-            module_idx,
-            name_idx,
-            if struct_.resource_kind {
-                Kind::Resource
-            } else {
-                Kind::Copyable
-            },
-        )?;
-        let struct_def = self.define_fields(sh_idx, &struct_.fields)?;
-        self.scope.publish_struct_def(
-            name,
-            if struct_.resource_kind {
-                Kind::Resource
-            } else {
-                Kind::Copyable
-            },
-            struct_def,
-        )?;
+    fn define_structs(
+        &mut self,
+        module_idx: ModuleHandleIndex,
+        structs: &[MoveStruct],
+    ) -> Result<()> {
+        // create struct handles for all structs
+        let struct_handles = structs
+            .iter()
+            .map(|s| {
+                let name_idx = self.make_string(s.name.name_ref())?;
+                self.make_struct_handle(module_idx, name_idx, s.is_nominal_resource)
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        // define fields for each struct
+        for (s, sh_idx) in structs.iter().zip(struct_handles.iter()) {
+            let struct_def = self.define_fields(*sh_idx, &s.fields)?;
+            self.scope
+                .publish_struct_def(s.name.name_ref(), s.is_nominal_resource, struct_def)?;
+        }
+
         Ok(())
     }
 
@@ -1417,17 +1541,19 @@ impl<S: Scope + Sized> Compiler<S> {
         &mut self,
         module_idx: ModuleHandleIndex,
         name_idx: StringPoolIndex,
-        kind: Kind,
+        is_nominal_resource: bool,
     ) -> Result<StructHandleIndex> {
         let sh = StructHandle {
             module: module_idx,
             name: name_idx,
-            kind,
-            kind_constraints: vec![],
+            is_nominal_resource,
+            type_parameters: vec![],
         };
         Ok(match self.structs.get(&sh) {
             None => {
-                let idx = self.scope.make_struct_handle(module_idx, name_idx, kind)?;
+                let idx =
+                    self.scope
+                        .make_struct_handle(module_idx, name_idx, is_nominal_resource)?;
                 self.structs.insert(sh, idx);
                 idx
             }
@@ -1543,56 +1669,57 @@ impl<S: Scope + Sized> Compiler<S> {
         Ok(FunctionSignature {
             return_types: ret_sig,
             arg_types: arg_sig,
-            kind_constraints: vec![],
+            type_parameters: vec![],
         })
     }
 
-    fn build_signature_token(&mut self, type_: &Type) -> Result<SignatureToken> {
-        match type_ {
-            Type::Normal(kind, tag) => self.build_normal_signature_token(&kind, &tag),
-            Type::Reference {
-                is_mutable,
-                kind,
-                tag,
-            } => {
-                let inner_token = Box::new(self.build_normal_signature_token(kind, tag)?);
+    fn build_signature_token(&mut self, t: &Type) -> Result<SignatureToken> {
+        match t {
+            Type::Address => Ok(SignatureToken::Address),
+            Type::U64 => Ok(SignatureToken::U64),
+            Type::Bool => Ok(SignatureToken::Bool),
+            Type::ByteArray => Ok(SignatureToken::ByteArray),
+            Type::Reference(is_mutable, inner_type) => {
+                let inner_token = Box::new(self.build_signature_token(inner_type)?);
                 if *is_mutable {
                     Ok(SignatureToken::MutableReference(inner_token))
                 } else {
                     Ok(SignatureToken::Reference(inner_token))
                 }
             }
-        }
-    }
+            Type::Struct(ident) => {
+                let module_name = ident.module().name_ref();
+                let struct_name = ident.name().name_ref();
 
-    fn build_normal_signature_token(
-        &mut self,
-        kind: &ast::Kind,
-        tag: &Tag,
-    ) -> Result<SignatureToken> {
-        match (kind, tag) {
-            (ast::Kind::Value, Tag::Address) => Ok(SignatureToken::Address),
-            (ast::Kind::Value, Tag::U64) => Ok(SignatureToken::U64),
-            (ast::Kind::Value, Tag::Bool) => Ok(SignatureToken::Bool),
-            (ast::Kind::Value, Tag::ByteArray) => Ok(SignatureToken::ByteArray),
-            (kind, Tag::Struct(ctype)) => {
-                let module_name = &ctype.module().name();
-                let module_idx = if self.scope.get_name().is_ok() && module_name == ModuleName::SELF
-                {
-                    ModuleHandleIndex::new(0)
-                } else {
-                    self.scope.get_imported_module_handle(module_name)?
-                };
-                let name_idx = self.make_string(&ctype.name().name_ref())?;
-                let kind = match kind {
-                    ast::Kind::Value => Kind::Copyable,
-                    ast::Kind::Resource => Kind::Resource,
-                };
-                let sh_idx = self.make_struct_handle(module_idx, name_idx, kind)?;
+                // in order to know the kind of the struct, we need to perform a look up using the
+                // qualified name of the struct (Module.Name)
+                let (module_idx, is_nominal_resource) =
+                    if self.scope.get_name().is_ok() && module_name == ModuleName::SELF {
+                        // case 1: the struct is defined in the module currently being compiled
+                        //         in this case, we look up the struct handles and find the one
+                        //         with matching module (self) & name
+                        //         we do not use struct definitions as they may not have been
+                        //         completely set up at the time this function is callled
+                        let mh_idx = ModuleHandleIndex::new(0);
+                        let sh = self.scope.get_struct_handle(mh_idx, struct_name)?;
+                        (mh_idx, sh.is_nominal_resource)
+                    } else {
+                        // case 2: the struct is defined in an external module already compiled
+                        //         in this case we look up the struct definition and get the
+                        //         corresponding struct handle
+                        let module_idx = self.scope.get_imported_module_handle(module_name)?;
+                        let module = self.scope.get_imported_module(module_name)?;
+                        let struct_def = self
+                            .scope
+                            .get_external_struct_def(module_name, struct_name)?;
+                        let struct_handle = module.struct_handle_at(struct_def.struct_handle);
+                        (module_idx, struct_handle.is_nominal_resource)
+                    };
+                let name_idx = self.make_string(struct_name)?;
+                let sh_idx = self.make_struct_handle(module_idx, name_idx, is_nominal_resource)?;
                 Ok(SignatureToken::Struct(sh_idx, vec![]))
             }
-            (ast::Kind::Value, _) => bail!("unknown value type {:?}", tag),
-            (ast::Kind::Resource, _) => bail!("unknown resource type {:?}", tag),
+            Type::String => bail!("`string` type is currently unused"),
         }
     }
 
@@ -2210,14 +2337,16 @@ impl<S: Scope + Sized> Compiler<S> {
                         Ok(VecDeque::new())
                     }
                     Builtin::MoveFrom(name) => {
-                        let (is_resource, def_idx) = self.scope.get_struct_def(name.name_ref())?;
+                        let (is_always_resource, def_idx) =
+                            self.scope.get_struct_def(name.name_ref())?;
                         code.code.push(Bytecode::MoveFrom(def_idx, NO_TYPE_ACTUALS));
                         function_frame.pop()?; // pop the address
                         function_frame.push()?; // push the return value
 
                         let module_idx = ModuleHandleIndex::new(0);
                         let name_idx = self.make_string(name.name_ref())?;
-                        let sh = self.make_struct_handle(module_idx, name_idx, is_resource)?;
+                        let sh =
+                            self.make_struct_handle(module_idx, name_idx, is_always_resource)?;
                         Ok(self.make_singleton_vec_deque(InferredType::Struct(sh)))
                     }
                     Builtin::MoveToSender(name) => {

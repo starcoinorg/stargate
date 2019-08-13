@@ -87,9 +87,19 @@ pub enum SerializedType {
 #[allow(non_camel_case_types)]
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
+pub enum SerializedNominalResourceFlag {
+    NOMINAL_RESOURCE        = 0x1,
+    NORMAL_STRUCT           = 0x2,
+}
+
+#[rustfmt::skip]
+#[allow(non_camel_case_types)]
+#[repr(u8)]
+#[derive(Clone, Copy, Debug)]
 pub enum SerializedKind {
-    RESOURCE                = 0x1,
-    COPYABLE                = 0x2,
+    ALL                     = 0x1,
+    UNRESTRICTED            = 0x2,
+    RESOURCE                = 0x3,
 }
 
 #[rustfmt::skip]
@@ -120,8 +130,8 @@ pub enum Opcodes {
     COPY_LOC                = 0x0B,
     MOVE_LOC                = 0x0C,
     ST_LOC                  = 0x0D,
-    LD_REF_LOC              = 0x0E,
-    LD_REF_FIELD            = 0x0F,
+    BORROW_LOC              = 0x0E,
+    BORROW_FIELD            = 0x0F,
     LD_BYTEARRAY            = 0x10,
     CALL                    = 0x11,
     PACK                    = 0x12,
@@ -151,7 +161,7 @@ pub enum Opcodes {
     GET_GAS_REMAINING       = 0x2A,
     GET_TXN_SENDER          = 0x2B,
     EXISTS                  = 0x2C,
-    BORROW_REF              = 0x2D,
+    BORROW_GLOBAL           = 0x2D,
     RELEASE_REF             = 0x2E,
     MOVE_FROM               = 0x2F,
     MOVE_TO                 = 0x30,
