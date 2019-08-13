@@ -167,6 +167,14 @@ impl StateStorage {
         self.account_states.get_mut(address)
     }
 
+    fn get_account_state_or_create(&mut self, address: &AccountAddress) -> &mut AccountState {
+        if !self.exist_account(address){
+            let account_state = AccountState::new();
+            self.update_account(*address, account_state);
+        }
+        self.account_states.get_mut(address).unwrap()
+    }
+
     fn get_by_access_path(&self, access_path: &AccessPath) -> Option<Vec<u8>> {
         self.get_account_state(&access_path.address).and_then(|state| state.get(&access_path.path))
     }
@@ -190,15 +198,12 @@ impl StateStorage {
     }
 
     pub fn update(&mut self, access_path: &AccessPath, value: Vec<u8>) -> Result<HashValue> {
-        let account_state = self.get_account_state_mut(&access_path.address);
-        match account_state {
-            Some(account_state) => {
-                let account_root_hash = account_state.update(access_path.path.clone(), value)?;
-                let mut global_state = self.global_state.borrow_mut();
-                *global_state = global_state.update(vec![(access_path.address.hash(), AccountStateBlob::from(account_root_hash.to_vec()))], &ProofReader::default()).unwrap();
-            }
-            None => { return bail!("can not find account by address:{}", access_path.address); }
-        };
+        {
+            let account_state = self.get_account_state_or_create(&access_path.address);
+            let account_root_hash = account_state.update(access_path.path.clone(), value)?;
+            let mut global_state = self.global_state.borrow_mut();
+            *global_state = global_state.update(vec![(access_path.address.hash(), AccountStateBlob::from(account_root_hash.to_vec()))], &ProofReader::default()).unwrap();
+        }
         Ok(self.global_state.borrow().root_hash())
     }
 
