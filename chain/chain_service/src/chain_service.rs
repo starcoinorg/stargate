@@ -1,6 +1,6 @@
 use failure::prelude::*;
 use types::proto::{access_path::AccessPath};
-use types::{transaction::{SignedTransaction, TransactionPayload, Program}, write_set::WriteSet, account_address::AccountAddress, vm_error::VMStatus};
+use types::{transaction::{SignedTransaction, TransactionPayload, Program}, language_storage::StructTag, write_set::WriteSet, account_address::AccountAddress, vm_error::VMStatus};
 use proto_conv::FromProto;
 use futures::{sync::mpsc::{unbounded, UnboundedReceiver}, future::Future, sink::Sink, stream::Stream};
 use super::pub_sub;
@@ -36,8 +36,10 @@ use star_types::{offchain_transaction::OffChainTransaction,
 use vm_runtime::{MoveVM, VMVerifier, VMExecutor};
 use lazy_static::lazy_static;
 use config::config::{VMConfig, VMPublishingOption};
-use super::struct_storage::StructStorage;
-use vm::file_format::CompiledModule;
+use super::struct_cache::StructCache;
+use vm::file_format::{CompiledModule, StructDefinition};
+use core::borrow::Borrow;
+use vm_runtime_types::loaded_data::struct_def::StructDef;
 
 lazy_static! {
     static ref VM_CONFIG:VMConfig = VMConfig{
@@ -51,7 +53,7 @@ pub struct ChainService {
     state_db: Arc<Mutex<StateStorage>>,
     tx_db: Arc<Mutex<TransactionStorage>>,
     vm: Arc<Mutex<MoveVM>>,
-    struct_db: Arc<Mutex<StructStorage>>,
+    struct_cache: Arc<Mutex<StructCache>>,
 }
 
 #[derive(Clone, Debug)]
@@ -67,8 +69,8 @@ impl ChainService {
         let tx_db = Arc::new(Mutex::new(TransactionStorage::new()));
         let state_db = Arc::new(Mutex::new(StateStorage::new()));
         let vm = Arc::new(Mutex::new(MoveVM::new(&VM_CONFIG)));
-        let struct_db = Arc::new(Mutex::new(StructStorage::new()));
-        let chain_service = ChainService { sender: tx_sender.clone(), state_db, tx_db, vm, struct_db };
+        let struct_cache = Arc::new(Mutex::new(StructCache::new()));
+        let chain_service = ChainService { sender: tx_sender.clone(), state_db, tx_db, vm, struct_cache };
         let chain_service_clone = chain_service.clone();
 
         let receiver_future = async move {
@@ -169,29 +171,6 @@ impl ChainService {
     pub fn faucet_inner(&self, account_address: AccountAddress, amount: u64) -> Result<HashValue> {
         let mut state_db = self.state_db.lock().unwrap();
         state_db.create_account(account_address, amount)
-    }
-
-    fn test(self,path_vec:Vec<u8>, program: Program) {
-        //序列化&反序列化
-        let modules: Vec<CompiledModule> = match program
-            .modules()
-            .iter()
-            .map(|module_blob| CompiledModule::deserialize(&module_blob))
-            .collect() {
-            Ok(modules) => modules,
-            Err(ref err) => {
-                println!("[VM] module deserialization failed {:?}", err);
-                return ();
-            }
-        };
-
-        //判断HASH是否存储，如果不存在
-
-
-        //into_compiled_program_and_deps
-        //获取到StructTag和StructDef
-
-        //存储
     }
 }
 

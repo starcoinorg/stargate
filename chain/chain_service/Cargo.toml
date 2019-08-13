@@ -32,6 +32,8 @@ rental = "0.5.4"
 compiler = { path = "../../language/compiler" }
 vm_runtime_types = { path = "../../language/vm/vm_runtime/vm_runtime_types" }
 vm = { path = "../../language/vm" }
+state_view = { path = "../../storage/state_view" }
+bytecode_verifier = { path = "../../language/bytecode_verifier" }
 
 [dependencies.ed25519-dalek]
 version = "1.0.0-pre.1"
