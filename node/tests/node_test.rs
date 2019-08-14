@@ -32,25 +32,35 @@ use nextgen_crypto::traits::SigningKey;
 use std::sync::{Arc,Mutex};
 use futures_01::future::Future as Future01;
 use std::time::{SystemTime,UNIX_EPOCH};
+use types::account_config::coin_struct_tag;
+use logger::prelude::*;
 
 
 #[test]
 fn start_server_test() -> Result<()> {
+    ::logger::init_for_e2e_testing();
     let mut rt = Runtime::new().unwrap();
     let executor = rt.executor();
 
     let (mut node1,addr1,keypair1) = gen_node(executor.clone());
-    //let node1 = Arc::new(Mutex::new(node1));    
     node1.start_server("/memory/10".parse().unwrap());
         
     let (mut node2,addr2,keypair2) = gen_node(executor.clone());
-    //let node2 = Arc::new(Mutex::new(node2));    
     node2.start_server("/memory/20".parse().unwrap());
 
     node2.connect("/memory/10".parse().unwrap(),addr1);
     
     let neg_msg = create_negotiate_message(addr2,addr1 ,keypair2.private_key);
     node2.open_channel_negotiate(neg_msg);
+
+    let transfer_amount = 1_000_000;
+    let offchain_txn = node1.off_chain_pay(coin_struct_tag(), addr2, transfer_amount).unwrap();
+    debug!("txn:{:#?}", offchain_txn);
+
+    //wallet.apply_txn(&offchain_txn);
+    //assert_eq!(amount - transfer_amount - offchain_txn.output().gas_used(), wallet.balance());
+
+
 /*     
         let mut dialer=MemorySocket::connect(10).unwrap();
         let mut stream = Framed::new(dialer.compat(), LengthDelimitedCodec::new()).sink_compat();

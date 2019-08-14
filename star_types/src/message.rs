@@ -177,6 +177,7 @@ impl IntoProto for AddressMessage {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MessageType {
     OpenChannelNodeNegotiateMessage,
     OpenChannelTransactionMessage,

@@ -24,6 +24,9 @@ use std::collections::HashMap;
 use types::account_address::AccountAddress;
 use failure::prelude::*;
 use std::{thread, time};
+use std::borrow::Borrow;
+use logger::prelude::*;
+
 
 pub struct Node <C: ChainClient+ Send+Sync+'static,TTransport:Transport+Sync+Send+'static>
     where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
@@ -33,7 +36,7 @@ pub struct Node <C: ChainClient+ Send+Sync+'static,TTransport:Transport+Sync+Sen
     dial_request_tx:UnboundedSender<(Multiaddr,AccountAddress)>,
     open_channel_negotiate_tx:UnboundedSender<OpenChannelNodeNegotiateMessage>,
     open_channel_message_tx:UnboundedSender<OpenChannelTransactionMessage>,
-    off_chain_pay_message_tx:UnboundedSender<OffChainPayMessage>,
+    off_chain_pay_message_tx:UnboundedSender<(types::language_storage::StructTag,AccountAddress,u64)>,
 }
 
 struct NodeInner<C: ChainClient+ Send+Sync+'static,TTransport:Transport+ Send+Sync+'static> 
@@ -45,7 +48,7 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
     dial_request_rx:UnboundedReceiver<(Multiaddr,AccountAddress)>,
     open_channel_negotiate_rx:UnboundedReceiver<OpenChannelNodeNegotiateMessage>,
     open_channel_message_rx:UnboundedReceiver<OpenChannelTransactionMessage>,
-    off_chain_pay_message_rx:UnboundedReceiver<OffChainPayMessage>,
+    off_chain_pay_message_rx:UnboundedReceiver<(types::language_storage::StructTag,AccountAddress,u64)>,
 }
 
 struct NodeData<C: ChainClient+ Send+Sync+'static> {
@@ -117,8 +120,9 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
         self.open_channel_message_tx.unbounded_send(open_channel_message);
     }
 
-    pub fn off_chain_pay(&self,off_chain_pay_message:OffChainPayMessage){
-        self.off_chain_pay_message_tx.unbounded_send(off_chain_pay_message);
+    pub fn off_chain_pay(&self,coin_resource_tag: types::language_storage::StructTag, receiver_address: AccountAddress, amount: u64)->Result<()>{
+        self.off_chain_pay_message_tx.unbounded_send((coin_resource_tag,receiver_address,amount));
+        Ok(())
     }
 
 }
@@ -146,7 +150,7 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
                             self.executor.spawn(Self::handle_stream(f_stream.await.unwrap(),addr.clone(),tx,rx,node_data).boxed().unit_error().compat());                                                        
                         }
                         Err(e) => {
-                            println!("Incoming connection error {}", e);
+                            warn!("Incoming connection error {}", e);
                         }
                     }
                 },
@@ -156,8 +160,8 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
                 msg=self.open_channel_message_rx.select_next_some() => {
                     self.open_channel(msg);
                 },
-                msg=self.off_chain_pay_message_rx.select_next_some() => {
-                    self.off_chain_pay(msg);
+                (resource_type,account_addr,amount)=self.off_chain_pay_message_rx.select_next_some() => {
+                    self.off_chain_pay(resource_type,account_addr,amount);
                 },
                 complete => break,
             }
@@ -173,6 +177,7 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
         loop {
             futures::select! {
                 data = f_stream.select_next_some() => {
+                    debug!("received msg");
                     let data = bytes::Bytes::from(data.unwrap());
                     let msg_type=parse_message_type(&data);
                     match msg_type {
@@ -180,10 +185,11 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
                         MessageType::OpenChannelTransactionMessage => Self::handle_open_channel(data[2..].to_vec(),node_data.clone()),
                         MessageType::OffChainPayMessage => Self::handle_off_chain_pay(data[2..].to_vec(),node_data.clone()),
                         MessageType::AddressMessage => Self::handle_addr(data[2..].to_vec(),tx.clone(),node_data.clone()),
+                        _=>warn!("message type not found {:?}",msg_type),
                     };                                        
                 },
                 data = rx.select_next_some() => {//send data
-                    println!("send real data");
+                    debug!("send real data");
                     f_stream.send(data).await;
                 },
                 complete => break,
@@ -200,39 +206,40 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
                     Some(sender) => {
                         sender.unbounded_send(msg);
                     },
-                    _ => println!("Don't have Ashley's number."),
+                    _ => warn!("can't find sender by multi addr {:?}",addr),
                 }
             },
-            _ => println!("Don't have ABC's number."),
+            _ => warn!("can't find multi addr by account addr {:?}",account_addr),
         }        
     }
 
     fn handle_addr(data:Vec<u8>,tx:UnboundedSender<bytes::Bytes>,node_data:Arc<Mutex<NodeData<C>>>){
         let account_addr = AddressMessage::from_proto_bytes(&data).unwrap();        
-        println!("{:?}",account_addr);
         node_data.lock().unwrap().addr_sender_map.insert(account_addr.addr.clone(),account_addr.ip_addr.clone());
         node_data.lock().unwrap().sender_map.insert(account_addr.ip_addr,tx);
     }
 
     fn handle_open_channel_negotiate(data:Vec<u8>,node_data:Arc<Mutex<NodeData<C>>>){
+        debug!("handle_open_channel_negotiate");
         let negotiate_message = OpenChannelNodeNegotiateMessage::from_proto_bytes(&data).unwrap();
         let raw_message = &(negotiate_message.raw_negotiate_message);
         if (raw_message.sender_addr == node_data.lock().unwrap().wallet.get_address()){
             match negotiate_message.receiver_sign {
                 Some(sign)=>{
-                    println!("receive 2 sign");
+                    debug!("receive 2 sign");
                     // TODO send open channel msg
                 },
-                None=>println!("none"),
+                None=>debug!("none"),
             }
         }
         if (raw_message.receiver_addr == node_data.lock().unwrap().wallet.get_address()){
             // sign message ,verify messsage,send back
-            println!("receive sender neg msg");    
+            debug!("receive sender neg msg");    
         }
     }
 
     fn handle_open_channel(data:Vec<u8>,node_data:Arc<Mutex<NodeData<C>>>){
+        debug!("handle_open_channel");
         let open_channel_message = OpenChannelTransactionMessage::from_proto_bytes(&data).unwrap();
         if (&open_channel_message.transaction.receiver() == &node_data.lock().unwrap().wallet.get_address()){
             // sign message ,verify messsage,send back    
@@ -241,15 +248,28 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
             if (open_channel_message.transaction.output_signatures().len()==2){
                 // wallet open channel
             }else {
-                println!("sign should eq 2");
+                debug!("sign should eq 2");
             }
         }
     }
 
-    fn handle_off_chain_pay(data:Vec<u8>,node_data:Arc<Mutex<NodeData<C>>>){    
+    fn handle_off_chain_pay(data:Vec<u8>,mut node_data:Arc<Mutex<NodeData<C>>>){ 
+        debug!("off chain pay");
         let off_chain_pay_message = OffChainPayMessage::from_proto_bytes(&data).unwrap();
-         if (off_chain_pay_message.transaction.receiver() == node_data.lock().unwrap().wallet.get_address()){
-            // sign message ,verify messsage, execute tx local
+        let raw_transaction = off_chain_pay_message.transaction.borrow();
+        let local_addr =node_data.lock().unwrap().wallet.get_address();
+        if (&raw_transaction.receiver() == &local_addr){
+            // sign message ,verify messsage, execute tx local            
+            node_data.lock().unwrap().wallet.apply_txn(raw_transaction).unwrap();
+            let receiver_addr = &&raw_transaction.txn().sender(); //send to tx sender
+            let off_chain_pay_message = OffChainPayMessage::new(raw_transaction.clone());
+            let msg = add_message_type(off_chain_pay_message.into_proto_bytes().unwrap(), MessageType::OffChainPayMessage);
+            Self::send_message(receiver_addr,msg,node_data.clone());
+        }
+        if (&raw_transaction.txn().sender() == &local_addr) {
+            debug!("receive feed back pay");
+            node_data.lock().unwrap().wallet.apply_txn(raw_transaction).unwrap();
+            info!("tx succ");
         }
     }
 
@@ -293,10 +313,13 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
         Ok(())
     }
 
-    fn off_chain_pay(&self,off_chain_pay_message:OffChainPayMessage)->Result<()>{
-        let addr=&off_chain_pay_message.transaction.receiver();
-        let msg = add_message_type(off_chain_pay_message.into_proto_bytes()?, MessageType::OpenChannelTransactionMessage);
-        Self::send_message(addr ,msg,self.node_data.clone());
+    fn off_chain_pay(&self,coin_resource_tag: types::language_storage::StructTag, receiver_address: AccountAddress, amount: u64)->Result<()>{
+        let off_chain_pay_tx = self.node_data.clone().lock().unwrap().wallet.transfer(coin_resource_tag,receiver_address,amount)?;
+        let off_chain_pay_msg = OffChainPayMessage {
+            transaction:off_chain_pay_tx,
+        };
+        let msg = add_message_type(off_chain_pay_msg.into_proto_bytes()?, MessageType::OffChainPayMessage);
+        Self::send_message(&receiver_address ,msg,self.node_data.clone());
         Ok(())
     }
 
