@@ -29,6 +29,7 @@ message OffChainPayMessage {
 
 message AddressMessage {
     bytes addr = 1;
+    bytes ip_addr = 2;
 }
 
 message ReceiveSignMessage {

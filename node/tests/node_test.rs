@@ -30,6 +30,8 @@ use proto_conv::{IntoProtoBytes,FromProto,FromProtoBytes,IntoProto};
 use nextgen_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
 use nextgen_crypto::traits::SigningKey;
 use std::sync::{Arc,Mutex};
+use futures_01::future::Future as Future01;
+use std::time::{SystemTime,UNIX_EPOCH};
 
 
 #[test]
@@ -45,8 +47,8 @@ fn start_server_test() -> Result<()> {
     //let node2 = Arc::new(Mutex::new(node2));    
     node2.start_server("/memory/20".parse().unwrap());
 
-    node2.connect("/memory/10".parse().unwrap(),addr2);
-
+    node2.connect("/memory/10".parse().unwrap(),addr1);
+    
     let neg_msg = create_negotiate_message(addr2,addr1 ,keypair2.private_key);
     node2.open_channel_negotiate(neg_msg);
 /*     
@@ -66,15 +68,15 @@ fn start_server_test() -> Result<()> {
     executor.spawn(f.boxed()
             .unit_error()
             .compat(),);
- */    //rt.shutdown_on_idle().wait().unwrap();
+ */ //rt.shutdown_on_idle().wait().unwrap();
     Ok(())
 }
 
 fn gen_node(executor:TaskExecutor)->(Node<MockChainClient,MemoryTransport>,AccountAddress,KeyPair<Ed25519PrivateKey,Ed25519PublicKey>){
     let switch:Switch<MemorySocket> = Switch::new();
 
-    let amount: u64 = 1_000_000_000;
-    let mut rng: StdRng = SeedableRng::from_seed([0; 32]);
+    let amount: u64 = 1_000_000_000;    
+    let mut rng: StdRng = SeedableRng::seed_from_u64(get_unix_ts());//SeedableRng::from_seed([0; 32]);
     let keypair = KeyPair::generate_for_testing(&mut rng);
     let client = Arc::new(MockChainClient::new());
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
@@ -93,4 +95,10 @@ fn create_negotiate_message(sender_addr:AccountAddress,receiver_addr:AccountAddr
     let hash_value = hasher.finish();
     let sender_sign=private_key.sign_message(&hash_value);
     OpenChannelNodeNegotiateMessage::new(rtx,sender_sign,None)
+}
+
+fn get_unix_ts()->u64{
+    let start = SystemTime::now();
+    let since_the_epoch = start.duration_since(UNIX_EPOCH).expect("Time went backwards");;   
+    since_the_epoch.as_millis() as u64
 }
