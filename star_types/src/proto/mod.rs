@@ -8,3 +8,4 @@ pub mod message;
 pub mod chain;
 pub mod chain_grpc;
 pub mod chain_client;
+pub mod change_set;
