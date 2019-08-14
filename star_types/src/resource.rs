@@ -95,7 +95,7 @@ impl Resource {
                 let change_op = if first_value == second_value {
                     ChangeOp::None
                 } else {
-                    ChangeOp::Update(second.clone().peek().clone())
+                    ChangeOp::Update(second_value.as_bytes().to_vec())
                 };
                 changes.push((accesses, change_op));
             } else {
@@ -105,7 +105,7 @@ impl Resource {
                 let change_op = if first_value == second_value {
                     ChangeOp::None
                 } else {
-                    ChangeOp::Update(second.clone().peek().clone())
+                    ChangeOp::Update(second_value.to_vec())
                 };
                 changes.push((accesses, change_op));
             } else {
@@ -115,7 +115,8 @@ impl Resource {
                 let change_op = if first_value == second_value {
                     ChangeOp::None
                 } else {
-                    ChangeOp::Update(second.clone().peek().clone())
+                    let byte: u8 = if *second_value { 1 } else { 0 };
+                    ChangeOp::Update(vec![byte])
                 };
                 changes.push((accesses, change_op));
             } else {
@@ -125,7 +126,7 @@ impl Resource {
                 let change_op = if first_value == second_value {
                     ChangeOp::None
                 } else {
-                    ChangeOp::Update(second.clone().peek().clone())
+                    ChangeOp::Update(second_value.clone().into_bytes())
                 };
                 changes.push((accesses, change_op));
             } else {

@@ -14,7 +14,7 @@ pub enum ChangeOp {
     None,
     Plus(u64),
     Minus(u64),
-    Update(Value),
+    Update(Vec<u8>),
     Deletion,
 }
 
