@@ -10,7 +10,7 @@ message ChangeOp {
 }
 
 message ChangeOpType {
-    oneof ChangeType {
+    oneof change_type {
         EmptyArg None = 1;
         uint64 Plus = 2;
         uint64 Minus = 3;

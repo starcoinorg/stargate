@@ -8,9 +8,10 @@ use proto_conv::{FromProto, IntoProto};
 use types::access_path::{AccessPath, Accesses};
 use std::mem;
 use ::protobuf::RepeatedField;
-use super::proto::change_set::{ChangeOpType_oneof_ChangeType, EmptyArg, ChangeSet as ChangeSetProto};
+use super::proto::change_set::{ChangeOpType_oneof_change_type, EmptyArg, ChangeSet as ChangeSetProto};
 use vm_runtime_types::{value::{MutVal, Value}};
 use canonical_serialization::{SimpleDeserializer, SimpleSerializer};
+use radix_trie::TrieKey;
 
 #[derive(Clone, Debug)]
 pub enum ChangeOp {
@@ -337,101 +338,94 @@ impl ::std::iter::IntoIterator for ChangeSet {
     }
 }
 
-//impl FromProto for ChangeSet {
-//    type ProtoType = crate::proto::change_set::ChangeSet;
-//
-//    fn from_proto(mut change_set_pb: Self::ProtoType) -> Result<Self> {
-//        use crate::proto::change_set::ChangeOpType;
-//        let mut change_set: Vec<(AccessPath, FieldChanges)> = vec![];
-//        let change_vec = change_set_pb.changes;
-//        change_vec.iter().for_each(|change_op_pb| {
-//            let access_path = AccessPath::from_proto(change_op_pb.access_path).unwrap();
-//            // TODO
-//            //1. path反序列化成StructTag
-//            //2. 从struct_cache中获取StructDef
-//            let mut changes: Vec<(Accesses, ChangeOp)> = vec![];
-//            change_op_pb.field_changes.iter().for_each(|mut field_change_pb| {
-//                let accesses = Accesses::from(field_change_pb.take_accesses());
-//                let change_op_type = field_change_pb.take_change_type();
-//
-//                let change_op = match change_op_type {
-//                    ChangeOpType_oneof_ChangeType::None(_) => { ChangeOp::None }
-//                    ChangeOpType_oneof_ChangeType::Plus(data) => {
-//                        ChangeOp::Plus(data)
-//                    }
-//                    ChangeOpType_oneof_ChangeType::Minus(data) => {
-//                        ChangeOp::Minus(data)
-//                    }
-//                    ChangeOpType_oneof_ChangeType::Update(blob) => {
-//                        let mut deserializer = SimpleDeserializer::new(&blob);
-//                        //3. 使用StructDef
-//                        let value = value_serializer::deserialize_struct(&mut deserializer, &struct_ef).unwrap();
-//                        ChangeOp::Update(value)
-//                    }
-//                    ChangeOpType_oneof_ChangeType::Deletion(_) => {
-//                        ChangeOp::Deletion
-//                    }
-//                };
-//
-//                changes.push((accesses, change_op));
-//            });
-//
-//            let field_changes = FieldChanges::new(changes);
-//            change_set.push((access_path, field_changes));
-//        });
-//
-//        let write_set_mut = ChangeSetMut::new(change_set);
-//        write_set_mut.freeze()
-//    }
-//}
-//
-//impl IntoProto for ChangeSet {
-//    type ProtoType = crate::proto::change_set::ChangeSet;
-//
-//    fn into_proto(self) -> Self::ProtoType {
-//        use crate::proto::change_set::{ChangeOp as ProtoChangeOp, ChangeOpType, FieldChange};
-//
-//        let mut change_set = RepeatedField::new();
-//        self.iter().for_each(|(access_path, field_changes)| {
-//            let access_path_pb = access_path.into_proto();
-//            let mut fields = RepeatedField::new();
-//            field_changes.iter().for_each(|(accesses, change_op)| {
-//                let accesses_bytes = accesses.encode_bytes();
-//                let mut change_op_type = ChangeOpType::new();
-//                match change_op {
-//                    ChangeOp::None => {
-//                        change_op_type.set_None(EmptyArg::new());
-//                    }
-//                    ChangeOp::Plus(data) => {
-//                        change_op_type.set_Plus(*data);
-//                    }
-//                    ChangeOp::Minus(data) => {
-//                        change_op_type.set_Minus(*data)
-//                    }
-//                    ChangeOp::Update(value) => {
-//                        let val = SimpleSerializer::<Vec<u8>>::serialize(value).ok().unwrap();
-//                        change_op_type.set_Update(val);
-//                    }
-//                    ChangeOp::Deletion => {
-//                        change_op_type.set_Deletion(EmptyArg::new())
-//                    }
-//                };
-//                let mut field_change = FieldChange::new();
-//                field_change.set_accesses(accesses_bytes);
-//                field_change.set_change_type(change_op_type);
-//
-//                fields.push(field_change);
-//            });
-//
-//            let mut change_op_pb = ProtoChangeOp::new();
-//            change_op_pb.set_access_path(accesses_bytes);
-//            change_op_pb.set_field_changes(fields);
-//
-//            change_set.push(change_op_pb);
-//        });
-//
-//        let mut change_set_pb = ChangeSetProto::new();
-//        change_set_pb.set_changes(change_set);
-//        change_set_pb
-//    }
-//}
+impl FromProto for ChangeSet {
+    type ProtoType = crate::proto::change_set::ChangeSet;
+
+    fn from_proto(change_set_pb: Self::ProtoType) -> Result<Self> {
+        use crate::proto::change_set::ChangeOpType;
+        let mut change_set: Vec<(AccessPath, FieldChanges)> = vec![];
+        let change_vec = change_set_pb.changes;
+        change_vec.iter().for_each(|change_op_pb| {
+            let access_path = AccessPath::from_proto(change_op_pb.clone().take_access_path()).unwrap();
+            let mut changes: Vec<(Accesses, ChangeOp)> = vec![];
+            change_op_pb.field_changes.iter().for_each(|field_change_pb| {
+                let accesses = Accesses::from(field_change_pb.clone().take_accesses());
+                let change_op_type = field_change_pb.clone().take_change_type();
+
+                let change_op = match change_op_type.change_type.unwrap() {
+                    ChangeOpType_oneof_change_type::None(_) => { ChangeOp::None }
+                    ChangeOpType_oneof_change_type::Plus(data) => {
+                        ChangeOp::Plus(data)
+                    }
+                    ChangeOpType_oneof_change_type::Minus(data) => {
+                        ChangeOp::Minus(data)
+                    }
+                    ChangeOpType_oneof_change_type::Update(blob) => {
+                        ChangeOp::Update(blob)
+                    }
+                    ChangeOpType_oneof_change_type::Deletion(_) => {
+                        ChangeOp::Deletion
+                    }
+                };
+
+                changes.push((accesses, change_op));
+            });
+
+            let field_changes = FieldChanges::new(changes);
+            change_set.push((access_path, field_changes));
+        });
+
+        let write_set_mut = ChangeSetMut::new(change_set);
+        write_set_mut.freeze()
+    }
+}
+
+impl IntoProto for ChangeSet {
+    type ProtoType = crate::proto::change_set::ChangeSet;
+
+    fn into_proto(self) -> Self::ProtoType {
+        use crate::proto::change_set::{ChangeOp as ProtoChangeOp, ChangeOpType, FieldChange};
+
+        let mut change_set = RepeatedField::new();
+        self.iter().for_each(|(access_path, field_changes)| {
+            let access_path_pb = access_path.clone().into_proto();
+            let mut fields = RepeatedField::new();
+            field_changes.iter().for_each(|(accesses, change_op)| {
+                let accesses_bytes = (*accesses).encode_bytes();
+                let mut change_op_type = ChangeOpType::new();
+                match change_op {
+                    ChangeOp::None => {
+                        change_op_type.set_None(EmptyArg::new());
+                    }
+                    ChangeOp::Plus(data) => {
+                        change_op_type.set_Plus(*data);
+                    }
+                    ChangeOp::Minus(data) => {
+                        change_op_type.set_Minus(*data)
+                    }
+                    ChangeOp::Update(val) => {
+                        change_op_type.set_Update(val.clone());
+                    }
+                    ChangeOp::Deletion => {
+                        change_op_type.set_Deletion(EmptyArg::new())
+                    }
+                };
+                let mut field_change = FieldChange::new();
+                field_change.set_accesses(accesses_bytes);
+                field_change.set_change_type(change_op_type);
+
+                fields.push(field_change);
+            });
+
+            let mut change_op_pb = ProtoChangeOp::new();
+            change_op_pb.set_access_path(access_path_pb);
+            change_op_pb.set_field_changes(fields);
+
+            change_set.push(change_op_pb);
+        });
+
+        let mut change_set_pb = ChangeSetProto::new();
+        change_set_pb.set_changes(change_set);
+        change_set_pb
+    }
+}
