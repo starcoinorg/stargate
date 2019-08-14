@@ -94,15 +94,19 @@ impl ChainService {
     fn submit_transaction_real(&self, tx: TransactionInner) {
         match tx {
             TransactionInner::OnChain(on_chain_tx) => {
-                self.submit_on_chain_transaction(on_chain_tx)
+                self.apply_on_chain_transaction(on_chain_tx)
             }
             TransactionInner::OffChain(off_chain_tx) => {
-                //TODO
+                self.apply_off_chain_transaction(off_chain_tx)
             }
         }
     }
 
-    fn submit_on_chain_transaction(&self, sign_tx: SignedTransaction) {
+    fn apply_off_chain_transaction(&self, sign_tx: OffChainTransaction) {
+        unimplemented!()
+    }
+
+    fn apply_on_chain_transaction(&self, sign_tx: SignedTransaction) {
         let signed_tx_hash = sign_tx.clone().hash();
         let mut tx_db = self.tx_db.lock().unwrap();
         let exist_flag = tx_db.exist_signed_transaction(signed_tx_hash);
@@ -142,8 +146,8 @@ impl ChainService {
         }
     }
 
-    pub async fn submit_transaction_inner(&self, mut sender: channel::Sender<TransactionInner>, sign_tx: SignedTransaction) {
-        sender.send(TransactionInner::OnChain(sign_tx)).await.unwrap();
+    pub async fn submit_transaction_inner(&self, mut sender: channel::Sender<TransactionInner>, inner_tx: TransactionInner) {
+        sender.send(inner_tx).await.unwrap();
     }
 
     pub fn watch_transaction_inner(&self, address: Vec<u8>) -> UnboundedReceiver<WatchTransactionResponse> {
@@ -220,7 +224,7 @@ impl Chain for ChainService {
             let submit_txn_pb = req.signed_txn.clone().unwrap();
             Ok((signed_txn, submit_txn_pb))
         }).and_then(|(signed_txn, submit_txn_pb)| {
-            block_on(self.submit_transaction_inner(self.sender.clone(), signed_txn.clone()));
+            block_on(self.submit_transaction_inner(self.sender.clone(), TransactionInner::OnChain(signed_txn.clone())));
             let mut wt_resp = WatchTransactionResponse::new();
             wt_resp.set_signed_txn(submit_txn_pb);
             pub_sub::send(wt_resp)?;
@@ -237,25 +241,23 @@ impl Chain for ChainService {
 
     fn submit_off_chain_transaction(&mut self, ctx: ::grpcio::RpcContext, req: OffChainTransactionProto,
                                     sink: ::grpcio::UnarySink<SubmitTransactionResponse>) {
-//        let resp = OffChainTransaction::from_proto(req).and_then(|off_chain_tx| {
-//            let submit_txn_pb = req.signed_txn.clone().unwrap();
-//            Ok((signed_txn, submit_txn_pb))
-//        }).and_then(|(signed_txn, submit_txn_pb)| {
-//            block_on(self.submit_transaction_inner(self.sender.clone(), signed_txn.clone()));
-//            let mut wt_resp = WatchTransactionResponse::new();
-//            wt_resp.set_signed_txn(submit_txn_pb);
-//            pub_sub::send(wt_resp)?;
-//
-//            let mut submit_resp = SubmitTransactionResponse::new();
-//            let mut state = MempoolAddTransactionStatus::new();
-//            state.set_code(MempoolAddTransactionStatusCode::Valid);
-//            submit_resp.set_mempool_status(state);
-//            Ok(submit_resp)
-//        });
-//
-//        provide_grpc_response(resp, ctx, sink);
+        let resp = OffChainTransaction::from_proto(req.clone()).and_then(|off_chain_tx| {
+            let submit_txn_pb = req.transaction.clone().unwrap();
+            Ok((off_chain_tx, submit_txn_pb))
+        }).and_then(|(off_chain_tx, submit_txn_pb)| {
+            block_on(self.submit_transaction_inner(self.sender.clone(), TransactionInner::OffChain(off_chain_tx)));
+            let mut wt_resp = WatchTransactionResponse::new();
+            wt_resp.set_signed_txn(submit_txn_pb);
+            pub_sub::send(wt_resp)?;
 
-        unimplemented!()
+            let mut submit_resp = SubmitTransactionResponse::new();
+            let mut state = MempoolAddTransactionStatus::new();
+            state.set_code(MempoolAddTransactionStatusCode::Valid);
+            submit_resp.set_mempool_status(state);
+            Ok(submit_resp)
+        });
+
+        provide_grpc_response(resp, ctx, sink);
     }
 
     fn watch_transaction(&mut self, ctx: ::grpcio::RpcContext,
