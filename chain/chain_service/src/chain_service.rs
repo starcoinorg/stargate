@@ -36,7 +36,7 @@ use star_types::{offchain_transaction::OffChainTransaction,
 use vm_runtime::{MoveVM, VMVerifier, VMExecutor};
 use lazy_static::lazy_static;
 use config::config::{VMConfig, VMPublishingOption};
-use super::struct_cache::StructCache;
+use struct_cache::StructCache;
 use vm::file_format::{CompiledModule, StructDefinition};
 use core::borrow::Borrow;
 use vm_runtime_types::loaded_data::struct_def::StructDef;
@@ -237,6 +237,24 @@ impl Chain for ChainService {
 
     fn submit_off_chain_transaction(&mut self, ctx: ::grpcio::RpcContext, req: OffChainTransactionProto,
                                     sink: ::grpcio::UnarySink<SubmitTransactionResponse>) {
+//        let resp = OffChainTransaction::from_proto(req).and_then(|off_chain_tx| {
+//            let submit_txn_pb = req.signed_txn.clone().unwrap();
+//            Ok((signed_txn, submit_txn_pb))
+//        }).and_then(|(signed_txn, submit_txn_pb)| {
+//            block_on(self.submit_transaction_inner(self.sender.clone(), signed_txn.clone()));
+//            let mut wt_resp = WatchTransactionResponse::new();
+//            wt_resp.set_signed_txn(submit_txn_pb);
+//            pub_sub::send(wt_resp)?;
+//
+//            let mut submit_resp = SubmitTransactionResponse::new();
+//            let mut state = MempoolAddTransactionStatus::new();
+//            state.set_code(MempoolAddTransactionStatusCode::Valid);
+//            submit_resp.set_mempool_status(state);
+//            Ok(submit_resp)
+//        });
+//
+//        provide_grpc_response(resp, ctx, sink);
+
         unimplemented!()
     }
 
@@ -334,9 +352,6 @@ mod tests {
             code,
             ..Compiler::default()
         };
-//        let program_bytes = compiler.into_script_blob().unwrap();
-//
-//        let program = Program::new(program_bytes, vec![], vec![]);
 
         let program = compiler.into_program(vec![]).unwrap();
 

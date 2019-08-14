@@ -204,6 +204,10 @@ impl Accesses {
         assert!(self.0.len() >= new_len);
         Accesses(self.0.clone().into_iter().take(new_len).collect())
     }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.into()
+    }
 }
 
 impl<'a> IntoIterator for &'a Accesses {
@@ -231,6 +235,12 @@ impl From<Vec<u8>> for Accesses {
             }
         }
         Accesses::from(accesses)
+    }
+}
+
+impl Into<Vec<u8>> for &Accesses {
+    fn into(self) -> Vec<u8> {
+        self.as_separated_string().into_bytes()
     }
 }
 

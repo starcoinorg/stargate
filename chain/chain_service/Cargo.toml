@@ -34,6 +34,7 @@ vm_runtime_types = { path = "../../language/vm/vm_runtime/vm_runtime_types" }
 vm = { path = "../../language/vm" }
 state_view = { path = "../../storage/state_view" }
 bytecode_verifier = { path = "../../language/bytecode_verifier" }
+struct_cache = { path = "../../storage/struct_cache" }
 
 [dependencies.ed25519-dalek]
 version = "1.0.0-pre.1"

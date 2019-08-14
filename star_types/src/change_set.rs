@@ -391,7 +391,7 @@ impl IntoProto for ChangeSet {
             let access_path_pb = access_path.clone().into_proto();
             let mut fields = RepeatedField::new();
             field_changes.iter().for_each(|(accesses, change_op)| {
-                let accesses_bytes = (*accesses).encode_bytes();
+                let accesses_bytes = accesses.to_bytes();
                 let mut change_op_type = ChangeOpType::new();
                 match change_op {
                     ChangeOp::None => {

@@ -1,0 +1,16 @@
+[package]
+name = "struct_cache"
+version = "0.1.0"
+authors = ["tiangong3624749 <tiangong3624749@163.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+crypto = { path = "../../crypto/legacy_crypto" }
+vm_runtime_types = { path = "../../language/vm/vm_runtime/vm_runtime_types" }
+vm_runtime = { path = "../../language/vm/vm_runtime" }
+types = { path = "../../types" }
+state_view = { path = "../state_view" }
+vm = { path = "../../language/vm" }
+bytecode_verifier = { path = "../../language/bytecode_verifier" }
