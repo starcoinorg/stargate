@@ -372,6 +372,6 @@ mod tests {
 
         let mut rt = Runtime::new().unwrap();
         let chain_service = ChainService::new(&mut rt);
-        chain_service.submit_on_chain_transaction(signed_tx);
+        chain_service.apply_on_chain_transaction(signed_tx);
     }
 }
