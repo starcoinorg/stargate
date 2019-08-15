@@ -2,8 +2,10 @@ use std::thread;
 
 use canonical_serialization::{CanonicalDeserialize, CanonicalSerialize, SimpleDeserializer, SimpleSerializer};
 use types::account_config::AccountResource;
+use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR};
 
 use super::*;
+use types::transaction::TransactionPayload;
 
 #[test]
 fn test_state_storage() {
@@ -44,4 +46,18 @@ fn test_multi_thread() {
     thread::spawn(move || {
         println!("{:#?}", storage.root_hash())
     });
+}
+
+#[test]
+fn test_genesis_tx(){
+    let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
+    let genesis_txn = genesis_checked_txn.into_inner();
+    let mut storage = StateStorage::new();
+    if let TransactionPayload::WriteSet(write_set)  = genesis_txn.payload(){
+        storage.apply_write_set(write_set).unwrap();
+    }
+    let account = AccountAddress::default();
+    let account_state = storage.get_account_state(&account).unwrap();
+    let map:BTreeMap<Vec<u8>,Vec<u8>> = account_state.into();
+    println!("{:?}", map);
 }

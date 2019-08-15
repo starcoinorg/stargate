@@ -15,13 +15,13 @@ use nextgen_crypto::SigningKey;
 use nextgen_crypto::test_utils::KeyPair;
 use star_types::{account_resource_ext, channel::SgChannelStream, transaction_output_helper};
 use star_types::offchain_transaction::{
-    OffChainTransaction, TransactionOutputSigner,
+    OffChainTransaction, TransactionOutputSigner,TransactionOutput
 };
 use star_types::resource::Resource;
 use types::account_address::AccountAddress;
 use types::account_config::{account_resource_path, AccountResource, coin_struct_tag};
 use types::language_storage::StructTag;
-use types::transaction::{Program, RawTransaction, RawTransactionBytes, SignedTransaction, TransactionOutput, TransactionStatus};
+use types::transaction::{Program, RawTransaction, RawTransactionBytes, SignedTransaction, TransactionStatus};
 use types::transaction_helpers::TransactionSigner;
 use types::vm_error::*;
 
@@ -71,7 +71,13 @@ impl<C> Wallet<C>
     }
 
     pub fn execute_transaction(&self, transaction: SignedTransaction) -> TransactionOutput {
-        self.vm.execute_transaction(transaction)
+        let libra_output = self.vm.execute_transaction(transaction);
+        TransactionOutput::new(
+            self.storage.borrow().write_set_to_change_set(libra_output.write_set()).unwrap(),
+            libra_output.events().to_vec(),
+            libra_output.gas_used(),
+            libra_output.status().clone()
+        )
     }
 
     pub fn validate_transaction(&self, transaction: SignedTransaction) -> Option<VMStatus> {
