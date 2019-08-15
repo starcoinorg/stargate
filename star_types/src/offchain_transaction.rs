@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use failure::prelude::*;
 use nextgen_crypto::ed25519::{Ed25519PublicKey, Ed25519Signature};
 use types::account_address::AccountAddress;
-use types::transaction::{RawTransaction, SignedTransaction, TransactionStatus, TransactionOutput};
+use types::transaction::{RawTransaction, SignedTransaction, TransactionStatus};
 use types::contract_event::ContractEvent;
 use types::write_set::WriteSet;
 use types::vm_error::VMStatus;
@@ -11,6 +11,56 @@ use proto_conv::{FromProto, IntoProto};
 use core::convert::TryFrom;
 use super::transaction_output_helper;
 use protobuf::RepeatedField;
+use crate::change_set::ChangeSet;
+
+
+/// The output of executing a transaction.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TransactionOutput {
+    /// The list of changes this transaction intends to do.
+    change_set: ChangeSet,
+
+    /// The list of events emitted during this transaction.
+    events: Vec<ContractEvent>,
+
+    /// The amount of gas used during execution.
+    gas_used: u64,
+
+    /// The execution status.
+    status: TransactionStatus,
+}
+
+impl TransactionOutput {
+    pub fn new(
+        change_set: ChangeSet,
+        events: Vec<ContractEvent>,
+        gas_used: u64,
+        status: TransactionStatus,
+    ) -> Self {
+        TransactionOutput {
+            change_set,
+            events,
+            gas_used,
+            status,
+        }
+    }
+
+    pub fn change_set(&self) -> &ChangeSet {
+        &self.change_set
+    }
+
+    pub fn events(&self) -> &[ContractEvent] {
+        &self.events
+    }
+
+    pub fn gas_used(&self) -> u64 {
+        self.gas_used
+    }
+
+    pub fn status(&self) -> &TransactionStatus {
+        &self.status
+    }
+}
 
 pub trait TransactionOutputSigner {
     fn sign_txn_output(&self, txn_output: &TransactionOutput) -> Result<Ed25519Signature>;

@@ -7,13 +7,19 @@ use failure::prelude::*;
 use proto_conv::{FromProto, IntoProto};
 use types::access_path::{AccessPath, Accesses};
 use std::mem;
-use ::protobuf::RepeatedField;
-use super::proto::change_set::{ChangeOpType_oneof_change_type, EmptyArg, ChangeSet as ChangeSetProto};
 use vm_runtime_types::{value::{MutVal, Value}};
 use canonical_serialization::{SimpleDeserializer, SimpleSerializer};
 use radix_trie::TrieKey;
+use types::write_set::WriteSet;
+use types::language_storage::StructTag;
+use vm_runtime_types::loaded_data::struct_def::StructDef;
+use crate::proto::change_set::ChangeOp_oneof_change;
+use vm_runtime_types::value::Reference;
+use types::byte_array::ByteArray;
+use types::account_address::AccountAddress;
+use std::convert::TryFrom;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ChangeOp {
     None,
     Plus(u64),
@@ -112,7 +118,50 @@ impl ChangeOp {
     }
 }
 
-#[derive(Clone, Debug)]
+pub trait Changeable{
+
+    fn apply_change(&mut self, op: ChangeOp) -> Result<()>;
+
+}
+
+impl Changeable for MutVal {
+
+    fn apply_change(&mut self, op: ChangeOp) -> Result<()> {
+        let value = match &*self.peek(){
+            Value::U64(value) => match op{
+                //TODO check overflow
+                ChangeOp::Plus(op_value) => Value::U64(*value+ op_value),
+                ChangeOp::Minus(op_value) => {
+                    println!("{} - {} ",value,op_value);
+                    Value::U64(*value - op_value)
+                },
+                _ => bail!("Can not apply change {:?} to {:?}", op, self)
+            },
+            Value::ByteArray(_) => match op {
+                ChangeOp::Update(bytes) => Value::ByteArray(ByteArray::new(bytes)),
+                _ => bail!("Can not apply change {:?} to {:?}", op, self)
+            },
+            Value::String(_) => match op {
+                ChangeOp::Update(bytes) => Value::String(String::from_utf8(bytes)?),
+                _ => bail!("Can not apply change {:?} to {:?}", op, self)
+            },
+            Value::Bool(_) => match op {
+                ChangeOp::Update(bytes) => Value::Bool(bytes[0]!=0),
+                _ => bail!("Can not apply change {:?} to {:?}", op, self)
+            },
+            Value::Address(_) => match op {
+                ChangeOp::Update(bytes) => Value::Address(AccountAddress::try_from(bytes)?),
+                _ => bail!("Can not apply change {:?} to {:?}", op, self)
+            }
+            _ => bail!("Can not apply change {:?} to {:?}", op, self)
+        };
+        //println!("replace {:?}", value);
+        self.0.replace(value);
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ChangeSet(ChangeSetMut);
 
 impl ChangeSet {
@@ -127,7 +176,7 @@ impl ChangeSet {
     }
 
     #[inline]
-    pub fn iter(&self) -> ::std::slice::Iter<(AccessPath, FieldChanges)> {
+    pub fn iter(&self) -> ::std::slice::Iter<(AccessPath, Changes)> {
         self.into_iter()
     }
 
@@ -141,7 +190,30 @@ impl ChangeSet {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Changes {
+    Value(Vec<u8>),
+    Fields(FieldChanges),
+    Deletion,
+}
+
+impl Changes {
+
+    /// merge other with self, and return old self
+    pub fn merge_with(&mut self, other: &Changes) -> Result<Changes>{
+        match self{
+            Changes::Value {..} => bail!("Unsupported whole value merge."),
+            Changes::Deletion => bail!("Unsupported deletion merge."),
+            Changes::Fields(field_changes) => if let Changes::Fields(other_field_changes) = other{
+                Ok(Changes::Fields(field_changes.merge_with(other_field_changes)?))
+            }else {
+                bail!("Unsupported merge {:?} with {:?}", self, other)
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FieldChanges(Vec<(Accesses, ChangeOp)>);
 
 impl FieldChanges {
@@ -240,18 +312,94 @@ impl Index<usize> for FieldChanges {
     }
 }
 
+impl FromProto for FieldChanges {
+    type ProtoType = crate::proto::change_set::FieldChanges;
 
-#[derive(Clone, Debug, Default)]
+    fn from_proto(mut object: Self::ProtoType) -> Result<Self> {
+        use ::protobuf::RepeatedField;
+        use crate::proto::change_set::{ChangeOpType_oneof_change_type, ChangeSet as ChangeSetProto};
+
+        Ok(FieldChanges::new(object.take_field_changes().iter_mut().map(|field_change|{
+            let accesses = Accesses::from(field_change.take_accesses());
+            let change_type = field_change.take_change_type().change_type;
+            let change_op = match change_type {
+                None => ChangeOp::None,
+                Some(change_type) => match change_type {
+                    ChangeOpType_oneof_change_type::None(_) => { ChangeOp::None }
+                    ChangeOpType_oneof_change_type::Plus(data) => {
+                        ChangeOp::Plus(data)
+                    }
+                    ChangeOpType_oneof_change_type::Minus(data) => {
+                        ChangeOp::Minus(data)
+                    }
+                    ChangeOpType_oneof_change_type::Update(blob) => {
+                        ChangeOp::Update(blob)
+                    }
+                    ChangeOpType_oneof_change_type::Deletion(_) => {
+                        ChangeOp::Deletion
+                    }
+                }
+            };
+            (accesses, change_op)
+        }).collect()))
+    }
+}
+
+impl IntoProto for FieldChanges {
+    type ProtoType = crate::proto::change_set::FieldChanges;
+
+    fn into_proto(self) -> Self::ProtoType {
+        use ::protobuf::RepeatedField;
+        use crate::proto::change_set::{ChangeOp as ProtoChangeOp, ChangeOpType, FieldChange};
+
+        let mut field_changes = Self::ProtoType::new();
+        let mut fields = RepeatedField::new();
+        self.iter().for_each(|(accesses, change_op)| {
+            let accesses_bytes = accesses.to_bytes();
+            let mut change_op_type = ChangeOpType::new();
+            match change_op {
+                ChangeOp::None => {
+                    change_op_type.set_None(true);
+                }
+                ChangeOp::Plus(data) => {
+                    change_op_type.set_Plus(*data);
+                }
+                ChangeOp::Minus(data) => {
+                    change_op_type.set_Minus(*data)
+                }
+                ChangeOp::Update(val) => {
+                    change_op_type.set_Update(val.clone());
+                }
+                ChangeOp::Deletion => {
+                    change_op_type.set_Deletion(true)
+                }
+            };
+            let mut field_change = FieldChange::new();
+            field_change.set_accesses(accesses_bytes);
+            field_change.set_change_type(change_op_type);
+            fields.push(field_change)
+        });
+        field_changes.set_field_changes(fields);
+        field_changes
+    }
+}
+
+pub trait StructDefResolve: Sync + Send{
+
+    fn resolve(&self, tag: &StructTag) -> Result<&StructDef>;
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ChangeSetMut {
-    change_set: Vec<(AccessPath, FieldChanges)>,
+    change_set: Vec<(AccessPath, Changes)>,
 }
 
 impl ChangeSetMut {
-    pub fn new(change_set: Vec<(AccessPath, FieldChanges)>) -> Self {
+    pub fn new(change_set: Vec<(AccessPath, Changes)>) -> Self {
         Self { change_set }
     }
 
-    pub fn push(&mut self, item: (AccessPath, FieldChanges)) {
+    pub fn push(&mut self, item: (AccessPath, Changes)) {
         self.change_set.push(item);
     }
 
@@ -270,11 +418,11 @@ impl ChangeSetMut {
         Ok(ChangeSet(self))
     }
 
-    pub fn get_changes(&self, access_path: &AccessPath) -> Option<&FieldChanges> {
+    pub fn get_changes(&self, access_path: &AccessPath) -> Option<&Changes> {
         self.change_set.iter().find(|(ap, _)| ap == access_path).map(|(_, change)| change)
     }
 
-    pub fn get_changes_mut(&mut self, access_path: &AccessPath) -> Option<&mut FieldChanges> {
+    pub fn get_changes_mut(&mut self, access_path: &AccessPath) -> Option<&mut Changes> {
         self.change_set.iter_mut().find(|(ap, _)| ap == access_path).map(|(_, change)| change)
     }
 
@@ -301,7 +449,7 @@ impl ChangeSetMut {
 }
 
 impl Index<usize> for ChangeSetMut {
-    type Output = (AccessPath, FieldChanges);
+    type Output = (AccessPath, Changes);
 
     #[inline]
     fn index(&self, index: usize) -> &Self::Output {
@@ -310,19 +458,19 @@ impl Index<usize> for ChangeSetMut {
 }
 
 
-impl ::std::iter::FromIterator<(AccessPath, FieldChanges)> for ChangeSetMut {
-    fn from_iter<I: IntoIterator<Item=(AccessPath, FieldChanges)>>(iter: I) -> Self {
-        let mut ws = ChangeSetMut::default();
-        for write in iter {
-            ws.push((write.0, write.1));
+impl ::std::iter::FromIterator<(AccessPath, Changes)> for ChangeSetMut {
+    fn from_iter<I: IntoIterator<Item=(AccessPath, Changes)>>(iter: I) -> Self {
+        let mut cs = ChangeSetMut::default();
+        for change in iter {
+            cs.push((change.0, change.1));
         }
-        ws
+        cs
     }
 }
 
 impl<'a> IntoIterator for &'a ChangeSet {
-    type Item = &'a (AccessPath, FieldChanges);
-    type IntoIter = ::std::slice::Iter<'a, (AccessPath, FieldChanges)>;
+    type Item = &'a (AccessPath, Changes);
+    type IntoIter = ::std::slice::Iter<'a, (AccessPath, Changes)>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.change_set.iter()
@@ -330,8 +478,8 @@ impl<'a> IntoIterator for &'a ChangeSet {
 }
 
 impl ::std::iter::IntoIterator for ChangeSet {
-    type Item = (AccessPath, FieldChanges);
-    type IntoIter = ::std::vec::IntoIter<(AccessPath, FieldChanges)>;
+    type Item = (AccessPath, Changes);
+    type IntoIter = ::std::vec::IntoIter<(AccessPath, Changes)>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.change_set.into_iter()
@@ -341,41 +489,26 @@ impl ::std::iter::IntoIterator for ChangeSet {
 impl FromProto for ChangeSet {
     type ProtoType = crate::proto::change_set::ChangeSet;
 
-    fn from_proto(change_set_pb: Self::ProtoType) -> Result<Self> {
+    fn from_proto(mut change_set_pb: Self::ProtoType) -> Result<Self> {
+        use ::protobuf::RepeatedField;
         use crate::proto::change_set::ChangeOpType;
-        let mut change_set: Vec<(AccessPath, FieldChanges)> = vec![];
-        let change_vec = change_set_pb.changes;
-        change_vec.iter().for_each(|change_op_pb| {
-            let access_path = AccessPath::from_proto(change_op_pb.clone().take_access_path()).unwrap();
-            let mut changes: Vec<(Accesses, ChangeOp)> = vec![];
-            change_op_pb.field_changes.iter().for_each(|field_change_pb| {
-                let accesses = Accesses::from(field_change_pb.clone().take_accesses());
-                let change_op_type = field_change_pb.clone().take_change_type();
-
-                let change_op = match change_op_type.change_type.unwrap() {
-                    ChangeOpType_oneof_change_type::None(_) => { ChangeOp::None }
-                    ChangeOpType_oneof_change_type::Plus(data) => {
-                        ChangeOp::Plus(data)
+        let change_set:Result<Vec<(AccessPath, Changes)>> = change_set_pb.take_changes().iter_mut().map(|change_op_pb| {
+            let access_path = AccessPath::from_proto(change_op_pb.take_access_path())?;
+            let changes = match change_op_pb.change.clone().ok_or(format_err!("change is none"))?{
+                    ChangeOp_oneof_change::Value(value) => {
+                        Changes::Value(value)
+                    },
+                    ChangeOp_oneof_change::Fields(field_changes) => {
+                        Changes::Fields(FieldChanges::from_proto(field_changes)?)
+                    },
+                    ChangeOp_oneof_change::Deletion(_) => {
+                        Changes::Deletion
                     }
-                    ChangeOpType_oneof_change_type::Minus(data) => {
-                        ChangeOp::Minus(data)
-                    }
-                    ChangeOpType_oneof_change_type::Update(blob) => {
-                        ChangeOp::Update(blob)
-                    }
-                    ChangeOpType_oneof_change_type::Deletion(_) => {
-                        ChangeOp::Deletion
-                    }
-                };
+            };
+            Ok((access_path, changes))
+        }).collect();
 
-                changes.push((accesses, change_op));
-            });
-
-            let field_changes = FieldChanges::new(changes);
-            change_set.push((access_path, field_changes));
-        });
-
-        let write_set_mut = ChangeSetMut::new(change_set);
+        let write_set_mut = ChangeSetMut::new(change_set?);
         write_set_mut.freeze()
     }
 }
@@ -384,43 +517,19 @@ impl IntoProto for ChangeSet {
     type ProtoType = crate::proto::change_set::ChangeSet;
 
     fn into_proto(self) -> Self::ProtoType {
-        use crate::proto::change_set::{ChangeOp as ProtoChangeOp, ChangeOpType, FieldChange};
+        use ::protobuf::RepeatedField;
+        use crate::proto::change_set::{ChangeOp as ProtoChangeOp, ChangeOpType, FieldChange, ChangeSet as ChangeSetProto};
 
         let mut change_set = RepeatedField::new();
-        self.iter().for_each(|(access_path, field_changes)| {
+        self.iter().for_each(|(access_path, changes)| {
             let access_path_pb = access_path.clone().into_proto();
-            let mut fields = RepeatedField::new();
-            field_changes.iter().for_each(|(accesses, change_op)| {
-                let accesses_bytes = accesses.to_bytes();
-                let mut change_op_type = ChangeOpType::new();
-                match change_op {
-                    ChangeOp::None => {
-                        change_op_type.set_None(EmptyArg::new());
-                    }
-                    ChangeOp::Plus(data) => {
-                        change_op_type.set_Plus(*data);
-                    }
-                    ChangeOp::Minus(data) => {
-                        change_op_type.set_Minus(*data)
-                    }
-                    ChangeOp::Update(val) => {
-                        change_op_type.set_Update(val.clone());
-                    }
-                    ChangeOp::Deletion => {
-                        change_op_type.set_Deletion(EmptyArg::new())
-                    }
-                };
-                let mut field_change = FieldChange::new();
-                field_change.set_accesses(accesses_bytes);
-                field_change.set_change_type(change_op_type);
-
-                fields.push(field_change);
-            });
-
             let mut change_op_pb = ProtoChangeOp::new();
+            match changes{
+                Changes::Value(code) => change_op_pb.set_Value(code.clone()),
+                Changes::Fields(field_changes) => change_op_pb.set_Fields(field_changes.clone().into_proto()),
+                Changes::Deletion => change_op_pb.set_Deletion(true),
+            };
             change_op_pb.set_access_path(access_path_pb);
-            change_op_pb.set_field_changes(fields);
-
             change_set.push(change_op_pb);
         });
 

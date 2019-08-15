@@ -64,6 +64,7 @@ use std::{
 };
 use crate::account_config::account_struct_tag;
 use std::convert::TryFrom;
+use std::ops::Index;
 
 #[derive(Default, Serialize, Deserialize, Debug, PartialEq, Hash, Eq, Clone, Ord, PartialOrd)]
 pub struct Field(String);
@@ -103,6 +104,13 @@ impl Access {
 
     pub fn new_with_index(idx: u64) -> Self {
         Access::Index(idx)
+    }
+
+    pub fn index(&self) -> Option<u64> {
+        match self{
+            Access::Index(val) => Some(*val),
+            _ => None
+        }
     }
 }
 
@@ -172,6 +180,10 @@ impl Accesses {
         self.0.last().unwrap() // guaranteed not to fail because sequence is non-empty
     }
 
+    pub fn first(&self) -> &Access {
+        self.0.first().unwrap()
+    }
+
     pub fn iter(&self) -> Iter<'_, Access> {
         self.0.iter()
     }
@@ -203,6 +215,10 @@ impl Accesses {
     pub fn take_nth(&self, new_len: usize) -> Accesses {
         assert!(self.0.len() >= new_len);
         Accesses(self.0.clone().into_iter().take(new_len).collect())
+    }
+
+    pub fn range(&self, from:usize, to:usize) -> Accesses {
+        Accesses(self.0[from..to].to_vec())
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -247,6 +263,15 @@ impl Into<Vec<u8>> for &Accesses {
 impl TrieKey for Accesses {
     fn encode_bytes(&self) -> Vec<u8> {
         self.as_separated_string().into_bytes()
+    }
+}
+
+impl Index<usize> for Accesses {
+
+    type Output = Access;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
     }
 }
 
@@ -335,6 +360,14 @@ impl DataPath {
             _ => false,
         }
     }
+
+    pub fn resource_tag(&self) -> Option<&StructTag> {
+        match self{
+            DataPath::OnChainResource {tag} => Some(tag),
+            DataPath::OffChainResource {participant,tag} => Some(tag),
+            _ => None,
+        }
+    }
 }
 
 impl From<&DataPath> for Vec<u8> {
@@ -399,7 +432,7 @@ impl AccessPath {
 
     /// Given an address, returns the corresponding access path that stores the Account resource.
     pub fn new_for_account(address: AccountAddress) -> Self {
-        Self::new(address, account_resource_path())
+        Self::new_for_account_resource(address)
     }
 
     /// Create an AccessPath for a ContractEvent.
@@ -495,18 +528,9 @@ impl AccessPath {
         if self.path.is_empty() {
             return None;
         }
-        match self.path[0]{
-            DataPath::CODE_TAG => None,
-            DataPath::ON_CHAIN_RESOURCE_TAG => Some(SimpleDeserializer::deserialize(&self.path.as_slice()[1..]).expect("invalid access path.")),
-            DataPath::OFF_CHAIN_RESOURCE_TAG => {
-                let parts = self.path.split(|byte|*byte == b'/').collect::<Vec<&[u8]>>();
-                if parts.len() < 2 {
-                    None
-                }else {
-                    SimpleDeserializer::deserialize(parts[1]).ok()
-                }
-            }
-            _ => None
+        match DataPath::from(self.path.as_slice()).ok(){
+            None => None,
+            Some(data_path) => data_path.resource_tag().cloned()
         }
     }
 }

@@ -6,23 +6,29 @@ import "access_path.proto";
 
 message ChangeOp {
     types.AccessPath access_path = 1;
-    repeated FieldChange field_changes = 2;
+    oneof change {
+        bytes Value = 2;
+        FieldChanges Fields = 3;
+        bool Deletion = 4;
+    }
 }
 
 message ChangeOpType {
     oneof change_type {
-        EmptyArg None = 1;
+        bool None = 1;
         uint64 Plus = 2;
         uint64 Minus = 3;
         bytes Update = 4;
-        EmptyArg Deletion = 5;
+        bool Deletion = 5;
     }
 }
 
-message EmptyArg {}
-
 message ChangeSet {
     repeated ChangeOp changes = 1;
+}
+
+message FieldChanges{
+    repeated FieldChange field_changes = 1;
 }
 
 message FieldChange {

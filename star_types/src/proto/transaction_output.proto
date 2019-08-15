@@ -2,12 +2,13 @@ syntax = "proto3";
 
 package star_types;
 
+import "change_set.proto";
 import "transaction.proto";
 import "events.proto";
 import "vm_errors.proto";
 
 message TransactionOutput {
-    types.WriteSet write_set = 1;
+    ChangeSet change_set = 1;
     repeated types.Event events = 2;
     uint64 gas_used = 3;
     TransactionStatus status = 4;

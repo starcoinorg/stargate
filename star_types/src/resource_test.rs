@@ -18,18 +18,20 @@ fn test_resource() {
 
     let resource = Resource::new_from_account_resource(account_resource);
     println!("resource:{:#?}", resource);
-    let out2: Vec<u8> = resource.encode().unwrap();
+    let out2: Vec<u8> = resource.encode();
     assert_eq!(out, out2)
 }
 
 #[test]
-fn test_resource_diff(){
-    let account_resource = Resource::new_from_account_resource(AccountResource::new(100, 1, types::byte_array::ByteArray::new(vec![]), 0, 0, false));
+fn test_resource_diff_and_apply(){
+    let mut account_resource = Resource::new_from_account_resource(AccountResource::new(100, 1, types::byte_array::ByteArray::new(vec![]), 0, 0, false));
     let account_resource2 = Resource::new_from_account_resource(AccountResource::new(200, 1, types::byte_array::ByteArray::new(vec![]), 0, 0, false));
 
-    let mut changes = account_resource.diff(account_resource2).unwrap();
+    let mut changes = account_resource.diff(&account_resource2).unwrap();
     println!("changes:{:#?}", changes);
     changes.filter_none();
     assert_eq!(1, changes.len());
 
+    account_resource.apply_changes(changes).unwrap();
+    assert_eq!(account_resource, account_resource2);
 }
