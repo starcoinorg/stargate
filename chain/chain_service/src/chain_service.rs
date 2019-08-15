@@ -30,6 +30,7 @@ use star_types::{offchain_transaction::OffChainTransaction,
                                  MempoolAddTransactionStatus, MempoolAddTransactionStatusCode,
                                  SubmitTransactionRequest, SubmitTransactionResponse,
                                  StateByAccessPathResponse, AccountResource,
+                                 WatchEventRequest, WatchEventResponse,
                          },
                          off_chain_transaction::OffChainTransaction as OffChainTransactionProto,
                  }};
@@ -156,6 +157,10 @@ impl ChainService {
         pub_sub::subscribe(id, sender.clone());
 
         receiver
+    }
+
+    pub fn watch_event_inner(&self, address: Vec<u8>) -> UnboundedReceiver<WatchEventResponse> {
+        unimplemented!()
     }
 
     pub fn least_state_root_inner(&self) -> HashValue {
@@ -296,6 +301,13 @@ impl Chain for ChainService {
 
         provide_grpc_response(resp, ctx, sink);
     }
+
+    fn watch_event(&mut self, ctx: ::grpcio::RpcContext,
+                   req: WatchEventRequest,
+                   sink: ::grpcio::ServerStreamingSink<WatchEventResponse>) {
+        self.watch_event_inner(req.address);
+        unimplemented!()
+    }
 }
 
 #[cfg(test)]
@@ -372,6 +384,6 @@ mod tests {
 
         let mut rt = Runtime::new().unwrap();
         let chain_service = ChainService::new(&mut rt);
-        chain_service.submit_on_chain_transaction(signed_tx);
+        chain_service.apply_on_chain_transaction(signed_tx);
     }
 }

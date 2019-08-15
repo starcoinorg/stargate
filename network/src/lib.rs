@@ -1,26 +1,31 @@
 #![feature(async_await)]
 
-#[cfg(test)]
-pub mod mem_stream;
-pub mod p2p;
+
 pub mod net;
 
+#[cfg(test)]
 mod tests {
-    use crate::net::build_network;
-    use futures::{Stream, Future, future};
-    use sg_config::config::NodeNetworkConfig;
-    use parity_multiaddr::Multiaddr;
-    use memsocket::MemoryListener;
-
+    use crate::net::{Network, Message};
+    use network_libp2p::NetworkConfiguration;
+    use libp2p::PeerId;
 
     #[test]
-    fn test_new_network() {
-        let cfg = NodeNetworkConfig {
-            addr: "".to_string(),
-            max_sockets: 0,
-            in_memory: true,
-            seeds: vec![],
+    fn test_send_receive() {
+        let cfg = NetworkConfiguration::new_local();
+        let msg_chan = Network::start_network(cfg.clone());
+        println!("{:?}", cfg.listen_addresses[0]);
+
+        let msg = {
+            let pub_key = cfg.node_key.clone().into_keypair().unwrap().public();
+            let peer_id = PeerId::from(pub_key);
+            Message {
+                peer_id,
+                msg: vec![1, 2],
+            }
         };
-        let network = build_network(cfg).unwrap();
+        let rt = tokio::runtime::Runtime::new();
+        msg_chan.msg_sender.send(msg);
+        let receive_msg = msg_chan.msg_receiver.recv().unwrap();
+        println!("{:?}", receive_msg.msg);
     }
 }

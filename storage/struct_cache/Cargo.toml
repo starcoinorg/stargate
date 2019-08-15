@@ -14,3 +14,5 @@ types = { path = "../../types" }
 state_view = { path = "../state_view" }
 vm = { path = "../../language/vm" }
 bytecode_verifier = { path = "../../language/bytecode_verifier" }
+compiler = { path = "../../language/compiler" }
+failure = { path = "../../common/failure_ext", package = "failure_ext" }

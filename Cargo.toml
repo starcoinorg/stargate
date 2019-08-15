@@ -50,5 +50,6 @@ members = [
     "node/node_proto",
     "node/node_client",
     "node/node_service",
+    "node/node_internal",
     "cli",
 ]

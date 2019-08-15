@@ -16,6 +16,16 @@ service Chain {
     rpc SubmitOffChainTransaction(star_types.OffChainTransaction) returns (SubmitTransactionResponse);
     rpc WatchTransaction (WatchTransactionRequest) returns (stream WatchTransactionResponse);
     rpc StateByAccessPath(types.AccessPath) returns (StateByAccessPathResponse);
+    rpc WatchEvent(WatchEventRequest) returns (stream WatchEventResponse);
+}
+
+message WatchEventRequest {
+    bytes address = 1;
+    uint64 start_tx = 2;
+}
+
+message WatchEventResponse {
+    repeated types.Event events = 1;
 }
 
 message LeastRootRequest {

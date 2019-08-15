@@ -23,7 +23,7 @@ impl StructCache {
         StructCache { struct_map }
     }
 
-    pub fn find_struct(&mut self, tag: StructTag, state_view: &dyn StateView) -> StructDef {
+    pub fn find_struct(&mut self, tag: StructTag, state_view: &dyn StateView) -> Option<&StructDef> {
         let exist = self.struct_map.contains_key(&tag);
         let tag_clone_1 = tag.clone();
         if !exist {
@@ -35,7 +35,7 @@ impl StructCache {
             self.struct_def_from_module(tag_clone_1, &module_fetcher, &module);
         };
 
-        return self.struct_map.get(&tag).unwrap().clone();
+        return self.struct_map.get(&tag).clone();
     }
 
     fn struct_def_from_module(&mut self, find_tag: StructTag, fetcher: &ModuleFetcher, module: &LoadedModule) {
@@ -43,18 +43,20 @@ impl StructCache {
         let struct_defs = module.struct_defs();
         let struct_handles = module.struct_handles();
 
-        struct_defs.iter().map(|struct_def| {
+        struct_defs.iter().for_each(|struct_def| {
             let struct_handle_index = struct_def.struct_handle;
-            let struct_handle_index_usize = struct_handle_index.0 as usize;
-            let def = self.resolve_struct_handle_with_fetcher(module, struct_handle_index, fetcher).unwrap().unwrap().unwrap();
-            let struct_handle = struct_handles.clone()[struct_handle_index_usize].clone();
-            let struct_name_index = struct_handle.name.0 as usize;
-            let struct_name = string_pool.clone()[struct_name_index].clone();
+            let struct_handle = module.struct_handle_at(struct_handle_index);
+            let struct_name = module.string_at(struct_handle.name);
+            let struct_def_idx = module
+                .struct_defs_table
+                .get(struct_name)
+                .ok_or(VMInvariantViolation::LinkerError).unwrap();
+            let def = self.resolve_struct_def_with_fetcher(module, *struct_def_idx, fetcher).unwrap().unwrap().unwrap();
 
             let tag = StructTag {
                 address: find_tag.address,
                 module: find_tag.module.clone(),
-                name: struct_name,
+                name: struct_name.to_string(),
                 type_params: vec![],
             };
 
@@ -162,19 +164,27 @@ impl StructCache {
         fetcher: &dyn ModuleFetcher,
     ) -> VMRuntimeResult<Option<LoadedModule>> {
         let module = match fetcher.get_module(id) {
-            Some(module) => module,
-            None => return Ok(None),
+            Some(module) => {
+                module
+            }
+            None => return {
+                Ok(None)
+            },
         };
 
         let module = match VerifiedModule::new(module) {
-            Ok(module) => module,
+            Ok(module) => {
+                module
+            }
             Err((_, errors)) => {
                 return Err(VMRuntimeError {
                     loc: Location::new(),
                     err: VMErrorKind::Verification(
                         errors
                             .into_iter()
-                            .map(|error| VerificationStatus::Dependency(id.clone(), error))
+                            .map(|error| {
+                                VerificationStatus::Dependency(id.clone(), error)
+                            })
                             .collect(),
                     ),
                 });
@@ -187,8 +197,102 @@ impl StructCache {
 
 #[cfg(test)]
 mod tests {
+    use failure::prelude::*;
+    use compiler::Compiler;
+    use state_view::StateView;
+    use types::access_path::AccessPath;
+    use crate::StructCache;
+    use types::{language_storage::StructTag, account_address::AccountAddress};
+    use vm_runtime_types::loaded_data::struct_def::StructDef;
+    use vm::access::ModuleAccess;
+    use std::collections::HashMap;
+    use types::language_storage::ModuleId;
+
+    struct MockStateView {
+        modules: HashMap<AccessPath, Vec<u8>>
+    }
+
+    impl MockStateView {
+        pub fn new() -> Self {
+            let code =
+                "
+            modules:
+            module B {
+                struct T {g: u64}
+
+                public new(g: u64): Self.T {
+                    return T{g: move(g)};
+                }
+
+                public t(this: &Self.T) {
+                    let g: &u64;
+                    let y: u64;
+                    g = &copy(this).g;
+                    y = *move(g);
+                    release(move(this));
+                    return;
+                }
+            }
+
+            script:
+
+            import Transaction.B;
+
+            main() {
+                let x: B.T;
+                let y: &B.T;
+                x = B.new(5);
+                y = &x;
+                B.t(move(y));
+                return;
+            }
+            ";
+
+            let compiler = Compiler {
+                code,
+                ..Compiler::default()
+            };
+
+            let (program, module) = compiler.into_compiled_program_and_deps().unwrap();
+            let mut modules = HashMap::new();
+            module.iter().for_each(|v_m| {
+                let tmp = v_m.clone().into_inner();
+                let mut data = vec![];
+                tmp.serialize(&mut data);
+
+                let index = modules.len();
+                let id = ModuleId::new(v_m.clone().address().clone(), format!("LibraCoin:{}", index));
+                let access_path = AccessPath::code_access_path(&id);
+                modules.insert(access_path, data);
+            });
+
+            MockStateView { modules }
+        }
+    }
+
+    impl StateView for MockStateView {
+        fn get(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
+            Ok(Some(self.modules.get(access_path).unwrap().clone()))
+        }
+
+        fn multi_get(&self, access_paths: &[AccessPath]) -> Result<Vec<Option<Vec<u8>>>> {
+            Ok(access_paths.iter().map(|path| -> Option<Vec<u8>> {
+                Some(self.modules.get(path).unwrap().clone())
+            }).collect())
+        }
+
+        fn is_genesis(&self) -> bool {
+            false
+        }
+    }
+
     #[test]
     fn test_struct_cache() {
-
+        let mut struct_cache = StructCache::new();
+        let state_view = MockStateView::new();
+        let address = AccountAddress::default();
+        let struct_tag = StructTag { address, module: "LibraCoin:0".to_string(), name: "T".to_string(), type_params: vec![] };
+        let struct_def = struct_cache.find_struct(struct_tag, &state_view);
+        println!("{:?}", struct_def)
     }
 }

@@ -1,4 +1,3 @@
-use network::net::build_network;
 use std::net::SocketAddr;
 use futures::{Stream, Future, future};
 use structopt::StructOpt;
@@ -50,8 +49,8 @@ fn main() {
     let args = Args::from_args();
     let swarm = launch_swarm(&args);
 
-    let mut node_server = setup_node_service(&swarm.config);
-    node_server.start();
+    //let mut node_server = setup_node_service(&swarm.config,);
+    //node_server.start();
 
     let cfg = NodeNetworkConfig {
         addr: "".to_string(),
@@ -59,8 +58,6 @@ fn main() {
         in_memory: false,
         seeds: vec![]
     };
-    let network = build_network(cfg);
-
     if args.start_client {
         let client = client::InteractiveClient::new_with_inherit_io(
             swarm.config.network.port

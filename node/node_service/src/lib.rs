@@ -10,18 +10,24 @@ use futures01::future::Future;
 use futures03::{
     channel::oneshot,
     future::{FutureExt, TryFutureExt},
+    io::{AsyncRead, AsyncWrite},
 };
 use grpc_helpers::{provide_grpc_response, spawn_service_thread_with_drop_closure, ServerHandle,default_reply_error_logger};
 use grpcio::{RpcStatus, RpcStatusCode,EnvBuilder};
 use proto_conv::{FromProto, IntoProto};
 use std::sync::{Arc,Mutex,mpsc};
 use sg_config::config::{NodeConfig};
+use node_internal::node::Node as Node_Internal;
+use netcore::transport::{Transport};
+use chain_client::{ChainClient};
 
-
-pub fn setup_node_service(config: &NodeConfig) -> ::grpcio::Server {
+pub fn setup_node_service<C,TTransport>(config: &NodeConfig,node:Arc<Mutex<Node_Internal<C,TTransport>>>) -> ::grpcio::Server 
+where C: ChainClient+Clone+ Send+Sync+'static,
+TTransport:Transport+Sync+Send+Clone+'static,
+TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
     let client_env = Arc::new(EnvBuilder::new().name_prefix("grpc-node-").build());
 
-    let handle = NodeService::new();
+    let handle = NodeService::new(node);
     let service = create_node(handle);
     ::grpcio::ServerBuilder::new(Arc::new(EnvBuilder::new().name_prefix("grpc-node-").build()))
         .register_service(service)
@@ -31,17 +37,22 @@ pub fn setup_node_service(config: &NodeConfig) -> ::grpcio::Server {
 }
 
 #[derive(Clone)]
-pub struct NodeService {
+pub struct NodeService  <C: ChainClient+Clone+Send+Sync+'static,TTransport:Transport+Sync+Send+Clone+'static>
+    where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
+        node:Arc<Mutex<Node_Internal<C,TTransport>>>
 }
 
-impl NodeService {
-    pub fn new() -> Self {
+impl<C: ChainClient+Clone +Send+Sync+'static,TTransport:Transport+Sync+Send+Clone+'static> NodeService<C,TTransport> 
+where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
+    pub fn new(node:Arc<Mutex<Node_Internal<C,TTransport>>>) -> Self {
         NodeService { 
+            node,
         }
     }
 }
 
-impl node_proto::proto::node_grpc::Node for NodeService {
+impl<C: ChainClient+Clone +Send+Sync+'static,TTransport:Transport+Sync+Send+Clone+'static> node_proto::proto::node_grpc::Node for NodeService<C,TTransport> 
+where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
     fn open_channel(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::OpenChannelRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::OpenChannelResponse>){
         println!("open channel");
     }
