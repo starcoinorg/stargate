@@ -66,11 +66,17 @@ impl Network {
         }).for_each(move |msg| {
             net_srv_sender.lock().send_custom_message(&msg.peer_id, msg.msg);
             Ok(())
+        }).then(|res| {
+            match res {
+                Ok(()) => (),
+                Err(_) => (), //todo:logger it
+            };
+            Ok(())
         });
 
         let futures: Vec<Box<Future<Item=(), Error=io::Error> + Send>> = vec![
             Box::new(net_fut) as Box<_>,
-            // Box::new(sender_fut) as Box<_>,
+            Box::new(sender_fut) as Box<_>,
         ];
         let futs = futures::select_all(futures)
             .and_then(move |_| { Ok(()) })

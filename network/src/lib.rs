@@ -15,7 +15,6 @@ mod tests {
         let msg_chan = Network::start_network(cfg.clone());
         println!("{:?}", cfg.listen_addresses[0]);
 
-
         let msg = {
             let pub_key = cfg.node_key.clone().into_keypair().unwrap().public();
             let peer_id = PeerId::from(pub_key);
