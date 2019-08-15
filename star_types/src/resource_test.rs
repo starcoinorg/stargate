@@ -32,6 +32,6 @@ fn test_resource_diff_and_apply(){
     changes.filter_none();
     assert_eq!(1, changes.len());
 
-    account_resource.apply_changes(changes).unwrap();
+    account_resource.apply_changes(&changes).unwrap();
     assert_eq!(account_resource, account_resource2);
 }

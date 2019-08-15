@@ -68,7 +68,8 @@ fn gene_change_set() -> (AccessPath, Accesses, ChangeSetProto) {
     accesses.add_index_to_back(0);
     let access_path = AccessPath::on_chain_resource_access_path(&resource_key);
 
-    let change_set0 = ChangeSetMut::new(vec![(access_path.clone(), FieldChanges::new(vec![(accesses.clone(), ChangeOp::Plus(100))]))]);
+    let changes = Changes::Fields(FieldChanges::new(vec![(accesses.clone(), ChangeOp::Plus(100))]));
+    let change_set0 = ChangeSetMut::new(vec![(access_path.clone(), changes)]);
     let change_set = change_set0.freeze().unwrap();
 
     let change_set_pb = change_set.into_proto();
@@ -81,7 +82,11 @@ fn test_change_set_pb() {
     let change_set = ChangeSet::from_proto(change_set_pb).unwrap();
     let change_set_mut = change_set.into_mut();
     let changes = change_set_mut.get_changes(&access_path).unwrap();
-    let change = changes.get_change(&accesses).unwrap();
-    let count = change.as_plus().unwrap();
-    assert_eq!(count, 100);
+    if let Changes::Fields(changes) = changes {
+        let change = changes.get_change(&accesses).unwrap();
+        let count = change.as_plus().unwrap();
+        assert_eq!(count, 100);
+    }else{
+        panic!("Unexpect changes type.")
+    }
 }
