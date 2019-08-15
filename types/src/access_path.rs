@@ -226,7 +226,7 @@ impl From<Vec<Access>> for Accesses {
 
 impl From<Vec<u8>> for Accesses {
     fn from(mut raw_bytes: Vec<u8>) -> Accesses {
-        let access_str = String::from_utf8(raw_bytes.split_off(HashValue::LENGTH + 1)).unwrap();
+        let access_str = String::from_utf8(raw_bytes).unwrap();
         let fields_str = access_str.split(SEPARATOR).collect::<Vec<&str>>();
         let mut accesses = vec![];
         for access_str in fields_str.into_iter() {

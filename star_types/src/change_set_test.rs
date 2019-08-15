@@ -57,12 +57,11 @@ fn gene_change_set() -> (AccessPath, Accesses, ChangeSetProto) {
     let change_set = change_set0.freeze().unwrap();
 
     let change_set_pb = change_set.into_proto();
-    println!("{:?}", change_set_pb);
-    (access_path,accesses, change_set_pb)
+    (access_path, accesses, change_set_pb)
 }
 
 #[test]
-fn test_change_set() {
+fn test_change_set_pb() {
     let (access_path, accesses, change_set_pb) = gene_change_set();
     let change_set = ChangeSet::from_proto(change_set_pb).unwrap();
     let change_set_mut = change_set.into_mut();
