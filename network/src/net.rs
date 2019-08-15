@@ -30,22 +30,36 @@ pub fn build_network_service(cfg: NetworkConfiguration) -> Result<Arc<Mutex<Serv
     }
 }
 
-pub struct Network {}
-
 pub struct NetMsgChan {
     pub msg_receiver: Receiver<Message>,
     pub msg_sender: Sender<Message>,
+    rx: Arc<Receiver<Message>>,
+    tx: Arc<Sender<Message>>,
 }
 
-impl Network {
-    pub fn new() -> Self {
-        Self {}
-    }
-    pub fn start_network(cfg: NetworkConfiguration) -> NetMsgChan {
+impl NetMsgChan {
+    fn new() -> NetMsgChan {
         let (tx, net_rx) = channel::unbounded();
         let (net_tx, rx) = channel::unbounded::<Message>();
+        Self {
+            msg_receiver: net_rx,
+            msg_sender: net_tx,
+            rx: Arc::new(rx),
+            tx: Arc::new(tx),
+        }
+    }
+}
+
+pub struct Network {
+    pub net_msg_bus: NetMsgChan
+}
+
+
+impl Network {
+    pub fn start_network(cfg: NetworkConfiguration, net_msg_chan: NetMsgChan) -> impl Future<Item=(), Error=io::Error> {
         let net_srv = build_network_service(cfg).unwrap();
         let net_srv_sender = net_srv.clone();
+        let tx = net_msg_chan.tx.clone();
         let net_fut = stream::poll_fn(move || net_srv.lock().poll())
             .for_each(move |event| {
                 match event {
@@ -57,6 +71,7 @@ impl Network {
                 Ok(())
             });
 
+        let rx = net_msg_chan.rx.clone();
         let sender_fut = stream::poll_fn(move || {
             match rx.try_recv() {
                 Ok(msg) => Ok(Async::Ready(Some(msg))),
@@ -81,7 +96,6 @@ impl Network {
         let futs = futures::select_all(futures)
             .and_then(move |_| { Ok(()) })
             .map_err(|(r, _, _)| r);
-        tokio::runtime::Runtime::new().unwrap().block_on(futs).unwrap();
-        NetMsgChan { msg_receiver: net_rx, msg_sender: net_tx }
+        futs
     }
 }
