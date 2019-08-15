@@ -14,6 +14,7 @@ serde = { version = "1.0.96", features = ["derive"] }
 rand = "0.6.5"
 
 node_proto = { path = "../node_proto" }
+node_internal = { path = "../node_internal" }
 failure = { path = "../../common/failure_ext", package = "failure_ext" }
 star_types = { path = "../../star_types" }
 proto_conv = { path = "../../common/proto_conv" }
@@ -22,3 +23,5 @@ node_client = { path = "../node_client" }
 nextgen_crypto = { path = "../../crypto/nextgen_crypto" }
 types = { package = "types", path = "../../types"}
 sg_config = {path="../../sgconfig"}
+chain_client = { path = "../../chain/chain_client"}
+netcore = { path = "../../network/netcore"}

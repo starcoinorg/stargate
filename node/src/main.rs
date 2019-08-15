@@ -49,8 +49,8 @@ fn main() {
     let args = Args::from_args();
     let swarm = launch_swarm(&args);
 
-    let mut node_server = setup_node_service(&swarm.config);
-    node_server.start();
+    //let mut node_server = setup_node_service(&swarm.config,);
+    //node_server.start();
 
     let cfg = NodeNetworkConfig {
         addr: "".to_string(),
