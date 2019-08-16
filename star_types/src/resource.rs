@@ -31,7 +31,7 @@ impl Resource {
 
     /// Create a empty struct, field with default value.
     pub fn empty(def: &StructDef) -> Self {
-        Self::new(Self::new_fields(def))
+        Self::new(Self::new_fields(&def))
     }
 
     fn new_fields(def: &StructDef) -> Vec<MutVal> {
@@ -78,11 +78,11 @@ impl Resource {
     pub fn new_from_account_resource(account_resource: AccountResource) -> Self {
         //this serialize and decode should never fail, so use unwrap.
         let out: Vec<u8> = SimpleSerializer::serialize(&account_resource).unwrap();
-        Self::decode(&get_account_struct_def(), &out).expect("decode fail.")
+        Self::decode(get_account_struct_def(), &out).expect("decode fail.")
     }
 
-    pub fn decode(def: &StructDef, bytes: &[u8]) -> Result<Self> {
-        let value = Value::simple_deserialize(bytes, def.clone()).map_err(|vm_error| format_err!("decode resource fail:{:?}", vm_error))?;
+    pub fn decode(def: StructDef, bytes: &[u8]) -> Result<Self> {
+        let value = Value::simple_deserialize(bytes, def).map_err(|vm_error| format_err!("decode resource fail:{:?}", vm_error))?;
         if let Value::Struct(fields) = value {
             Ok(Self::new(
                 fields,

@@ -1,3 +1,4 @@
+use failure::prelude::*;
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use crypto::HashValue;
@@ -24,17 +25,19 @@ impl StructCache {
         StructCache { struct_map }
     }
 
-    pub fn find_struct(&self, tag: StructTag, state_view: &dyn StateView) -> Option<StructDef> {
-        let exist = self.struct_map.borrow().contains_key(&tag);
+    pub fn find_struct(&self, tag: &StructTag, state_view: &dyn StateView) -> Result<StructDef> {
+        let exist = self.struct_map.borrow().contains_key(tag);
         if !exist {
             let module_fetcher = ModuleFetcherImpl::new(state_view);
             let module_id = ModuleId::new(tag.address, tag.module.clone());
-            let module = self.get_loaded_module_with_fetcher(&module_id, &module_fetcher).unwrap().unwrap();
-
-            self.struct_def_from_module(tag.clone(), &module_fetcher, &module);
+            let module = self.get_loaded_module_with_fetcher(&module_id, &module_fetcher).map_err(|vm_error|format_err!("${:?}", vm_error))?;
+            match module {
+                None => {},
+                Some(module) => self.struct_def_from_module(tag.clone(), &module_fetcher, &module)
+            }
         };
         let map = self.struct_map.borrow();
-        return map.get(&tag).cloned();
+        return map.get(tag).cloned().ok_or(format_err!("Can not find StructDef with StructTag: {:?}", tag));
     }
 
     fn struct_def_from_module(&self, find_tag: StructTag, fetcher: &dyn ModuleFetcher, module: &LoadedModule) {
@@ -291,7 +294,7 @@ mod tests {
         let state_view = MockStateView::new();
         let address = AccountAddress::default();
         let struct_tag = StructTag { address, module: "LibraCoin:0".to_string(), name: "T".to_string(), type_params: vec![] };
-        let struct_def = struct_cache.find_struct(struct_tag, &state_view);
+        let struct_def = struct_cache.find_struct(&struct_tag, &state_view).unwrap();
         println!("{:?}", struct_def)
     }
 }

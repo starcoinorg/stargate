@@ -384,9 +384,9 @@ impl IntoProto for FieldChanges {
     }
 }
 
-pub trait StructDefResolve: Sync + Send{
+pub trait StructDefResolve{
 
-    fn resolve(&self, tag: &StructTag) -> Result<&StructDef>;
+    fn resolve(&self, tag: &StructTag) -> Result<StructDef>;
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]

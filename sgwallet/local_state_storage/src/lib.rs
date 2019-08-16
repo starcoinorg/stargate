@@ -12,6 +12,9 @@ use types::write_set::{WriteOp, WriteSet};
 use star_types::change_set::{ChangeSet, Changes, ChangeSetMut, StructDefResolve};
 use star_types::resource::Resource;
 use atomic_refcell::AtomicRefCell;
+use struct_cache::StructCache;
+use types::language_storage::{StructTag};
+use vm_runtime_types::loaded_data::struct_def::StructDef;
 
 pub struct LocalStateStorage<C>
 where
@@ -21,7 +24,7 @@ where
     state: AtomicRefCell<AccountState>,
     client: Arc<C>,
     channels: AtomicRefCell<HashMap<AccountAddress, AccountState>>,
-    struct_def_resolve: Arc<dyn StructDefResolve>,
+    struct_cache: Arc<StructCache>,
 }
 
 impl<C> LocalStateStorage<C>
@@ -38,7 +41,7 @@ where
             state,
             client,
             channels: AtomicRefCell::new(HashMap::new()),
-            struct_def_resolve: Arc::new(StaticStructDefResolve::new()),
+            struct_cache: Arc::new(StructCache::new()),
         })
     }
 
@@ -73,21 +76,20 @@ where
     fn apply_changes(&self, access_path: &AccessPath, changes: &Changes) {
         //TODO fix unwrap
         let data_path = &access_path.data_path().unwrap();
-        let resolve = &*self.struct_def_resolve;
         debug!("apply {:?} changes:{:#?}", access_path, changes);
         if self.account == access_path.address {
-            self.state.borrow().apply_changes(&data_path, changes, resolve);
+            self.state.borrow().apply_changes(&data_path, changes, self);
         } else {
             //TODO check channel
             let mut channels = self.channels.borrow_mut();
             match channels.get_mut(&access_path.address) {
                 Some(channel_state) => {
-                    channel_state.apply_changes(&data_path, changes, resolve);
+                    channel_state.apply_changes(&data_path, changes, self);
                 }
                 None => {
                     debug!("init new channel_state with address:{}", access_path.address);
                     let mut channel_state = AccountState::new();
-                    channel_state.apply_changes(&data_path, changes, resolve);
+                    channel_state.apply_changes(&data_path, changes, self);
                     channels.insert(access_path.address, channel_state);
                 }
             }
@@ -123,7 +125,7 @@ where
                     Changes::Value(value.clone())
                 }else{
                     let old_resource = self.get_resource(ap)?;
-                    let new_resource = Resource::decode(self.struct_def_resolve.resolve(&ap.resource_tag().ok_or(format_err!("get resource tag fail"))?)?, value.as_slice())?;
+                    let new_resource = Resource::decode(self.resolve(&ap.resource_tag().ok_or(format_err!("get resource tag fail"))?)?, value.as_slice())?;
 
                     let field_changes = match old_resource {
                         Some(old_resource) => old_resource.diff(&new_resource)?,
@@ -144,8 +146,8 @@ where
             Some(state) => {
                 //TODO fix unwrap
                 let tag = access_path.resource_tag().unwrap();
-                let def = self.struct_def_resolve.resolve(&tag)?;
-                Ok(Some(Resource::decode(&def, state.as_slice())?))
+                let def = self.resolve(&tag)?;
+                Ok(Some(Resource::decode(def, state.as_slice())?))
             }
         }
     }
@@ -199,6 +201,19 @@ where
 
     fn is_genesis(&self) -> bool {
         false
+    }
+}
+
+impl<C>  StructDefResolve for LocalStateStorage<C>
+    where
+        C: ChainClient,
+{
+
+    fn resolve(&self, tag: &StructTag) -> Result<StructDef> {
+        match state_storage::STATIC_STRUCT_DEF_RESOLVE.resolve(tag){
+            Ok(result) => Ok(result),
+            Err(_) => self.struct_cache.find_struct(tag, self)
+        }
     }
 }
 

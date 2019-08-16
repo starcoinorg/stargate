@@ -34,9 +34,10 @@ use star_types::resource::{Resource, get_account_struct_def, get_coin_struct_def
 use types::language_storage::StructTag;
 use lazy_static::lazy_static;
 use vm_runtime_types::loaded_data::struct_def::StructDef;
+use struct_cache::StructCache;
 
 lazy_static!{
-    static ref STATIC_STRUCT_DEF_RESOLVE: StaticStructDefResolve = StaticStructDefResolve::new();
+    pub static ref STATIC_STRUCT_DEF_RESOLVE: StaticStructDefResolve = StaticStructDefResolve::new();
 }
 
 pub struct AccountState {
@@ -97,7 +98,7 @@ impl AccountState {
                         let tag = data_path.resource_tag().ok_or(format_err!("get resource tag from path fail."))?;
                         let def = resolve.resolve(tag)?;
                         debug!("init new resource {:?} from change {:#?}", tag, fields);
-                        let new_resource = Resource::from_changes(fields, def);
+                        let new_resource = Resource::from_changes(fields, &def);
                         debug!("result {:?}", new_resource);
                         self.do_update(data_path.clone(), new_resource.encode());
                     }
@@ -185,7 +186,7 @@ impl ProofRead for ProofReader {
 pub struct StateStorage {
     global_state: Arc<AtomicRefCell<SparseMerkleTree>>,
     account_states: Arc<AtomicRefCell<HashMap<AccountAddress, AccountState>>>,
-    struct_def_resolve: Arc<dyn StructDefResolve>
+    struct_cache: Arc<StructCache>,
 }
 
 impl StateStorage {
@@ -193,7 +194,7 @@ impl StateStorage {
         Self {
             global_state: Arc::new(AtomicRefCell::new(SparseMerkleTree::new(*SPARSE_MERKLE_PLACEHOLDER_HASH))),
             account_states: Arc::new(AtomicRefCell::new(HashMap::new())),
-            struct_def_resolve: Arc::new(StaticStructDefResolve::new())
+            struct_cache: Arc::new(StructCache::new()),
         }
     }
 
@@ -256,7 +257,7 @@ impl StateStorage {
         let state = states.get(&access_path.address);
         match state {
             None => Ok(None),
-            Some(state) => state.get_resource(&access_path.data_path().unwrap(),&*self.struct_def_resolve)
+            Some(state) => state.get_resource(&access_path.data_path().unwrap(),self)
         }
     }
 
@@ -276,7 +277,7 @@ impl StateStorage {
                     Changes::Value(value.clone())
                 }else{
                     let old_resource = self.get_resource(ap)?;
-                    let new_resource = Resource::decode(self.struct_def_resolve.resolve(&ap.resource_tag().ok_or(format_err!("get resource tag fail"))?)?, value.as_slice())?;
+                    let new_resource = Resource::decode(self.resolve(&ap.resource_tag().ok_or(format_err!("get resource tag fail"))?)?, value.as_slice())?;
 
                     let field_changes = match old_resource {
                         Some(old_resource) => old_resource.diff(&new_resource)?,
@@ -309,7 +310,7 @@ impl StateStorage {
         let data_path = &access_path.data_path().unwrap();
         //TODO use self.struct_def_resolve
         let resolve = &StaticStructDefResolve::new();
-        account_state.apply_changes(data_path, changes, &*self.struct_def_resolve);
+        account_state.apply_changes(data_path, changes, self);
     }
 
 
@@ -354,6 +355,18 @@ impl StateView for StateStorage {
     }
 }
 
+impl  StructDefResolve for StateStorage
+{
+
+    fn resolve(&self, tag: &StructTag) -> Result<StructDef> {
+        match STATIC_STRUCT_DEF_RESOLVE.resolve(tag){
+            Ok(result) => Ok(result),
+            Err(_) => self.struct_cache.find_struct(tag, self)
+        }
+    }
+}
+
+
 pub struct StaticStructDefResolve{
     register:HashMap<StructTag, StructDef>,
 }
@@ -376,8 +389,8 @@ impl StaticStructDefResolve {
 
 impl StructDefResolve for StaticStructDefResolve{
 
-    fn resolve(&self, tag: &StructTag) -> Result<&StructDef> {
-        self.register.get(tag).ok_or(format_err!("Can not find StructDef by tag: {:?}", tag))
+    fn resolve(&self, tag: &StructTag) -> Result<StructDef> {
+        self.register.get(tag).cloned().ok_or(format_err!("Can not find StructDef by tag: {:?}", tag))
     }
 }
 
