@@ -35,6 +35,8 @@ proto_conv = { path = "../common/proto_conv" }
 types = { path = "../types" }
 vm_genesis = { path = "../language/vm/vm_genesis" }
 node_client = { path = "../node/node_client"}
+cli_wallet = { path = "./cli_wallet" }
 
 [dev-dependencies]
 nextgen_crypto = { path = "../crypto/nextgen_crypto", features = ["testing"] }
+types = { path = "../types" }

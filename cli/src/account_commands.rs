@@ -33,14 +33,13 @@ impl Command for AccountCommandCreate {
     }
     fn execute(&self, client: &mut ClientProxy, _params: &[&str]) {
         println!(">> Creating/retrieving next account from wallet");
-        // match client.create_next_account(true) {
-        //     Ok(account_data) => println!(
-        //         "Created/retrieved account #{} address {}",
-        //         account_data.index,
-        //         hex::encode(account_data.address)
-        //     ),
-        //     Err(e) => report_error("Error creating account", e),
-        // }
+        match client.get_account() {
+            Ok(addr) => println!(
+                "Created/retrieved address {}",
+                hex::encode(addr)
+            ),
+            Err(e) => report_error("Error creating account", e),
+        }
     }
 }
 

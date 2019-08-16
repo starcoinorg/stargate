@@ -30,56 +30,42 @@ pub fn build_network_service(cfg: NetworkConfiguration) -> Result<Arc<Mutex<Serv
     }
 }
 
-pub struct NetMsgChan {
-    pub msg_receiver: Receiver<Message>,
-    pub msg_sender: Sender<Message>,
-    rx: Arc<Receiver<Message>>,
-    tx: Arc<Sender<Message>>,
-}
 
-impl NetMsgChan {
-    fn new() -> NetMsgChan {
-        let (tx, net_rx) = channel::unbounded();
-        let (net_tx, rx) = channel::unbounded::<Message>();
-        Self {
-            msg_receiver: net_rx,
-            msg_sender: net_tx,
-            rx: Arc::new(rx),
-            tx: Arc::new(tx),
-        }
-    }
-}
+pub type NetMsgBus = (Sender<Message>, Receiver<Message>);
 
-pub struct Network {
-    pub net_msg_bus: NetMsgChan
-}
-
+pub struct Network {}
 
 impl Network {
-    pub fn start_network(cfg: NetworkConfiguration, net_msg_chan: NetMsgChan) -> impl Future<Item=(), Error=io::Error> {
-        let net_srv = build_network_service(cfg).unwrap();
+    pub fn start_listen_network(net_srv: Arc<Mutex<Service<NetworkMsg>>>) -> (impl Future<Item=(), Error=io::Error>, NetMsgBus) {
+        let (tx, net_rx) = channel::unbounded();
+        let (net_tx, rx) = channel::unbounded::<Message>();
         let net_srv_sender = net_srv.clone();
-        let tx = net_msg_chan.tx.clone();
         let net_fut = stream::poll_fn(move || net_srv.lock().poll())
             .for_each(move |event| {
                 match event {
                     ServiceEvent::CustomMessage { peer_id, message } => {
+                        println!("in custom message");
                         tx.try_send(Message { peer_id, msg: message });
                     }
-                    _ => {}
+                    ServiceEvent::OpenedCustomProtocol { peer_id, .. } => {
+                        println!("connected {:?}", peer_id);
+                    }
+                    _ => { println!("nothing"); }
                 }
                 Ok(())
             });
-
-        let rx = net_msg_chan.rx.clone();
         let sender_fut = stream::poll_fn(move || {
             match rx.try_recv() {
-                Ok(msg) => Ok(Async::Ready(Some(msg))),
+                Ok(msg) => {
+                    println!("real send it");
+                    Ok(Async::Ready(Some(msg)))
+                }
                 Err(TryRecvError::Empty) => Ok(Async::NotReady),
                 Err(TryRecvError::Disconnected) => Err(()),
             }
         }).for_each(move |msg| {
             net_srv_sender.lock().send_custom_message(&msg.peer_id, msg.msg);
+            println!("{:?} real send it 1", &msg.peer_id);
             Ok(())
         }).then(|res| {
             match res {
@@ -96,6 +82,7 @@ impl Network {
         let futs = futures::select_all(futures)
             .and_then(move |_| { Ok(()) })
             .map_err(|(r, _, _)| r);
-        futs
+        let msg_bus = (net_tx, net_rx);
+        (futs, msg_bus)
     }
 }
