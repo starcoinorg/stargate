@@ -9,7 +9,7 @@ use crypto::{
     hash::{CryptoHash, TestOnlyHash, SPARSE_MERKLE_PLACEHOLDER_HASH},
     HashValue,
 };
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::HashMap};
 use types::{
     account_state_blob::AccountStateBlob,
     proof::{verify_sparse_merkle_element, SparseMerkleProof},

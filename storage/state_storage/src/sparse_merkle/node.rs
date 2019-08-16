@@ -21,10 +21,6 @@ use crypto::{
     hash::{CryptoHash, SPARSE_MERKLE_PLACEHOLDER_HASH},
     HashValue,
 };
-use std::{
-    cell::{Ref, RefCell, RefMut},
-    rc::Rc,
-};
 use types::{
     account_state_blob::AccountStateBlob,
     proof::{SparseMerkleInternalNode, SparseMerkleLeafNode},

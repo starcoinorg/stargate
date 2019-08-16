@@ -72,7 +72,6 @@ use crypto::{
     hash::{HashValueBitIterator, SPARSE_MERKLE_PLACEHOLDER_HASH},
     HashValue,
 };
-use std::rc::Rc;
 use types::{account_state_blob::AccountStateBlob, proof::SparseMerkleProof};
 use std::sync::Arc;
 
