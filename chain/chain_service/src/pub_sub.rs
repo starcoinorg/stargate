@@ -1,63 +1,59 @@
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
-use std::sync::Once;
-use std::mem::transmute;
 use futures::sync::mpsc::{UnboundedSender, SendError};
-use star_types::proto::chain::WatchTransactionResponse;
+use crypto::HashValue;
+
+struct WatchInner<T> where T: Clone {
+    sender: UnboundedSender<T>,
+    filter_func: Box<dyn Fn(T) -> bool + Send>,
+}
 
 #[derive(Clone)]
-struct Pub {
-    senders: Arc<Mutex<HashMap<String, UnboundedSender<WatchTransactionResponse>>>>,
+pub struct Pub<T> where T: Clone {
+    senders: Arc<Mutex<HashMap<HashValue, WatchInner<T>>>>,
 }
 
-fn singleton() -> Pub {
-    static mut SINGLETON: *const Pub = 0 as *const Pub;
-    static ONCE: Once = Once::new();
-
-    unsafe {
-        ONCE.call_once(|| {
-            let singleton = Pub {
-                senders: Arc::new(Mutex::new(HashMap::<String, UnboundedSender<WatchTransactionResponse>>::new())),
-            };
-
-            SINGLETON = transmute(Box::new(singleton));
-        });
-
-        (*SINGLETON).clone()
-    }
-}
-
-pub fn send(tx: WatchTransactionResponse) -> Result<(), SendError<WatchTransactionResponse>> {
-    let p = singleton();
-    let senders = p.senders.lock().unwrap();
-    for (_, sender) in senders.iter() {
-        match sender.unbounded_send(tx.clone()) {
-            Ok(_) => {}
-            Err(err) => return Err(err),
+impl<T> Pub<T> where T: Clone {
+    pub fn new() -> Self {
+        Pub {
+            senders: Arc::new(Mutex::new(HashMap::<HashValue, WatchInner<T>>::new())),
         }
     }
 
-    Ok(())
-}
+    pub fn send(&self, tx: T) -> Result<(), SendError<T>> {
+        let senders = self.senders.lock().unwrap();
+        for (_, inner) in senders.iter() {
+            let func = &inner.filter_func;
+            let send_flag = (func)(tx.clone());
+            if send_flag {
+                match inner.sender.unbounded_send(tx.clone()) {
+                    Ok(_) => {}
+                    Err(err) => return Err(err),
+                }
+            }
+        }
 
-pub fn subscribe(id: String, sender: UnboundedSender<WatchTransactionResponse>) {
-    let p = singleton();
-    let mut senders = p.senders.lock().unwrap();
-    senders.insert(id, sender);
-}
+        Ok(())
+    }
 
-pub fn unsubscribe(id: String) {
-    let p = singleton();
-    let mut senders = p.senders.lock().unwrap();
-    senders.remove(&id);
-}
+    pub fn subscribe(&self, id: HashValue, sender: UnboundedSender<T>, filter: Box<dyn Fn(T) -> bool + Send>) {
+        let mut senders = self.senders.lock().unwrap();
+        senders.insert(id, WatchInner { sender, filter_func: filter });
+    }
 
+    pub fn unsubscribe(&self, id: HashValue) {
+        let mut senders = self.senders.lock().unwrap();
+        senders.remove(&id);
+    }
+}
 
 #[cfg(test)]
 mod tests {
+    use crate::pub_sub::Pub;
 
     #[test]
-    fn test_xxx() {
-
+    fn test_pub_new() {
+        let pub_new = Pub::<u64>::new();
+        println!("{}", "?????");
     }
 }

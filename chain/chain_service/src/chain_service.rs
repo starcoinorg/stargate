@@ -1,14 +1,13 @@
 use failure::prelude::*;
-use types::{transaction::{SignedTransaction, TransactionPayload, Program}, language_storage::StructTag, write_set::WriteSet, account_address::AccountAddress, vm_error::VMStatus};
-use proto_conv::FromProto;
+use types::proto::{access_path::AccessPath as ProtoAccessPath, events::Event};
+use types::{transaction::{SignedTransaction, TransactionPayload}, account_address::AccountAddress};
 use futures::{sync::mpsc::{unbounded, UnboundedReceiver}, future::Future, sink::Sink, stream::Stream};
 use super::pub_sub;
-use hex;
 use grpcio::WriteFlags;
 use state_storage::StateStorage;
 use super::transaction_storage::TransactionStorage;
 use std::{sync::{Arc, Mutex}};
-use crypto::{hash::CryptoHash, HashValue};
+use crypto::{hash::{CryptoHash}, HashValue};
 use grpc_helpers::provide_grpc_response;
 use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR};
 use std::convert::TryFrom;
@@ -33,17 +32,16 @@ use star_types::{offchain_transaction::OffChainTransaction,
                          },
                          off_chain_transaction::OffChainTransaction as OffChainTransactionProto,
                  }};
-use vm_runtime::{MoveVM, VMVerifier, VMExecutor};
+use vm_runtime::{MoveVM, VMExecutor};
 use lazy_static::lazy_static;
 use config::config::{VMConfig, VMPublishingOption};
 use struct_cache::StructCache;
 use vm::file_format::{CompiledModule, StructDefinition};
-use core::borrow::Borrow;
-use vm_runtime_types::loaded_data::struct_def::StructDef;
 use state_view::StateView;
 use types::access_path::AccessPath;
-use types::proto::access_path::AccessPath as ProtoAccessPath;
-use state_store::StateStore;
+use core::borrow::{Borrow};
+use proto_conv::{FromProto, IntoProto};
+use protobuf::RepeatedField;
 
 lazy_static! {
     static ref VM_CONFIG:VMConfig = VMConfig{
@@ -58,6 +56,8 @@ pub struct ChainService {
     tx_db: Arc<Mutex<TransactionStorage>>,
     vm: Arc<Mutex<MoveVM>>,
     struct_cache: Arc<Mutex<StructCache>>,
+    tx_pub: Arc<Mutex<pub_sub::Pub<WatchTransactionResponse>>>,
+    event_pub: Arc<Mutex<pub_sub::Pub<WatchEventResponse>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -69,12 +69,14 @@ pub enum TransactionInner {
 impl ChainService {
     pub fn new(rt: &mut Runtime) -> Self {
         let gauge = IntGauge::new("receive_transaction_channel_counter", "receive transaction channel").unwrap();
-        let (mut tx_sender, mut tx_receiver) = channel::new(1_024, &gauge);
+        let (tx_sender, mut tx_receiver) = channel::new(1_024, &gauge);
         let tx_db = Arc::new(Mutex::new(TransactionStorage::new()));
         let state_db = Arc::new(Mutex::new(StateStorage::new()));
         let vm = Arc::new(Mutex::new(MoveVM::new(&VM_CONFIG)));
         let struct_cache = Arc::new(Mutex::new(StructCache::new()));
-        let chain_service = ChainService { sender: tx_sender.clone(), state_db, tx_db, vm, struct_cache };
+        let tx_pub = Arc::new(Mutex::new(pub_sub::Pub::new()));
+        let event_pub = Arc::new(Mutex::new(pub_sub::Pub::new()));
+        let chain_service = ChainService { sender: tx_sender.clone(), state_db, tx_db, vm, struct_cache, tx_pub, event_pub };
         let chain_service_clone = chain_service.clone();
 
         let receiver_future = async move {
@@ -106,22 +108,22 @@ impl ChainService {
         }
     }
 
-    fn apply_off_chain_transaction(&self, sign_tx: OffChainTransaction) {
+    fn apply_off_chain_transaction(&self, _sign_tx: OffChainTransaction) {
+        //TODO:watch tx and event
         unimplemented!()
     }
 
     fn apply_on_chain_transaction(&self, sign_tx: SignedTransaction) {
-        let signed_tx_hash = sign_tx.clone().hash();
+        let signed_tx_hash = sign_tx.borrow().hash();
         let mut tx_db = self.tx_db.lock().unwrap();
         let exist_flag = tx_db.exist_signed_transaction(signed_tx_hash);
         if !exist_flag {
             // 1. state_root
-            let payload = sign_tx.clone().payload().clone();
+            let payload = sign_tx.borrow().payload().borrow();
             match payload {
                 TransactionPayload::WriteSet(ws) => {
-                    let mut state_db = self.state_db.lock().unwrap();
-                    state_db.apply_write_set(&ws).unwrap();
-                    let state_hash = state_db.root_hash();
+                    let state_db = self.state_db.lock().unwrap();
+                    let state_hash = state_db.apply_write_set(&ws).unwrap();
                     //let state_hash = SparseMerkleTree::default().root_hash();
 
 //                    // 2. add signed_tx
@@ -135,19 +137,33 @@ impl ChainService {
 //                    let hash_root = tx_db.accumulator_append(tx_info);
 //                    tx_db.insert_ledger_info(hash_root);
 
-                    tx_db.insert_all(state_hash, sign_tx);
+                    tx_db.insert_all(state_hash, sign_tx.clone());
                 }
-                TransactionPayload::Program(program) => {
-                    let mut state_db = self.state_db.lock().unwrap();
+                TransactionPayload::Program(_program) => {
+                    let state_db = self.state_db.lock().unwrap();
                     let mut output_vec = MoveVM::execute_block(vec![sign_tx.clone()], &VM_CONFIG, &*state_db);
 
                     output_vec.pop().and_then(|output| {
-                        let state_hash = state_db.apply_libra_output(&output).unwrap();
-                        tx_db.insert_all(state_hash, sign_tx);
+                        let state_hash = state_db.apply_write_set(&output.write_set()).unwrap();
+                        tx_db.insert_all(state_hash, sign_tx.clone());
+
+                        let events: Vec<Event> = output.events().iter().map(|e| -> Event {
+                            e.clone().into_proto()
+                        }).collect();
+                        let mut event_resp = WatchEventResponse::new();
+                        event_resp.events = RepeatedField::from(events);
+                        let event_lock = self.event_pub.lock().unwrap();
+                        event_lock.send(event_resp).unwrap();
                         Some(())
                     });
                 }
             }
+
+            let mut wt_resp = WatchTransactionResponse::new();
+            wt_resp.set_signed_txn(sign_tx.into_proto());
+
+            let tx_lock = self.tx_pub.lock().unwrap();
+            tx_lock.send(wt_resp).unwrap();
         }
     }
 
@@ -155,16 +171,43 @@ impl ChainService {
         sender.send(inner_tx).await.unwrap();
     }
 
-    pub fn watch_transaction_inner(&self, address: Vec<u8>) -> UnboundedReceiver<WatchTransactionResponse> {
+    pub fn watch_transaction_inner(&self, address: AccountAddress, index: u64) -> UnboundedReceiver<WatchTransactionResponse> {
+        if index != std::u64::MAX {
+            //TODO
+            //1. get least tx index
+            //2. compare index
+            //3. get tx and send to client
+        }
+
         let (sender, receiver) = unbounded::<WatchTransactionResponse>();
-        let id = hex::encode(address);
-        pub_sub::subscribe(id, sender.clone());
+        let id = address.hash();
+        let tx_lock = self.tx_pub.lock().unwrap();
+        tx_lock.subscribe(id, sender, Box::new(move |mut tx: WatchTransactionResponse| -> bool {
+            let signed_tx = SignedTransaction::from_proto(tx.take_signed_txn()).unwrap();
+            signed_tx.sender() == address
+        }));
 
         receiver
     }
 
-    pub fn watch_event_inner(&self, address: Vec<u8>) -> UnboundedReceiver<WatchEventResponse> {
-        unimplemented!()
+    pub fn watch_event_inner(&self, address: AccountAddress, _index: u64) -> UnboundedReceiver<WatchEventResponse> {
+        let (sender, receiver) = unbounded::<WatchEventResponse>();
+        let id = address.hash();
+        let event_lock = self.event_pub.lock().unwrap();
+        event_lock.subscribe(id, sender, Box::new(move |event: WatchEventResponse| -> bool {
+            let mut flag = false;
+            event.events.iter().for_each(|e| {
+                if flag {
+                    return;
+                }
+                let event_address = AccountAddress::from_proto(e.clone().take_access_path().address).unwrap();
+                flag = event_address == address;
+            });
+
+            flag
+        }));
+
+        receiver
     }
 
     pub fn least_state_root_inner(&self) -> HashValue {
@@ -182,7 +225,7 @@ impl ChainService {
     }
 
     pub fn faucet_inner(&self, account_address: AccountAddress, amount: u64) -> Result<HashValue> {
-        let mut state_db = self.state_db.lock().unwrap();
+        let state_db = self.state_db.lock().unwrap();
         state_db.create_account(account_address, amount)
     }
 }
@@ -231,13 +274,7 @@ impl Chain for ChainService {
                           req: SubmitTransactionRequest,
                           sink: ::grpcio::UnarySink<SubmitTransactionResponse>) {
         let resp = SignedTransaction::from_proto(req.signed_txn.clone().unwrap()).and_then(|signed_txn| {
-            let submit_txn_pb = req.signed_txn.clone().unwrap();
-            Ok((signed_txn, submit_txn_pb))
-        }).and_then(|(signed_txn, submit_txn_pb)| {
-            block_on(self.submit_transaction_inner(self.sender.clone(), TransactionInner::OnChain(signed_txn.clone())));
-            let mut wt_resp = WatchTransactionResponse::new();
-            wt_resp.set_signed_txn(submit_txn_pb);
-            pub_sub::send(wt_resp)?;
+            block_on(self.submit_transaction_inner(self.sender.clone(), TransactionInner::OnChain(signed_txn)));
 
             let mut submit_resp = SubmitTransactionResponse::new();
             let mut state = MempoolAddTransactionStatus::new();
@@ -252,13 +289,7 @@ impl Chain for ChainService {
     fn submit_off_chain_transaction(&mut self, ctx: ::grpcio::RpcContext, req: OffChainTransactionProto,
                                     sink: ::grpcio::UnarySink<SubmitTransactionResponse>) {
         let resp = OffChainTransaction::from_proto(req.clone()).and_then(|off_chain_tx| {
-            let submit_txn_pb = req.transaction.clone().unwrap();
-            Ok((off_chain_tx, submit_txn_pb))
-        }).and_then(|(off_chain_tx, submit_txn_pb)| {
             block_on(self.submit_transaction_inner(self.sender.clone(), TransactionInner::OffChain(off_chain_tx)));
-            let mut wt_resp = WatchTransactionResponse::new();
-            wt_resp.set_signed_txn(submit_txn_pb);
-            pub_sub::send(wt_resp)?;
 
             let mut submit_resp = SubmitTransactionResponse::new();
             let mut state = MempoolAddTransactionStatus::new();
@@ -273,7 +304,12 @@ impl Chain for ChainService {
     fn watch_transaction(&mut self, ctx: ::grpcio::RpcContext,
                          req: WatchTransactionRequest,
                          sink: ::grpcio::ServerStreamingSink<WatchTransactionResponse>) {
-        let receiver = self.watch_transaction_inner(req.address);
+        let index = if req.has_index() {
+            req.get_index()
+        } else {
+            std::u64::MAX
+        };
+        let receiver = self.watch_transaction_inner(AccountAddress::from_proto(req.address).unwrap(), index);
         let stream = receiver
             .map(|e| (e, WriteFlags::default()))
             .map_err(|_| grpcio::Error::RemoteStopped);
@@ -310,8 +346,22 @@ impl Chain for ChainService {
     fn watch_event(&mut self, ctx: ::grpcio::RpcContext,
                    req: WatchEventRequest,
                    sink: ::grpcio::ServerStreamingSink<WatchEventResponse>) {
-        self.watch_event_inner(req.address);
-        unimplemented!()
+        let index = if req.has_index() {
+            req.get_index()
+        } else {
+            std::u64::MAX
+        };
+        let receiver = self.watch_event_inner(AccountAddress::from_proto(req.address).unwrap(), index);
+        let stream = receiver
+            .map(|e| (e, WriteFlags::default()))
+            .map_err(|_| grpcio::Error::RemoteStopped);
+
+        ctx.spawn(
+            sink
+                .send_all(stream)
+                .map(|_| println!("completed"))
+                .map_err(|e| println!("failed to reply: {:?}", e)),
+        );
     }
 }
 
