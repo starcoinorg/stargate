@@ -3,38 +3,34 @@ mod state_storage_test;
 pub mod sparse_merkle;
 
 use std::collections::{HashMap, BTreeMap};
-use std::rc::Rc;
 
 use crypto::{
-    hash::{AccountStateBlobHasher, CryptoHash, CryptoHasher, SPARSE_MERKLE_PLACEHOLDER_HASH},
+    hash::{CryptoHash, SPARSE_MERKLE_PLACEHOLDER_HASH},
     HashValue,
 };
 use failure::prelude::*;
 use types::account_address::AccountAddress;
 use types::account_state_blob::AccountStateBlob;
 use types::proof::SparseMerkleProof;
-use types::write_set::{WriteOp, WriteSet};
-use types::access_path::{AccessPath, DataPath, Accesses};
-use types::access_path::Access;
+use types::access_path::{AccessPath, DataPath};
 use std::convert::TryFrom;
-use std::cell::RefCell;
 use itertools::Itertools;
 use std::sync::Arc;
 use crate::sparse_merkle::{SparseMerkleTree, ProofRead};
 use atomic_refcell::AtomicRefCell;
-use std::ops::Deref;
-use star_types::offchain_transaction::OffChainTransaction;
-use types::account_config::{AccountResource, account_resource_path, account_struct_tag, coin_struct_tag, COIN_MODULE_NAME, core_code_address, EventHandle};
+use star_types::offchain_transaction::{OffChainTransaction, TransactionOutput};
+use types::account_config::{AccountResource, account_resource_path, EventHandle};
 use types::byte_array::ByteArray;
 use canonical_serialization::{SimpleSerializer, CanonicalSerialize};
 use state_view::StateView;
 use logger::prelude::*;
-use star_types::change_set::{ChangeSet, Changes, StructDefResolve, ChangeSetMut};
-use star_types::resource::{Resource, get_account_struct_def, get_coin_struct_def, get_market_cap_struct_tag, get_market_cap_struct_def, get_mint_capability_struct_tag, get_mint_capability_struct_def, get_event_handle_struct_tag, get_event_handle_struct_def, get_event_handle_id_generator_tag, get_event_handle_id_generator_def};
+use star_types::change_set::{ChangeSet, Changes, StructDefResolve};
+use star_types::resource::{Resource};
 use types::language_storage::StructTag;
 use lazy_static::lazy_static;
 use vm_runtime_types::loaded_data::struct_def::StructDef;
 use struct_cache::StructCache;
+use state_store::{StateStore, StateViewPlus};
 
 pub struct AccountState {
     state: Arc<AtomicRefCell<BTreeMap<DataPath, Vec<u8>>>>
@@ -73,53 +69,12 @@ impl AccountState {
         self.state.borrow_mut().insert(data_path, value);
     }
 
-    pub fn apply_changes(&self, data_path: &DataPath, changes: &Changes, resolve: &dyn StructDefResolve) -> Result<HashValue> {
-        match changes {
-            Changes::Value(value) => {
-                self.state.borrow_mut().insert(data_path.clone(), value.clone());
-            },
-            Changes::Deletion => {
-                self.state.borrow_mut().remove(data_path);
-            }
-            Changes::Fields(fields) => {
-                let old_resource = self.get_resource(data_path, resolve)?;
-                match old_resource {
-                    Some(mut old_resource) => {
-                        debug!("apply changes: {:#?} to resource {:#?}", fields, old_resource);
-                        old_resource.apply_changes(fields);
-                        debug!("merged resource {:#?}", old_resource);
-                        self.do_update(data_path.clone(), old_resource.encode());
-                    },
-                    None => {
-                        let tag = data_path.resource_tag().ok_or(format_err!("get resource tag from path fail."))?;
-                        let def = resolve.resolve(tag)?;
-                        debug!("init new resource {:?} from change {:#?}", tag, fields);
-                        let new_resource = Resource::from_changes(fields, &def);
-                        debug!("result {:?}", new_resource);
-                        self.do_update(data_path.clone(), new_resource.encode());
-                    }
-                }
-            }
-        };
-
-        Ok(self.root_hash())
-    }
-
     pub fn get(&self, path: &Vec<u8>) -> Option<Vec<u8>> {
         self.get_state(&DataPath::from(path.as_slice()).unwrap())
     }
 
     pub fn get_state(&self, data_path: &DataPath) -> Option<Vec<u8>>{
         self.state.borrow().get(data_path).cloned()
-    }
-
-    pub fn get_resource(&self, data_path: &DataPath, resolve: &dyn StructDefResolve) -> Result<Option<Resource>> {
-        let tag = data_path.resource_tag().ok_or(format_err!("get resource tag from path fail."))?;
-        let def = resolve.resolve(tag)?;
-
-        Ok(self.get_state(data_path).and_then(|state|{
-            Resource::decode(def, state.as_slice()).ok()
-        }))
     }
 
     pub fn delete(&self, path: &Vec<u8>) -> Result<HashValue> {
@@ -202,6 +157,7 @@ impl StateStorage {
         self.account_states.borrow().contains_key(address)
     }
 
+    #[deprecated]
     pub fn create_account(&self, address: AccountAddress, init_amount: u64) -> Result<HashValue> {
         if self.exist_account(&address) {
             bail!("account with address: {} already exist.", address);
@@ -217,7 +173,7 @@ impl StateStorage {
         state.update(account_resource_path(), value);
         self.update_account(address, state)
     }
-
+    #[deprecated]
     fn update_account(&self, address: AccountAddress, account_state: AccountState) -> Result<HashValue> {
         {
             let account_root_hash = account_state.root_hash();
@@ -236,7 +192,7 @@ impl StateStorage {
     fn ensure_account_state(&self, address: &AccountAddress){
         if !self.exist_account(address){
             let account_state = AccountState::new();
-            self.update_account(*address, account_state);
+            self.account_states.borrow_mut().insert(*address, account_state);
         }
     }
 
@@ -244,96 +200,23 @@ impl StateStorage {
         self.account_states.borrow().get(&access_path.address).and_then(|state| state.get(&access_path.path))
     }
 
-//    fn get_state(&self, access_path: &AccessPath) -> Option<&State>{
-//        self.get_account_state(&access_path.address).and_then(|state| state.get_state(&access_path.data_path().unwrap()))
-//    }
-
-    pub fn get_resource(&self, access_path: &AccessPath) -> Result<Option<Resource>> {
-        let states = self.account_states.borrow();
-        let state = states.get(&access_path.address);
-        match state {
-            None => Ok(None),
-            Some(state) => state.get_resource(&access_path.data_path().unwrap(),self)
-        }
-    }
-
     pub fn apply_txn(&self, txn: &OffChainTransaction) -> Result<HashValue> {
-        self.apply_change_set(txn.output().change_set())
+        self.apply_output(txn.output())
     }
 
-    pub fn apply_write_set(&self, write_set: &WriteSet) -> Result<HashValue> {
-        self.apply_change_set(&self.write_set_to_change_set(write_set)?)
-    }
-
-    pub fn write_set_to_change_set(&self, write_set: &WriteSet) -> Result<ChangeSet> {
-        let change_set:Result<Vec<(AccessPath, Changes)>> = write_set.iter().map(|(ap,write_op)|{
-            let changes = match write_op {
-                WriteOp::Deletion => Changes::Deletion,
-                WriteOp::Value(value) => if ap.is_code(){
-                    Changes::Value(value.clone())
-                }else{
-                    let old_resource = self.get_resource(ap)?;
-                    let new_resource = Resource::decode(self.resolve(&ap.resource_tag().ok_or(format_err!("get resource tag fail"))?)?, value.as_slice())?;
-
-                    let field_changes = match old_resource {
-                        Some(old_resource) => old_resource.diff(&new_resource)?,
-                        None => new_resource.to_changes()
-                    };
-                    Changes::Fields(field_changes)
-                }
-            };
-            Ok((ap.clone(), changes))
-        }).collect();
-        ChangeSetMut::new(change_set?).freeze()
-    }
-
-    pub fn apply_change_set(&self, change_set: &ChangeSet) -> Result<HashValue> {
-        {
-            for (access_path, changes) in change_set {
-                self.apply_changes(access_path, changes);
-            }
-        }
+    pub fn apply_output(&self, txn_output: &TransactionOutput) -> Result<HashValue> {
+        self.apply_change_set(txn_output.change_set())?;
         Ok(self.root_hash())
     }
 
-    pub fn apply_changes(&self, access_path: &AccessPath, changes: &Changes) {
-        self.ensure_account_state(&access_path.address);
-        //this account state must exist, so use unwrap.
-        let mut states = self.account_states.borrow_mut();
-        let account_state = states.get_mut(&access_path.address).unwrap();
-        //let resolve = &*self.struct_def_resolve;
-        //TODO fix unwrap
-        let data_path = &access_path.data_path().unwrap();
-        account_state.apply_changes(data_path, changes, self);
-    }
-
-
-//    pub fn update(&mut self, access_path: &AccessPath, value: Vec<u8>) -> Result<HashValue> {
-//        {
-//            let account_state = self.get_account_state_or_create(&access_path.address);
-//            let account_root_hash = account_state.update(access_path.path.clone(), value)?;
-//            let mut global_state = self.global_state.borrow_mut();
-//            *global_state = global_state.update(vec![(access_path.address.hash(), AccountStateBlob::from(account_root_hash.to_vec()))], &ProofReader::default()).unwrap();
-//        }
-//        Ok(self.global_state.borrow().root_hash())
-//    }
-//
-    pub fn delete(&self, access_path: &AccessPath) -> Result<HashValue> {
-        let mut states = self.account_states.borrow_mut();
-        let account_state = states.get_mut(&access_path.address);
-        match account_state {
-            Some(account_state) => {
-                let account_root_hash = account_state.delete(&access_path.path)?;
-                let mut global_state = self.global_state.borrow_mut();
-                *global_state = global_state.update(vec![(access_path.address.hash(), AccountStateBlob::from(account_root_hash.to_vec()))], &ProofReader::default()).unwrap();
-            }
-            None => { return bail!("can not find account by address:{}", access_path.address); }
-        };
-        Ok(self.global_state.borrow().root_hash())
+    pub fn apply_libra_output(&self, txn_output: &types::transaction::TransactionOutput) -> Result<HashValue> {
+        self.apply_write_set(txn_output.write_set())?;
+        Ok(self.root_hash())
     }
 }
 
 impl StateView for StateStorage {
+
     fn get(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
         Ok(self.get_by_access_path(access_path))
     }
@@ -346,6 +229,38 @@ impl StateView for StateStorage {
 
     fn is_genesis(&self) -> bool {
         false
+    }
+}
+
+impl StateViewPlus for StateStorage {
+
+}
+
+impl StateStore for StateStorage {
+
+    fn update(&self, access_path: &AccessPath, value: Vec<u8>) -> Result<()> {
+        self.ensure_account_state(&access_path.address);
+        let mut states = self.account_states.borrow_mut();
+        //this account state must exist, so use unwrap.
+        let mut account_state = states.get_mut(&access_path.address).unwrap();
+        let account_root_hash = account_state.update(access_path.path.clone(), value)?;
+        let mut global_state = self.global_state.borrow_mut();
+        *global_state = global_state.update(vec![(access_path.address.hash(), AccountStateBlob::from(account_root_hash.to_vec()))], &ProofReader::default()).unwrap();
+        Ok(())
+    }
+
+    fn delete(&self, access_path: &AccessPath) -> Result<()> {
+        let mut states = self.account_states.borrow_mut();
+        let account_state = states.get_mut(&access_path.address);
+        match account_state {
+            Some(account_state) => {
+                let account_root_hash = account_state.delete(&access_path.path)?;
+                let mut global_state = self.global_state.borrow_mut();
+                *global_state = global_state.update(vec![(access_path.address.hash(), AccountStateBlob::from(account_root_hash.to_vec()))], &ProofReader::default()).unwrap();
+            }
+            None => { bail!("can not find account by address:{}", access_path.address); }
+        };
+        Ok(())
     }
 }
 

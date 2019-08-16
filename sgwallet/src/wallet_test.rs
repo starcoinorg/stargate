@@ -29,6 +29,6 @@ fn test_wallet() {
     let transfer_amount = 1_000_000;
     let offchain_txn = wallet.transfer(coin_struct_tag(), account_address2, transfer_amount).unwrap();
     debug!("txn:{:#?}", offchain_txn);
-    wallet.apply_txn(&offchain_txn);
+    wallet.apply_txn(&offchain_txn)?;
     assert_eq!(amount - transfer_amount - offchain_txn.output().gas_used(), wallet.balance());
 }

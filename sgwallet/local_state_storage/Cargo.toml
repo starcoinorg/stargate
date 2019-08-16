@@ -16,6 +16,7 @@ star_types = { path = "../../star_types" }
 state_storage = {path = "../../storage/state_storage"}
 chain_client = {path = "../../chain/chain_client"}
 state_view = {path = "../../storage/state_view"}
+state_store = {path = "../../storage/state_store"}
 struct_cache = {path = "../../storage/struct_cache" }
 logger = { path = "../../common/logger"}
 atomic_refcell = "0.1.3"

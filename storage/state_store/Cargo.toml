@@ -1,0 +1,18 @@
+[package]
+name = "state_store"
+version = "0.1.0"
+authors = ["jolestar <jolestar@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+failure = { path = "../../common/failure_ext", package = "failure_ext" }
+types = { path = "../../types" }
+star_types = { path = "../../star_types"}
+state_view = { path = "../state_view"}
+crypto = { path = "../../crypto/legacy_crypto" }
+logger = { path = "../../common/logger"}
+
+[dev-dependencies]
+types = { path = "../../types", features = ["testing"]}

@@ -15,6 +15,7 @@ use atomic_refcell::AtomicRefCell;
 use struct_cache::StructCache;
 use types::language_storage::{StructTag};
 use vm_runtime_types::loaded_data::struct_def::StructDef;
+use state_store::{StateViewPlus, StateStore};
 
 pub struct LocalStateStorage<C>
 where
@@ -55,48 +56,33 @@ where
         self.state.borrow().get(path)
     }
 
-    fn update(&self, access_path: &AccessPath, value: &Vec<u8>) {
+}
+
+impl<C> StateStore for LocalStateStorage<C>
+    where
+        C: ChainClient,
+{
+    fn update(&self, access_path: &AccessPath, value: Vec<u8>) -> Result<()> {
         if self.account == access_path.address {
             self.state.borrow().update(access_path.path.clone(), value.clone());
-        } else {
-            //TODO check channel
-            match self.channels.borrow_mut().get_mut(&access_path.address) {
-                Some(channel_state) => {
-                    channel_state.update(access_path.path.clone(), value.clone());
-                }
-                None => {
-                    let mut channel_state = AccountState::new();
-                    channel_state.update(access_path.path.clone(), value.clone());
-                    self.channels.borrow_mut().insert(access_path.address, channel_state);
-                }
-            }
-        }
-    }
-
-    fn apply_changes(&self, access_path: &AccessPath, changes: &Changes) {
-        //TODO fix unwrap
-        let data_path = &access_path.data_path().unwrap();
-        debug!("apply {:?} changes:{:#?}", access_path, changes);
-        if self.account == access_path.address {
-            self.state.borrow().apply_changes(&data_path, changes, self);
         } else {
             //TODO check channel
             let mut channels = self.channels.borrow_mut();
             match channels.get_mut(&access_path.address) {
                 Some(channel_state) => {
-                    channel_state.apply_changes(&data_path, changes, self);
+                    channel_state.update(access_path.path.clone(), value.clone());
                 }
                 None => {
-                    debug!("init new channel_state with address:{}", access_path.address);
                     let mut channel_state = AccountState::new();
-                    channel_state.apply_changes(&data_path, changes, self);
+                    channel_state.update(access_path.path.clone(), value.clone());
                     channels.insert(access_path.address, channel_state);
                 }
             }
         }
+        Ok(())
     }
 
-    fn delete(&self, access_path: &AccessPath) {
+    fn delete(&self, access_path: &AccessPath) -> Result<()> {
         if self.account == access_path.address {
             self.state.borrow().delete(&access_path.path);
         } else {
@@ -110,56 +96,14 @@ where
                 }
             }
         }
+        Ok(())
     }
+}
 
-    pub fn apply_write_set(&self, write_set: &WriteSet) {
-        self.apply_change_set(&self.write_set_to_change_set(write_set).unwrap())
-    }
-
-    //TODO fix dup code.
-    pub fn write_set_to_change_set(&self, write_set: &WriteSet) -> Result<ChangeSet> {
-        let change_set:Result<Vec<(AccessPath, Changes)>> = write_set.iter().map(|(ap,write_op)|{
-            let changes = match write_op {
-                WriteOp::Deletion => Changes::Deletion,
-                WriteOp::Value(value) => if ap.is_code(){
-                    Changes::Value(value.clone())
-                }else{
-                    let old_resource = self.get_resource(ap)?;
-                    let new_resource = Resource::decode(self.resolve(&ap.resource_tag().ok_or(format_err!("get resource tag fail"))?)?, value.as_slice())?;
-
-                    let field_changes = match old_resource {
-                        Some(old_resource) => old_resource.diff(&new_resource)?,
-                        None => new_resource.to_changes()
-                    };
-                    Changes::Fields(field_changes)
-                }
-            };
-            Ok((ap.clone(), changes))
-        }).collect();
-        ChangeSetMut::new(change_set?).freeze()
-    }
-
-    pub fn get_resource(&self, access_path: &AccessPath) -> Result<Option<Resource>> {
-        let state = self.get(&access_path)?;
-        match state {
-            None => Ok(None),
-            Some(state) => {
-                //TODO fix unwrap
-                let tag = access_path.resource_tag().unwrap();
-                let def = self.resolve(&tag)?;
-                Ok(Some(Resource::decode(def, state.as_slice())?))
-            }
-        }
-    }
-
-    pub fn apply_change_set(&self, change_set: &ChangeSet){
-        {
-            for (access_path, changes) in change_set {
-                self.apply_changes(access_path, changes);
-            }
-        }
-    }
-
+impl<C> StateViewPlus for LocalStateStorage<C>
+    where
+        C: ChainClient,
+{
 
 }
 

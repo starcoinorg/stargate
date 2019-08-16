@@ -19,6 +19,8 @@ members = [
     "storage/state_view",
     "storage/scratchpad",
     "storage/state_storage",
+    "storage/struct_cache",
+    "storage/state_store",
     "language/vm",
     "language/vm/serializer_tests",
     "language/vm/vm_runtime",

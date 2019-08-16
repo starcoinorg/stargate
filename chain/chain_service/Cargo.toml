@@ -33,6 +33,7 @@ compiler = { path = "../../language/compiler" }
 vm_runtime_types = { path = "../../language/vm/vm_runtime/vm_runtime_types" }
 vm = { path = "../../language/vm" }
 state_view = { path = "../../storage/state_view" }
+state_store = { path = "../../storage/state_store" }
 bytecode_verifier = { path = "../../language/bytecode_verifier" }
 struct_cache = { path = "../../storage/struct_cache" }
 clap = "2.32"

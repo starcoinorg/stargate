@@ -24,6 +24,7 @@ use types::language_storage::StructTag;
 use types::transaction::{Program, RawTransaction, RawTransactionBytes, SignedTransaction, TransactionStatus};
 use types::transaction_helpers::TransactionSigner;
 use types::vm_error::*;
+use state_store::StateStore;
 
 pub struct Wallet<C>
     where

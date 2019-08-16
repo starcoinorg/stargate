@@ -1,12 +1,10 @@
-use std::thread;
-
-use canonical_serialization::{CanonicalDeserialize, CanonicalSerialize, SimpleDeserializer, SimpleSerializer};
+use super::*;
+use canonical_serialization::{CanonicalDeserialize, SimpleDeserializer};
 use types::account_config::AccountResource;
 use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR};
-
-use super::*;
 use types::transaction::TransactionPayload;
 use std::convert::TryInto;
+use std::thread;
 
 #[test]
 fn test_state_storage() {
