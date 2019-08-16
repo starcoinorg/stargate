@@ -42,6 +42,7 @@ use types::access_path::AccessPath;
 use core::borrow::{Borrow};
 use proto_conv::{FromProto, IntoProto};
 use protobuf::RepeatedField;
+use state_store::StateStore;
 
 lazy_static! {
     static ref VM_CONFIG:VMConfig = VMConfig{
@@ -123,7 +124,8 @@ impl ChainService {
             match payload {
                 TransactionPayload::WriteSet(ws) => {
                     let state_db = self.state_db.lock().unwrap();
-                    let state_hash = state_db.apply_write_set(&ws).unwrap();
+                    state_db.apply_write_set(&ws).unwrap();
+                    let state_hash = state_db.root_hash();
                     //let state_hash = SparseMerkleTree::default().root_hash();
 
 //                    // 2. add signed_tx
@@ -144,7 +146,8 @@ impl ChainService {
                     let mut output_vec = MoveVM::execute_block(vec![sign_tx.clone()], &VM_CONFIG, &*state_db);
 
                     output_vec.pop().and_then(|output| {
-                        let state_hash = state_db.apply_write_set(&output.write_set()).unwrap();
+                        state_db.apply_write_set(&output.write_set()).unwrap();
+                        let state_hash = state_db.root_hash();
                         tx_db.insert_all(state_hash, sign_tx.clone());
 
                         let events: Vec<Event> = output.events().iter().map(|e| -> Event {
