@@ -24,7 +24,9 @@
 //! Note2: The level of tree counts from leaf level, start from 0
 //! Note3: The leaf index starting from left-most leaf, starts from 0
 
-use super::treebits;
+#[cfg(test)]
+mod position_test;
+mod treebits;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct Position(u64);
@@ -65,14 +67,22 @@ impl Position {
         Self::from_inorder_index(treebits::right_child(self.0))
     }
 
-    // Note: if self is root, the direction will overflow (and will always be left)
-    pub fn get_direction_for_self(self) -> treebits::NodeDirection {
-        treebits::direction_from_parent(self.0)
+    /// Whether this position is a left child of its parent.
+    pub fn is_left_child(self) -> bool {
+        match treebits::direction_from_parent(self.0) {
+            treebits::NodeDirection::Left => true,
+            treebits::NodeDirection::Right => false,
+        }
     }
 
     // The level start from 0 counting from the leaf level
     pub fn get_level(self) -> u32 {
         treebits::level(self.0)
+    }
+
+    // Compute the position given the level and the pos count on this level.
+    pub fn from_level_and_pos(level: u32, pos: u64) -> Self {
+        Self::from_inorder_index(treebits::node_from_level_and_pos(level, pos))
     }
 
     // Given the position, return the leaf index counting from the left
