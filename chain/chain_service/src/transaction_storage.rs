@@ -15,7 +15,7 @@ pub struct TransactionStorage {
 
 impl TransactionStorage {
     pub fn new() -> Self {
-        TransactionStorage { signed_tx_vec: vec![], signed_tx_hash_map: HashMap::new(), tx_info_vec: vec![], ledger_info_vec: vec![], accumulator: Accumulator::new(vec![], 0) }
+        TransactionStorage { signed_tx_vec: vec![], signed_tx_hash_map: HashMap::new(), tx_info_vec: vec![], ledger_info_vec: vec![], accumulator: Accumulator::new(vec![], 0).unwrap() }
     }
 
     pub fn exist_signed_transaction(&self, key: HashValue) -> bool {

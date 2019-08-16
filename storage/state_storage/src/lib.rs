@@ -24,13 +24,13 @@ use crate::sparse_merkle::{SparseMerkleTree, ProofRead};
 use atomic_refcell::AtomicRefCell;
 use std::ops::Deref;
 use star_types::offchain_transaction::OffChainTransaction;
-use types::account_config::{AccountResource, account_resource_path, account_struct_tag, coin_struct_tag, COIN_MODULE_NAME, core_code_address};
+use types::account_config::{AccountResource, account_resource_path, account_struct_tag, coin_struct_tag, COIN_MODULE_NAME, core_code_address, EventHandle};
 use types::byte_array::ByteArray;
 use canonical_serialization::{SimpleSerializer, CanonicalSerialize};
 use state_view::StateView;
 use logger::prelude::*;
 use star_types::change_set::{ChangeSet, Changes, StructDefResolve, ChangeSetMut};
-use star_types::resource::{Resource, get_account_struct_def, get_coin_struct_def, get_market_cap_struct_tag, get_market_cap_struct_def, get_mint_capability_struct_tag, get_mint_capability_struct_def};
+use star_types::resource::{Resource, get_account_struct_def, get_coin_struct_def, get_market_cap_struct_tag, get_market_cap_struct_def, get_mint_capability_struct_tag, get_mint_capability_struct_def, get_event_handle_struct_tag, get_event_handle_struct_def, get_event_handle_id_generator_tag, get_event_handle_id_generator_def};
 use types::language_storage::StructTag;
 use lazy_static::lazy_static;
 use vm_runtime_types::loaded_data::struct_def::StructDef;
@@ -213,7 +213,9 @@ impl StateStorage {
         }
         info!("create account:{}", address);
         let mut state = AccountState::new();
-        let account_resource = AccountResource::new(init_amount, 0, ByteArray::new(address.to_vec()), 0, 0, false);
+        //TODO not directly create account
+        let event_handle = EventHandle::new_from_address(&address, 0);
+        let account_resource = AccountResource::new(init_amount, 0, ByteArray::new(address.to_vec()), false, event_handle.clone(), event_handle.clone());
         let mut serializer = SimpleSerializer::new();
         account_resource.serialize(&mut serializer);
         let value: Vec<u8> = serializer.get_output();
@@ -366,6 +368,8 @@ impl StaticStructDefResolve {
         register.insert(coin_struct_tag(), get_coin_struct_def());
         register.insert(get_market_cap_struct_tag(), get_market_cap_struct_def());
         register.insert(get_mint_capability_struct_tag(), get_mint_capability_struct_def());
+        register.insert( get_event_handle_struct_tag(), get_event_handle_struct_def());
+        register.insert(get_event_handle_id_generator_tag(), get_event_handle_id_generator_def());
         Self{
             register
         }

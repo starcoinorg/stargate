@@ -7,7 +7,7 @@ use failure::prelude::*;
 use logger::prelude::*;
 use types::access_path::{Access, Accesses};
 use types::account_address::AccountAddress;
-use types::account_config::{account_struct_tag, AccountResource, COIN_MODULE_NAME, core_code_address};
+use types::account_config::{account_struct_tag, AccountResource, COIN_MODULE_NAME, core_code_address, COIN_STRUCT_NAME};
 use types::byte_array::ByteArray;
 use types::language_storage::StructTag;
 use vm_runtime_types::{loaded_data::struct_def::StructDef, value::MutVal};
@@ -280,12 +280,15 @@ pub fn get_account_struct_def() -> StructDef {
     let int_type = Type::U64;
     let byte_array_type = Type::ByteArray;
     let coin = Type::Struct(get_coin_struct_def());
+
+    let event_handle = Type::Struct(get_event_handle_struct_def());
+
     StructDef::new(vec![
         byte_array_type,
         coin,
         Type::Bool,
-        int_type.clone(),
-        int_type.clone(),
+        event_handle.clone(),
+        event_handle.clone(),
         int_type.clone(),
     ])
 }
@@ -320,4 +323,35 @@ pub fn get_mint_capability_struct_tag() -> StructTag{
 
 pub fn get_mint_capability_struct_def() -> StructDef {
     StructDef::new(vec![])
+}
+
+pub fn get_event_handle_struct_tag() -> StructTag {
+    StructTag {
+        module: "Event".to_string(),
+        name: "Handle".to_string(),
+        address: core_code_address(),
+        type_params: vec![],
+    }
+}
+
+pub fn get_event_handle_struct_def() -> StructDef {
+    StructDef::new(vec![
+        Type::U64,
+        Type::ByteArray,
+    ])
+}
+
+pub fn get_event_handle_id_generator_tag() -> StructTag {
+    StructTag {
+        module: "Event".to_string(),
+        name: "HandleIdGenerator".to_string(),
+        address: core_code_address(),
+        type_params: vec![],
+    }
+}
+
+pub fn get_event_handle_id_generator_def() -> StructDef {
+    StructDef::new(vec![
+        Type::U64,
+    ])
 }
