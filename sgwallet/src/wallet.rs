@@ -106,9 +106,9 @@ impl<C> Wallet<C>
         Ok(OffChainTransaction::new(txn, receiver_address, output, output_signature))
     }
 
-    pub fn apply_txn(&mut self, txn: &OffChainTransaction) -> Result<()> {
+    pub fn apply_txn(&self, txn: &OffChainTransaction) -> Result<()> {
         //TODO verify signature
-        self.storage.borrow_mut().apply_txn(txn);
+        self.storage.borrow().apply_txn(txn);
         Ok(())
     }
 

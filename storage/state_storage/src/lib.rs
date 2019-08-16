@@ -51,14 +51,14 @@ impl AccountState {
     }
 
     pub fn from_account_state_blob(account_state_blob: Vec<u8>) -> Result<Self> {
-        let mut state = Self::new();
+        let state = Self::new();
         let bmap = BTreeMap::try_from(&AccountStateBlob::from(account_state_blob))?;
         let updates = bmap.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-        Self::update_state(&mut state, updates);
+        Self::update_state(&state, updates);
         Ok(state)
     }
 
-    fn update_state(state: &mut AccountState, updates: Vec<(Vec<u8>, Vec<u8>)>) -> Result<()> {
+    fn update_state(state: &AccountState, updates: Vec<(Vec<u8>, Vec<u8>)>) -> Result<()> {
         for (path, value) in updates {
             state.update(path, value)?;
         }
@@ -66,17 +66,17 @@ impl AccountState {
     }
 
     /// update path resource and return new root.
-    pub fn update(&mut self, path: Vec<u8>, value: Vec<u8>) -> Result<HashValue> {
+    pub fn update(&self, path: Vec<u8>, value: Vec<u8>) -> Result<HashValue> {
         let data_path = DataPath::from(path.as_slice())?;
         self.do_update(data_path, value);
         Ok(self.root_hash())
     }
 
-    fn do_update(&mut self, data_path: DataPath, value: Vec<u8>){
+    fn do_update(&self, data_path: DataPath, value: Vec<u8>){
         self.state.borrow_mut().insert(data_path, value);
     }
 
-    pub fn apply_changes(&mut self, data_path: &DataPath, changes: &Changes, resolve: &dyn StructDefResolve) -> Result<HashValue> {
+    pub fn apply_changes(&self, data_path: &DataPath, changes: &Changes, resolve: &dyn StructDefResolve) -> Result<HashValue> {
         match changes {
             Changes::Value(value) => {
                 self.state.borrow_mut().insert(data_path.clone(), value.clone());
@@ -125,11 +125,11 @@ impl AccountState {
         }))
     }
 
-    pub fn delete(&mut self, path: &Vec<u8>) -> Result<HashValue> {
+    pub fn delete(&self, path: &Vec<u8>) -> Result<HashValue> {
         self.delete_state(&DataPath::from(path.as_slice())?)
     }
 
-    pub fn delete_state(&mut self, path: &DataPath) -> Result<HashValue> {
+    pub fn delete_state(&self, path: &DataPath) -> Result<HashValue> {
         self.state.borrow_mut().remove(path);
         Ok(self.root_hash())
     }
@@ -205,7 +205,7 @@ impl StateStorage {
         self.account_states.borrow().contains_key(address)
     }
 
-    pub fn create_account(&mut self, address: AccountAddress, init_amount: u64) -> Result<HashValue> {
+    pub fn create_account(&self, address: AccountAddress, init_amount: u64) -> Result<HashValue> {
         if self.exist_account(&address) {
             bail!("account with address: {} already exist.", address);
         }
@@ -243,17 +243,6 @@ impl StateStorage {
         }
     }
 
-//    fn get_account_state_or_create(&self, address: &AccountAddress) -> &mut AccountState {
-//        if !self.exist_account(address){
-//            let account_state = AccountState::new();
-//            self.update_account(*address, account_state);
-//        }
-//        //this account state must exist, so use unwrap.
-//        //let mut states =
-//        (&mut *self.account_states.borrow_mut()).get_mut(address).unwrap()
-//        //states.get_mut(address).unwrap()
-//    }
-
     fn get_by_access_path(&self, access_path: &AccessPath) -> Option<Vec<u8>> {
         self.account_states.borrow().get(&access_path.address).and_then(|state| state.get(&access_path.path))
     }
@@ -271,11 +260,11 @@ impl StateStorage {
         }
     }
 
-    pub fn apply_txn(&mut self, txn: &OffChainTransaction) -> Result<HashValue> {
+    pub fn apply_txn(&self, txn: &OffChainTransaction) -> Result<HashValue> {
         self.apply_change_set(txn.output().change_set())
     }
 
-    pub fn apply_write_set(&mut self, write_set: &WriteSet) -> Result<HashValue> {
+    pub fn apply_write_set(&self, write_set: &WriteSet) -> Result<HashValue> {
         self.apply_change_set(&self.write_set_to_change_set(write_set)?)
     }
 
@@ -334,7 +323,7 @@ impl StateStorage {
 //        Ok(self.global_state.borrow().root_hash())
 //    }
 //
-    pub fn delete(&mut self, access_path: &AccessPath) -> Result<HashValue> {
+    pub fn delete(&self, access_path: &AccessPath) -> Result<HashValue> {
         let mut states = self.account_states.borrow_mut();
         let account_state = states.get_mut(&access_path.address);
         match account_state {

@@ -18,7 +18,7 @@ where
     C: ChainClient,
 {
     account: AccountAddress,
-    state: AccountState,
+    state: AtomicRefCell<AccountState>,
     client: Arc<C>,
     channels: AtomicRefCell<HashMap<AccountAddress, AccountState>>,
     struct_def_resolve: Arc<dyn StructDefResolve>,
@@ -32,7 +32,7 @@ where
         let state_blob = client.get_account_state(&account).and_then(|state| {
             state.ok_or(format_err!("can not find account by address:{}", account))
         })?;
-        let state = AccountState::from_account_state_blob(state_blob)?;
+        let state = AtomicRefCell::new(AccountState::from_account_state_blob(state_blob)?);
         Ok(Self {
             account,
             state,
@@ -42,19 +42,19 @@ where
         })
     }
 
-    pub fn apply_txn(&mut self, txn: &OffChainTransaction) {
+    pub fn apply_txn(&self, txn: &OffChainTransaction) {
         let output = txn.output();
         let change_set = output.change_set();
         self.apply_change_set(change_set);
     }
 
     pub fn get_by_path(&self, path: &Vec<u8>) -> Option<Vec<u8>> {
-        self.state.get(path)
+        self.state.borrow().get(path)
     }
 
-    fn update(&mut self, access_path: &AccessPath, value: &Vec<u8>) {
+    fn update(&self, access_path: &AccessPath, value: &Vec<u8>) {
         if self.account == access_path.address {
-            self.state.update(access_path.path.clone(), value.clone());
+            self.state.borrow().update(access_path.path.clone(), value.clone());
         } else {
             //TODO check channel
             match self.channels.borrow_mut().get_mut(&access_path.address) {
@@ -70,14 +70,13 @@ where
         }
     }
 
-    fn apply_changes(&mut self, access_path: &AccessPath, changes: &Changes) {
+    fn apply_changes(&self, access_path: &AccessPath, changes: &Changes) {
         //TODO fix unwrap
         let data_path = &access_path.data_path().unwrap();
-        //TODO use self.struct_def_resolve
-        let resolve = &StaticStructDefResolve::new();
+        let resolve = &*self.struct_def_resolve;
         debug!("apply {:?} changes:{:#?}", access_path, changes);
         if self.account == access_path.address {
-            self.state.apply_changes(&data_path, changes, resolve);
+            self.state.borrow().apply_changes(&data_path, changes, resolve);
         } else {
             //TODO check channel
             let mut channels = self.channels.borrow_mut();
@@ -95,9 +94,9 @@ where
         }
     }
 
-    fn delete(&mut self, access_path: &AccessPath) {
+    fn delete(&self, access_path: &AccessPath) {
         if self.account == access_path.address {
-            self.state.delete(&access_path.path);
+            self.state.borrow().delete(&access_path.path);
         } else {
             //TODO check channel
             match self.channels.borrow_mut().get_mut(&access_path.address) {
@@ -111,7 +110,7 @@ where
         }
     }
 
-    pub fn apply_write_set(&mut self, write_set: &WriteSet) {
+    pub fn apply_write_set(&self, write_set: &WriteSet) {
         self.apply_change_set(&self.write_set_to_change_set(write_set).unwrap())
     }
 
@@ -151,7 +150,7 @@ where
         }
     }
 
-    pub fn apply_change_set(&mut self, change_set: &ChangeSet){
+    pub fn apply_change_set(&self, change_set: &ChangeSet){
         {
             for (access_path, changes) in change_set {
                 self.apply_changes(access_path, changes);
@@ -169,7 +168,7 @@ where
     fn get(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
         let AccessPath { address, path } = access_path;
         if address == &self.account {
-            Ok(self.state.get(path))
+            Ok(self.state.borrow().get(path))
         } else {
             let mut channels = self.channels.borrow_mut();
             match channels.get(address) {
