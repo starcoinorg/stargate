@@ -21,7 +21,9 @@ service Chain {
 
 message WatchEventRequest {
     bytes address = 1;
-    uint64 start_tx = 2;
+    oneof start_tx {
+        uint64 index = 2;
+    }
 }
 
 message WatchEventResponse {
@@ -61,7 +63,9 @@ message GetAccountStateWithProofByStateRootResponse {
 
 message WatchTransactionRequest {
     bytes address = 1;
-    uint64 start_tx = 2;
+    oneof start_tx {
+        uint64 index = 2;
+    }
 }
 
 message WatchTransactionResponse {
@@ -75,7 +79,7 @@ message SubmitTransactionRequest {
 
 message SubmitTransactionResponse {
   oneof status {
-    MempoolAddTransactionStatus mempool_status = 3;
+    MempoolAddTransactionStatus mempool_status = 1;
   }
 }
 
