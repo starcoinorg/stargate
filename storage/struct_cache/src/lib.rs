@@ -12,34 +12,33 @@ use vm::{try_runtime, file_format::{SignatureToken, CompiledModule, StructDefini
 use core::borrow::{Borrow, BorrowMut};
 use vm::access::ModuleAccess;
 use bytecode_verifier::VerifiedModule;
+use atomic_refcell::AtomicRefCell;
 
 pub struct StructCache {
-    struct_map: HashMap<StructTag, StructDef>
+    struct_map: AtomicRefCell<HashMap<StructTag, StructDef>>
 }
 
 impl StructCache {
     pub fn new() -> Self {
-        let struct_map = HashMap::new();
+        let struct_map = AtomicRefCell::new(HashMap::new());
         StructCache { struct_map }
     }
 
-    pub fn find_struct(&mut self, tag: StructTag, state_view: &dyn StateView) -> Option<&StructDef> {
-        let exist = self.struct_map.contains_key(&tag);
-        let tag_clone_1 = tag.clone();
+    pub fn find_struct(&self, tag: StructTag, state_view: &dyn StateView) -> Option<StructDef> {
+        let exist = self.struct_map.borrow().contains_key(&tag);
         if !exist {
             let module_fetcher = ModuleFetcherImpl::new(state_view);
-            let tag_clone_2 = tag.clone();
-            let module_id = ModuleId::new(tag_clone_2.address, tag_clone_2.module);
+            let module_id = ModuleId::new(tag.address, tag.module.clone());
             let module = self.get_loaded_module_with_fetcher(&module_id, &module_fetcher).unwrap().unwrap();
 
-            self.struct_def_from_module(tag_clone_1, &module_fetcher, &module);
+            self.struct_def_from_module(tag.clone(), &module_fetcher, &module);
         };
-
-        return self.struct_map.get(&tag).clone();
+        let map = self.struct_map.borrow();
+        return map.get(&tag).cloned();
     }
 
-    fn struct_def_from_module(&mut self, find_tag: StructTag, fetcher: &ModuleFetcher, module: &LoadedModule) {
-        let string_pool = module.string_pool().clone();
+    fn struct_def_from_module(&self, find_tag: StructTag, fetcher: &dyn ModuleFetcher, module: &LoadedModule) {
+        let string_pool = module.string_pool();
         let struct_defs = module.struct_defs();
         let struct_handles = module.struct_handles();
 
@@ -60,7 +59,7 @@ impl StructCache {
                 type_params: vec![],
             };
 
-            self.struct_map.insert(tag, def);
+            self.struct_map.borrow_mut().insert(tag, def);
         });
     }
 
