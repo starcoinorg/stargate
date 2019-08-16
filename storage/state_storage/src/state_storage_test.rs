@@ -6,6 +6,7 @@ use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR};
 
 use super::*;
 use types::transaction::TransactionPayload;
+use std::convert::TryInto;
 
 #[test]
 fn test_state_storage() {
@@ -25,7 +26,7 @@ fn test_state_storage() {
     let resource = AccountResource::deserialize(&mut deserializer).unwrap();
     assert_eq!(init_amount, resource.balance());
 
-    let resource_bytes2 = account_state.get(&access_path.path).unwrap();
+    let resource_bytes2 = storage.get(&access_path).unwrap().unwrap();
 
     //let root_hash = storage.update(&access_path, resource_bytes.clone()).expect("update fail.");
     //assert_eq!(root_hash, storage.root_hash());
@@ -58,6 +59,6 @@ fn test_genesis_tx(){
     }
     let account = AccountAddress::default();
     let account_state = storage.get_account_state(&account).unwrap();
-    let map:BTreeMap<Vec<u8>,Vec<u8>> = account_state.into();
+    let map:BTreeMap<Vec<u8>,Vec<u8>> = (&AccountStateBlob::from(account_state)).try_into().unwrap();
     println!("{:?}", map);
 }

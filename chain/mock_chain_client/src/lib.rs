@@ -39,7 +39,7 @@ impl ChainClient for MockChainClient {
 
     fn get_state_by_access_path(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
         debug!("get_state_by_access_path:{}", access_path);
-        Ok(self.chain_service.as_ref().unwrap().state_by_access_path_inner(access_path.address, access_path.path.clone()))
+        self.chain_service.as_ref().unwrap().state_by_access_path_inner(access_path.address, access_path.path.clone())
     }
 
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()> {

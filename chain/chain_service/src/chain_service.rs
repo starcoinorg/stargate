@@ -1,5 +1,4 @@
 use failure::prelude::*;
-use types::proto::{access_path::AccessPath};
 use types::{transaction::{SignedTransaction, TransactionPayload, Program}, language_storage::StructTag, write_set::WriteSet, account_address::AccountAddress, vm_error::VMStatus};
 use proto_conv::FromProto;
 use futures::{sync::mpsc::{unbounded, UnboundedReceiver}, future::Future, sink::Sink, stream::Stream};
@@ -41,6 +40,9 @@ use struct_cache::StructCache;
 use vm::file_format::{CompiledModule, StructDefinition};
 use core::borrow::Borrow;
 use vm_runtime_types::loaded_data::struct_def::StructDef;
+use state_view::StateView;
+use types::access_path::AccessPath;
+use types::proto::access_path::AccessPath as ProtoAccessPath;
 
 lazy_static! {
     static ref VM_CONFIG:VMConfig = VMConfig{
@@ -169,12 +171,12 @@ impl ChainService {
 
     pub fn get_account_state_with_proof_by_state_root_inner(&self, account_address: AccountAddress) -> Option<Vec<u8>> {
         let state_db = self.state_db.lock().unwrap();
-        state_db.get_account_state(&account_address).map(|state| state.to_bytes())
+        state_db.get_account_state(&account_address)
     }
 
-    pub fn state_by_access_path_inner(&self, account_address: AccountAddress, path: Vec<u8>) -> Option<Vec<u8>> {
+    pub fn state_by_access_path_inner(&self, account_address: AccountAddress, path: Vec<u8>) -> Result<Option<Vec<u8>>> {
         let state_db = self.state_db.lock().unwrap();
-        state_db.get_account_state(&account_address).and_then(|state| state.get(&path))
+        state_db.get(&AccessPath::new(account_address, path))
     }
 
     pub fn faucet_inner(&self, account_address: AccountAddress, amount: u64) -> Result<HashValue> {
@@ -184,6 +186,7 @@ impl ChainService {
 }
 
 impl Chain for ChainService {
+
     fn least_state_root(&mut self, ctx: ::grpcio::RpcContext, _req: LeastRootRequest, sink: ::grpcio::UnarySink<LeastRootResponse>) {
         let least_hash_root = self.least_state_root_inner();
         let mut resp = LeastRootResponse::new();
@@ -282,10 +285,10 @@ impl Chain for ChainService {
     }
 
     fn state_by_access_path(&mut self, ctx: ::grpcio::RpcContext,
-                            req: AccessPath,
+                            req: ProtoAccessPath,
                             sink: ::grpcio::UnarySink<StateByAccessPathResponse>) {
         let resp = AccountAddress::try_from(req.get_address().to_vec()).and_then(|account_address| {
-            Ok(self.state_by_access_path_inner(account_address, req.path))
+            self.state_by_access_path_inner(account_address, req.path)
         }).and_then(|resource| {
             let mut state_resp = StateByAccessPathResponse::new();
             match resource {

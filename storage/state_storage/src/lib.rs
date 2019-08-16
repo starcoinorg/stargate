@@ -184,17 +184,15 @@ impl ProofRead for ProofReader {
 
 pub struct StateStorage {
     global_state: Arc<AtomicRefCell<SparseMerkleTree>>,
-    account_states: HashMap<AccountAddress, AccountState>,
+    account_states: Arc<AtomicRefCell<HashMap<AccountAddress, AccountState>>>,
     struct_def_resolve: Arc<dyn StructDefResolve>
 }
 
 impl StateStorage {
     pub fn new() -> Self {
-        let mut account_states = HashMap::new();
-        account_states.insert(AccountAddress::default(), AccountState::new());
         Self {
             global_state: Arc::new(AtomicRefCell::new(SparseMerkleTree::new(*SPARSE_MERKLE_PLACEHOLDER_HASH))),
-            account_states,
+            account_states: Arc::new(AtomicRefCell::new(HashMap::new())),
             struct_def_resolve: Arc::new(StaticStructDefResolve::new())
         }
     }
@@ -204,7 +202,7 @@ impl StateStorage {
     }
 
     pub fn exist_account(&self, address: &AccountAddress) -> bool {
-        self.get_account_state(address).is_some()
+        self.account_states.borrow().contains_key(address)
     }
 
     pub fn create_account(&mut self, address: AccountAddress, init_amount: u64) -> Result<HashValue> {
@@ -223,10 +221,10 @@ impl StateStorage {
         self.update_account(address, state)
     }
 
-    fn update_account(&mut self, address: AccountAddress, account_state: AccountState) -> Result<HashValue> {
+    fn update_account(&self, address: AccountAddress, account_state: AccountState) -> Result<HashValue> {
         {
             let account_root_hash = account_state.root_hash();
-            self.account_states.insert(address, account_state);
+            self.account_states.borrow_mut().insert(address, account_state);
             let mut global_state = self.global_state.borrow_mut();
             *global_state = global_state.update(vec![(address.hash(), AccountStateBlob::from(account_root_hash.to_vec()))], &ProofReader::default()).unwrap();
         }
@@ -234,24 +232,30 @@ impl StateStorage {
     }
 
     //TODO get with proof
-    pub fn get_account_state(&self, address: &AccountAddress) -> Option<&AccountState> {
-        self.account_states.get(address)
+    pub fn get_account_state(&self, address: &AccountAddress) -> Option<Vec<u8>> {
+        self.account_states.borrow().get(address).map(|state|state.to_bytes())
     }
 
-    fn get_account_state_mut(&mut self, address: &AccountAddress) -> Option<&mut AccountState> {
-        self.account_states.get_mut(address)
-    }
-
-    fn get_account_state_or_create(&mut self, address: &AccountAddress) -> &mut AccountState {
+    fn ensure_account_state(&self, address: &AccountAddress){
         if !self.exist_account(address){
             let account_state = AccountState::new();
             self.update_account(*address, account_state);
         }
-        self.account_states.get_mut(address).unwrap()
     }
 
+//    fn get_account_state_or_create(&self, address: &AccountAddress) -> &mut AccountState {
+//        if !self.exist_account(address){
+//            let account_state = AccountState::new();
+//            self.update_account(*address, account_state);
+//        }
+//        //this account state must exist, so use unwrap.
+//        //let mut states =
+//        (&mut *self.account_states.borrow_mut()).get_mut(address).unwrap()
+//        //states.get_mut(address).unwrap()
+//    }
+
     fn get_by_access_path(&self, access_path: &AccessPath) -> Option<Vec<u8>> {
-        self.get_account_state(&access_path.address).and_then(|state| state.get(&access_path.path))
+        self.account_states.borrow().get(&access_path.address).and_then(|state| state.get(&access_path.path))
     }
 
 //    fn get_state(&self, access_path: &AccessPath) -> Option<&State>{
@@ -259,7 +263,8 @@ impl StateStorage {
 //    }
 
     pub fn get_resource(&self, access_path: &AccessPath) -> Result<Option<Resource>> {
-        let state = self.get_account_state(&access_path.address);
+        let states = self.account_states.borrow();
+        let state = states.get(&access_path.address);
         match state {
             None => Ok(None),
             Some(state) => state.get_resource(&access_path.data_path().unwrap(),&*self.struct_def_resolve)
@@ -296,23 +301,26 @@ impl StateStorage {
         ChangeSetMut::new(change_set?).freeze()
     }
 
-    pub fn apply_change_set(&mut self, change_set: &ChangeSet) -> Result<HashValue> {
+    pub fn apply_change_set(&self, change_set: &ChangeSet) -> Result<HashValue> {
         {
             for (access_path, changes) in change_set {
                 self.apply_changes(access_path, changes);
             }
         }
-        Ok(self.global_state.borrow().root_hash())
+        Ok(self.root_hash())
     }
 
-    pub fn apply_changes(&mut self, access_path: &AccessPath, changes: &Changes) {
-        let account_state = self.get_account_state_or_create(&access_path.address);
+    pub fn apply_changes(&self, access_path: &AccessPath, changes: &Changes) {
+        self.ensure_account_state(&access_path.address);
+        //this account state must exist, so use unwrap.
+        let mut states = self.account_states.borrow_mut();
+        let account_state = states.get_mut(&access_path.address).unwrap();
         //let resolve = &*self.struct_def_resolve;
         //TODO fix unwrap
         let data_path = &access_path.data_path().unwrap();
         //TODO use self.struct_def_resolve
         let resolve = &StaticStructDefResolve::new();
-        account_state.apply_changes(data_path, changes, resolve);
+        account_state.apply_changes(data_path, changes, &*self.struct_def_resolve);
     }
 
 
@@ -327,7 +335,8 @@ impl StateStorage {
 //    }
 //
     pub fn delete(&mut self, access_path: &AccessPath) -> Result<HashValue> {
-        let account_state = self.get_account_state_mut(&access_path.address);
+        let mut states = self.account_states.borrow_mut();
+        let account_state = states.get_mut(&access_path.address);
         match account_state {
             Some(account_state) => {
                 let account_root_hash = account_state.delete(&access_path.path)?;
