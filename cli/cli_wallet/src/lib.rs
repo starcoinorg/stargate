@@ -11,5 +11,7 @@ pub mod key_factory;
 /// Utils for mnemonic seed
 pub mod mnemonic;
 
+pub mod cli_wallet;
+
 /// Default imports
 pub use crate::{mnemonic::Mnemonic};

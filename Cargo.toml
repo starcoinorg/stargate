@@ -52,5 +52,5 @@ members = [
     "node/node_service",
     "node/node_internal",
     "cli",
-    "cli/cli-wallet",
+    "cli/cli_wallet",
 ]

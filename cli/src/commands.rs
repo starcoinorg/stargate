@@ -1,6 +1,28 @@
 use crate::client_proxy::ClientProxy;
 use std::sync::Arc;
 use std::collections::HashMap;
+use failure::prelude::*;
+
+pub fn report_error(msg: &str, e: Error) {
+    println!("[ERROR] {}: {}", msg, pretty_format_error(e));
+}
+
+fn pretty_format_error(e: Error) -> String {
+    if let Some(grpc_error) = e.downcast_ref::<grpcio::Error>() {
+        if let grpcio::Error::RpcFailure(grpc_rpc_failure) = grpc_error {
+            match grpc_rpc_failure.status {
+                grpcio::RpcStatusCode::Unavailable | grpcio::RpcStatusCode::DeadlineExceeded => {
+                    return "Server unavailable, please retry and/or check \
+                            if host passed to the client is running"
+                        .to_string();
+                }
+                _ => {}
+            }
+        }
+    }
+
+    return format!("{}", e);
+}
 
 pub fn get_commands() -> (
     Vec<Arc<dyn Command>>,

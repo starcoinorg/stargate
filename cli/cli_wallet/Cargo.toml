@@ -1,5 +1,5 @@
 [package]
-name = "cli-wallet"
+name = "cli_wallet"
 version = "0.1.0"
 authors = ["hit.cs.lijun@gmail.com"]
 license = "Apache-2.0"
@@ -17,6 +17,7 @@ serde = "1.0.96"
 tiny-keccak = "1.5.0"
 protobuf = "2.7"
 sha3 = "0.8.2"
+nextgen_crypto = { path = "../../crypto/nextgen_crypto", features = ["testing"] }
 
 [dependencies.ed25519-dalek]
 version = "1.0.0-pre.1"
