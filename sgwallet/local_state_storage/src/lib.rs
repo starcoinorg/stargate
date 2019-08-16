@@ -2,7 +2,7 @@ use chain_client::{ChainClient, RpcChainClient};
 use failure::prelude::*;
 use logger::prelude::*;
 use star_types::offchain_transaction::OffChainTransaction;
-use state_storage::{AccountState, StaticStructDefResolve};
+use state_storage::{AccountState};
 use state_view::StateView;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -210,10 +210,7 @@ impl<C>  StructDefResolve for LocalStateStorage<C>
 {
 
     fn resolve(&self, tag: &StructTag) -> Result<StructDef> {
-        match state_storage::STATIC_STRUCT_DEF_RESOLVE.resolve(tag){
-            Ok(result) => Ok(result),
-            Err(_) => self.struct_cache.find_struct(tag, self)
-        }
+        self.struct_cache.find_struct(tag, self)
     }
 }
 

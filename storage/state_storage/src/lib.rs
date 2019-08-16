@@ -36,10 +36,6 @@ use lazy_static::lazy_static;
 use vm_runtime_types::loaded_data::struct_def::StructDef;
 use struct_cache::StructCache;
 
-lazy_static!{
-    pub static ref STATIC_STRUCT_DEF_RESOLVE: StaticStructDefResolve = StaticStructDefResolve::new();
-}
-
 pub struct AccountState {
     state: Arc<AtomicRefCell<BTreeMap<DataPath, Vec<u8>>>>
 }
@@ -308,8 +304,6 @@ impl StateStorage {
         //let resolve = &*self.struct_def_resolve;
         //TODO fix unwrap
         let data_path = &access_path.data_path().unwrap();
-        //TODO use self.struct_def_resolve
-        let resolve = &StaticStructDefResolve::new();
         account_state.apply_changes(data_path, changes, self);
     }
 
@@ -359,38 +353,8 @@ impl  StructDefResolve for StateStorage
 {
 
     fn resolve(&self, tag: &StructTag) -> Result<StructDef> {
-        match STATIC_STRUCT_DEF_RESOLVE.resolve(tag){
-            Ok(result) => Ok(result),
-            Err(_) => self.struct_cache.find_struct(tag, self)
-        }
+        self.struct_cache.find_struct(tag, self)
     }
 }
 
-
-pub struct StaticStructDefResolve{
-    register:HashMap<StructTag, StructDef>,
-}
-
-impl StaticStructDefResolve {
-
-    pub fn new() -> Self{
-        let mut register = HashMap::new();
-        register.insert(account_struct_tag(), get_account_struct_def());
-        register.insert(coin_struct_tag(), get_coin_struct_def());
-        register.insert(get_market_cap_struct_tag(), get_market_cap_struct_def());
-        register.insert(get_mint_capability_struct_tag(), get_mint_capability_struct_def());
-        register.insert( get_event_handle_struct_tag(), get_event_handle_struct_def());
-        register.insert(get_event_handle_id_generator_tag(), get_event_handle_id_generator_def());
-        Self{
-            register
-        }
-    }
-}
-
-impl StructDefResolve for StaticStructDefResolve{
-
-    fn resolve(&self, tag: &StructTag) -> Result<StructDef> {
-        self.register.get(tag).cloned().ok_or(format_err!("Can not find StructDef by tag: {:?}", tag))
-    }
-}
 

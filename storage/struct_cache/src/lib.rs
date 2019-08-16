@@ -14,6 +14,14 @@ use core::borrow::{Borrow, BorrowMut};
 use vm::access::ModuleAccess;
 use bytecode_verifier::VerifiedModule;
 use atomic_refcell::AtomicRefCell;
+use types::account_config::{account_struct_tag, coin_struct_tag};
+use star_types::resource::*;
+use star_types::change_set::StructDefResolve;
+use lazy_static::lazy_static;
+
+lazy_static!{
+    pub static ref STATIC_STRUCT_DEF_RESOLVE: StaticStructDefResolve = StaticStructDefResolve::new();
+}
 
 pub struct StructCache {
     struct_map: AtomicRefCell<HashMap<StructTag, StructDef>>
@@ -26,6 +34,12 @@ impl StructCache {
     }
 
     pub fn find_struct(&self, tag: &StructTag, state_view: &dyn StateView) -> Result<StructDef> {
+        match STATIC_STRUCT_DEF_RESOLVE.resolve(tag){
+            Ok(def) => return Ok(def),
+            Err(_) => {
+                //continue
+            }
+        }
         let exist = self.struct_map.borrow().contains_key(tag);
         if !exist {
             let module_fetcher = ModuleFetcherImpl::new(state_view);
@@ -196,6 +210,37 @@ impl StructCache {
         Ok(Some(LoadedModule::new(module)))
     }
 }
+
+
+
+pub struct StaticStructDefResolve{
+    register:HashMap<StructTag, StructDef>,
+}
+
+impl StaticStructDefResolve {
+
+    pub fn new() -> Self{
+        let mut register = HashMap::new();
+        register.insert(account_struct_tag(), get_account_struct_def());
+        register.insert(coin_struct_tag(), get_coin_struct_def());
+        register.insert(get_market_cap_struct_tag(), get_market_cap_struct_def());
+        register.insert(get_mint_capability_struct_tag(), get_mint_capability_struct_def());
+        register.insert( get_event_handle_struct_tag(), get_event_handle_struct_def());
+        register.insert(get_event_handle_id_generator_tag(), get_event_handle_id_generator_def());
+        Self{
+            register
+        }
+    }
+}
+
+impl StructDefResolve for StaticStructDefResolve{
+
+    fn resolve(&self, tag: &StructTag) -> Result<StructDef> {
+        self.register.get(tag).cloned().ok_or(format_err!("Can not find StructDef by tag: {:?}", tag))
+    }
+}
+
+
 
 #[cfg(test)]
 mod tests {
