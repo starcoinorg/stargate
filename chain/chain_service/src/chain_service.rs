@@ -110,28 +110,32 @@ impl ChainService {
     }
 
     fn apply_off_chain_transaction(&self, off_chain_tx: OffChainTransaction) {
-        let state_db = self.state_db.lock().unwrap();
-        let output = off_chain_tx.output();
-        let change_set = output.change_set();
-
-        state_db.apply_change_set(change_set).unwrap();
-        let state_hash = state_db.root_hash();
+        let signed_tx_hash = off_chain_tx.txn().borrow().hash();
         let mut tx_db = self.tx_db.lock().unwrap();
-        tx_db.insert_all(state_hash, off_chain_tx.txn().clone());
+        let exist_flag = tx_db.exist_signed_transaction(signed_tx_hash);
+        if !exist_flag {
+            let state_db = self.state_db.lock().unwrap();
+            let output = off_chain_tx.output();
+            let change_set = output.change_set();
 
-        let events: Vec<Event> = output.events().iter().map(|e| -> Event {
-            e.clone().into_proto()
-        }).collect();
-        let mut event_resp = WatchEventResponse::new();
-        event_resp.events = RepeatedField::from(events);
-        let event_lock = self.event_pub.lock().unwrap();
-        event_lock.send(event_resp).unwrap();
+            state_db.apply_change_set(change_set).unwrap();
+            let state_hash = state_db.root_hash();
+            tx_db.insert_all(state_hash, off_chain_tx.txn().clone());
 
-        let mut wt_resp = WatchTransactionResponse::new();
-        wt_resp.set_signed_txn(off_chain_tx.txn().clone().into_proto());
+            let events: Vec<Event> = output.events().iter().map(|e| -> Event {
+                e.clone().into_proto()
+            }).collect();
+            let mut event_resp = WatchEventResponse::new();
+            event_resp.events = RepeatedField::from(events);
+            let event_lock = self.event_pub.lock().unwrap();
+            event_lock.send(event_resp).unwrap();
 
-        let tx_lock = self.tx_pub.lock().unwrap();
-        tx_lock.send(wt_resp).unwrap();
+            let mut wt_resp = WatchTransactionResponse::new();
+            wt_resp.set_signed_txn(off_chain_tx.txn().clone().into_proto());
+
+            let tx_lock = self.tx_pub.lock().unwrap();
+            tx_lock.send(wt_resp).unwrap();
+        }
     }
 
     fn apply_on_chain_transaction(&self, sign_tx: SignedTransaction) {
