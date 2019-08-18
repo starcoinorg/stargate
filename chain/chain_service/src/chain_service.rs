@@ -7,7 +7,7 @@ use grpcio::WriteFlags;
 use state_storage::StateStorage;
 use super::transaction_storage::TransactionStorage;
 use std::{sync::{Arc, Mutex}};
-use crypto::{hash::{CryptoHash}, HashValue};
+use crypto::{hash::CryptoHash, HashValue};
 use grpc_helpers::provide_grpc_response;
 use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR};
 use std::convert::TryFrom;
@@ -39,7 +39,7 @@ use struct_cache::StructCache;
 use vm::file_format::{CompiledModule, StructDefinition};
 use state_view::StateView;
 use types::access_path::AccessPath;
-use core::borrow::{Borrow};
+use core::borrow::Borrow;
 use proto_conv::{FromProto, IntoProto};
 use protobuf::RepeatedField;
 use state_store::StateStore;
@@ -109,9 +109,29 @@ impl ChainService {
         }
     }
 
-    fn apply_off_chain_transaction(&self, _sign_tx: OffChainTransaction) {
-        //TODO:watch tx and event
-        unimplemented!()
+    fn apply_off_chain_transaction(&self, off_chain_tx: OffChainTransaction) {
+        let state_db = self.state_db.lock().unwrap();
+        let output = off_chain_tx.output();
+        let change_set = output.change_set();
+
+        state_db.apply_change_set(change_set).unwrap();
+        let state_hash = state_db.root_hash();
+        let mut tx_db = self.tx_db.lock().unwrap();
+        tx_db.insert_all(state_hash, off_chain_tx.txn().clone());
+
+        let events: Vec<Event> = output.events().iter().map(|e| -> Event {
+            e.clone().into_proto()
+        }).collect();
+        let mut event_resp = WatchEventResponse::new();
+        event_resp.events = RepeatedField::from(events);
+        let event_lock = self.event_pub.lock().unwrap();
+        event_lock.send(event_resp).unwrap();
+
+        let mut wt_resp = WatchTransactionResponse::new();
+        wt_resp.set_signed_txn(off_chain_tx.txn().clone().into_proto());
+
+        let tx_lock = self.tx_pub.lock().unwrap();
+        tx_lock.send(wt_resp).unwrap();
     }
 
     fn apply_on_chain_transaction(&self, sign_tx: SignedTransaction) {
@@ -234,7 +254,6 @@ impl ChainService {
 }
 
 impl Chain for ChainService {
-
     fn least_state_root(&mut self, ctx: ::grpcio::RpcContext, _req: LeastRootRequest, sink: ::grpcio::UnarySink<LeastRootResponse>) {
         let least_hash_root = self.least_state_root_inner();
         let mut resp = LeastRootResponse::new();
