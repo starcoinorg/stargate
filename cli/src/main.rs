@@ -1,13 +1,13 @@
 use logger::set_default_global_logger;
 use rustyline::{config::CompletionType, error::ReadlineError, Config, Editor};
 use structopt::StructOpt;
-use cli::{commands::*,client_proxy::ClientProxy};
+use cli::{commands::*, client_proxy::ClientProxy};
 
 #[derive(Debug, StructOpt)]
 #[structopt(
-    name = "Libra Client",
-    author = "The Libra Association",
-    about = "Libra client to connect to a specific validator"
+name = "Libra Client",
+author = "The Libra Association",
+about = "Libra client to connect to a specific validator"
 )]
 struct Args {
     /// Admission Control port to connect to.
@@ -16,6 +16,12 @@ struct Args {
     /// Host address/name to connect to.
     #[structopt(short = "a", long = "host")]
     pub host: String,
+    /// Chain Host address/name to connect to.
+    #[structopt(short = "s", long = "chain_host", default_value = "127.0.0.1")]
+    pub chain_host: String,
+    /// Chain port to connect to.
+    #[structopt(short = "r", long = "chain_port", default_value = "3000")]
+    pub chain_port: u16,
     /// Path to the generated keypair for the faucet account. The faucet account can be used to
     /// mint coins. If not passed, a new keypair will be generated for
     /// you and placed in a temporary directory.
@@ -25,20 +31,22 @@ struct Args {
     pub faucet_account_file: Option<String>,
 }
 
-fn main() -> std::io::Result<()>{
+fn main() -> std::io::Result<()> {
     let _logger = set_default_global_logger(false /* async */, None);
 
     let (commands, alias_to_cmd) = get_commands();
 
     let args = Args::from_args();
     let faucet_account_file = args.faucet_account_file.unwrap_or_else(|| "".to_string());
-    
+
     let mut client_proxy = ClientProxy::new(
         &args.host,
         args.port,
+        &args.chain_host,
+        args.chain_port,
         &faucet_account_file,
     )
-    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, &format!("{}", e)[..]))?;
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, &format!("{}", e)[..]))?;
 
     let cli_info = format!("Connected to validator at: {}:{}", args.host, args.port);
     print_help(&cli_info, &commands);

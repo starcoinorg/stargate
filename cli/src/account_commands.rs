@@ -56,9 +56,10 @@ impl Command for AccountCommandMint {
         "Mint coins to the account. Suffix 'b' is for blocking"
     }
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-        if params.len() != 3 {
+        if params.len() != 1 {
             println!("Invalid number of arguments for mint");
         }
+        client.faucet(params[0].parse::<u64>().unwrap());
         // println!(">> Minting coins");
         // let is_blocking = blocking_cmd(params[0]);
         // match client.mint_coins(&params, is_blocking) {

@@ -36,6 +36,7 @@ types = { path = "../types" }
 vm_genesis = { path = "../language/vm/vm_genesis" }
 node_client = { path = "../node/node_client"}
 cli_wallet = { path = "./cli_wallet" }
+chain_client = { path = "../chain/chain_client" }
 
 [dev-dependencies]
 nextgen_crypto = { path = "../crypto/nextgen_crypto", features = ["testing"] }
