@@ -7,6 +7,9 @@ use types::{
     account_address::AccountAddress,
 };
 use chain_client::{RpcChainClient, ChainClient};
+use node_proto::{
+    OpenChannelRequest,OpenChannelResponse,PayRequest,PayResponse
+};
 
 pub struct ClientProxy {
     node_client: NodeClient,
@@ -40,4 +43,12 @@ impl ClientProxy {
     pub fn faucet(&mut self, amount: u64) -> Result<()> {
         self.chain_client.faucet(self.wallet.get_address(), amount)
     }
+    pub fn open_channel(&mut self,space_delim_strings: &[&str], is_blocking: bool) -> Result<OpenChannelResponse>{
+         unimplemented!();
+    }
+
+    pub fn off_chain_pay(&mut self,space_delim_strings: &[&str], is_blocking: bool) -> Result<PayResponse>{
+         unimplemented!();
+    }
+
 }
