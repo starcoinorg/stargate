@@ -163,12 +163,6 @@ pub enum FunctionVisibility {
     Internal,
 }
 
-#[derive(PartialEq, Debug, Clone)]
-pub enum FunctionAnnotation {
-    Requires(String),
-    Ensures(String),
-}
-
 /// The body of a Move function
 #[derive(PartialEq, Debug, Clone)]
 pub enum FunctionBody {
@@ -190,8 +184,11 @@ pub struct Function {
     pub visibility: FunctionVisibility,
     /// The type signature
     pub signature: FunctionSignature,
-    /// Annotations on the function
-    pub annotations: Vec<FunctionAnnotation>,
+    /// List of nominal resources (declared in this module) that the procedure might access
+    /// Either through: BorrowGlobal, MoveFrom, or transitively through another procedure
+    /// This list of acquires grants the borrow checker the ability to statically verify the safety
+    /// of references into global storage
+    pub acquires: Vec<StructName>,
     /// The code for the procedure
     pub body: FunctionBody,
 }
@@ -264,8 +261,6 @@ pub enum Builtin {
     GetTxnSequenceNumber,
     /// Returns the unit of gas remain to be used for now.
     GetGasRemaining,
-    /// Emit an event
-    EmitEvent,
 
     /// Publishing,
     /// Initialize a previously empty address by publishing a resource of type Account
@@ -353,8 +348,6 @@ pub enum Statement {
     WhileStatement(While),
     /// `loop { s }`
     LoopStatement(Loop),
-    VerifyStatement(String),
-    AssumeStatement(String),
     /// no-op that eases parsing in some places
     EmptyStatement,
 }
@@ -746,14 +739,14 @@ impl Function {
         visibility: FunctionVisibility,
         formals: Vec<(Var, Type)>,
         return_type: Vec<Type>,
-        annotations: Vec<FunctionAnnotation>,
+        acquires: Vec<StructName>,
         body: FunctionBody,
     ) -> Self {
         let signature = FunctionSignature::new(formals, return_type);
         Function {
             visibility,
             signature,
-            annotations,
+            acquires,
             body,
         }
     }
@@ -1133,7 +1126,6 @@ impl fmt::Display for Builtin {
         match self {
             Builtin::CreateAccount => write!(f, "create_account"),
             Builtin::Release => write!(f, "release"),
-            Builtin::EmitEvent => write!(f, "log"),
             Builtin::Exists(t) => write!(f, "exists<{}>", t),
             Builtin::BorrowGlobal(t) => write!(f, "borrow_global<{}>", t),
             Builtin::GetHeight => write!(f, "get_height"),
@@ -1235,8 +1227,6 @@ impl fmt::Display for Statement {
             Statement::IfElseStatement(if_else) => write!(f, "{}", if_else),
             Statement::WhileStatement(while_) => write!(f, "{}", while_),
             Statement::LoopStatement(loop_) => write!(f, "{}", loop_),
-            Statement::VerifyStatement(cond) => write!(f, "verify<{}>)", cond),
-            Statement::AssumeStatement(cond) => write!(f, "assume<{}>", cond),
             Statement::EmptyStatement => write!(f, "<empty statement>"),
         }
     }
