@@ -13,8 +13,8 @@ impl Command for AccountCommand {
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
         let commands: Vec<Box<dyn Command>> = vec![
             Box::new(AccountCommandCreate {}),
-            //Box::new(AccountCommandListAccounts {}),
             Box::new(AccountCommandMint {}),
+            Box::new(AccountCommandBalance {}),
         ];
 
         subcommand_execute(&params[0], commands, client, &params[1..]);
@@ -56,24 +56,39 @@ impl Command for AccountCommandMint {
         "Mint coins to the account. Suffix 'b' is for blocking"
     }
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-        println!("{:?}",params);
         if params.len() < 2 {
             println!("Invalid number of arguments for mint");
         }
-        client.faucet(params[1].parse::<u64>().unwrap());
-        // println!(">> Minting coins");
-        // let is_blocking = blocking_cmd(params[0]);
-        // match client.mint_coins(&params, is_blocking) {
-        //     Ok(_) => {
-        //         if is_blocking {
-        //             println!("Finished minting!");
-        //         } else {
-        //             // If this value is updated, it must also be changed in
-        //             // setup_scripts/docker/mint/server.py
-        //             println!("Mint request submitted");
-        //         }
-        //     }
-        //     Err(e) => report_error("Error minting coins", e),
-        // }
+        match client.faucet(params[1].parse::<u64>().unwrap()) {
+            Ok(result) => println!(
+                "mint success"),
+            Err(e) => report_error("Error mint account", e),
+
+        }
+    }
+}
+
+pub struct AccountCommandBalance {}
+
+impl Command for AccountCommandBalance {
+    fn get_aliases(&self) -> Vec<&'static str> {
+        vec!["balance", "b",]
+    }
+    fn get_params_help(&self) -> &'static str {
+        "<number_of_coins>"
+    }
+    fn get_description(&self) -> &'static str {
+        "get balance of account"
+    }
+    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+        if params.len() != 1 {
+            println!("Invalid number of arguments for mint");
+        }
+        match client.faucet(params[1].parse::<u64>().unwrap()) {
+            Ok(result) => println!(
+                "mint success"),
+            Err(e) => report_error("Error mint account", e),
+
+        }
     }
 }
