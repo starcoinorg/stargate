@@ -1,7 +1,6 @@
 use failure::prelude::*;
 use node_client::NodeClient;
 use grpcio::EnvBuilder;
-use std::sync::Arc;
 use cli_wallet::cli_wallet::WalletLibrary;
 use types::{
     account_address::AccountAddress,
@@ -9,6 +8,9 @@ use types::{
 use chain_client::{RpcChainClient, ChainClient};
 use node_proto::{
     OpenChannelRequest,OpenChannelResponse,PayRequest,PayResponse
+};
+use std::{
+    sync::Arc,
 };
 
 pub struct ClientProxy {
@@ -31,7 +33,7 @@ impl ClientProxy {
         let chain_client = RpcChainClient::new(chain_host, chain_port as u32);
         Ok(ClientProxy {
             node_client,
-            wallet: WalletLibrary::new(),
+            wallet: WalletLibrary::new(faucet_account_file),
             chain_client,
         })
     }

@@ -27,8 +27,8 @@ struct Args {
     /// you and placed in a temporary directory.
     /// To manually generate a keypair, use generate_keypair:
     /// `cargo run -p generate_keypair -- -o <output_file_path>`
-    #[structopt(short = "m", long = "faucet_key_file_path")]
-    pub faucet_account_file: Option<String>,
+    #[structopt(short = "m", long = "faucet_key_file_path",default_value="wallet/key")]
+    pub faucet_account_file:String,
 }
 
 fn main() -> std::io::Result<()> {
@@ -37,14 +37,14 @@ fn main() -> std::io::Result<()> {
     let (commands, alias_to_cmd) = get_commands();
 
     let args = Args::from_args();
-    let faucet_account_file = args.faucet_account_file.unwrap_or_else(|| "".to_string());
+    //let faucet_account_file = args.faucet_account_file.unwrap_or_else(|| "".to_string());
 
     let mut client_proxy = ClientProxy::new(
         &args.host,
         args.port,
         &args.chain_host,
         args.chain_port,
-        &faucet_account_file,
+        &args.faucet_account_file,
     )
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, &format!("{}", e)[..]))?;
 
