@@ -18,4 +18,4 @@ nextgen_crypto = { path = "../crypto/nextgen_crypto", features = ["testing"] }
 parity-multiaddr = "0.4.0"
 network_libp2p = { package = "network-libp2p", path = "../network-libp2p" }
 crossbeam-channel = "0.3.6"
-parking_lot="0.7.1"
+parking_lot = "0.7.1"
