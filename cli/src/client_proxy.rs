@@ -43,6 +43,7 @@ impl ClientProxy {
     pub fn faucet(&mut self, amount: u64) -> Result<()> {
         self.chain_client.faucet(self.wallet.get_address(), amount)
     }
+
     pub fn open_channel(&mut self,space_delim_strings: &[&str], is_blocking: bool) -> Result<OpenChannelResponse>{
          unimplemented!();
     }
