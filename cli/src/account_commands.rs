@@ -1,4 +1,5 @@
 use crate::{client_proxy::ClientProxy, commands::*};
+use state_storage::AccountState;
 
 /// Major command for account related operations.
 pub struct AccountCommand {}
@@ -14,7 +15,7 @@ impl Command for AccountCommand {
         let commands: Vec<Box<dyn Command>> = vec![
             Box::new(AccountCommandCreate {}),
             Box::new(AccountCommandMint {}),
-            Box::new(AccountCommandBalance {}),
+            Box::new(AccountCommandState {}),
         ];
 
         subcommand_execute(&params[0], commands, client, &params[1..]);
@@ -68,25 +69,41 @@ impl Command for AccountCommandMint {
     }
 }
 
-pub struct AccountCommandBalance {}
+pub struct AccountCommandState {}
 
-impl Command for AccountCommandBalance {
+impl Command for AccountCommandState {
     fn get_aliases(&self) -> Vec<&'static str> {
-        vec!["balance", "b",]
+        vec!["state", "s",]
     }
     fn get_params_help(&self) -> &'static str {
-        "<number_of_coins>"
+        ""
     }
     fn get_description(&self) -> &'static str {
-        "get balance of account"
+        "get state of account"
     }
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
         if params.len() != 1 {
-            println!("Invalid number of arguments for mint");
+            println!("Invalid number of arguments for state");
         }
-        match client.faucet(params[1].parse::<u64>().unwrap()) {
-            Ok(result) => println!(
-                "mint success"),
+        match client.account_state(){
+            Ok(result) => {
+                match result{
+                    Some(data) => {
+                        let account_resource=AccountState::from_account_state_blob(data).unwrap().get_account_resource();
+                        match account_resource {
+                            Some(resource) => {
+                                println!("account state is {:?}",resource);
+                            },
+                            None=>{
+                                println!("no such account state ");
+                            },
+                        }
+                    },
+                    None=>{
+                        println!("no such account state ");
+                    },
+                }
+            },
             Err(e) => report_error("Error mint account", e),
 
         }

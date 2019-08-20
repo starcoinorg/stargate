@@ -38,6 +38,7 @@ node_client = { path = "../node/node_client"}
 cli_wallet = { path = "./cli_wallet" }
 chain_client = { path = "../chain/chain_client" }
 node_proto = { path = "../node/node_proto" }
+state_storage = { path = "../storage/state_storage" }
 
 [dev-dependencies]
 nextgen_crypto = { path = "../crypto/nextgen_crypto", features = ["testing"] }
