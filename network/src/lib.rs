@@ -7,15 +7,15 @@ pub mod net;
 mod tests {
     use crate::net::{Network, Message, build_network_service, NetworkMsg};
     use tokio::runtime::Runtime;
-    use futures::{future, prelude::Async};
+    use futures::{future, prelude::Async, stream};
     use network_libp2p::{NetworkConfiguration, Service, build_multiaddr};
-    use std::{io, fmt};
-    use futures::future::IntoFuture;
-    use futures::future::Future;
+    use std::{io, fmt, thread, time};
+    use futures::{future::Future, stream::Stream};
     use parity_multiaddr::{Multiaddr, Protocol};
     use std::sync::Arc;
     use parking_lot::Mutex;
     use libp2p::PeerId;
+    use crossbeam_channel::TrySendError;
 
     fn new_local_srv_cfg(port: u16, boot_nodes: Vec<String>) -> NetworkConfiguration {
         let config = network_libp2p::NetworkConfiguration {
@@ -67,45 +67,39 @@ mod tests {
     #[test]
     fn test_send_receive() {
         let rt = Runtime::new().unwrap();
+        let executor = rt.executor();
         let (mut node1, mut node2) = {
             let mut l = build_nodes(2, 50400).into_iter();
             let a = l.next().unwrap();
             let b = l.next().unwrap();
             (a, b)
         };
-
-        let msg = Message {
-            peer_id: node2.lock().peer_id().clone(),
-            msg: vec![1, 2],
-        };
-        println!("{:?},{:?}", node1.lock().peer_id(), node2.lock().peer_id());
-        let (net_srv1, bus_1) = Network::start_listen_network(node1);
-        let (net_srv2, bus_2) = Network::start_listen_network(node2);
-
+        let msg_peer_id = node2.lock().peer_id().clone();
+        let mut net1 = Network::new(executor.clone());
+        let mut net2 = Network::new(executor.clone());
+        let bus_1 = net1.start_listen_network(node1);
+        let bus_2 = net2.start_listen_network(node2);
 
         let recv = bus_1.1;
-        let recv_fut = future::poll_fn(move || -> io::Result<_> {
-            println!("in recv");
-            let msg = recv.recv().unwrap().msg;
-            println!("the {:?}", msg);
-            Ok(Async::Ready(()))
-        });
-
-        let futures: Vec<Box<Future<Item=(), Error=io::Error> + Send>> = vec![
-            Box::new(net_srv1) as Box<_>,
-            Box::new(net_srv2) as Box<_>,
-            Box::new(recv_fut) as Box<_>,
-        ];
-        let futs = futures::select_all(futures)
-            .and_then(move |_| { Ok(()) })
-            .map_err(|(r, _, _)| r);
-
         let sender = bus_2.0;
-        match sender.send(msg) {
-            Ok(()) => { println!("send ok") }
-            Err(e) => { panic!("send err") }
+        let sender_fut = stream::poll_fn(move || {
+            
+            match sender.try_send(
+                Message {
+                    peer_id: msg_peer_id.clone(),
+                    msg: vec![1, 2],
+                }
+            ) {
+                Ok(()) => Ok(Async::Ready(Some(()))),
+                Err(TrySendError::Full(msg)) => Ok(Async::NotReady),
+                Err(_) => Err(())
+            }
+        }).for_each(|_| {
+            Ok(())
         }
+        );
 
-        rt.block_on_all(futs).unwrap();
+        executor.clone().spawn(sender_fut);
+        rt.shutdown_on_idle().wait().unwrap();
     }
 }
