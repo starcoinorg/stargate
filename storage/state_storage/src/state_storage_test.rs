@@ -12,17 +12,17 @@ fn test_state_storage() {
     let account_address = AccountAddress::random();
     let init_amount = 100;
     storage.create_account(account_address, init_amount);
-    let account_state = storage.get_account_state(&account_address).unwrap();
-    //let resource = AccountResource::default();
-    //let mut serializer = SimpleSerializer::new();
-    //resource.serialize(&mut serializer);
+    let account_state_blob = storage.get_account_state(&account_address).unwrap();
+    let account_state = AccountState::from_account_state_blob(account_state_blob).unwrap();
+    let resource = account_state.get_account_resource().unwrap();
+    assert_eq!(resource.balance(), init_amount);
     let access_path = AccessPath::new_for_account(account_address);
 
     let resource_bytes: Vec<u8> = storage.get_by_access_path(&access_path).unwrap();  //serializer.get_output();
 
     let mut deserializer = SimpleDeserializer::new(resource_bytes.as_slice());
-    let resource = AccountResource::deserialize(&mut deserializer).unwrap();
-    assert_eq!(init_amount, resource.balance());
+    let resource1 = AccountResource::deserialize(&mut deserializer).unwrap();
+    assert_eq!(resource.balance(), resource1.balance());
 
     let resource_bytes2 = storage.get(&access_path).unwrap().unwrap();
 

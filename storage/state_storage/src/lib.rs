@@ -31,6 +31,7 @@ use lazy_static::lazy_static;
 use vm_runtime_types::loaded_data::struct_def::StructDef;
 use struct_cache::StructCache;
 use state_store::{StateStore, StateViewPlus};
+use star_types::account_resource_ext;
 
 pub struct AccountState {
     state: Arc<AtomicRefCell<BTreeMap<DataPath, Vec<u8>>>>
@@ -84,6 +85,11 @@ impl AccountState {
     pub fn delete_state(&self, path: &DataPath) -> Result<HashValue> {
         self.state.borrow_mut().remove(path);
         Ok(self.root_hash())
+    }
+
+    pub fn get_account_resource(&self) -> Option<AccountResource> {
+        self.get(&account_resource_path())
+            .and_then(|value| account_resource_ext::from_bytes(&value).ok())
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
