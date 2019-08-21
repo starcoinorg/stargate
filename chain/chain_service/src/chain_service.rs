@@ -184,6 +184,10 @@ impl ChainService {
                         Some(())
                     });
                 }
+                _ => {
+                    //TODO support Module and Script
+                    unimplemented!()
+                }
             }
 
             let mut wt_resp = WatchTransactionResponse::new();
