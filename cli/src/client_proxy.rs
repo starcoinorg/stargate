@@ -7,7 +7,7 @@ use types::{
 };
 use chain_client::{RpcChainClient, ChainClient};
 use node_proto::{
-    OpenChannelRequest,OpenChannelResponse,PayRequest,PayResponse
+    OpenChannelRequest,OpenChannelResponse,PayRequest,PayResponse,ConnectRequest,ConnectResponse,
 };
 use std::{
     sync::Arc,
@@ -50,8 +50,20 @@ impl ClientProxy {
          unimplemented!();
     }
 
-    pub fn off_chain_pay(&mut self,space_delim_strings: &[&str], is_blocking: bool) -> Result<PayResponse>{
-         unimplemented!();
+    pub fn off_chain_pay(&mut self,space_delim_strings: &[&str], _is_blocking: bool) -> Result<PayResponse>{
+        let response=self.node_client.pay(PayRequest{
+            remote_addr:AccountAddress::from_hex_literal(space_delim_strings[1])?,
+            amount:space_delim_strings[2].parse::<u64>()?,
+        })?;
+        Ok(response)
+    }
+
+    pub fn connect(&mut self,space_delim_strings: &[&str], is_blocking: bool) -> Result<ConnectResponse>{
+        let response=self.node_client.connect(ConnectRequest{
+            remote_addr:AccountAddress::from_hex_literal(space_delim_strings[1])?,
+            remote_ip:space_delim_strings[2].to_string(),
+        })?;
+        Ok(response)
     }
 
     pub fn account_state(&mut self,) -> Result<Option<Vec<u8>>>{

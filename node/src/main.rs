@@ -91,7 +91,8 @@ fn main() {
     let executor = rt.executor();
 
     let keypair = load_from_file(&args.faucet_key_path);
-    let node = gen_node(executor,keypair,&swarm.config.wallet);
+    let mut node = gen_node(executor,keypair,&swarm.config.wallet);
+    node.start_server(swarm.config.node_net_work.addr.parse().unwrap());
 
     let mut node_server = setup_node_service(&swarm.config,Arc::new(node));
     node_server.start();
