@@ -86,17 +86,21 @@ mod tests {
         let (sender_1, receiver_1) = net1.start_listen_network(node1);
         let (mut sender_2, receiver_2) = net2.start_listen_network(node2);
 
-        let sender_fut = stream::poll_fn(move || {
-            match sender_2.try_send(Message {
-                peer_id: msg_peer_id.clone(),
-                msg: vec![1, 2],
-            }) {
-                Ok(()) => Ok(Async::Ready(Some(()))),
-                Err(TrySendError) => Ok(Async::NotReady),
-                Err(_) => Err(()),
-            }
-        })
-        .for_each(|_| Ok(()));
+        let sender_fut = stream::repeat(1)
+            .and_then(move |_| {
+                match sender_2.try_send(Message {
+                    peer_id: msg_peer_id.clone(),
+                    msg: vec![1, 2],
+                }) {
+                    Ok(()) => Ok(Async::Ready(Some(()))),
+                    Err(e) => match e.is_full() {
+                        true => Ok(Async::NotReady),
+                        false => return Err(()),
+                    },
+                    Err(_) => Err(()),
+                }
+            })
+            .for_each(|_| Ok(()));
 
         executor.clone().spawn(sender_fut);
         rt.shutdown_on_idle().wait().unwrap();
