@@ -4,7 +4,7 @@ use failure::prelude::*;
 use proptest_derive::Arbitrary;
 use proto_conv::{FromProto, IntoProto};
 use crate::offchain_transaction::OffChainTransaction;
-use nextgen_crypto::ed25519::Ed25519Signature;
+use crypto::ed25519::Ed25519Signature;
 use std::convert::{TryFrom};
 use crate::proto::message::ReceiveSignMessage;
 use parity_multiaddr::Multiaddr;

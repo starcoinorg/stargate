@@ -15,12 +15,12 @@ use types::{
     transaction::{RawTransaction, RawTransactionBytes, SignedTransaction},
     transaction_helpers::TransactionSigner,
 };
-use nextgen_crypto::traits::Uniform;
-use nextgen_crypto::test_utils::KeyPair;
+use libra_crypto::traits::Uniform;
+use libra_crypto::test_utils::KeyPair;
 use std::time::{SystemTime,UNIX_EPOCH};
 use rand::prelude::*;
-use nextgen_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
-use nextgen_crypto::traits::SigningKey;
+use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
+use libra_crypto::traits::SigningKey;
 use std::{
     fs,
     sync::Arc,

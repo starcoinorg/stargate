@@ -60,6 +60,7 @@ where
 
             // Add modules to the cache and prepare for publishing.
             let mut publish_modules = vec![];
+
             for (module, raw_bytes) in modules.into_iter().zip(module_bytes) {
                 let module_id = module.self_id();
 
@@ -96,6 +97,11 @@ where
                 }
 
                 txn_executor.module_cache().cache_module(module);
+
+                // `publish_modules` is initally empty, a single element is pushed per loop
+                // iteration and the number of iterations is bound to the max size
+                // of `modules`
+                assume!(publish_modules.len() < usize::max_value());
                 publish_modules.push((module_id, raw_bytes));
             }
 
@@ -122,6 +128,12 @@ where
             0,
             VMStatus::Execution(ExecutionStatus::Executed).into(),
         ),
+        TransactionPayload::Module(_) | TransactionPayload::Script(_) => {
+            // This is an impossible condition at the moment and for a short time.
+            // ValidatedTransaction is never built with Module or Script so there
+            // is no way to reach this state
+            panic!("Unknown Transaction")
+        }
     }
 }
 

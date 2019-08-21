@@ -25,8 +25,7 @@ structopt = "0.2.15"
 tempfile = "3.1.0"
 
 config = { path = "../config" }
-crypto = { path = "../crypto/legacy_crypto" }
-nextgen_crypto = { path = "../crypto/nextgen_crypto" }
+crypto = { path = "../crypto/crypto" }
 failure = { package = "failure_ext", path = "../common/failure_ext" }
 libc = "0.2.60"
 logger =  { path = "../common/logger" }
@@ -41,5 +40,5 @@ node_proto = { path = "../node/node_proto" }
 state_storage = { path = "../storage/state_storage" }
 
 [dev-dependencies]
-nextgen_crypto = { path = "../crypto/nextgen_crypto", features = ["testing"] }
+crypto = { path = "../crypto/crypto", features = ["testing"] }
 types = { path = "../types" }

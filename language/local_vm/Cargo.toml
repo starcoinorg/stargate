@@ -19,4 +19,4 @@ types = { path = "../../types" }
 state_view = { path = "../../storage/state_view"}
 
 [dev-dependencies]
-nextgen_crypto = { path = "../../crypto/nextgen_crypto", features = ["testing"] }
+crypto = { path = "../../crypto/crypto", features = ["testing"] }

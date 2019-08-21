@@ -4,7 +4,7 @@ use grpc_helpers::ServerHandle;
 use grpcio::{EnvBuilder, ServerBuilder};
 use sg_config::config::{NodeConfig};
 use std::{sync::Arc};
-use nextgen_crypto::{
+use crypto::{
      ed25519::*,
      traits::{Signature, SigningKey, Uniform},
 };

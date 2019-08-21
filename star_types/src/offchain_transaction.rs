@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use failure::prelude::*;
-use nextgen_crypto::ed25519::{Ed25519PublicKey, Ed25519Signature};
+use crypto::ed25519::{Ed25519PublicKey, Ed25519Signature};
 use types::account_address::AccountAddress;
 use types::transaction::{RawTransaction, SignedTransaction, TransactionStatus};
 use types::contract_event::ContractEvent;

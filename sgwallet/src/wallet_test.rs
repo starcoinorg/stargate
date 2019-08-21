@@ -4,8 +4,8 @@ use rand::prelude::*;
 
 use chain_client::{ChainClient, RpcChainClient};
 use mock_chain_client::MockChainClient;
-use nextgen_crypto::test_utils::KeyPair;
-use nextgen_crypto::Uniform;
+use crypto::test_utils::KeyPair;
+use crypto::Uniform;
 use types::account_address::AccountAddress;
 
 use super::wallet::*;

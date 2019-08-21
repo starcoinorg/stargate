@@ -10,9 +10,9 @@ use failure::_core::cell::RefCell;
 use failure::prelude::*;
 use local_state_storage::LocalStateStorage;
 use local_vm::LocalVM;
-use nextgen_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
-use nextgen_crypto::SigningKey;
-use nextgen_crypto::test_utils::KeyPair;
+use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
+use crypto::SigningKey;
+use crypto::test_utils::KeyPair;
 use star_types::{account_resource_ext, channel::SgChannelStream, transaction_output_helper};
 use star_types::offchain_transaction::{
     OffChainTransaction, TransactionOutputSigner,TransactionOutput

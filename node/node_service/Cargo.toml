@@ -20,7 +20,7 @@ star_types = { path = "../../star_types" }
 proto_conv = { path = "../../common/proto_conv" }
 grpc_helpers = { path = "../../common/grpc_helpers" }
 node_client = { path = "../node_client" }
-nextgen_crypto = { path = "../../crypto/nextgen_crypto" }
+crypto = { path = "../../crypto/crypto" }
 types = { package = "types", path = "../../types"}
 sg_config = {path="../../sgconfig"}
 chain_client = { path = "../../chain/chain_client"}

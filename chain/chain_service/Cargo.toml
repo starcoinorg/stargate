@@ -14,7 +14,7 @@ grpc_helpers = { path = "../../common/grpc_helpers" }
 types = { path = "../../types" }
 futures = "0.1.28"
 star_types = { path = "../../star_types" }
-crypto = { path = "../../crypto/legacy_crypto" }
+crypto = { path = "../../crypto/crypto" }
 scratchpad = { path = "../../storage/scratchpad" }
 state_storage = { path = "../../storage/state_storage" }
 hex = "0.3.2"
@@ -42,4 +42,4 @@ clap = "2.32"
 version = "1.0.0-pre.1"
 
 [dev-dependencies]
-nextgen_crypto = { path = "../../crypto/nextgen_crypto", features = ["testing"] }
+crypto = { path = "../../crypto/crypto", features = ["testing"] }

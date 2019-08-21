@@ -21,8 +21,7 @@ logger = { path = "../common/logger" }
 futures03 = { version = "0.3.0-alpha.16", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }
 types = { package = "types", path = "../types", features = ["testing"]}
 canonical_serialization = { path = "../common/canonical_serialization"}
-crypto = { path = "../crypto/legacy_crypto" }
-nextgen_crypto = { path = "../crypto/nextgen_crypto" }
+crypto = { path = "../crypto/crypto" }
 failure = { path = "../common/failure_ext", package = "failure_ext" }
 proptest_helpers = { path = "../common/proptest_helpers" }
 proto_conv = { path = "../common/proto_conv", features = ["derive"] }
@@ -34,4 +33,4 @@ parity-multiaddr = "0.4.0"
 build_helpers = { path = "../common/build_helpers" }
 
 [dev-dependencies]
-nextgen_crypto = { path = "../crypto/nextgen_crypto", features = ["testing"] }
+crypto = { path = "../crypto/crypto", features = ["testing"] }

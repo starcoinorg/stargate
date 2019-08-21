@@ -9,8 +9,7 @@ edition = "2018"
 [dependencies]
 failure = { path = "../../common/failure_ext", package = "failure_ext" }
 itertools = "0.8.0"
-crypto = { path = "../../crypto/legacy_crypto" }
-nextgen_crypto = { path = "../../crypto/nextgen_crypto" }
+crypto = { path = "../../crypto/crypto" }
 types = { path = "../../types"}
 star_types = { path = "../../star_types" }
 state_storage = {path = "../../storage/state_storage"}
@@ -23,5 +22,5 @@ atomic_refcell = "0.1.3"
 vm_runtime_types = { path = "../../language/vm/vm_runtime/vm_runtime_types"}
 
 [dev-dependencies]
-nextgen_crypto = { path = "../../crypto/nextgen_crypto", features = ["testing"] }
+crypto = { path = "../../crypto/crypto", features = ["testing"] }
 mock_chain_client = { path = "../../chain/mock_chain_client" }

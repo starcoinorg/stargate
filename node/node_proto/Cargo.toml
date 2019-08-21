@@ -22,4 +22,4 @@ types = { package = "types", path = "../../types"}
 build_helpers = { path = "../../common/build_helpers" }
 
 [dev-dependencies]
-nextgen_crypto = { path = "../../crypto/nextgen_crypto", features = ["testing"] }
+crypto = { path = "../../crypto/crypto", features = ["testing"] }

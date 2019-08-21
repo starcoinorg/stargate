@@ -30,8 +30,7 @@ chain_client = { path = "../chain/chain_client"}
 types = { path = "../types" }
 star_types = { path = "../star_types" }
 
-nextgen_crypto = { path = "../crypto/nextgen_crypto", features = ["testing"] }
+crypto = { path = "../crypto/crypto", features = ["testing"] }
 mock_chain_client = { path = "../chain/mock_chain_client" }
 proto_conv = { path = "../common/proto_conv", features = ["derive"] }
-crypto = { path = "../crypto/legacy_crypto" }
 failure = { path = "../common/failure_ext", package = "failure_ext" }

@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::account_address::AccountAddress;
+use crypto::*;
 use failure::prelude::*;
 use logger::prelude::*;
-use nextgen_crypto::*;
 use std::collections::HashMap;
 
 /// Errors possible during signature verification.
@@ -80,11 +80,6 @@ impl<PublicKey: VerifyingKey> ValidatorVerifier<PublicKey> {
         let mut author_to_public_keys = HashMap::new();
         author_to_public_keys.insert(author, public_key);
         Self::new(author_to_public_keys)
-    }
-
-    /// Helper method to initialize with an empty validator set.
-    pub fn new_empty() -> Self {
-        Self::new(HashMap::new())
     }
 
     /// Verify the correctness of a signature of a hash by a known author.
@@ -241,8 +236,7 @@ mod tests {
         validator_signer::ValidatorSigner,
         validator_verifier::{ValidatorVerifier, VerifyError},
     };
-    use crypto::HashValue;
-    use nextgen_crypto::{ed25519::*, test_utils::TEST_SEED};
+    use crypto::{ed25519::*, test_utils::TEST_SEED, HashValue};
     use std::collections::HashMap;
 
     #[test]

@@ -14,7 +14,7 @@ futures = "0.1"
 memsocket = { path = "memsocket" }
 netcore = { path = "netcore" }
 sg_config = { path = "../sgconfig" }
-nextgen_crypto = { path = "../crypto/nextgen_crypto", features = ["testing"] }
+crypto = { path = "../crypto/crypto", features = ["testing"] }
 parity-multiaddr = "0.4.0"
 network_libp2p = { package = "network-libp2p", path = "../network-libp2p" }
 crossbeam-channel = "0.3.6"

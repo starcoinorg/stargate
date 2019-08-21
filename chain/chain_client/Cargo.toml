@@ -14,8 +14,8 @@ grpc_helpers = { path = "../../common/grpc_helpers" }
 types = { path = "../../types" }
 futures = "0.1.28"
 star_types = { path = "../../star_types" }
-crypto = { path = "../../crypto/legacy_crypto" }
+crypto = { path = "../../crypto/crypto" }
 failure = { path = "../../common/failure_ext", package = "failure_ext" }
 
 [dev-dependencies]
-nextgen_crypto = { path = "../../crypto/nextgen_crypto", features = ["testing"] }
+crypto = { path = "../../crypto/crypto", features = ["testing"] }

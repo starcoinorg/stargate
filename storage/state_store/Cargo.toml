@@ -11,7 +11,7 @@ failure = { path = "../../common/failure_ext", package = "failure_ext" }
 types = { path = "../../types" }
 star_types = { path = "../../star_types"}
 state_view = { path = "../state_view"}
-crypto = { path = "../../crypto/legacy_crypto" }
+crypto = { path = "../../crypto/crypto" }
 logger = { path = "../../common/logger"}
 
 [dev-dependencies]

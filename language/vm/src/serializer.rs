@@ -604,8 +604,12 @@ fn serialize_instruction_inner(binary: &mut BinaryData, opcode: &Bytecode) -> Re
             binary.push(Opcodes::BORROW_LOC as u8)?;
             binary.push(*local_idx)
         }
-        Bytecode::BorrowField(field_idx) => {
-            binary.push(Opcodes::BORROW_FIELD as u8)?;
+        Bytecode::MutBorrowField(field_idx) => {
+            binary.push(Opcodes::MUT_BORROW_FIELD as u8)?;
+            write_u16_as_uleb128(binary, field_idx.0)
+        }
+        Bytecode::ImmBorrowField(field_idx) => {
+            binary.push(Opcodes::IMM_BORROW_FIELD as u8)?;
             write_u16_as_uleb128(binary, field_idx.0)
         }
         Bytecode::Call(method_idx, types_idx) => {
@@ -889,7 +893,7 @@ impl CommonSerializer {
             for string in strings {
                 serialize_string(binary, string)?;
             }
-            self.string_pool.1 = checked_calculate_table_size(binary, self.string_pool.0)?;;
+            self.string_pool.1 = checked_calculate_table_size(binary, self.string_pool.0)?;
         }
         Ok(())
     }
@@ -906,7 +910,7 @@ impl CommonSerializer {
             for byte_array in byte_arrays {
                 serialize_byte_array(binary, byte_array)?;
             }
-            self.byte_array_pool.1 = checked_calculate_table_size(binary, self.byte_array_pool.0)?;;
+            self.byte_array_pool.1 = checked_calculate_table_size(binary, self.byte_array_pool.0)?;
         }
         Ok(())
     }
@@ -958,7 +962,7 @@ impl CommonSerializer {
                 serialize_function_signature(binary, signature)?;
             }
             self.function_signatures.1 =
-                checked_calculate_table_size(binary, self.function_signatures.0)?;;
+                checked_calculate_table_size(binary, self.function_signatures.0)?;
         }
         Ok(())
     }

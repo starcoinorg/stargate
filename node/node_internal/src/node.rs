@@ -14,9 +14,9 @@ use futures::{
 use std::sync::{Arc,Mutex};
 use sgwallet::wallet::Wallet;
 use chain_client::{ChainClient};
-use nextgen_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
-use nextgen_crypto::SigningKey;
-use nextgen_crypto::test_utils::KeyPair;
+use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
+use crypto::SigningKey;
+use crypto::test_utils::KeyPair;
 use tokio::sync::mpsc::{channel,Sender,Receiver};
 use star_types::message::{*};
 use proto_conv::{IntoProtoBytes,FromProto,FromProtoBytes,IntoProto};

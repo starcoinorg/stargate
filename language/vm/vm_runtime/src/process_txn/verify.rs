@@ -63,6 +63,12 @@ where
                 // here.
                 None
             }
+            TransactionPayload::Module(_) | TransactionPayload::Script(_) => {
+                // This is an impossible condition at the moment and for a short time.
+                // ValidatedTransaction is never built with Module or Script so there
+                // is no way to reach this state
+                panic!("Unknown Transaction")
+            }
         };
 
         Ok(Self {
@@ -160,6 +166,7 @@ fn static_verify_modules(
     let modules_len = modules.len();
 
     let mut modules_out = vec![];
+
     for (module_idx, module) in modules.into_iter().enumerate() {
         // Make sure the module's self address matches the transaction sender. The self address is
         // where the module will actually be published. If we did not check this, the sender could
@@ -182,10 +189,15 @@ fn static_verify_modules(
         };
 
         if let Some(error) = self_error {
+            // Verification should stop before we generate enough errors to overflow
+            assume!(errors.len() < usize::max_value());
             errors.push(error);
         }
 
         if errors.is_empty() {
+            // `modules_out` is initally empty, a single element is pushed per loop iteration and
+            // the number of iterations is bound to the max size of `modules``
+            assume!(modules_out.len() < usize::max_value());
             modules_out.push(module.expect("empty errors => module should verify"));
         } else {
             statuses.push(Box::new(errors.into_iter().map(move |error| {
