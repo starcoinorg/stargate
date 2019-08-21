@@ -21,7 +21,7 @@ use node_internal::node::Node as Node_Internal;
 use netcore::transport::{Transport};
 use chain_client::{ChainClient};
 
-pub fn setup_node_service<C,TTransport>(config: &NodeConfig,node:Arc<Mutex<Node_Internal<C,TTransport>>>) -> ::grpcio::Server 
+pub fn setup_node_service<C,TTransport>(config: &NodeConfig,node:Arc<Node_Internal<C,TTransport>>) -> ::grpcio::Server 
 where C: ChainClient+Clone+ Send+Sync+'static,
 TTransport:Transport+Sync+Send+Clone+'static,
 TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
@@ -39,12 +39,12 @@ TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
 #[derive(Clone)]
 pub struct NodeService  <C: ChainClient+Clone+Send+Sync+'static,TTransport:Transport+Sync+Send+Clone+'static>
     where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
-        node:Arc<Mutex<Node_Internal<C,TTransport>>>
+        node:Arc<Node_Internal<C,TTransport>>
 }
 
 impl<C: ChainClient+Clone +Send+Sync+'static,TTransport:Transport+Sync+Send+Clone+'static> NodeService<C,TTransport> 
 where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
-    pub fn new(node:Arc<Mutex<Node_Internal<C,TTransport>>>) -> Self {
+    pub fn new(node:Arc<Node_Internal<C,TTransport>>) -> Self {
         NodeService { 
             node,
         }

@@ -4,7 +4,14 @@ use serde::{Deserialize, Serialize};
 pub struct NodeConfig {
     pub network: NetworkConfig,
     pub node_net_work: NodeNetworkConfig,
+    pub wallet: WalletConfig,
     //pub log_collector: LoggerConfig,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct WalletConfig {
+    pub chain_address: String,
+    pub chain_port: u16,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -31,7 +38,7 @@ pub struct LoggerConfig {
 
 pub fn get_test_config(addr: String, port: u16) -> (NodeConfig) {
     let network = NetworkConfig {
-        address: addr,
+        address: addr.clone(),
         port,
     };
     let node_network = NodeNetworkConfig {
@@ -40,8 +47,13 @@ pub fn get_test_config(addr: String, port: u16) -> (NodeConfig) {
         in_memory: false,
         seeds: vec![String::from("127.0.0.1:8001")],
     };
+    let wallet_config = WalletConfig{
+        chain_address:addr,
+        chain_port:port,
+    };
     NodeConfig {
         network,
         node_net_work: node_network,
+        wallet:wallet_config,
     }
 }

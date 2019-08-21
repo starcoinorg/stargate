@@ -65,7 +65,6 @@ impl WalletLibrary{
                 //let keypair:KeyPair<Ed25519PrivateKey,Ed25519PublicKey>=bincode::deserialize(&data[..]).expect("Unable to deserialize faucet account file");
                 let private_key  = Ed25519PrivateKey::try_from(&data[0..32]).unwrap();
                 let public_key = Ed25519PublicKey::try_from(&data[32..]).unwrap(); 
-                println!("private key is {},public key is {}",private_key,public_key);
                 let keypair =KeyPair{
                     private_key,
                     public_key,

@@ -22,6 +22,7 @@ pub trait ChainClient {
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()>;
 }
 
+#[derive(Clone)]
 pub struct RpcChainClient {
     conn_addr: String,
     client: chain_grpc::ChainClient,
