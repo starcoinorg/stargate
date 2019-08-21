@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use std::fs;
+use failure::*;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct NodeConfig {
@@ -34,6 +36,12 @@ pub struct LoggerConfig {
     pub is_async: bool,
     pub chan_size: Option<usize>,
     pub use_std_output: bool,
+}
+
+pub fn load_from(config_file:&str)->Result<NodeConfig>{
+    let content=fs::read_to_string(config_file)?;
+    let node_config=toml::from_str(&content)?;
+    Ok(node_config)
 }
 
 pub fn get_test_config(addr: String, port: u16) -> (NodeConfig) {

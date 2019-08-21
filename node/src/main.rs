@@ -7,7 +7,7 @@ use std::{
 use futures::{Stream, Future, future};
 use structopt::StructOpt;
 use node_service::setup_node_service;
-use sg_config::config::{NodeConfig, NetworkConfig, NodeNetworkConfig,WalletConfig};
+use sg_config::config::{NodeConfig, NetworkConfig, NodeNetworkConfig,WalletConfig,load_from};
 use node::client;
 use crypto::test_utils::KeyPair;
 use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
@@ -20,6 +20,7 @@ use grpcio::EnvBuilder;
 use sgwallet::wallet::*;
 use node_internal::node::Node;
 use netcore::transport::tcp::TcpTransport;
+use failure::*;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -32,8 +33,8 @@ struct Args {
     pub enable_logging: bool,
     #[structopt(short = "s", long = "start_client")]
     pub start_client: bool,
-    #[structopt(short = "c", long = "config_dir")]
-    pub config_dir: Option<String>,
+    #[structopt(short = "c", long = "config_dir",default_value="wallet")]
+    pub config_dir: String,
     #[structopt(short = "f", long = "faucet_key_path",default_value="wallet/key")]
     pub faucet_key_path: String,
 }
@@ -43,26 +44,12 @@ pub struct Swarm {
     tee_logs: bool,
 }
 
-fn launch_swarm(args: &Args) -> Swarm {
-    Swarm {
-        config: NodeConfig {
-            network: NetworkConfig {
-                address: "localhost".to_string(),
-                port: 8080,
-            },
-            node_net_work: NodeNetworkConfig {
-                addr: String::from("127.0.0.1:8000"),
-                max_sockets: 0,
-                in_memory: false,
-                seeds: vec![String::from("127.0.0.1:8001")],
-            },
-            wallet:WalletConfig{
-                chain_address: "localhost".to_string(),
-                chain_port:3000,
-            }
-        },
+fn launch_swarm(args: &Args) -> Result<Swarm> {
+    let node_config = load_from(&(args.config_dir.to_string()+"/node.toml"))?;
+    Ok(Swarm {
+        config:node_config,
         tee_logs: true,
-    }
+    })
 }
 
 fn load_from_file(faucet_account_file: &str)->KeyPair<Ed25519PrivateKey,Ed25519PublicKey>{
@@ -98,7 +85,7 @@ fn gen_node(executor:TaskExecutor,keypair:KeyPair<Ed25519PrivateKey,Ed25519Publi
 
 fn main() {
     let args = Args::from_args();
-    let swarm = launch_swarm(&args);
+    let swarm = launch_swarm(&args).unwrap();
 
     let mut rt = Runtime::new().unwrap();
     let executor = rt.executor();
