@@ -1,0 +1,13 @@
+[network]
+address = 'localhost'
+port = 8000
+
+[node_net_work]
+addr = 'localhost'
+max_sockets = 20
+in_memory = false
+seeds = []
+
+[wallet]
+chain_address = 'localhost'
+chain_port = 3000
