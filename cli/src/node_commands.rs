@@ -34,8 +34,8 @@ impl Command for NodeCommandConnect {
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
         match client.connect(params,true) {
             Ok(result) => println!(
-                "mint success"),
-            Err(e) => report_error("Error mint account", e),
+                "connect success"),
+            Err(e) => report_error("Error connect", e),
 
         }
     }
@@ -65,8 +65,13 @@ impl Command for NodeCommandPay {
         "off chain pay"
     }
 
-    fn execute(&self, client: &mut ClientProxy, _params: &[&str]) {
-        println!(">> pay to remote addr");
+    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+        match client.off_chain_pay(params,true) {
+            Ok(result) => println!(
+                "pay success"),
+            Err(e) => report_error("Error pay account", e),
+
+        }
     }
 }
 
