@@ -117,6 +117,10 @@ impl<C> Wallet<C>
         self.storage.borrow().get_by_path(path)
     }
 
+    pub fn get_account_state(&self) -> Vec<u8> {
+        self.storage.borrow().get_account_state()
+    }
+
     pub fn account_resource(&self) -> AccountResource {
         // account_resource must exist.
         self.get(&account_resource_path())

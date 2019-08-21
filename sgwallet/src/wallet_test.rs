@@ -31,4 +31,6 @@ fn test_wallet() {
     debug!("txn:{:#?}", offchain_txn);
     wallet.apply_txn(&offchain_txn).unwrap();
     assert_eq!(amount - transfer_amount - offchain_txn.output().gas_used(), wallet.balance());
+    let account_state_blob = wallet.get_account_state();
+    debug_assert!(account_state_blob.len() > 0);
 }

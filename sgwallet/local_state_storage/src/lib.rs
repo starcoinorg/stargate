@@ -56,6 +56,10 @@ where
         self.state.borrow().get(path)
     }
 
+    pub fn get_account_state(&self) -> Vec<u8> {
+        (&*self.state.borrow()).into()
+    }
+
 }
 
 impl<C> StateStore for LocalStateStorage<C>
