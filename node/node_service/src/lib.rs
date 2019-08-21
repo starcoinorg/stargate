@@ -2,7 +2,7 @@
 
 //use config::config::NodeConfig;
 use node_proto::{
-    OpenChannelRequest,OpenChannelResponse,PayRequest,PayResponse,
+    OpenChannelRequest,OpenChannelResponse,PayRequest,PayResponse,ConnectRequest,ConnectResponse,
     proto::node_grpc::create_node
 };
 use failure::Result;
@@ -20,6 +20,7 @@ use sg_config::config::{NodeConfig};
 use node_internal::node::Node as Node_Internal;
 use netcore::transport::{Transport};
 use chain_client::{ChainClient};
+use types::account_config::coin_struct_tag;
 
 pub fn setup_node_service<C,TTransport>(config: &NodeConfig,node:Arc<Node_Internal<C,TTransport>>) -> ::grpcio::Server 
 where C: ChainClient+Clone+ Send+Sync+'static,
@@ -56,13 +57,24 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
     fn open_channel(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::OpenChannelRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::OpenChannelResponse>){
         println!("open channel");
     }
+
     fn pay(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::PayRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::PayResponse>){
-        println!("pay");
+        let request = PayRequest::from_proto(req).unwrap();
+        self.node.off_chain_pay(coin_struct_tag(), request.remote_addr, request.amount).unwrap();
+        let resp=PayResponse{}.into_proto();
+        provide_grpc_response(Ok(resp),ctx,sink);
     }
 
     fn send_off_line_tx(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::SendOffLineTxRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::SendOffLineTxResponse>){
         println!("send off line tx");
     }  
+
+    fn connect(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::ConnectRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::ConnectResponse>){
+        let connect_req = ConnectRequest::from_proto(req).unwrap();
+        self.node.connect(connect_req.remote_ip.parse().unwrap(),connect_req.remote_addr);
+        let resp=ConnectResponse{}.into_proto();
+        provide_grpc_response(Ok(resp),ctx,sink);
+    }
 }
 
 async fn process_response<T>(

@@ -12,12 +12,32 @@ impl Command for NodeCommand {
     }
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
         let commands: Vec<Box<dyn Command>> = vec![
+            Box::new(NodeCommandConnect {}),
             Box::new(NodeCommandOpenChannel {}),
             Box::new(NodeCommandPay {}),
             Box::new(NodeCommandCloseChannel{}),
         ];
 
         subcommand_execute(&params[0], commands, client, &params[1..]);
+    }
+}
+
+pub struct NodeCommandConnect {}
+
+impl Command for NodeCommandConnect {
+    fn get_aliases(&self) -> Vec<&'static str> {
+        vec!["connect", "c"]
+    }
+    fn get_description(&self) -> &'static str {
+        "connect to  remote addr"
+    }
+    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+        match client.connect(params,true) {
+            Ok(result) => println!(
+                "mint success"),
+            Err(e) => report_error("Error mint account", e),
+
+        }
     }
 }
 
@@ -39,11 +59,12 @@ pub struct NodeCommandPay {}
 
 impl Command for NodeCommandPay {
     fn get_aliases(&self) -> Vec<&'static str> {
-        vec!["open channel ", "oc"]
+        vec!["pay", "p"]
     }
     fn get_description(&self) -> &'static str {
-        "open channel with remote addr"
+        "off chain pay"
     }
+
     fn execute(&self, client: &mut ClientProxy, _params: &[&str]) {
         println!(">> pay to remote addr");
     }
@@ -53,10 +74,10 @@ pub struct NodeCommandCloseChannel {}
 
 impl Command for NodeCommandCloseChannel {
     fn get_aliases(&self) -> Vec<&'static str> {
-        vec!["open channel ", "oc"]
+        vec!["close channel ", "cc"]
     }
     fn get_description(&self) -> &'static str {
-        "open channel with remote addr"
+        "close channel with remote addr"
     }
     fn execute(&self, client: &mut ClientProxy, _params: &[&str]) {
         println!(">> Close channel with remote addr");

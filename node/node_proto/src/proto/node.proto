@@ -8,6 +8,8 @@ service Node {
     rpc Pay(PayRequest) returns (PayResponse) {}
   
     rpc SendOffLineTx(SendOffLineTxRequest) returns (SendOffLineTxResponse) {}
+
+    rpc Connect(ConnectRequest) returns (ConnectResponse) {}
 }
   
 message OpenChannelRequest {
@@ -18,8 +20,18 @@ message OpenChannelResponse {
 
 }
 
+message ConnectRequest {
+    bytes remote_addr=1;
+    string remote_ip = 2;
+}
+
+message ConnectResponse {
+
+}
+
 message PayRequest {
     bytes remote_addr=1;
+    uint64 amount=2;
 }
 
 message PayResponse {

@@ -63,14 +63,16 @@ impl IntoProto for OpenChannelResponse {
 #[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct PayRequest {
     pub remote_addr: AccountAddress,
+    pub amount :u64,
 }
 
 impl PayRequest {
     pub fn new(
-        remote_addr: AccountAddress,
+        remote_addr: AccountAddress,amount:u64
     ) -> Self {
         PayRequest {
             remote_addr,
+            amount,
         }
     }
 }
@@ -105,4 +107,38 @@ impl IntoProto for PayResponse {
         let mut out = Self::ProtoType::new();        
         out
     }
+}
+
+
+#[derive(Clone, Debug, Eq, PartialEq, FromProto, IntoProto)]
+#[ProtoType(crate::proto::node::ConnectRequest)]
+#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
+pub struct ConnectRequest {
+    pub remote_addr: AccountAddress,
+    pub remote_ip:String,
+}
+
+impl ConnectRequest {
+    pub fn new(
+        remote_addr: AccountAddress,remote_ip:String
+    ) -> Self {
+        Self {
+            remote_addr,remote_ip,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq,FromProto,IntoProto)]
+#[ProtoType(crate::proto::node::ConnectResponse)]
+#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
+pub struct ConnectResponse {
+}
+
+impl ConnectResponse {
+    pub fn new(
+    ) -> Self {
+        Self {
+        }
+    }
+
 }
