@@ -9,8 +9,8 @@ use structopt::StructOpt;
 use node_service::setup_node_service;
 use sg_config::config::{NodeConfig, NetworkConfig, NodeNetworkConfig,WalletConfig};
 use node::client;
-use nextgen_crypto::test_utils::KeyPair;
-use nextgen_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
+use crypto::test_utils::KeyPair;
+use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
 use types::{
     account_address::AccountAddress,
 };
