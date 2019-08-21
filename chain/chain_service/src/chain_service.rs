@@ -165,7 +165,7 @@ impl ChainService {
 
                     tx_db.insert_all(state_hash, sign_tx.clone());
                 }
-                TransactionPayload::Program(_program) => {
+                TransactionPayload::Program(_) | TransactionPayload::Module(_) | TransactionPayload::Script(_) => {
                     let state_db = self.state_db.lock().unwrap();
                     let mut output_vec = MoveVM::execute_block(vec![sign_tx.clone()], &VM_CONFIG, &*state_db);
 
@@ -183,10 +183,6 @@ impl ChainService {
                         event_lock.send(event_resp).unwrap();
                         Some(())
                     });
-                }
-                _ => {
-                    //TODO support Module and Script
-                    unimplemented!()
                 }
             }
 
