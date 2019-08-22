@@ -11,6 +11,9 @@ pub mod transaction_output_helper;
 pub mod change_set;
 #[cfg(test)]
 mod change_set_test;
+pub mod resource_value;
+pub mod resource_value_serializer;
+pub mod resource_type;
 
 #[cfg(test)]
 mod tests {
