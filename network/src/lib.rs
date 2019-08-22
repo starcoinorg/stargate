@@ -5,16 +5,16 @@ pub mod net;
 #[cfg(test)]
 mod tests {
     use crate::net::{build_libp2p_service, Message, Service};
-    use futures::{future, prelude::Async, stream};
-    use futures::{future::Future, stream::Stream};
+    use crypto::ed25519::compat;
+    use futures::{future, future::Future, prelude::Async, stream, stream::Stream};
     use libp2p::PeerId;
-    use network_libp2p::{build_multiaddr, start_service, NetworkConfiguration};
+    use network_libp2p::{build_multiaddr, identity, start_service, NetworkConfiguration};
     use parity_multiaddr::{Multiaddr, Protocol};
     use parking_lot::Mutex;
-    use std::sync::Arc;
-    use std::thread;
-    use tokio::runtime::Runtime;
-    use tokio::sync::mpsc::error::TrySendError;
+    use std::time::Duration;
+    use std::{sync::Arc, thread};
+    use tokio::{runtime::Runtime, sync::mpsc::error::TrySendError};
+    use types::account_address::AccountAddress;
 
     fn build_network_service(num: usize, base_port: u16) -> Vec<Service> {
         let mut result: Vec<Service> = Vec::with_capacity(num);
@@ -80,5 +80,25 @@ mod tests {
         let executor = rt.executor();
         executor.spawn(sender_fut);
         rt.shutdown_on_idle().wait().unwrap();
+    }
+
+    #[test]
+    fn test_account_to_peer_id() {
+        //let (private_key, public_key) = compat::generate_keypair();
+        //let key = private_key.to_bytes();
+    }
+
+    #[test]
+    fn test_connected_nodes() {
+        let (service1, mut service2) = {
+            let mut l = build_network_service(2, 50400).into_iter();
+            let a = l.next().unwrap();
+            let b = l.next().unwrap();
+            (a, b)
+        };
+        thread::sleep(Duration::new(1, 0));
+        for (peer_id, peer) in service1.libp2p_service.lock().state().connected_peers {
+            println!("id: {:?}, peer: {:?}", peer_id, peer);
+        }
     }
 }
