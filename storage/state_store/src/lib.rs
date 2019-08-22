@@ -15,7 +15,7 @@ pub trait StateViewPlus: StateView + StructDefResolve {
             Some(state) => {
                 let tag = access_path.resource_tag().ok_or(format_err!("access_path {:?} is not a resource path.", access_path))?;
                 let def = self.resolve(&tag)?;
-                Ok(Some(Resource::decode(def, state.as_slice())?))
+                Ok(Some(Resource::decode(tag, def, state.as_slice())?))
             }
         }
     }
@@ -51,7 +51,7 @@ pub trait StateStore : StateViewPlus {
                         let tag = access_path.resource_tag().ok_or(format_err!("get resource tag from path fail."))?;
                         let def = self.resolve(&tag)?;
                         debug!("init new resource {:?} from change {:#?}", tag, field_changes);
-                        let new_resource = Resource::from_changes(field_changes, &def);
+                        let new_resource = Resource::from_changes(field_changes, tag,&def);
                         debug!("result {:?}", new_resource);
                         self.update(access_path, new_resource.encode())
                     }
@@ -68,7 +68,9 @@ pub trait StateStore : StateViewPlus {
                     Changes::Value(value.clone())
                 }else{
                     let old_resource = self.get_resource(ap)?;
-                    let new_resource = Resource::decode(self.resolve(&ap.resource_tag().ok_or(format_err!("get resource tag fail"))?)?, value.as_slice())?;
+                    let tag = ap.resource_tag().ok_or(format_err!("get resource tag fail"))?;
+                    let def = self.resolve(&tag)?;
+                    let new_resource = Resource::decode(tag,def, value.as_slice())?;
 
                     let field_changes = match old_resource {
                         Some(old_resource) => old_resource.diff(&new_resource)?,

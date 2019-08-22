@@ -2,8 +2,6 @@ use hex;
 
 use canonical_serialization::{CanonicalSerialize, SimpleDeserializer, SimpleSerializer};
 use types::account_config::{account_struct_tag, AccountResource, EventHandle};
-use vm_runtime_types::loaded_data::struct_def::StructDef;
-use vm_runtime_types::loaded_data::types::Type;
 
 use crate::resource::*;
 
@@ -27,15 +25,15 @@ fn test_resource() {
 
 #[test]
 fn test_resource_diff_and_apply() {
+    ::logger::init_for_e2e_testing();
     let account_address = AccountAddress::random();
-    let event_handle = EventHandle::new_from_address(&account_address, 0);
-    let mut account_resource = Resource::new_from_account_resource(new_account_for_test(100));
-    let account_resource2 = Resource::new_from_account_resource(new_account_for_test(200));
+    let mut account_resource = Resource::new_from_account_resource(new_account_for_test(account_address,100));
+    let account_resource2 = Resource::new_from_account_resource(new_account_for_test(account_address,200));
 
     let mut changes = account_resource.diff(&account_resource2).unwrap();
     println!("changes:{:#?}", changes);
     changes.filter_none();
-    assert_eq!(1, changes.len());
+    assert_eq!(changes.len(), 1);
 
     account_resource.apply_changes(&changes).unwrap();
     assert_eq!(account_resource, account_resource2);

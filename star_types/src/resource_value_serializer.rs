@@ -15,7 +15,7 @@ impl ResourceValue {
     }
 
     /// Deserialize this value using `SimpleDeserializer` and a provided struct definition.
-    pub fn simple_deserialize(blob: &[u8], struct_tag: &StructTag, resource: ResourceDef) -> Result<ResourceValue> {
+    pub fn simple_deserialize(blob: &[u8], struct_tag: StructTag, resource: ResourceDef) -> Result<ResourceValue> {
         let mut deserializer = SimpleDeserializer::new(blob);
         deserialize_struct(&mut deserializer, struct_tag,&resource)
     }
@@ -23,7 +23,7 @@ impl ResourceValue {
 
 fn deserialize_struct(
     deserializer: &mut SimpleDeserializer,
-    struct_tag: &StructTag,
+    struct_tag: StructTag,
     struct_def: &ResourceDef,
 ) -> Result<ResourceValue> {
     let mut s_vals: Vec<MutResourceVal> = Vec::new();
@@ -70,7 +70,7 @@ fn deserialize_struct(
                 bail!("DataFormatError");
             }
             ResourceType::Resource(tag, s_fields) => {
-                if let Ok(s) = deserialize_struct(deserializer, tag,s_fields) {
+                if let Ok(s) = deserialize_struct(deserializer, tag.clone(),s_fields) {
                     s_vals.push(MutResourceVal::new(s));
                 } else {
                     bail!("DataFormatError");
@@ -78,7 +78,7 @@ fn deserialize_struct(
             }
         }
     }
-    Ok(ResourceValue::Resource(struct_tag.clone(), s_vals))
+    Ok(ResourceValue::Resource(struct_tag, s_vals))
 }
 
 impl CanonicalSerialize for ResourceValue {

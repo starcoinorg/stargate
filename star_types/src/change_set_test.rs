@@ -1,14 +1,15 @@
 use types::access_path::{Accesses, AccessPath, DataPath};
 use types::account_address::AccountAddress;
-use types::account_config::account_struct_tag;
+use types::account_config::{account_struct_tag, AccountResource};
 use types::language_storage::ResourceKey;
 
 use crate::change_set::{ChangeOp, Changes, ChangeSet, ChangeSetMut, FieldChanges, Changeable};
 
 use super::*;
-use vm_runtime_types::value::{MutVal, Value, GlobalRef, Reference};
 use proto_conv::{FromProto, IntoProto};
 use crate::proto::change_set::ChangeSet as ChangeSetProto;
+use crate::account_resource_ext::new_account_for_test;
+use crate::{resource_value::{ResourceValue,MutResourceVal}};
 
 #[test]
 fn test_change_op_merge_plus() {
@@ -51,7 +52,7 @@ fn test_change_set_merge() {
 
 #[test]
 fn test_apply_change(){
-    let mut val = MutVal::new(Value::U64(100));
+    let mut val = MutResourceVal::new(ResourceValue::U64(100));
     val.apply_change(ChangeOp::Plus(100)).unwrap();
 
     assert_eq!(Into::<Option<u64>>::into(val.clone()).unwrap(), 200);

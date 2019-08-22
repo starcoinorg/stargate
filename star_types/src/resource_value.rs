@@ -13,7 +13,6 @@ use types::{
     contract_event::ContractEvent,
 };
 use failure::prelude::*;
-use vm_runtime_types::value::Reference;
 use crate::resource_type::{resource_types::ResourceType, resource_def::ResourceDef};
 use types::language_storage::StructTag;
 
@@ -111,6 +110,49 @@ impl ResourceValue {
             _ => bail!("InternalTypeError"),
         })
     }
+
+    pub fn is_u64(&self) -> bool {
+        match self{
+            ResourceValue::U64(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_bool(&self) -> bool {
+        match self{
+            ResourceValue::Bool(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_address(&self) -> bool {
+        match self{
+            ResourceValue::Address(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_byte_array(&self) -> bool {
+        match self{
+            ResourceValue::ByteArray(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_string(&self) -> bool {
+        match self{
+            ResourceValue::String(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_resource(&self) -> bool {
+        match self{
+            ResourceValue::Resource(_,_) => true,
+            _ => false
+        }
+    }
+
 }
 
 
@@ -179,28 +221,64 @@ impl MutResourceVal {
     pub fn not_equals(&self, mv2: &MutResourceVal) -> Result<bool> {
         self.peek().not_equals(&mv2.peek())
     }
+
+    pub fn is_u64(&self) -> bool {
+        match &*self.peek(){
+            ResourceValue::U64(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_bool(&self) -> bool {
+        match &*self.peek(){
+            ResourceValue::Bool(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_address(&self) -> bool {
+        match &*self.peek(){
+            ResourceValue::Address(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_byte_array(&self) -> bool {
+        match &*self.peek(){
+            ResourceValue::ByteArray(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_string(&self) -> bool {
+        match &*self.peek(){
+            ResourceValue::String(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_resource(&self) -> bool {
+        match &*self.peek(){
+            ResourceValue::Resource(_,_) => true,
+            _ => false
+        }
+    }
+
+    pub fn borrow_field(&self, idx: u32) -> Option<Self> {
+        match &*self.peek() {
+            ResourceValue::Resource(_, ref vec) => vec.get(idx as usize).map(MutResourceVal::shallow_clone),
+            _ => None,
+        }
+    }
+
+    pub fn read_reference(self) -> MutResourceVal {
+        self.clone()
+    }
+
+    pub fn mutate_reference(self, v: MutResourceVal) {
+        self.0.replace(v.peek().clone());
+    }
 }
-//
-//impl Reference for MutResourceVal {
-//    fn borrow_field(&self, idx: u32) -> Option<Self> {
-//        match &*self.peek() {
-//            ResourceValue::Resource(_, ref vec) => vec.get(idx as usize).map(MutResourceVal::shallow_clone),
-//            _ => None,
-//        }
-//    }
-//
-//    fn read_reference(self) -> MutResourceVal {
-//        self.clone()
-//    }
-//
-//    fn mutate_reference(self, v: MutResourceVal) {
-//        self.0.replace(v.peek().clone());
-//    }
-//
-//    fn size(&self) -> AbstractMemorySize<GasCarrier> {
-//        words_in(*REFERENCE_SIZE)
-//    }
-//}
 
 //
 // Conversion routines for the interpreter
