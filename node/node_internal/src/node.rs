@@ -167,8 +167,6 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
             }
         }
 
-        while let Some(Ok((f_stream, addr))) = listener.next().await {
-        }
     }
 
     async fn handle_stream<S>(output:S,addr:Multiaddr,tx:UnboundedSender<bytes::Bytes>,mut rx:UnboundedReceiver<bytes::Bytes>,node_data:Arc<Mutex<NodeData<C>>>)
