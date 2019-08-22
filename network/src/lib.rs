@@ -6,13 +6,18 @@ pub mod net;
 mod tests {
     use crate::net::{build_libp2p_service, Message, Service};
     use crypto::ed25519::compat;
+    use crypto::test_utils::KeyPair;
     use futures::{future, future::Future, prelude::Async, stream, stream::Stream};
-    use libp2p::PeerId;
-    use network_libp2p::{build_multiaddr, identity, start_service, NetworkConfiguration};
+    use network_libp2p::{
+        build_multiaddr, identity, start_service, NetworkConfiguration, NodeKeyConfig, PeerId,
+        PublicKey, Secret,
+    };
     use parity_multiaddr::{Multiaddr, Protocol};
     use parking_lot::Mutex;
+    use rand::rngs::StdRng;
+    use rand_core::SeedableRng;
+    use std::thread;
     use std::time::Duration;
-    use std::{sync::Arc, thread};
     use tokio::{runtime::Runtime, sync::mpsc::error::TrySendError};
     use types::account_address::AccountAddress;
 
@@ -84,13 +89,24 @@ mod tests {
 
     #[test]
     fn test_account_to_peer_id() {
-        //let (private_key, public_key) = compat::generate_keypair();
-        //let key = private_key.to_bytes();
+        let (private_key, public_key) = compat::generate_keypair(Option::None);
+
+        let mut cfg = network_libp2p::NetworkConfiguration::new();
+        let seckey = identity::ed25519::SecretKey::from_bytes(&mut private_key.to_bytes()).unwrap();
+        cfg.node_key = NodeKeyConfig::Ed25519(Secret::Input(seckey));
+        let libp2p_public_key = cfg.node_key.into_keypair().unwrap().public();
+        let libp2p_public_key_byte;
+        if let PublicKey::Ed25519(key) = libp2p_public_key {
+            libp2p_public_key_byte = key.encode();
+            assert_eq!(libp2p_public_key_byte, public_key.to_bytes());
+        } else {
+            panic!("failed");
+        }
     }
 
     #[test]
     fn test_connected_nodes() {
-        let (service1, mut service2) = {
+        let (service1, service2) = {
             let mut l = build_network_service(2, 50400).into_iter();
             let a = l.next().unwrap();
             let b = l.next().unwrap();
