@@ -7,14 +7,15 @@ use failure::prelude::*;
 use proto_conv::{FromProto, IntoProto};
 use types::access_path::{AccessPath, Accesses};
 use std::mem;
-use vm_runtime_types::{value::{MutVal, Value}};
+use crate::{
+    resource_type::{resource_def::ResourceDef, resource_types::ResourceType},
+    resource_value::{ResourceValue,MutResourceVal},
+    proto::change_set::ChangeOp_oneof_change,
+};
 use canonical_serialization::{SimpleDeserializer, SimpleSerializer};
 use radix_trie::TrieKey;
 use types::write_set::WriteSet;
 use types::language_storage::StructTag;
-use vm_runtime_types::loaded_data::struct_def::StructDef;
-use crate::proto::change_set::ChangeOp_oneof_change;
-use vm_runtime_types::value::Reference;
 use types::byte_array::ByteArray;
 use types::account_address::AccountAddress;
 use std::convert::TryFrom;
@@ -124,33 +125,33 @@ pub trait Changeable{
 
 }
 
-impl Changeable for MutVal {
+impl Changeable for MutResourceVal {
 
     fn apply_change(&mut self, op: ChangeOp) -> Result<()> {
         let value = match &*self.peek(){
-            Value::U64(value) => match op{
+            ResourceValue::U64(value) => match op{
                 //TODO check overflow
-                ChangeOp::Plus(op_value) => Value::U64(*value+ op_value),
+                ChangeOp::Plus(op_value) => ResourceValue::U64(*value+ op_value),
                 ChangeOp::Minus(op_value) => {
                     println!("{} - {} ",value,op_value);
-                    Value::U64(*value - op_value)
+                    ResourceValue::U64(*value - op_value)
                 },
                 _ => bail!("Can not apply change {:?} to {:?}", op, self)
             },
-            Value::ByteArray(_) => match op {
-                ChangeOp::Update(bytes) => Value::ByteArray(ByteArray::new(bytes)),
+            ResourceValue::ByteArray(_) => match op {
+                ChangeOp::Update(bytes) => ResourceValue::ByteArray(ByteArray::new(bytes)),
                 _ => bail!("Can not apply change {:?} to {:?}", op, self)
             },
-            Value::String(_) => match op {
-                ChangeOp::Update(bytes) => Value::String(String::from_utf8(bytes)?),
+            ResourceValue::String(_) => match op {
+                ChangeOp::Update(bytes) => ResourceValue::String(String::from_utf8(bytes)?),
                 _ => bail!("Can not apply change {:?} to {:?}", op, self)
             },
-            Value::Bool(_) => match op {
-                ChangeOp::Update(bytes) => Value::Bool(bytes[0]!=0),
+            ResourceValue::Bool(_) => match op {
+                ChangeOp::Update(bytes) => ResourceValue::Bool(bytes[0]!=0),
                 _ => bail!("Can not apply change {:?} to {:?}", op, self)
             },
-            Value::Address(_) => match op {
-                ChangeOp::Update(bytes) => Value::Address(AccountAddress::try_from(bytes)?),
+            ResourceValue::Address(_) => match op {
+                ChangeOp::Update(bytes) => ResourceValue::Address(AccountAddress::try_from(bytes)?),
                 _ => bail!("Can not apply change {:?} to {:?}", op, self)
             }
             _ => bail!("Can not apply change {:?} to {:?}", op, self)
@@ -386,7 +387,7 @@ impl IntoProto for FieldChanges {
 
 pub trait StructDefResolve{
 
-    fn resolve(&self, tag: &StructTag) -> Result<StructDef>;
+    fn resolve(&self, tag: &StructTag) -> Result<ResourceDef>;
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]

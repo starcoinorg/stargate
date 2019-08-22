@@ -16,6 +16,7 @@ use struct_cache::StructCache;
 use types::language_storage::{StructTag};
 use vm_runtime_types::loaded_data::struct_def::StructDef;
 use state_store::{StateViewPlus, StateStore};
+use star_types::resource_type::resource_def::ResourceDef;
 
 pub struct LocalStateStorage<C>
 where
@@ -157,7 +158,7 @@ impl<C>  StructDefResolve for LocalStateStorage<C>
         C: ChainClient,
 {
 
-    fn resolve(&self, tag: &StructTag) -> Result<StructDef> {
+    fn resolve(&self, tag: &StructTag) -> Result<ResourceDef> {
         self.struct_cache.find_struct(tag, self)
     }
 }
