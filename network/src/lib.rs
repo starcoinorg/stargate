@@ -2,25 +2,18 @@
 
 pub mod net;
 
-#[cfg(test)]
 mod tests {
-    use crate::net::{build_libp2p_service, Message, Service};
+    use crate::net::{Message, Service};
+    use crate::{convert_account_address_to_peer_id, convert_peer_id_to_account_address};
     use crypto::ed25519::compat;
-    use crypto::test_utils::KeyPair;
-    use futures::{future, future::Future, prelude::Async, stream, stream::Stream};
-    use network_libp2p::{
-        build_multiaddr, identity, start_service, NetworkConfiguration, NodeKeyConfig, PeerId,
-        PublicKey, Secret,
-    };
+    use futures::{future::Future, stream, stream::Stream};
+    use network_libp2p::{build_multiaddr, identity, NodeKeyConfig, PeerId, PublicKey, Secret};
     use parity_multiaddr::{Multiaddr, Protocol};
-    use parking_lot::Mutex;
-    use rand::rngs::StdRng;
-    use rand_core::SeedableRng;
     use std::thread;
     use std::time::Duration;
-    use tokio::{runtime::Runtime, sync::mpsc::error::TrySendError};
+    use tokio::prelude::Async;
+    use tokio::runtime::Runtime;
     use types::account_address::AccountAddress;
-
     fn build_network_service(num: usize, base_port: u16) -> Vec<Service> {
         let mut result: Vec<Service> = Vec::with_capacity(num);
         let mut first_addr = None::<Multiaddr>;
@@ -57,7 +50,6 @@ mod tests {
         result
     }
 
-    #[test]
     fn test_send_receive() {
         let (service1, mut service2) = {
             let mut l = build_network_service(2, 50400).into_iter();
@@ -87,8 +79,7 @@ mod tests {
         rt.shutdown_on_idle().wait().unwrap();
     }
 
-    #[test]
-    fn test_account_to_peer_id() {
+    fn test_generate_account_and_peer_id() {
         let (private_key, public_key) = compat::generate_keypair(Option::None);
 
         let mut cfg = network_libp2p::NetworkConfiguration::new();
@@ -102,9 +93,17 @@ mod tests {
         } else {
             panic!("failed");
         }
+
+        let address = AccountAddress::from_public_key(&public_key).to_vec();
+        let peer_id =
+            parity_multihash::encode(parity_multihash::Hash::SHA3256, &public_key.to_bytes())
+                .unwrap()
+                .to_vec();
+        //println!("{:?}", peer_id);
+        PeerId::from_bytes(peer_id.clone()).unwrap();
+        assert_eq!(address, &peer_id[2..]);
     }
 
-    #[test]
     fn test_connected_nodes() {
         let (service1, service2) = {
             let mut l = build_network_service(2, 50400).into_iter();
@@ -117,4 +116,34 @@ mod tests {
             println!("id: {:?}, peer: {:?}", peer_id, peer);
         }
     }
+
+    fn test_convert_address_peer_id() {
+        let (private_key, public_key) = compat::generate_keypair(Option::None);
+
+        let mut cfg = network_libp2p::NetworkConfiguration::new();
+        let seckey = identity::ed25519::SecretKey::from_bytes(&mut private_key.to_bytes()).unwrap();
+        cfg.node_key = NodeKeyConfig::Ed25519(Secret::Input(seckey));
+
+        let account_address = AccountAddress::from_public_key(&public_key);
+        let peer_id = convert_account_address_to_peer_id(account_address).unwrap();
+    }
+}
+
+use failure::prelude::*;
+use network_libp2p::PeerId;
+use std::convert::TryFrom;
+use types::account_address::AccountAddress;
+
+pub fn convert_peer_id_to_account_address(peer_id: PeerId) -> Result<AccountAddress> {
+    let peer_id_bytes = &peer_id.into_bytes()[2..];
+    AccountAddress::try_from(peer_id_bytes)
+}
+
+pub fn convert_account_address_to_peer_id(
+    address: AccountAddress,
+) -> std::result::Result<PeerId, Vec<u8>> {
+    let mut peer_id_vec = address.to_vec();
+    peer_id_vec.insert(0, 32);
+    peer_id_vec.insert(0, 22);
+    PeerId::from_bytes(peer_id_vec)
 }
