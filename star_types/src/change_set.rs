@@ -19,6 +19,7 @@ use types::language_storage::StructTag;
 use types::byte_array::ByteArray;
 use types::account_address::AccountAddress;
 use std::convert::TryFrom;
+use crate::resource::Resource;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ChangeOp {
@@ -202,13 +203,14 @@ impl Changes {
 
     /// merge other with self, and return old self
     pub fn merge_with(&mut self, other: &Changes) -> Result<Changes>{
-        match self{
-            Changes::Value {..} => bail!("Unsupported whole value merge."),
-            Changes::Deletion => bail!("Unsupported deletion merge."),
-            Changes::Fields(field_changes) => if let Changes::Fields(other_field_changes) = other{
+        match (self, other){
+            (Changes::Value {..}, Changes::Value{..}) => bail!("Unsupported whole value merge."),
+            (Changes::Deletion, Changes::Deletion) => bail!("Unsupported deletion merge."),
+            (Changes::Fields(field_changes), Changes::Fields(other_field_changes)) => {
                 Ok(Changes::Fields(field_changes.merge_with(other_field_changes)?))
-            }else {
-                bail!("Unsupported merge {:?} with {:?}", self, other)
+            },
+            (first,second) => {
+                bail!("Unsupported merge {:?} with {:?}", first, second)
             }
         }
     }
@@ -224,6 +226,44 @@ impl FieldChanges {
 
     pub fn new(changes: Vec<(Accesses, ChangeOp)>) -> Self {
         Self(changes)
+    }
+
+    /// Create whole resource deletion changes
+    pub fn delete(resource: Resource) -> Self{
+        let fields = resource.fields();
+        Self::new(Self::delete_fields(&fields))
+    }
+
+    fn delete_fields(fields: &Vec<MutResourceVal>) -> Vec<(Accesses, ChangeOp)> {
+        let mut results = vec![];
+        for (idx, field) in fields.iter().enumerate(){
+            let mut changes = Self::delete_field(idx, field);
+            results.append(&mut changes);
+        }
+        results
+    }
+
+    fn delete_field(idx:usize, field: &MutResourceVal) -> Vec<(Accesses,ChangeOp)> {
+        let mut accesses = Accesses::new_with_index(idx as u64);
+        let mut results = vec![];
+        match &*field.peek() {
+            ResourceValue::U64(value) => {
+                let op = ChangeOp::Minus(*value);
+                results.push((accesses, op));
+            },
+            ResourceValue::Resource(tag, fields) => {
+                let changes = Self::delete_fields(fields);
+                for (mut sub_accesses, change_op) in changes {
+                    let mut accesses = accesses.clone();
+                    accesses.append(&mut sub_accesses);
+                    results.push((accesses, change_op));
+                }
+            }
+            _ => {
+                results.push((accesses, ChangeOp::Deletion));
+            }
+        }
+        results
     }
 
     #[inline]
