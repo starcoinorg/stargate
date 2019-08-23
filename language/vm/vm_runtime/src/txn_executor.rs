@@ -337,7 +337,7 @@ where
                         return Ok(Ok(0));
                     }
                 }
-                Bytecode::BorrowLoc(idx) => {
+                Bytecode::MutBorrowLoc(idx) | Bytecode::ImmBorrowLoc(idx) => {
                     match self
                         .execution_stack
                         .top_frame()?
@@ -450,11 +450,7 @@ where
                     }
                 }
                 Bytecode::ReleaseRef => {
-                    let reference = self.execution_stack.pop()?;
-                    match reference.release_reference() {
-                        Ok(_) => (),
-                        Err(e) => return Ok(Err(e)),
-                    }
+                    self.execution_stack.pop()?;
                 }
                 // Arithmetic Operations
                 Bytecode::Add => try_runtime!(self.binop_int(u64::checked_add)),
