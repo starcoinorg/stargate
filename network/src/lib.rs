@@ -21,6 +21,7 @@ pub fn convert_account_address_to_peer_id(
     PeerId::from_bytes(peer_id_vec)
 }
 
+#[cfg(test)]
 mod tests {
     use crate::net::{Message, Service};
     use crate::{convert_account_address_to_peer_id, convert_peer_id_to_account_address};
@@ -106,7 +107,29 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_account_and_peer_id() {}
+    fn test_generate_account_and_peer_id() {
+        let (private_key, public_key) = compat::generate_keypair(Option::None);
+
+        let mut cfg = network_libp2p::NetworkConfiguration::new();
+        let seckey = identity::ed25519::SecretKey::from_bytes(&mut private_key.to_bytes()).unwrap();
+        cfg.node_key = NodeKeyConfig::Ed25519(Secret::Input(seckey));
+        let libp2p_public_key = cfg.node_key.into_keypair().unwrap().public();
+        let libp2p_public_key_byte;
+        if let PublicKey::Ed25519(key) = libp2p_public_key {
+            libp2p_public_key_byte = key.encode();
+            assert_eq!(libp2p_public_key_byte, public_key.to_bytes());
+        } else {
+            panic!("failed");
+        }
+
+        let address = AccountAddress::from_public_key(&public_key).to_vec();
+        let peer_id = multihash::encode(multihash::Hash::SHA3256, &public_key.to_bytes())
+            .unwrap()
+            .into_bytes();
+        println!("{:?}", peer_id);
+        PeerId::from_bytes(peer_id.clone()).unwrap();
+        assert_eq!(address, &peer_id[2..]);
+    }
 
     #[test]
     fn test_connected_nodes() {
@@ -132,5 +155,7 @@ mod tests {
 
         let account_address = AccountAddress::from_public_key(&public_key);
         let peer_id = convert_account_address_to_peer_id(account_address).unwrap();
+        let account_address_1 = convert_peer_id_to_account_address(peer_id).unwrap();
+        assert_eq!(account_address, account_address_1);
     }
 }
