@@ -15,28 +15,25 @@ use crate::{
     resource_type::{resource_types::ResourceType, resource_def::ResourceDef},
     change_set::{Changeable, ChangeOp, ChangeSet, FieldChanges},
 };
+use protobuf::well_known_types::Struct;
 
 #[derive(Clone, Debug)]
-pub struct Resource {
-    fields: MutResourceVal,
-}
+pub struct Resource(StructTag,Vec<MutResourceVal>);
 
 impl Resource {
     pub fn new(tag: StructTag, fields: Vec<MutResourceVal>) -> Self {
         //TODO check def and fields
-        Self {
-            fields: MutResourceVal::new(ResourceValue::Resource(tag, fields)),
-        }
+        Self(tag, fields)
     }
 
-    pub fn new_with_value(fields: ResourceValue) -> Result<Self>{
-        if !fields.is_resource() {
-            bail!("expect resource but get:{:?}", fields);
-        }
-        Ok(Self{
-            fields:MutResourceVal::new(fields)
-        })
-    }
+//    pub fn new_with_value(fields: ResourceValue) -> Result<Self>{
+//        if !fields.is_resource() {
+//            bail!("expect resource but get:{:?}", fields);
+//        }
+//        Ok(Self{
+//            fields:MutResourceVal::new(fields)
+//        })
+//    }
 
     /// Create a empty struct, field with default value.
     pub fn empty(tag: StructTag, def: &ResourceDef) -> Self {
@@ -59,7 +56,7 @@ impl Resource {
             ResourceType::Address => ResourceValue::Address(AccountAddress::default()),
             ResourceType::U64 => ResourceValue::U64(0),
             ResourceType::Resource(struct_tag, struct_def) => {
-                ResourceValue::Resource(struct_tag.clone(), Self::new_fields(struct_def))
+                ResourceValue::Resource(Resource::new(struct_tag.clone(), Self::new_fields(struct_def)))
             }
             _ => panic!("Unsupported field type: {:?}", field_type)
         }
@@ -71,12 +68,34 @@ impl Resource {
         empty_resource
     }
 
+    /// Normal code should always know what type this value has. This is made available only for
+    /// tests.
+    #[allow(non_snake_case)]
+    #[doc(hidden)]
+    pub fn to_resource_def_FOR_TESTING(&self) -> ResourceDef {
+        let fields = self.1
+            .iter()
+            .map(|mut_val| {
+                let val = &*mut_val.peek();
+                match val {
+                    ResourceValue::Bool(_) => ResourceType::Bool,
+                    ResourceValue::Address(_) => ResourceType::Address,
+                    ResourceValue::U64(_) => ResourceType::U64,
+                    ResourceValue::String(_) => ResourceType::String,
+                    ResourceValue::ByteArray(_) => ResourceType::ByteArray,
+                    ResourceValue::Resource(res) => ResourceType::Resource(res.tag().clone(), res.to_resource_def_FOR_TESTING()),
+                }
+            })
+            .collect();
+        ResourceDef::new(fields)
+    }
+
     /// Check current resource is asset resource.
     /// if a resource only contains a u64 field, it is considered an asset.
     /// TODO add a asset type tag to resource def
     pub fn is_asset(&self) -> bool{
-        if self.fields_len() == 1 {
-            return match *self.field(0).peek() {
+        if self.len() == 1 {
+            return match &*self.1[0].peek() {
                 ResourceValue::U64(_) => true,
                 _ => false,
             }
@@ -84,25 +103,30 @@ impl Resource {
         return false
     }
 
-    pub fn fields(&self) -> Vec<MutResourceVal> {
-        if let ResourceValue::Resource(_, fields) = &*self.fields.peek() {
-            //TODO optimize, not clone.
-            fields.clone()
-        } else {
-            panic!("resource must be struct.")
-        }
+    pub fn tag(&self) -> &StructTag {
+        &self.0
     }
 
-    pub fn fields_len(&self) -> usize {
-        self.fields().len()
+    pub fn fields(&self) -> &Vec<MutResourceVal> {
+        &self.1
+//        if let ResourceValue::Resource(_, fields) = &*self.fields.peek() {
+//            //TODO optimize, not clone.
+//            fields.clone()
+//        } else {
+//            panic!("resource must be struct.")
+//        }
     }
 
-    pub fn field(&self, idx: usize) -> MutResourceVal {
-        if let ResourceValue::Resource(_, fields) = &*self.fields.peek() {
-            fields[idx].clone()
-        } else {
-            panic!("resource must be struct.")
-        }
+    pub fn len(&self) -> usize {
+        self.1.len()
+    }
+
+    pub fn field(&self, idx: usize) -> Option<&MutResourceVal> {
+        self.1.get(idx)
+    }
+
+    pub fn iter(&self) -> ::std::slice::Iter<'_, MutResourceVal> {
+        self.1.iter()
     }
 
     pub fn new_from_account_resource(account_resource: AccountResource) -> Self {
@@ -112,8 +136,7 @@ impl Resource {
     }
 
     pub fn decode(tag: StructTag, def: ResourceDef, bytes: &[u8]) -> Result<Self> {
-        let value = ResourceValue::simple_deserialize(bytes, tag,def).map_err(|vm_error| format_err!("decode resource fail:{:?}", vm_error))?;
-        Self::new_with_value(value)
+        ResourceValue::simple_deserialize(bytes, tag,def).map_err(|vm_error| format_err!("decode resource fail:{:?}", vm_error))
     }
 
     pub fn encode(&self) -> Vec<u8> {
@@ -123,7 +146,7 @@ impl Resource {
 
     pub fn diff(&self, other: &Resource) -> Result<FieldChanges> {
         //ensure!(self.tag == other.tag, "diff only support same type resource.");
-        ensure!(self.fields_len() == other.fields_len(), "two resource's fields len should be same.");
+        ensure!(self.len() == other.len(), "two resource's fields len should be same.");
         let mut changes = FieldChanges::empty();
         let self_fields = self.fields();
         let other_fields = other.fields();
@@ -154,8 +177,8 @@ impl Resource {
             } else {
                 bail!("expect type {:?} but get {:?}", first, second);
             },
-            ResourceValue::Resource(first_tag, first_struct) => if let ResourceValue::Resource(second_tag, second_struct) = &*second.peek() {
-                for (field_idx, (first_value, second_value)) in first_struct.iter().zip(second_struct).enumerate() {
+            ResourceValue::Resource(first_res) => if let ResourceValue::Resource(second_res) = &*second.peek() {
+                for (field_idx, (first_value, second_value)) in first_res.iter().zip(second_res.iter()).enumerate() {
                     let mut field_changes = Self::diff_field(field_idx, first_value, second_value)?;
                     for (mut field_accesses, field_change_op) in field_changes {
                         let mut new_accesses = accesses.clone();
@@ -213,7 +236,7 @@ impl Resource {
 
     fn borrow_field(&self, accesses: &Accesses) -> Result<MutResourceVal> {
         //TODO optimize, not use clone.
-        let mut value = self.fields.borrow_field(accesses.first().index().unwrap() as u32).ok_or(format_err!("Can not find field by access {:?}", accesses))?;
+        let mut value = self.field(accesses.first().index().unwrap() as usize).map(MutResourceVal::shallow_clone).ok_or(format_err!("Can not find field by access {:?}", accesses))?;
         for access in accesses.range(1, accesses.len()).iter() {
             if let Access::Index(idx) = access {
                 value = value.borrow_field(*idx as u32).ok_or(format_err!("can not find field by accesses {:?}", accesses))?;
@@ -247,8 +270,8 @@ impl Resource {
             ResourceValue::U64(value) => {
                 changes.push((accesses, ChangeOp::Plus(*value)))
             }
-            ResourceValue::Resource(tag, values) => {
-                for (idx, sub_field) in values.iter().enumerate() {
+            ResourceValue::Resource(res) => {
+                for (idx, sub_field) in res.iter().enumerate() {
                     let sub_changes = Self::field_to_changes(idx, sub_field);
                     for (mut field_accesses, field_change_op) in sub_changes {
                         let mut new_accesses = accesses.clone();
@@ -277,13 +300,13 @@ impl Resource {
 
 impl Into<ResourceValue> for Resource {
     fn into(self) -> ResourceValue {
-        (&self).into()
+        ResourceValue::Resource(self)
     }
 }
 
 impl Into<ResourceValue> for &Resource {
     fn into(self) -> ResourceValue {
-        self.fields.peek().clone()
+        self.clone().into()
     }
 }
 
@@ -297,6 +320,13 @@ impl std::cmp::PartialEq for Resource {
     fn eq(&self, other: &Self) -> bool {
         //TODO optimize
         self.encode() == other.encode()
+    }
+}
+
+impl Into<(StructTag,Vec<MutResourceVal>)> for Resource {
+
+    fn into(self) -> (StructTag, Vec<MutResourceVal>) {
+        (self.0, self.1)
     }
 }
 

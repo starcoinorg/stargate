@@ -251,8 +251,8 @@ impl FieldChanges {
                 let op = ChangeOp::Minus(*value);
                 results.push((accesses, op));
             },
-            ResourceValue::Resource(tag, fields) => {
-                let changes = Self::delete_fields(fields);
+            ResourceValue::Resource(res) => {
+                let changes = Self::delete_fields(res.fields());
                 for (mut sub_accesses, change_op) in changes {
                     let mut accesses = accesses.clone();
                     accesses.append(&mut sub_accesses);

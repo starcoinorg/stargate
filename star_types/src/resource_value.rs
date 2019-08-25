@@ -15,6 +15,7 @@ use types::{
 use failure::prelude::*;
 use crate::resource_type::{resource_types::ResourceType, resource_def::ResourceDef};
 use types::language_storage::StructTag;
+use crate::resource::Resource;
 
 #[derive(Debug, Clone)]
 pub enum ResourceValue {
@@ -22,7 +23,7 @@ pub enum ResourceValue {
     U64(u64),
     Bool(bool),
     String(String),
-    Resource(StructTag,Vec<MutResourceVal>),
+    Resource(Resource),
     ByteArray(ByteArray),
 }
 
@@ -33,26 +34,11 @@ impl ResourceValue {
     #[allow(non_snake_case)]
     #[doc(hidden)]
     pub fn to_resource_def_FOR_TESTING(&self) -> ResourceDef {
-        let values = match self {
-            ResourceValue::Resource(tag, values) => values,
+        let res = match self {
+            ResourceValue::Resource(res) => res,
             _ => panic!("Value must be a struct {:?}", self),
         };
-
-        let fields = values
-            .iter()
-            .map(|mut_val| {
-                let val = &*mut_val.peek();
-                match val {
-                    ResourceValue::Bool(_) => ResourceType::Bool,
-                    ResourceValue::Address(_) => ResourceType::Address,
-                    ResourceValue::U64(_) => ResourceType::U64,
-                    ResourceValue::String(_) => ResourceType::String,
-                    ResourceValue::ByteArray(_) => ResourceType::ByteArray,
-                    ResourceValue::Resource(tag, _) => ResourceType::Resource(tag.clone(), val.to_resource_def_FOR_TESTING()),
-                }
-            })
-            .collect();
-        ResourceDef::new(fields)
+        res.to_resource_def_FOR_TESTING()
     }
 
     // Structural equality for Move values
@@ -64,15 +50,15 @@ impl ResourceValue {
             (ResourceValue::Address(a1), ResourceValue::Address(a2)) => a1 == a2,
             (ResourceValue::U64(u1), ResourceValue::U64(u2)) => u1 == u2,
             (ResourceValue::String(s1), ResourceValue::String(s2)) => s1 == s2,
-            (ResourceValue::Resource(tag1, s1), ResourceValue::Resource(tag2, s2)) => {
-                if tag1 != tag2 {
+            (ResourceValue::Resource(s1), ResourceValue::Resource(s2)) => {
+                if s1.tag() != s2.tag() {
                     //TODO custom error
                     bail!("InternalTypeError");
                 }
                 if s1.len() != s2.len() {
                     bail!("InternalTypeError");
                 }
-                for (mv1, mv2) in s1.iter().zip(s2) {
+                for (mv1, mv2) in s1.iter().zip(s2.iter()) {
                     if !MutResourceVal::equals(mv1, mv2)? {
                         return Ok(false);
                     }
@@ -92,14 +78,14 @@ impl ResourceValue {
             (ResourceValue::Address(a1), ResourceValue::Address(a2)) => a1 != a2,
             (ResourceValue::U64(u1), ResourceValue::U64(u2)) => u1 != u2,
             (ResourceValue::String(s1), ResourceValue::String(s2)) => s1 != s2,
-            (ResourceValue::Resource(tag1, s1), ResourceValue::Resource(tag2,s2)) => {
-                if tag1 != tag2 {
+            (ResourceValue::Resource(s1), ResourceValue::Resource(s2)) => {
+                if s1.tag() != s2.tag() {
                     bail!("InternalTypeError");
                 }
                 if s1.len() != s2.len() {
                     bail!("InternalTypeError");
                 }
-                for (mv1, mv2) in s1.iter().zip(s2) {
+                for (mv1, mv2) in s1.iter().zip(s2.iter()) {
                     if MutResourceVal::not_equals(mv1, mv2)? {
                         return Ok(true);
                     }
@@ -148,7 +134,7 @@ impl ResourceValue {
 
     pub fn is_resource(&self) -> bool {
         match self{
-            ResourceValue::Resource(_,_) => true,
+            ResourceValue::Resource(_) => true,
             _ => false
         }
     }
@@ -181,7 +167,8 @@ impl MutResourceVal {
         MutResourceVal(Rc::new(RefCell::new(v)))
     }
 
-    fn shallow_clone(&self) -> Self {
+    //TODO ensure is pub
+    pub fn shallow_clone(&self) -> Self {
         MutResourceVal(Rc::clone(&self.0))
     }
 
@@ -202,7 +189,7 @@ impl MutResourceVal {
     }
 
     fn resource(tag: StructTag, v: Vec<MutResourceVal>) -> Self {
-        MutResourceVal::new(ResourceValue::Resource(tag, v))
+        MutResourceVal::new(ResourceValue::Resource(Resource::new(tag, v)))
     }
 
     fn bytearray(v: ByteArray) -> Self {
@@ -259,14 +246,14 @@ impl MutResourceVal {
 
     pub fn is_resource(&self) -> bool {
         match &*self.peek(){
-            ResourceValue::Resource(_,_) => true,
+            ResourceValue::Resource(_) => true,
             _ => false
         }
     }
 
     pub fn borrow_field(&self, idx: u32) -> Option<Self> {
         match &*self.peek() {
-            ResourceValue::Resource(_, ref vec) => vec.get(idx as usize).map(MutResourceVal::shallow_clone),
+            ResourceValue::Resource(res) => res.field(idx as usize).map(MutResourceVal::shallow_clone),
             _ => None,
         }
     }

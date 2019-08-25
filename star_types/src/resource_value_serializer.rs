@@ -7,6 +7,7 @@ use failure::prelude::*;
 use std::convert::TryFrom;
 use types::{account_address::AccountAddress, byte_array::ByteArray};
 use types::language_storage::StructTag;
+use crate::resource::Resource;
 
 impl ResourceValue {
     /// Serialize this value using `SimpleSerializer`.
@@ -15,7 +16,7 @@ impl ResourceValue {
     }
 
     /// Deserialize this value using `SimpleDeserializer` and a provided struct definition.
-    pub fn simple_deserialize(blob: &[u8], struct_tag: StructTag, resource: ResourceDef) -> Result<ResourceValue> {
+    pub fn simple_deserialize(blob: &[u8], struct_tag: StructTag, resource: ResourceDef) -> Result<Resource> {
         let mut deserializer = SimpleDeserializer::new(blob);
         deserialize_struct(&mut deserializer, struct_tag,&resource)
     }
@@ -25,7 +26,7 @@ fn deserialize_struct(
     deserializer: &mut SimpleDeserializer,
     struct_tag: StructTag,
     struct_def: &ResourceDef,
-) -> Result<ResourceValue> {
+) -> Result<Resource> {
     let mut s_vals: Vec<MutResourceVal> = Vec::new();
     for field_type in struct_def.field_definitions() {
         match field_type {
@@ -71,14 +72,14 @@ fn deserialize_struct(
             }
             ResourceType::Resource(tag, s_fields) => {
                 if let Ok(s) = deserialize_struct(deserializer, tag.clone(),s_fields) {
-                    s_vals.push(MutResourceVal::new(s));
+                    s_vals.push(MutResourceVal::new(ResourceValue::Resource(s)));
                 } else {
                     bail!("DataFormatError");
                 }
             }
         }
     }
-    Ok(ResourceValue::Resource(struct_tag, s_vals))
+    Ok(Resource::new(struct_tag, s_vals))
 }
 
 impl CanonicalSerialize for ResourceValue {
@@ -100,8 +101,8 @@ impl CanonicalSerialize for ResourceValue {
                 // Right now we are just using Rust to serialize the string
                 serializer.encode_variable_length_bytes(s.as_bytes())?;
             }
-            ResourceValue::Resource(tag, vals) => {
-                for mut_val in vals {
+            ResourceValue::Resource(res) => {
+                for mut_val in res.fields() {
                     (*mut_val.peek()).serialize(serializer)?;
                 }
             }
