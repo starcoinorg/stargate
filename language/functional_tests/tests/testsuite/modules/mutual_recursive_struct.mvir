@@ -1,0 +1,8 @@
+// check: VerificationError
+// check: RecursiveStructDef
+
+module M {
+    struct A{b: Self.B}
+    struct B{a: Self.A}
+}
+

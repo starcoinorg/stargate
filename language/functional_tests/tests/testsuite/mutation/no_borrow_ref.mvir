@@ -1,0 +1,11 @@
+// check: VerificationError
+// kind: BorrowLocReferenceError
+
+main() {
+    let v: u64;
+    let ref_v: &u64;
+    v = 5;
+    ref_v = &v;
+    _ = &ref_v;
+    return;
+}

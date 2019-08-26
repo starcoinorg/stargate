@@ -1,0 +1,4 @@
+module Test {
+    import 0x0.LibraCoin;
+    resource T{fint: LibraCoin.T}
+}
