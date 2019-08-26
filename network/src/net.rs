@@ -1,11 +1,11 @@
-use futures::{future, stream::Stream, Async, Future};
+use futures::{future, stream::Stream, sync::mpsc, Async, Future};
 use network_libp2p::{
     start_service, NetworkConfiguration, PeerId, Service as Libp2pService, ServiceEvent,
 };
 use parking_lot::Mutex;
 use std::sync::Arc;
 use std::{io, thread};
-use tokio::{runtime::Builder as RuntimeBuilder, sync::mpsc};
+use tokio::runtime::Builder as RuntimeBuilder;
 
 #[derive(Clone, Debug)]
 pub struct Message {
