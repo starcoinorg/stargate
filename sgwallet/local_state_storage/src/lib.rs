@@ -47,12 +47,6 @@ where
         })
     }
 
-    pub fn apply_txn(&self, txn: &OffChainTransaction) {
-        let output = txn.output();
-        let change_set = output.change_set();
-        self.apply_change_set(change_set);
-    }
-
     pub fn get_by_path(&self, path: &Vec<u8>) -> Option<Vec<u8>> {
         self.state.borrow().get(path)
     }
