@@ -61,7 +61,6 @@ fn run_network(
     mpsc::UnboundedReceiver<Message>,
     impl Future<Item = (), Error = ()>,
 ) {
-    println!("Start listen");
     let (mut _tx, net_rx) = mpsc::unbounded();
     let (net_tx, mut _rx) = mpsc::unbounded::<Message>();
     let net_srv_sender = net_srv.clone();
@@ -162,8 +161,7 @@ impl NetworkService {
         )
     }
 
-    pub fn is_connected(&self, peer_id: PeerId) -> bool {
-        //self.libp2p_service.lock().is_open(peer_id)
-        unimplemented!()
+    pub fn is_connected(&self, peer_id: &PeerId) -> bool {
+        self.libp2p_service.lock().is_open(peer_id)
     }
 }
