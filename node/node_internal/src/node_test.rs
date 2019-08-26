@@ -82,7 +82,7 @@ fn start_server_test() -> Result<()> {
     Ok(())
 }
 
-fn gen_node(executor:TaskExecutor)->(Node<MockChainClient,MemoryTransport>,AccountAddress,KeyPair<Ed25519PrivateKey,Ed25519PublicKey>){
+fn gen_node(executor:TaskExecutor)->(Node<MockChainClient>,AccountAddress,KeyPair<Ed25519PrivateKey,Ed25519PublicKey>){
     let switch:Switch<MemorySocket> = Switch::new();
 
     let amount: u64 = 1_000_000_000;    
@@ -94,7 +94,7 @@ fn gen_node(executor:TaskExecutor)->(Node<MockChainClient,MemoryTransport>,Accou
     client.faucet(account_address, amount).unwrap();
     let mut wallet = Wallet::new_with_client(account_address, keypair.clone(), client).unwrap();
 
-    (Node::new(executor.clone(),wallet,keypair.clone(),MemoryTransport::default()),account_address,keypair)
+    (Node::new(executor.clone(),wallet,keypair.clone()),account_address,keypair)
 }
 
 fn create_negotiate_message(sender_addr:AccountAddress,receiver_addr:AccountAddress,private_key:Ed25519PrivateKey)->OpenChannelNodeNegotiateMessage{
