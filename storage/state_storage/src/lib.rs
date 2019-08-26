@@ -32,6 +32,7 @@ use vm_runtime_types::loaded_data::struct_def::StructDef;
 use struct_cache::StructCache;
 use state_store::{StateStore, StateViewPlus};
 use star_types::account_resource_ext;
+use star_types::resource_type::resource_def::ResourceDef;
 
 pub struct AccountState {
     state: Arc<AtomicRefCell<BTreeMap<DataPath, Vec<u8>>>>
@@ -270,10 +271,9 @@ impl StateStore for StateStorage {
     }
 }
 
-impl  StructDefResolve for StateStorage
-{
+impl  StructDefResolve for StateStorage {
 
-    fn resolve(&self, tag: &StructTag) -> Result<StructDef> {
+    fn resolve(&self, tag: &StructTag) -> Result<ResourceDef> {
         self.struct_cache.find_struct(tag, self)
     }
 }

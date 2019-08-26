@@ -252,17 +252,14 @@ impl GasMeter {
                 let default_gas = static_cost_instr(instr, size);
                 Self::gas_of(default_gas)
             }
-            | Bytecode::BorrowLoc(_)
+            | Bytecode::MutBorrowLoc(_)
+            | Bytecode::ImmBorrowLoc(_)
             | Bytecode::MutBorrowField(_)
             | Bytecode::ImmBorrowField(_) => {
                 let default_gas = static_cost_instr(instr, AbstractMemorySize::new(1));
                 Self::gas_of(default_gas)
             }
             Bytecode::CreateAccount => Self::gas_of(static_cost_instr(instr, *DEFAULT_ACCOUNT_SIZE)),
-            // Releasing a reference is not dependent on the size of the underlying data
-            Bytecode::ReleaseRef => {
-                Self::gas_of(static_cost_instr(instr, AbstractMemorySize::new(1)))
-            }
             // Note that we charge twice for these operations; once at the start of
             // `execute_single_instruction` we charge once with size 1. This then covers the cost
             // of accessing the value and guards (somewhat) against abusive memory accesses. Once

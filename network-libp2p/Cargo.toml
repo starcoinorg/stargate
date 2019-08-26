@@ -26,4 +26,3 @@ void = "1.0"
 
 [dev-dependencies]
 tempdir = "0.3"
-

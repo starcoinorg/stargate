@@ -31,6 +31,9 @@ members = [
     "language/compiler/ir_to_bytecode",
     "language/compiler/ir_to_bytecode/syntax",
     "language/local_vm",
+    "language/functional_tests",
+    "language/e2e_tests",
+    "language/transaction_builder",
     "types",
     "star_types",
     "routing",
@@ -53,3 +56,6 @@ members = [
     "cli",
     "cli/cli_wallet",
 ]
+
+[replace]
+"libp2p:0.7.0" = { git = "https://github.com/fikgol/rust-libp2p", tag = "v0.7.0-stargate" }

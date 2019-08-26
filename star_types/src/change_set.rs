@@ -7,17 +7,19 @@ use failure::prelude::*;
 use proto_conv::{FromProto, IntoProto};
 use types::access_path::{AccessPath, Accesses};
 use std::mem;
-use vm_runtime_types::{value::{MutVal, Value}};
+use crate::{
+    resource_type::{resource_def::ResourceDef, resource_types::ResourceType},
+    resource_value::{ResourceValue,MutResourceVal},
+    proto::change_set::ChangeOp_oneof_change,
+};
 use canonical_serialization::{SimpleDeserializer, SimpleSerializer};
 use radix_trie::TrieKey;
 use types::write_set::WriteSet;
 use types::language_storage::StructTag;
-use vm_runtime_types::loaded_data::struct_def::StructDef;
-use crate::proto::change_set::ChangeOp_oneof_change;
-use vm_runtime_types::value::Reference;
 use types::byte_array::ByteArray;
 use types::account_address::AccountAddress;
 use std::convert::TryFrom;
+use crate::resource::Resource;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ChangeOp {
@@ -124,33 +126,33 @@ pub trait Changeable{
 
 }
 
-impl Changeable for MutVal {
+impl Changeable for MutResourceVal {
 
     fn apply_change(&mut self, op: ChangeOp) -> Result<()> {
         let value = match &*self.peek(){
-            Value::U64(value) => match op{
+            ResourceValue::U64(value) => match op{
                 //TODO check overflow
-                ChangeOp::Plus(op_value) => Value::U64(*value+ op_value),
+                ChangeOp::Plus(op_value) => ResourceValue::U64(*value+ op_value),
                 ChangeOp::Minus(op_value) => {
                     println!("{} - {} ",value,op_value);
-                    Value::U64(*value - op_value)
+                    ResourceValue::U64(*value - op_value)
                 },
                 _ => bail!("Can not apply change {:?} to {:?}", op, self)
             },
-            Value::ByteArray(_) => match op {
-                ChangeOp::Update(bytes) => Value::ByteArray(ByteArray::new(bytes)),
+            ResourceValue::ByteArray(_) => match op {
+                ChangeOp::Update(bytes) => ResourceValue::ByteArray(ByteArray::new(bytes)),
                 _ => bail!("Can not apply change {:?} to {:?}", op, self)
             },
-            Value::String(_) => match op {
-                ChangeOp::Update(bytes) => Value::String(String::from_utf8(bytes)?),
+            ResourceValue::String(_) => match op {
+                ChangeOp::Update(bytes) => ResourceValue::String(String::from_utf8(bytes)?),
                 _ => bail!("Can not apply change {:?} to {:?}", op, self)
             },
-            Value::Bool(_) => match op {
-                ChangeOp::Update(bytes) => Value::Bool(bytes[0]!=0),
+            ResourceValue::Bool(_) => match op {
+                ChangeOp::Update(bytes) => ResourceValue::Bool(bytes[0]!=0),
                 _ => bail!("Can not apply change {:?} to {:?}", op, self)
             },
-            Value::Address(_) => match op {
-                ChangeOp::Update(bytes) => Value::Address(AccountAddress::try_from(bytes)?),
+            ResourceValue::Address(_) => match op {
+                ChangeOp::Update(bytes) => ResourceValue::Address(AccountAddress::try_from(bytes)?),
                 _ => bail!("Can not apply change {:?} to {:?}", op, self)
             }
             _ => bail!("Can not apply change {:?} to {:?}", op, self)
@@ -201,13 +203,14 @@ impl Changes {
 
     /// merge other with self, and return old self
     pub fn merge_with(&mut self, other: &Changes) -> Result<Changes>{
-        match self{
-            Changes::Value {..} => bail!("Unsupported whole value merge."),
-            Changes::Deletion => bail!("Unsupported deletion merge."),
-            Changes::Fields(field_changes) => if let Changes::Fields(other_field_changes) = other{
+        match (self, other){
+            (Changes::Value {..}, Changes::Value{..}) => bail!("Unsupported whole value merge."),
+            (Changes::Deletion, Changes::Deletion) => bail!("Unsupported deletion merge."),
+            (Changes::Fields(field_changes), Changes::Fields(other_field_changes)) => {
                 Ok(Changes::Fields(field_changes.merge_with(other_field_changes)?))
-            }else {
-                bail!("Unsupported merge {:?} with {:?}", self, other)
+            },
+            (first,second) => {
+                bail!("Unsupported merge {:?} with {:?}", first, second)
             }
         }
     }
@@ -223,6 +226,44 @@ impl FieldChanges {
 
     pub fn new(changes: Vec<(Accesses, ChangeOp)>) -> Self {
         Self(changes)
+    }
+
+    /// Create whole resource deletion changes
+    pub fn delete(resource: Resource) -> Self{
+        let fields = resource.fields();
+        Self::new(Self::delete_fields(&fields))
+    }
+
+    fn delete_fields(fields: &Vec<MutResourceVal>) -> Vec<(Accesses, ChangeOp)> {
+        let mut results = vec![];
+        for (idx, field) in fields.iter().enumerate(){
+            let mut changes = Self::delete_field(idx, field);
+            results.append(&mut changes);
+        }
+        results
+    }
+
+    fn delete_field(idx:usize, field: &MutResourceVal) -> Vec<(Accesses,ChangeOp)> {
+        let mut accesses = Accesses::new_with_index(idx as u64);
+        let mut results = vec![];
+        match &*field.peek() {
+            ResourceValue::U64(value) => {
+                let op = ChangeOp::Minus(*value);
+                results.push((accesses, op));
+            },
+            ResourceValue::Resource(res) => {
+                let changes = Self::delete_fields(res.fields());
+                for (mut sub_accesses, change_op) in changes {
+                    let mut accesses = accesses.clone();
+                    accesses.append(&mut sub_accesses);
+                    results.push((accesses, change_op));
+                }
+            }
+            _ => {
+                results.push((accesses, ChangeOp::Deletion));
+            }
+        }
+        results
     }
 
     #[inline]
@@ -386,7 +427,7 @@ impl IntoProto for FieldChanges {
 
 pub trait StructDefResolve{
 
-    fn resolve(&self, tag: &StructTag) -> Result<StructDef>;
+    fn resolve(&self, tag: &StructTag) -> Result<ResourceDef>;
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]

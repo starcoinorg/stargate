@@ -1,0 +1,12 @@
+// check: VerificationError
+// check: MoveLocExistsBorrowError
+
+main() {
+    let v: u64;
+    let ref_v: &mut u64;
+    let dead: u64;
+    v = 5;
+    ref_v = &mut v;
+    dead = move(v);
+    return;
+}

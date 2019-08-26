@@ -282,7 +282,7 @@ lazy_static! {
 }
 
 
-#[derive(Clone, Eq, PartialEq, Hash, Serialize, Deserialize, Ord, PartialOrd, )]
+#[derive(Clone, Eq, PartialEq, Hash, Serialize, Deserialize, Ord, PartialOrd, Debug)]
 pub enum DataPath {
     Code { module_id: ModuleId },
     OnChainResource { tag: StructTag },

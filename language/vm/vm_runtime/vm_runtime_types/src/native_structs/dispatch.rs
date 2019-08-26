@@ -10,7 +10,7 @@ pub struct NativeStruct {
     /// The expected boolean indicating if it is a nominal resource or not
     pub expected_nominal_resource: bool,
     /// The expected kind constraints of the type parameters.
-    pub expected_type_parameters: Vec<Kind>,
+    pub expected_type_formals: Vec<Kind>,
     /// The expected index for the struct
     /// Helpful for ensuring proper typing of native functions
     pub expected_index: StructHandleIndex,
@@ -26,9 +26,6 @@ pub fn dispatch_native_struct(
 }
 
 macro_rules! add {
-    ($m:ident, $addr:expr, $module:expr, $name:expr, $resource: expr) => {{
-        add!($m, $addr, $module, $name, $resource, vec![])
-    }};
     ($m:ident, $addr:expr, $module:expr, $name:expr, $resource: expr, $ty_kinds: expr) => {{
         let id = ModuleId::new($addr, $module.into());
         let struct_table = $m.entry(id).or_insert_with(HashMap::new);
@@ -36,7 +33,7 @@ macro_rules! add {
 
         let s = NativeStruct {
             expected_nominal_resource: $resource,
-            expected_type_parameters: $ty_kinds,
+            expected_type_formals: $ty_kinds,
             expected_index,
         };
         let old = struct_table.insert($name.into(), s);
@@ -50,7 +47,7 @@ lazy_static! {
     static ref NATIVE_STRUCT_MAP: NativeStructMap = {
         let mut m: NativeStructMap = HashMap::new();
         let addr = account_config::core_code_address();
-        add!(m, addr, "Vector", "T", false);
+        add!(m, addr, "Vector", "T", false, vec![Kind::All]);
         m
     };
 }

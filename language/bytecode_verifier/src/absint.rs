@@ -1,4 +1,4 @@
-use crate::control_flow_graph::{BlockId, ControlFlowGraph, VMControlFlowGraph};
+use crate::control_flow_graph::{BlockId, ControlFlowGraph};
 use std::collections::HashMap;
 use vm::{
     file_format::{Bytecode, CompiledModule},
@@ -87,11 +87,10 @@ pub trait AbstractInterpreter: TransferFunctions {
         &mut self,
         initial_state: Self::State,
         function_view: &FunctionDefinitionView<CompiledModule>,
-        cfg: &VMControlFlowGraph,
+        cfg: &dyn ControlFlowGraph,
     ) -> InvariantMap<Self::State> {
         let mut inv_map: InvariantMap<Self::State> = InvariantMap::new();
-        let entry_block_id = 0; // 0 is always the entry block
-                                // seed worklist/precondition map with initial block/state
+        let entry_block_id = cfg.entry_block_id();
         let mut work_list = vec![entry_block_id];
         inv_map.insert(
             entry_block_id,
@@ -124,7 +123,7 @@ pub trait AbstractInterpreter: TransferFunctions {
                 }
             };
             let block_ends_in_error = self
-                .execute_block(block_id, &mut state, &function_view, &cfg)
+                .execute_block(block_id, &mut state, &function_view, cfg)
                 .is_err();
             if block_ends_in_error {
                 block_invariant.post = BlockPostcondition::Error;
@@ -133,11 +132,8 @@ pub trait AbstractInterpreter: TransferFunctions {
                 block_invariant.post = BlockPostcondition::Success;
             };
 
-            let block = cfg
-                .block_of_id(block_id)
-                .expect("block_id is not the start offset of a block");
             // propagate postcondition of this block to successor blocks
-            for next_block_id in &block.successors {
+            for next_block_id in cfg.successors(&block_id) {
                 match inv_map.get_mut(next_block_id) {
                     Some(next_block_invariant) => {
                         let join_result = match &mut next_block_invariant.pre {
@@ -185,15 +181,12 @@ pub trait AbstractInterpreter: TransferFunctions {
         block_id: BlockId,
         state: &mut Self::State,
         function_view: &FunctionDefinitionView<CompiledModule>,
-        cfg: &VMControlFlowGraph,
+        cfg: &dyn ControlFlowGraph,
     ) -> Result<(), Self::AnalysisError> {
-        let block = cfg
-            .block_of_id(block_id)
-            .expect("block_id is not the start offset of a block");
-
-        for offset in block.entry..=block.exit {
+        let block_end = cfg.block_end(&block_id);
+        for offset in cfg.instr_indexes(&block_id) {
             let instr = &function_view.code().code[offset as usize];
-            self.execute(state, instr, offset as usize, block.exit as usize)?
+            self.execute(state, instr, offset as usize, block_end as usize)?
         }
 
         Ok(())

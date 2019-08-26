@@ -272,16 +272,20 @@ impl<'a> ApplyCodeUnitBoundsContext<'a> {
                     CopyLoc(_) => locals_bytecode!(locals_len, bytecode_idx, offset, CopyLoc),
                     MoveLoc(_) => locals_bytecode!(locals_len, bytecode_idx, offset, MoveLoc),
                     StLoc(_) => locals_bytecode!(locals_len, bytecode_idx, offset, StLoc),
-                    BorrowLoc(_) => locals_bytecode!(locals_len, bytecode_idx, offset, BorrowLoc),
+                    MutBorrowLoc(_) => {
+                        locals_bytecode!(locals_len, bytecode_idx, offset, MutBorrowLoc)
+                    }
+                    ImmBorrowLoc(_) => {
+                        locals_bytecode!(locals_len, bytecode_idx, offset, ImmBorrowLoc)
+                    }
 
                     // List out the other options explicitly so there's a compile error if a new
                     // bytecode gets added.
-                    FreezeRef | ReleaseRef | Pop | Ret | LdConst(_) | LdTrue | LdFalse
-                    | ReadRef | WriteRef | Add | Sub | Mul | Mod | Div | BitOr | BitAnd | Xor
-                    | Or | And | Not | Eq | Neq | Lt | Gt | Le | Ge | Abort
-                    | GetTxnGasUnitPrice | GetTxnMaxGasUnits | GetGasRemaining
-                    | GetTxnSenderAddress | CreateAccount | GetTxnSequenceNumber
-                    | GetTxnPublicKey => {
+                    FreezeRef | Pop | Ret | LdConst(_) | LdTrue | LdFalse | ReadRef | WriteRef
+                    | Add | Sub | Mul | Mod | Div | BitOr | BitAnd | Xor | Or | And | Not | Eq
+                    | Neq | Lt | Gt | Le | Ge | Abort | GetTxnGasUnitPrice | GetTxnMaxGasUnits
+                    | GetGasRemaining | GetTxnSenderAddress | CreateAccount
+                    | GetTxnSequenceNumber | GetTxnPublicKey => {
                         panic!("Bytecode has no internal index: {:?}", code[bytecode_idx])
                     }
                 };
@@ -320,13 +324,14 @@ fn is_interesting(bytecode: &Bytecode) -> bool {
         | CopyLoc(_)
         | MoveLoc(_)
         | StLoc(_)
-        | BorrowLoc(_) => true,
+        | MutBorrowLoc(_)
+        | ImmBorrowLoc(_) => true,
 
         // List out the other options explicitly so there's a compile error if a new
         // bytecode gets added.
-        FreezeRef | ReleaseRef | Pop | Ret | LdConst(_) | LdTrue | LdFalse | ReadRef | WriteRef
-        | Add | Sub | Mul | Mod | Div | BitOr | BitAnd | Xor | Or | And | Not | Eq | Neq | Lt
-        | Gt | Le | Ge | Abort | GetTxnGasUnitPrice | GetTxnMaxGasUnits | GetGasRemaining
+        FreezeRef | Pop | Ret | LdConst(_) | LdTrue | LdFalse | ReadRef | WriteRef | Add | Sub
+        | Mul | Mod | Div | BitOr | BitAnd | Xor | Or | And | Not | Eq | Neq | Lt | Gt | Le
+        | Ge | Abort | GetTxnGasUnitPrice | GetTxnMaxGasUnits | GetGasRemaining
         | GetTxnSenderAddress | CreateAccount | GetTxnSequenceNumber | GetTxnPublicKey => false,
     }
 }

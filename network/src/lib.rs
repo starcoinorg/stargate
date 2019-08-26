@@ -2,19 +2,43 @@
 
 pub mod net;
 
+use failure::prelude::*;
+use network_libp2p::PeerId;
+use std::convert::TryFrom;
+use types::account_address::AccountAddress;
+
+pub fn convert_peer_id_to_account_address(peer_id: PeerId) -> Result<AccountAddress> {
+    let peer_id_bytes = &peer_id.into_bytes()[2..];
+    AccountAddress::try_from(peer_id_bytes)
+}
+
+pub fn convert_account_address_to_peer_id(
+    address: AccountAddress,
+) -> std::result::Result<PeerId, Vec<u8>> {
+    let mut peer_id_vec = address.to_vec();
+    peer_id_vec.insert(0, 32);
+    peer_id_vec.insert(0, 22);
+    PeerId::from_bytes(peer_id_vec)
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::net::{build_libp2p_service, Message, Service};
-    use futures::{future, prelude::Async, stream};
-    use futures::{future::Future, stream::Stream};
-    use libp2p::PeerId;
-    use network_libp2p::{build_multiaddr, start_service, NetworkConfiguration};
-    use parity_multiaddr::{Multiaddr, Protocol};
-    use parking_lot::Mutex;
-    use std::sync::Arc;
+    use crate::net::{Message, Service};
+    use crate::{convert_account_address_to_peer_id, convert_peer_id_to_account_address};
+    use crypto::ed25519::compat;
+    use futures::{future::Future, stream, stream::Stream};
+    use libp2p::{
+        build_multiaddr,
+        multiaddr::{Multiaddr, Protocol},
+        multihash,
+        multihash::Multihash,
+    };
+    use network_libp2p::{identity, NodeKeyConfig, PeerId, PublicKey, Secret};
     use std::thread;
+    use std::time::Duration;
+    use tokio::prelude::Async;
     use tokio::runtime::Runtime;
-    use tokio::sync::mpsc::error::TrySendError;
+    use types::account_address::AccountAddress;
 
     fn build_network_service(num: usize, base_port: u16) -> Vec<Service> {
         let mut result: Vec<Service> = Vec::with_capacity(num);
@@ -80,5 +104,58 @@ mod tests {
         let executor = rt.executor();
         executor.spawn(sender_fut);
         rt.shutdown_on_idle().wait().unwrap();
+    }
+
+    #[test]
+    fn test_generate_account_and_peer_id() {
+        let (private_key, public_key) = compat::generate_keypair(Option::None);
+
+        let mut cfg = network_libp2p::NetworkConfiguration::new();
+        let seckey = identity::ed25519::SecretKey::from_bytes(&mut private_key.to_bytes()).unwrap();
+        cfg.node_key = NodeKeyConfig::Ed25519(Secret::Input(seckey));
+        let libp2p_public_key = cfg.node_key.into_keypair().unwrap().public();
+        let libp2p_public_key_byte;
+        if let PublicKey::Ed25519(key) = libp2p_public_key {
+            libp2p_public_key_byte = key.encode();
+            assert_eq!(libp2p_public_key_byte, public_key.to_bytes());
+        } else {
+            panic!("failed");
+        }
+
+        let address = AccountAddress::from_public_key(&public_key).to_vec();
+        let peer_id = multihash::encode(multihash::Hash::SHA3256, &public_key.to_bytes())
+            .unwrap()
+            .into_bytes();
+        println!("{:?}", peer_id);
+        PeerId::from_bytes(peer_id.clone()).unwrap();
+        assert_eq!(address, &peer_id[2..]);
+    }
+
+    #[test]
+    fn test_connected_nodes() {
+        let (service1, service2) = {
+            let mut l = build_network_service(2, 50400).into_iter();
+            let a = l.next().unwrap();
+            let b = l.next().unwrap();
+            (a, b)
+        };
+        thread::sleep(Duration::new(1, 0));
+        for (peer_id, peer) in service1.libp2p_service.lock().state().connected_peers {
+            println!("id: {:?}, peer: {:?}", peer_id, peer);
+        }
+    }
+
+    #[test]
+    fn test_convert_address_peer_id() {
+        let (private_key, public_key) = compat::generate_keypair(Option::None);
+
+        let mut cfg = network_libp2p::NetworkConfiguration::new();
+        let seckey = identity::ed25519::SecretKey::from_bytes(&mut private_key.to_bytes()).unwrap();
+        cfg.node_key = NodeKeyConfig::Ed25519(Secret::Input(seckey));
+
+        let account_address = AccountAddress::from_public_key(&public_key);
+        let peer_id = convert_account_address_to_peer_id(account_address).unwrap();
+        let account_address_1 = convert_peer_id_to_account_address(peer_id).unwrap();
+        assert_eq!(account_address, account_address_1);
     }
 }

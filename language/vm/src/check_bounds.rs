@@ -359,7 +359,8 @@ impl FunctionDefinition {
                         }
                     }
                     // Instructions that refer to the locals.
-                    CopyLoc(idx) | MoveLoc(idx) | StLoc(idx) | BorrowLoc(idx) => {
+                    CopyLoc(idx) | MoveLoc(idx) | StLoc(idx) | MutBorrowLoc(idx)
+                    | ImmBorrowLoc(idx) => {
                         let idx = *idx as usize;
                         if idx >= locals_len {
                             Some(VMStaticViolation::CodeUnitIndexOutOfBounds(
@@ -375,12 +376,11 @@ impl FunctionDefinition {
 
                     // List out the other options explicitly so there's a compile error if a new
                     // bytecode gets added.
-                    FreezeRef | ReleaseRef | Pop | Ret | LdConst(_) | LdTrue | LdFalse
-                    | ReadRef | WriteRef | Add | Sub | Mul | Mod | Div | BitOr | BitAnd | Xor
-                    | Or | And | Not | Eq | Neq | Lt | Gt | Le | Ge | Abort
-                    | GetTxnGasUnitPrice | GetTxnMaxGasUnits | GetGasRemaining
-                    | GetTxnSenderAddress | CreateAccount | GetTxnSequenceNumber
-                    | GetTxnPublicKey => None,
+                    FreezeRef | Pop | Ret | LdConst(_) | LdTrue | LdFalse | ReadRef | WriteRef
+                    | Add | Sub | Mul | Mod | Div | BitOr | BitAnd | Xor | Or | And | Not | Eq
+                    | Neq | Lt | Gt | Le | Ge | Abort | GetTxnGasUnitPrice | GetTxnMaxGasUnits
+                    | GetGasRemaining | GetTxnSenderAddress | CreateAccount
+                    | GetTxnSequenceNumber | GetTxnPublicKey => None,
                 }
             })
             .collect()

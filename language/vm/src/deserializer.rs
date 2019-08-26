@@ -443,12 +443,12 @@ fn load_struct_handles(
         let module_handle = read_uleb_u16_internal(&mut cursor)?;
         let name = read_uleb_u16_internal(&mut cursor)?;
         let is_nominal_resource = load_nominal_resource_flag(&mut cursor)?;
-        let type_parameters = load_kinds(&mut cursor)?;
+        let type_formals = load_kinds(&mut cursor)?;
         struct_handles.push(StructHandle {
             module: ModuleHandleIndex(module_handle),
             name: StringPoolIndex(name),
             is_nominal_resource,
-            type_parameters,
+            type_formals,
         });
     }
     Ok(())
@@ -610,11 +610,11 @@ fn load_function_signatures(
             let token = load_signature_token(&mut cursor)?;
             args_signature.push(token);
         }
-        let type_parameters = load_kinds(&mut cursor)?;
+        let type_formals = load_kinds(&mut cursor)?;
         function_signatures.push(FunctionSignature {
             return_types: returns_signature,
             arg_types: args_signature,
-            type_parameters,
+            type_formals,
         });
     }
     Ok(())
@@ -892,9 +892,13 @@ fn load_code(cursor: &mut Cursor<&[u8]>, code: &mut Vec<Bytecode>) -> BinaryLoad
                 let idx = cursor.read_u8().map_err(|_| BinaryError::Malformed)?;
                 Bytecode::StLoc(idx)
             }
-            Opcodes::BORROW_LOC => {
+            Opcodes::MUT_BORROW_LOC => {
                 let idx = cursor.read_u8().map_err(|_| BinaryError::Malformed)?;
-                Bytecode::BorrowLoc(idx)
+                Bytecode::MutBorrowLoc(idx)
+            }
+            Opcodes::IMM_BORROW_LOC => {
+                let idx = cursor.read_u8().map_err(|_| BinaryError::Malformed)?;
+                Bytecode::ImmBorrowLoc(idx)
             }
             Opcodes::MUT_BORROW_FIELD => {
                 let idx = read_uleb_u16_internal(cursor)?;
@@ -957,7 +961,6 @@ fn load_code(cursor: &mut Cursor<&[u8]>, code: &mut Vec<Bytecode>) -> BinaryLoad
                 let types_idx = read_uleb_u16_internal(cursor)?;
                 Bytecode::BorrowGlobal(StructDefinitionIndex(idx), LocalsSignatureIndex(types_idx))
             }
-            Opcodes::RELEASE_REF => Bytecode::ReleaseRef,
             Opcodes::MOVE_FROM => {
                 let idx = read_uleb_u16_internal(cursor)?;
                 let types_idx = read_uleb_u16_internal(cursor)?;
@@ -1105,40 +1108,40 @@ impl Opcodes {
             0x0B => Ok(Opcodes::COPY_LOC),
             0x0C => Ok(Opcodes::MOVE_LOC),
             0x0D => Ok(Opcodes::ST_LOC),
-            0x0E => Ok(Opcodes::BORROW_LOC),
-            0x0F => Ok(Opcodes::MUT_BORROW_FIELD),
-            0x10 => Ok(Opcodes::IMM_BORROW_FIELD),
-            0x11 => Ok(Opcodes::LD_BYTEARRAY),
-            0x12 => Ok(Opcodes::CALL),
-            0x13 => Ok(Opcodes::PACK),
-            0x14 => Ok(Opcodes::UNPACK),
-            0x15 => Ok(Opcodes::READ_REF),
-            0x16 => Ok(Opcodes::WRITE_REF),
-            0x17 => Ok(Opcodes::ADD),
-            0x18 => Ok(Opcodes::SUB),
-            0x19 => Ok(Opcodes::MUL),
-            0x1A => Ok(Opcodes::MOD),
-            0x1B => Ok(Opcodes::DIV),
-            0x1C => Ok(Opcodes::BIT_OR),
-            0x1D => Ok(Opcodes::BIT_AND),
-            0x1E => Ok(Opcodes::XOR),
-            0x1F => Ok(Opcodes::OR),
-            0x20 => Ok(Opcodes::AND),
-            0x21 => Ok(Opcodes::NOT),
-            0x22 => Ok(Opcodes::EQ),
-            0x23 => Ok(Opcodes::NEQ),
-            0x24 => Ok(Opcodes::LT),
-            0x25 => Ok(Opcodes::GT),
-            0x26 => Ok(Opcodes::LE),
-            0x27 => Ok(Opcodes::GE),
-            0x28 => Ok(Opcodes::ABORT),
-            0x29 => Ok(Opcodes::GET_TXN_GAS_UNIT_PRICE),
-            0x2A => Ok(Opcodes::GET_TXN_MAX_GAS_UNITS),
-            0x2B => Ok(Opcodes::GET_GAS_REMAINING),
-            0x2C => Ok(Opcodes::GET_TXN_SENDER),
-            0x2D => Ok(Opcodes::EXISTS),
-            0x2E => Ok(Opcodes::BORROW_GLOBAL),
-            0x2F => Ok(Opcodes::RELEASE_REF),
+            0x0E => Ok(Opcodes::MUT_BORROW_LOC),
+            0x0F => Ok(Opcodes::IMM_BORROW_LOC),
+            0x10 => Ok(Opcodes::MUT_BORROW_FIELD),
+            0x11 => Ok(Opcodes::IMM_BORROW_FIELD),
+            0x12 => Ok(Opcodes::LD_BYTEARRAY),
+            0x13 => Ok(Opcodes::CALL),
+            0x14 => Ok(Opcodes::PACK),
+            0x15 => Ok(Opcodes::UNPACK),
+            0x16 => Ok(Opcodes::READ_REF),
+            0x17 => Ok(Opcodes::WRITE_REF),
+            0x18 => Ok(Opcodes::ADD),
+            0x19 => Ok(Opcodes::SUB),
+            0x1A => Ok(Opcodes::MUL),
+            0x1B => Ok(Opcodes::MOD),
+            0x1C => Ok(Opcodes::DIV),
+            0x1D => Ok(Opcodes::BIT_OR),
+            0x1E => Ok(Opcodes::BIT_AND),
+            0x1F => Ok(Opcodes::XOR),
+            0x20 => Ok(Opcodes::OR),
+            0x21 => Ok(Opcodes::AND),
+            0x22 => Ok(Opcodes::NOT),
+            0x23 => Ok(Opcodes::EQ),
+            0x24 => Ok(Opcodes::NEQ),
+            0x25 => Ok(Opcodes::LT),
+            0x26 => Ok(Opcodes::GT),
+            0x27 => Ok(Opcodes::LE),
+            0x28 => Ok(Opcodes::GE),
+            0x29 => Ok(Opcodes::ABORT),
+            0x2A => Ok(Opcodes::GET_TXN_GAS_UNIT_PRICE),
+            0x2B => Ok(Opcodes::GET_TXN_MAX_GAS_UNITS),
+            0x2C => Ok(Opcodes::GET_GAS_REMAINING),
+            0x2D => Ok(Opcodes::GET_TXN_SENDER),
+            0x2E => Ok(Opcodes::EXISTS),
+            0x2F => Ok(Opcodes::BORROW_GLOBAL),
             0x30 => Ok(Opcodes::MOVE_FROM),
             0x31 => Ok(Opcodes::MOVE_TO),
             0x32 => Ok(Opcodes::CREATE_ACCOUNT),

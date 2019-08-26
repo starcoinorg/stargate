@@ -5,7 +5,7 @@ use super::{hash, primitive_helpers, signature, vector};
 use crate::{native_structs::dispatch::dispatch_native_struct, value::Local};
 use std::collections::{HashMap, VecDeque};
 use types::{account_address::AccountAddress, account_config, language_storage::ModuleId};
-use vm::file_format::{FunctionSignature, SignatureToken};
+use vm::file_format::{FunctionSignature, Kind, SignatureToken};
 
 /// Enum representing the result of running a native function
 pub enum NativeReturnStatus {
@@ -61,7 +61,7 @@ macro_rules! add {
         let expected_signature = FunctionSignature {
             return_types: $ret,
             arg_types: $args,
-            type_parameters: $kinds,
+            type_formals: $kinds,
         };
         let f = NativeFunction {
             dispatch: $dis,
@@ -87,7 +87,7 @@ fn tstruct(
     let native_struct = dispatch_native_struct(&id, function_name).unwrap();
     let idx = native_struct.expected_index;
     // TODO assert kinds match
-    assert_eq!(args.len(), native_struct.expected_type_parameters.len());
+    assert_eq!(args.len(), native_struct.expected_type_formals.len());
     SignatureToken::Struct(idx, args)
 }
 
@@ -151,7 +151,8 @@ lazy_static! {
         // Vector
         add!(m, addr, "Vector", "length",
             vector::native_length,
-            vec![Reference(Box::new(tstruct(addr, "Vector", "T", vec![])))],
+            vec![Kind::All],
+            vec![Reference(Box::new(tstruct(addr, "Vector", "T", vec![SignatureToken::TypeParameter(0)])))],
             vec![U64]
         );
         // Event
