@@ -27,7 +27,7 @@ use std::borrow::Borrow;
 use logger::prelude::*;
 use network::{
     convert_account_address_to_peer_id,convert_peer_id_to_account_address,
-    net::{Service,Message}
+    net::{NetworkService,Message}
 };
 
 
@@ -40,13 +40,13 @@ struct NodeInner<C: ChainClient> {
     wallet:Wallet<C>,
     executor:TaskExecutor,
     keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
-    network_service:Service,
+    network_service:NetworkService,
 }
 
 impl<C:ChainClient> Node<C>{
 
     pub fn new(executor: TaskExecutor,wallet:Wallet<C>,keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
-        network_service:Service)->Self{
+        network_service:NetworkService)->Self{
         let executor_clone = executor.clone();
 
         let node_inner=NodeInner{

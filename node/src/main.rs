@@ -19,7 +19,7 @@ use chain_client::{RpcChainClient, ChainClient};
 use grpcio::EnvBuilder;
 use sgwallet::wallet::*;
 use node_internal::node::Node;
-use network::net::Service;
+use network::net::{NetworkService,build_network_service};
 use failure::*;
 
 
@@ -73,7 +73,7 @@ fn load_from_file(faucet_account_file: &str)->KeyPair<Ed25519PrivateKey,Ed25519P
     }
 }
 
-fn gen_node(executor:TaskExecutor,keypair:KeyPair<Ed25519PrivateKey,Ed25519PublicKey>,wallet_config:&WalletConfig,network_service:Service)->(Node<RpcChainClient>){
+fn gen_node(executor:TaskExecutor,keypair:KeyPair<Ed25519PrivateKey,Ed25519PublicKey>,wallet_config:&WalletConfig,network_service:NetworkService)->(Node<RpcChainClient>){
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     let env_builder_arc = Arc::new(EnvBuilder::new().build());
     let client = RpcChainClient::new(&wallet_config.chain_address, wallet_config.chain_port as u32);
@@ -92,7 +92,7 @@ fn main() {
     let executor = rt.executor();
 
     let keypair = load_from_file(&args.faucet_key_path);
-    let (network_service,tx,rx) = Service::new(&swarm.config.network);
+    let (network_service,tx,rx) = build_network_service(&swarm.config.node_net_work,keypair.clone());
 
     let mut node = gen_node(executor,keypair,&swarm.config.wallet,network_service);
     //node.start_server(swarm.config.node_net_work.addr.parse().unwrap());
