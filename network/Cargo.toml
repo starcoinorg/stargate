@@ -23,3 +23,4 @@ types = { path = "../types" }
 rand = "0.7.0"
 rand_core = "0.5.0"
 failure = {package = "failure_ext", path = "../common/failure_ext"}
+logger = { path = "../common/logger" }

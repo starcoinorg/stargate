@@ -101,10 +101,11 @@ mod tests {
             (a, b)
         };
         let msg_peer_id = service1.0.libp2p_service.lock().peer_id().clone();
+
         let sender_fut = stream::repeat(1)
             .and_then(move |_| {
                 match service2.1.unbounded_send(Message {
-                    peer_id: msg_peer_id.clone(),
+                    peer_id: convert_peer_id_to_account_address(msg_peer_id.clone()).unwrap(),
                     msg: vec![1, 2],
                 }) {
                     Ok(()) => Ok(Async::Ready(Some(()))),

@@ -35,7 +35,7 @@ use futures_01::future::Future as Future01;
 use std::time::{SystemTime,UNIX_EPOCH};
 use types::account_config::coin_struct_tag;
 use logger::prelude::*;
-use sg_config::config::NodeNetworkConfig;
+use sg_config::config::NetworkConfig;
 use crate::test_helper{*};
 use crate::node::Node;
 

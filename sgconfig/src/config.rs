@@ -4,8 +4,8 @@ use std::fs;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct NodeConfig {
-    pub network: NetworkConfig,
-    pub node_net_work: NodeNetworkConfig,
+    pub rpc_config: RpcConfig,
+    pub net_config: NetworkConfig,
     pub wallet: WalletConfig,
     //pub log_collector: LoggerConfig,
 }
@@ -17,13 +17,13 @@ pub struct WalletConfig {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct NodeNetworkConfig {
+pub struct NetworkConfig {
     pub listen: String,
     pub seeds: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct NetworkConfig {
+pub struct RpcConfig {
     pub address: String,
     pub port: u16,
 }
@@ -43,11 +43,11 @@ pub fn load_from(config_file: &str) -> Result<NodeConfig> {
 }
 
 pub fn get_test_config(addr: String, port: u16) -> (NodeConfig) {
-    let network = NetworkConfig {
+    let network = RpcConfig {
         address: addr.clone(),
         port,
     };
-    let node_network = NodeNetworkConfig {
+    let node_network = NetworkConfig {
         listen: String::from("127.0.0.1:8000"),
         seeds: vec![String::from("127.0.0.1:8001")],
     };
@@ -56,8 +56,8 @@ pub fn get_test_config(addr: String, port: u16) -> (NodeConfig) {
         chain_port: port,
     };
     NodeConfig {
-        network,
-        node_net_work: node_network,
+        rpc_config: network,
+        net_config: node_network,
         wallet: wallet_config,
     }
 }

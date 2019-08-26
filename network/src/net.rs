@@ -1,19 +1,23 @@
-use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
-use crypto::test_utils::KeyPair;
+use crate::{convert_account_address_to_peer_id, convert_peer_id_to_account_address};
+use crypto::{
+    ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
+    test_utils::KeyPair,
+};
 use futures::{future, stream::Stream, sync::mpsc, Async, Future};
+use logger::prelude::*;
 use network_libp2p::{
     identity, start_service, NetworkConfiguration, NodeKeyConfig, PeerId, Secret,
     Service as Libp2pService, ServiceEvent,
 };
 use parking_lot::Mutex;
-use sg_config::config::NodeNetworkConfig;
-use std::sync::Arc;
-use std::{io, thread};
+use sg_config::config::NetworkConfig;
+use std::{io, sync::Arc, thread};
 use tokio::runtime::Builder as RuntimeBuilder;
+use types::account_address::AccountAddress;
 
 #[derive(Clone, Debug)]
 pub struct Message {
-    pub peer_id: PeerId,
+    pub peer_id: AccountAddress,
     pub msg: Vec<u8>,
 }
 
@@ -23,7 +27,7 @@ pub struct NetworkService {
 }
 
 pub fn build_network_service(
-    cfg: &NodeNetworkConfig,
+    cfg: &NetworkConfig,
     key_pair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
 ) -> (
     NetworkService,
@@ -61,7 +65,6 @@ fn run_network(
     mpsc::UnboundedReceiver<Message>,
     impl Future<Item = (), Error = ()>,
 ) {
-    println!("Start listen");
     let (mut _tx, net_rx) = mpsc::unbounded();
     let (net_tx, mut _rx) = mpsc::unbounded::<Message>();
     let net_srv_sender = net_srv.clone();
@@ -70,15 +73,17 @@ fn run_network(
         loop {
             match net_srv.lock().poll().unwrap() {
                 Async::Ready(Some(ServiceEvent::CustomMessage { peer_id, message })) => {
-                    println!("Receive custom message");
-                    //TODO: error check
+                    debug!("Receive custom message");
                     let _ = _tx.unbounded_send(Message {
-                        peer_id,
+                        peer_id: convert_peer_id_to_account_address(peer_id).unwrap(),
                         msg: message,
                     });
                 }
                 Async::Ready(Some(ServiceEvent::OpenedCustomProtocol { peer_id, .. })) => {
-                    println!("Connected peer {:?}", peer_id);
+                    println!(
+                        "Connected peer {:?}",
+                        convert_peer_id_to_account_address(peer_id).unwrap()
+                    );
                 }
                 Async::NotReady => {
                     break;
@@ -93,9 +98,10 @@ fn run_network(
         loop {
             match _rx.poll() {
                 Ok(Async::Ready(Some(message))) => {
+                    let peer_id = convert_account_address_to_peer_id(message.peer_id).unwrap();
                     net_srv_sender
                         .lock()
-                        .send_custom_message(&message.peer_id, message.msg);
+                        .send_custom_message(&peer_id, message.msg);
                     println!("Already send message to {:?}", &message.peer_id);
                     break;
                 }
@@ -162,8 +168,7 @@ impl NetworkService {
         )
     }
 
-    pub fn is_connected(&self, peer_id: PeerId) -> bool {
-        //self.libp2p_service.lock().is_open(peer_id)
-        unimplemented!()
+    pub fn is_connected(&self, peer_id: &PeerId) -> bool {
+        self.libp2p_service.lock().is_open(peer_id)
     }
 }

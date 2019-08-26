@@ -19,11 +19,11 @@ use futures_01::future::Future as Future01;
 use std::time::{SystemTime,UNIX_EPOCH};
 use types::account_config::coin_struct_tag;
 use logger::prelude::*;
-use sg_config::config::NodeNetworkConfig;
+use sg_config::config::NetworkConfig;
 use tokio::runtime::{Runtime,TaskExecutor};
 use crate::node::Node;
 
-pub fn gen_node(executor:TaskExecutor,config:&NodeNetworkConfig)->(Node<MockChainClient>,AccountAddress,KeyPair<Ed25519PrivateKey,Ed25519PublicKey>){
+pub fn gen_node(executor:TaskExecutor,config:&NetworkConfig)->(Node<MockChainClient>,AccountAddress,KeyPair<Ed25519PrivateKey,Ed25519PublicKey>){
 
     let amount: u64 = 1_000_000_000;    
     let mut rng: StdRng = SeedableRng::seed_from_u64(get_unix_ts());//SeedableRng::from_seed([0; 32]);
@@ -39,8 +39,8 @@ pub fn gen_node(executor:TaskExecutor,config:&NodeNetworkConfig)->(Node<MockChai
     (Node::new(executor.clone(),wallet,keypair.clone(),network),account_address,keypair)
 }
 
-pub fn create_node_network_config(addr:String,seeds:Vec<String>)->NodeNetworkConfig{
-    return NodeNetworkConfig{
+pub fn create_node_network_config(addr:String,seeds:Vec<String>)->NetworkConfig{
+    return NetworkConfig{
         listen:addr,
         seeds,
     }
