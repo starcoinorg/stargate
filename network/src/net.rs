@@ -1,3 +1,4 @@
+use crate::{convert_account_address_to_peer_id, convert_peer_id_to_account_address};
 use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
 use crypto::test_utils::KeyPair;
 use futures::{future, stream::Stream, sync::mpsc, Async, Future};
@@ -10,10 +11,11 @@ use sg_config::config::NodeNetworkConfig;
 use std::sync::Arc;
 use std::{io, thread};
 use tokio::runtime::Builder as RuntimeBuilder;
+use types::account_address::AccountAddress;
 
 #[derive(Clone, Debug)]
 pub struct Message {
-    pub peer_id: PeerId,
+    pub peer_id: AccountAddress,
     pub msg: Vec<u8>,
 }
 
@@ -70,14 +72,17 @@ fn run_network(
             match net_srv.lock().poll().unwrap() {
                 Async::Ready(Some(ServiceEvent::CustomMessage { peer_id, message })) => {
                     println!("Receive custom message");
-                    //TODO: error check
+
                     let _ = _tx.unbounded_send(Message {
-                        peer_id,
+                        peer_id: convert_peer_id_to_account_address(peer_id).unwrap(),
                         msg: message,
                     });
                 }
                 Async::Ready(Some(ServiceEvent::OpenedCustomProtocol { peer_id, .. })) => {
-                    println!("Connected peer {:?}", peer_id);
+                    println!(
+                        "Connected peer {:?}",
+                        convert_peer_id_to_account_address(peer_id).unwrap()
+                    );
                 }
                 Async::NotReady => {
                     break;
@@ -92,9 +97,10 @@ fn run_network(
         loop {
             match _rx.poll() {
                 Ok(Async::Ready(Some(message))) => {
+                    let peer_id = convert_account_address_to_peer_id(message.peer_id).unwrap();
                     net_srv_sender
                         .lock()
-                        .send_custom_message(&message.peer_id, message.msg);
+                        .send_custom_message(&peer_id, message.msg);
                     println!("Already send message to {:?}", &message.peer_id);
                     break;
                 }
