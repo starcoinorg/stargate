@@ -23,7 +23,7 @@ pub fn convert_account_address_to_peer_id(
 
 #[cfg(test)]
 mod tests {
-    use crate::net::{Message, Service};
+    use crate::net::{Message, NetworkService};
     use crate::{convert_account_address_to_peer_id, convert_peer_id_to_account_address};
     use crypto::ed25519::compat;
     use futures::{
@@ -49,12 +49,12 @@ mod tests {
         num: usize,
         base_port: u16,
     ) -> Vec<(
-        Service,
+        NetworkService,
         UnboundedSender<Message>,
         UnboundedReceiver<Message>,
     )> {
         let mut result: Vec<(
-            Service,
+            NetworkService,
             UnboundedSender<Message>,
             UnboundedReceiver<Message>,
         )> = Vec::with_capacity(num);
@@ -73,7 +73,7 @@ mod tests {
                         .to_string(),
                 );
             }
-
+            println!("boot nodes:{:?}", boot_nodes);
             let config = network_libp2p::NetworkConfiguration {
                 listen_addresses: vec![build_multiaddr![
                     Ip4([127, 0, 0, 1]),
@@ -86,7 +86,7 @@ mod tests {
             if first_addr.is_none() {
                 first_addr = Some(config.listen_addresses.iter().next().unwrap().clone());
             }
-            let server = Service::new(config);
+            let server = NetworkService::new(config);
             result.push(server);
         }
         result
