@@ -21,6 +21,7 @@ bytecode_verifier = { path = "../../language/bytecode_verifier" }
 compiler = { path = "../../language/compiler" }
 failure = { path = "../../common/failure_ext", package = "failure_ext" }
 logger = { path = "../../common/logger"}
+stdlib = { path = "../../language/stdlib" }
 
 [dev-dependencies]
 crypto = { path = "../../crypto/crypto", features = ["testing"] }

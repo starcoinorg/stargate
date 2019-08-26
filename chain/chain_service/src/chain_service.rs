@@ -36,7 +36,6 @@ use vm_runtime::{MoveVM, VMExecutor};
 use lazy_static::lazy_static;
 use config::config::{VMConfig, VMPublishingOption};
 use struct_cache::StructCache;
-use vm::file_format::{CompiledModule, StructDefinition};
 use state_view::StateView;
 use types::access_path::AccessPath;
 use core::borrow::Borrow;
