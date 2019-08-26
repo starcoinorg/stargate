@@ -1,16 +1,15 @@
 use failure::prelude::*;
 use types::proto::{access_path::AccessPath as ProtoAccessPath, events::Event};
-use types::{transaction::{SignedTransaction, TransactionPayload}, account_address::AccountAddress};
+use types::{transaction::{SignedTransaction, TransactionArgument, TransactionPayload, Program, RawTransaction}, access_path::AccessPath, account_address::AccountAddress};
 use futures::{sync::mpsc::{unbounded, UnboundedReceiver}, future::Future, sink::Sink, stream::Stream};
 use super::pub_sub;
 use grpcio::WriteFlags;
 use state_storage::StateStorage;
 use super::transaction_storage::TransactionStorage;
-use std::{sync::{Arc, Mutex}};
+use std::{sync::{Arc, Mutex}, time::Duration, convert::TryFrom};
 use crypto::{hash::CryptoHash, HashValue};
 use grpc_helpers::provide_grpc_response;
 use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR};
-use std::convert::TryFrom;
 use metrics::IntGauge;
 use futures03::{
     future::{FutureExt, TryFutureExt},
@@ -18,7 +17,7 @@ use futures03::{
     sink::SinkExt,
     executor::block_on,
 };
-use tokio::{runtime::Runtime};
+use tokio::{runtime::{Runtime, TaskExecutor}};
 use star_types::{offchain_transaction::OffChainTransaction,
                  proto::{chain_grpc::Chain,
                          chain::{LeastRootRequest, LeastRootResponse,
@@ -36,13 +35,12 @@ use vm_runtime::{MoveVM, VMExecutor};
 use lazy_static::lazy_static;
 use config::config::{VMConfig, VMPublishingOption};
 use struct_cache::StructCache;
-use vm::file_format::{CompiledModule, StructDefinition};
 use state_view::StateView;
-use types::access_path::AccessPath;
 use core::borrow::Borrow;
 use proto_conv::{FromProto, IntoProto};
 use protobuf::RepeatedField;
 use state_store::StateStore;
+use compiler::Compiler;
 
 lazy_static! {
     static ref VM_CONFIG:VMConfig = VMConfig{
@@ -68,7 +66,7 @@ pub enum TransactionInner {
 }
 
 impl ChainService {
-    pub fn new(rt: &mut Runtime) -> Self {
+    pub fn new(exe: &TaskExecutor) -> Self {
         let gauge = IntGauge::new("receive_transaction_channel_counter", "receive transaction channel").unwrap();
         let (tx_sender, mut tx_receiver) = channel::new(1_024, &gauge);
         let tx_db = Arc::new(Mutex::new(TransactionStorage::new()));
@@ -85,7 +83,7 @@ impl ChainService {
                 chain_service_clone.submit_transaction_real(tx);
             }
         };
-        rt.spawn(receiver_future.boxed().unit_error().compat());
+        exe.spawn(receiver_future.boxed().unit_error().compat());
 
         let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
         let genesis_txn = genesis_checked_txn.into_inner();
@@ -93,7 +91,7 @@ impl ChainService {
         let genesis_future = async move {
             tx_sender_2.send(TransactionInner::OnChain(genesis_txn)).await.unwrap();
         };
-        rt.spawn(genesis_future.boxed().unit_error().compat());
+        exe.spawn(genesis_future.boxed().unit_error().compat());
 
         chain_service
     }
@@ -250,9 +248,38 @@ impl ChainService {
         state_db.get(&AccessPath::new(account_address, path))
     }
 
-    pub fn faucet_inner(&self, account_address: AccountAddress, amount: u64) -> Result<HashValue> {
+    pub fn faucet_inner(&self, receiver: AccountAddress, amount: u64) -> Result<()> {
         let state_db = self.state_db.lock().unwrap();
-        state_db.create_account(account_address, amount)
+        let exist_flag = state_db.exist_account(&receiver);
+        if !exist_flag {
+            //TODO :create account
+        }
+
+        let mut args: Vec<TransactionArgument> = Vec::new();
+        args.push(TransactionArgument::Address(receiver));
+        args.push(TransactionArgument::U64(amount));
+
+        let transfer_compiler = Compiler {
+            code: stdlib::transaction_scripts::peer_to_peer(),
+            ..Compiler::default()
+        };
+        let program = transfer_compiler.into_program(args).unwrap();
+
+        let sender = AccountAddress::from_public_key(&GENESIS_KEYPAIR.1);
+        let s_n = state_db.sequence_number(&sender).unwrap() + 1;
+        let signed_tx = RawTransaction::new(
+            receiver,
+            s_n,
+            program,
+            10_000 as u64,
+            1 as u64,
+            Duration::from_secs(u64::max_value()),
+        ).sign(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone())
+            .unwrap()
+            .into_inner();
+
+        self.apply_on_chain_transaction(signed_tx);
+        Ok(())
     }
 }
 
@@ -269,7 +296,7 @@ impl Chain for ChainService {
               sink: ::grpcio::UnarySink<FaucetResponse>) {
         let resp = AccountAddress::try_from(req.get_address().to_vec()).and_then(|account_address| {
             self.faucet_inner(account_address, req.get_amount())
-        }).and_then(|_root_hash| {
+        }).and_then(|_| {
             Ok(FaucetResponse::new())
         });
         provide_grpc_response(resp, ctx, sink);

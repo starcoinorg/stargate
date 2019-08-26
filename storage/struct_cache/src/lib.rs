@@ -1,16 +1,13 @@
 use failure::prelude::*;
-use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
-use crypto::HashValue;
-use vm_runtime_types::loaded_data::{struct_def::StructDef, types::Type};
-use vm_runtime::{code_cache::{module_adapter::{ModuleFetcherImpl, ModuleFetcher}}, loaded_data::loaded_module::LoadedModule};
-use types::{access_path::AccessPath, language_storage::StructTag};
+use vm_runtime::{code_cache::{module_adapter::{ModuleFetcherImpl, ModuleFetcher, FakeFetcher}}, loaded_data::loaded_module::LoadedModule};
+use types::{language_storage::StructTag};
 use state_view::StateView;
 use types::language_storage::ModuleId;
-use vm::{file_format::{SignatureToken, CompiledModule, StructDefinition, StructFieldInformation, StructHandleIndex, StructDefinitionIndex},
-         errors::{VMInvariantViolation, VMResult, VMRuntimeResult, VMRuntimeError, VMErrorKind, VerificationStatus, Location},
-         views::{FunctionHandleView, StructHandleView}};
-use core::borrow::{Borrow, BorrowMut};
+use vm::{file_format::{SignatureToken, StructFieldInformation, StructHandleIndex, StructDefinitionIndex},
+         errors::{VMRuntimeError, VMErrorKind, VerificationStatus, Location},
+         views::{StructHandleView}};
+use core::borrow::{BorrowMut};
 use vm::access::ModuleAccess;
 use bytecode_verifier::VerifiedModule;
 use atomic_refcell::AtomicRefCell;
@@ -21,7 +18,7 @@ use star_types::resource_type::{resource_def::ResourceDef, resource_types::Resou
 use lazy_static::lazy_static;
 use logger::prelude::*;
 
-lazy_static!{
+lazy_static! {
     pub static ref STATIC_STRUCT_DEF_RESOLVE: StaticStructDefResolve = StaticStructDefResolve::new();
 }
 
@@ -32,27 +29,26 @@ pub struct StructCache {
 impl StructCache {
     pub fn new() -> Self {
         let struct_map = AtomicRefCell::new(HashMap::new());
+
+        let tmp = Self::genesis_tags();
+        for (tag, def) in tmp {
+            struct_map.borrow_mut().insert(tag, def);
+        }
         StructCache { struct_map }
     }
 
     pub fn find_struct(&self, tag: &StructTag, state_view: &dyn StateView) -> Result<ResourceDef> {
-        match STATIC_STRUCT_DEF_RESOLVE.resolve(tag){
-            Ok(def) => return Ok(def),
-            Err(_) => {
-                //continue
-            }
-        }
         let exist = self.struct_map.borrow().contains_key(tag);
         if !exist {
             let module_fetcher = ModuleFetcherImpl::new(state_view);
             let module_id = ModuleId::new(tag.address, tag.module.clone());
-            match Self::get_loaded_module_with_fetcher(&module_id, &module_fetcher)?{
+            match Self::get_loaded_module_with_fetcher(&module_id, &module_fetcher)? {
                 None => {
                     warn!("Get loaded module {:?} fail.", module_id)
-                },
+                }
                 Some(module) => {
                     let defs = Self::resource_def_from_module(&module_fetcher, &module)?;
-                    for (tag, def) in defs{
+                    for (tag, def) in defs {
                         self.struct_map.borrow_mut().insert(tag, def);
                     }
                 }
@@ -62,10 +58,8 @@ impl StructCache {
         return map.get(tag).cloned().ok_or(format_err!("Can not find ResourceDef with StructTag: {:?}", tag));
     }
 
-    fn resource_def_from_module(fetcher: &dyn ModuleFetcher, module: &LoadedModule) -> Result<Vec<(StructTag,ResourceDef)>> {
-        let string_pool = module.string_pool();
+    fn resource_def_from_module(fetcher: &dyn ModuleFetcher, module: &LoadedModule) -> Result<Vec<(StructTag, ResourceDef)>> {
         let struct_defs = module.struct_defs();
-        let struct_handles = module.struct_handles();
         let mut results = vec![];
         for struct_def in struct_defs {
             let struct_handle_index = struct_def.struct_handle;
@@ -75,8 +69,8 @@ impl StructCache {
                 .struct_defs_table
                 .get(struct_name)
                 .ok_or(format_err!("VMInvariantViolation::LinkerError"))?;
-            let (tag,def) = Self::resolve_struct_def_with_fetcher(module, *struct_def_idx, fetcher)?.ok_or(format_err!("resolve struct def fail."))?;
-            results.push((tag,def));
+            let (tag, def) = Self::resolve_struct_def_with_fetcher(module, *struct_def_idx, fetcher)?.ok_or(format_err!("resolve struct def fail."))?;
+            results.push((tag, def));
         }
         Ok(results)
     }
@@ -85,7 +79,7 @@ impl StructCache {
         module: &LoadedModule,
         idx: StructHandleIndex,
         fetcher: &dyn ModuleFetcher,
-    ) -> Result<Option<(StructTag,ResourceDef)>> {
+    ) -> Result<Option<(StructTag, ResourceDef)>> {
         let struct_handle = module.struct_handle_at(idx);
         let struct_name = module.string_at(struct_handle.name);
         let struct_def_module_id = StructHandleView::new(module, struct_handle).module_id();
@@ -114,10 +108,10 @@ impl StructCache {
             SignatureToken::ByteArray => Ok(Some(ResourceType::ByteArray)),
             SignatureToken::Address => Ok(Some(ResourceType::Address)),
             SignatureToken::Struct(sh_idx, _) => {
-                Ok(match Self::resolve_struct_handle_with_fetcher(module, *sh_idx, fetcher)?{
-                    Some((struct_tag,struct_def)) => {
-                        Some(ResourceType::Resource(struct_tag,struct_def))
-                    },
+                Ok(match Self::resolve_struct_handle_with_fetcher(module, *sh_idx, fetcher)? {
+                    Some((struct_tag, struct_def)) => {
+                        Some(ResourceType::Resource(struct_tag, struct_def))
+                    }
                     None => None
                 })
             }
@@ -138,11 +132,11 @@ impl StructCache {
         let def = {
             let struct_def = module.struct_def_at(idx);
             let struct_handle = module.struct_handle_at(struct_def.struct_handle);
-            let struct_tag = StructTag{
+            let struct_tag = StructTag {
                 name: module.string_at(struct_handle.name).to_owned(),
                 address: *module.address(),
                 module: module.name().to_owned(),
-                type_params: vec![]
+                type_params: vec![],
             };
             match &struct_def.field_information {
                 StructFieldInformation::Native => bail!("VMInvariantViolation::LinkerError"),
@@ -155,7 +149,7 @@ impl StructCache {
                         let ty = Self::resolve_signature_token_with_fetcher(
                             module,
                             &module.type_signature_at(field.signature).0,
-                            fetcher
+                            fetcher,
                         )?;
                         if let Some(t) = ty {
                             field_types.push(t);
@@ -164,7 +158,7 @@ impl StructCache {
                         }
                     }
 
-                    (struct_tag,ResourceDef::new(field_types))
+                    (struct_tag, ResourceDef::new(field_types))
                 }
             }
         };
@@ -175,7 +169,7 @@ impl StructCache {
         id: &ModuleId,
         fetcher: &dyn ModuleFetcher,
     ) -> Result<Option<LoadedModule>> {
-            let module = match fetcher.get_module(id) {
+        let module = match fetcher.get_module(id) {
             Some(module) => {
                 module
             }
@@ -206,38 +200,48 @@ impl StructCache {
 
         Ok(Some(LoadedModule::new(module)))
     }
+
+    fn genesis_tags() -> HashMap<StructTag, ResourceDef> {
+        let mut genesis_tags = HashMap::new();
+        let genesis_modules = stdlib::stdlib_modules();
+        let fake_fetcher = FakeFetcher::new(genesis_modules.iter().map(|m| m.as_inner().clone()).collect());
+        genesis_modules.iter().for_each(|module| {
+            let loaded_module = LoadedModule::new(module.clone());
+            let defs = Self::resource_def_from_module(&fake_fetcher, &loaded_module).unwrap();
+            for (tag, def) in defs {
+                genesis_tags.borrow_mut().insert(tag, def);
+            }
+        });
+
+        genesis_tags
+    }
 }
 
-
-
-pub struct StaticStructDefResolve{
-    register:HashMap<StructTag, ResourceDef>,
+pub struct StaticStructDefResolve {
+    register: HashMap<StructTag, ResourceDef>,
 }
 
 impl StaticStructDefResolve {
-
-    pub fn new() -> Self{
+    pub fn new() -> Self {
         let mut register = HashMap::new();
         register.insert(account_struct_tag(), get_account_struct_def());
         register.insert(coin_struct_tag(), get_coin_struct_def());
         register.insert(get_market_cap_struct_tag(), get_market_cap_struct_def());
         register.insert(get_mint_capability_struct_tag(), get_mint_capability_struct_def());
-        register.insert( get_event_handle_struct_tag(), get_event_handle_struct_def());
+        register.insert(get_event_handle_struct_tag(), get_event_handle_struct_def());
         register.insert(get_event_handle_id_generator_tag(), get_event_handle_id_generator_def());
         register.insert(get_block_module_tag(), get_block_module_def());
-        Self{
+        Self {
             register
         }
     }
 }
 
-impl StructDefResolve for StaticStructDefResolve{
-
+impl StructDefResolve for StaticStructDefResolve {
     fn resolve(&self, tag: &StructTag) -> Result<ResourceDef> {
         self.register.get(tag).cloned().ok_or(format_err!("Can not find StructDef by tag: {:?}", tag))
     }
 }
-
 
 
 #[cfg(test)]
@@ -253,6 +257,8 @@ mod tests {
     use std::collections::HashMap;
     use types::language_storage::ModuleId;
     use itertools::Itertools;
+    use types::account_config::account_struct_tag;
+    use vm_runtime::code_cache::module_adapter::NullFetcher;
 
     struct MockStateView {
         modules: HashMap<AccessPath, Vec<u8>>
@@ -300,10 +306,10 @@ mod tests {
             };
 
             let (mut program, mut deps) = compiler.into_compiled_program_and_deps().unwrap();
-            let mut modules = deps.iter().map(|module|module.clone().into_inner()).collect_vec();
+            let mut modules = deps.iter().map(|module| module.clone().into_inner()).collect_vec();
             modules.append(&mut program.modules);
             let mut cache = HashMap::new();
-            modules.iter().for_each(|module|{
+            modules.iter().for_each(|module| {
                 let mut data = vec![];
                 module.serialize(&mut data);
                 let id = ModuleId::new(module.address().clone(), module.name().to_owned());
@@ -311,7 +317,7 @@ mod tests {
                 println!("insert access path: {:?}, module_id:{:?}", access_path, id);
                 cache.insert(access_path, data);
             });
-            MockStateView { modules:cache }
+            MockStateView { modules: cache }
         }
     }
 
@@ -340,5 +346,14 @@ mod tests {
         let struct_tag = StructTag { address, module: "B".to_string(), name: "T".to_string(), type_params: vec![] };
         let struct_def = struct_cache.find_struct(&struct_tag, &state_view).unwrap();
         println!("{:?}", struct_def)
+    }
+
+    #[test]
+    fn test_genesis_tag() {
+        let mut struct_cache = StructCache::new();
+        let struct_tag = account_struct_tag();
+        let state_view = MockStateView::new();
+        let resource_def = struct_cache.find_struct(&struct_tag, &state_view).unwrap();
+        println!("{:?}", resource_def)
     }
 }
