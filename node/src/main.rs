@@ -19,8 +19,9 @@ use chain_client::{RpcChainClient, ChainClient};
 use grpcio::EnvBuilder;
 use sgwallet::wallet::*;
 use node_internal::node::Node;
-use netcore::transport::tcp::TcpTransport;
+use network::net::Service;
 use failure::*;
+
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -72,14 +73,14 @@ fn load_from_file(faucet_account_file: &str)->KeyPair<Ed25519PrivateKey,Ed25519P
     }
 }
 
-fn gen_node(executor:TaskExecutor,keypair:KeyPair<Ed25519PrivateKey,Ed25519PublicKey>,wallet_config:&WalletConfig)->(Node<RpcChainClient,TcpTransport>){
+fn gen_node(executor:TaskExecutor,keypair:KeyPair<Ed25519PrivateKey,Ed25519PublicKey>,wallet_config:&WalletConfig,network_service:Service)->(Node<RpcChainClient>){
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     let env_builder_arc = Arc::new(EnvBuilder::new().build());
     let client = RpcChainClient::new(&wallet_config.chain_address, wallet_config.chain_port as u32);
 
     let mut wallet = Wallet::new_with_client(account_address, keypair.clone(), Arc::new(client)).unwrap();
 
-    Node::new(executor.clone(),wallet,keypair.clone(),TcpTransport::default())
+    Node::new(executor.clone(),wallet,keypair.clone(),network_service)
 }
 
 
@@ -92,17 +93,11 @@ fn main() {
 
     let keypair = load_from_file(&args.faucet_key_path);
     let mut node = gen_node(executor,keypair,&swarm.config.wallet);
-    node.start_server(swarm.config.node_net_work.addr.parse().unwrap());
+    //node.start_server(swarm.config.node_net_work.addr.parse().unwrap());
 
     let mut node_server = setup_node_service(&swarm.config,Arc::new(node));
     node_server.start();
 
-    let cfg = NodeNetworkConfig {
-        addr: "".to_string(),
-        max_sockets: 0,
-        in_memory: false,
-        seeds: vec![]
-    };
     if args.start_client {
         let client = client::InteractiveClient::new_with_inherit_io(
             swarm.config.network.port

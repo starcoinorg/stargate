@@ -22,10 +22,8 @@ use netcore::transport::{Transport};
 use chain_client::{ChainClient};
 use types::account_config::coin_struct_tag;
 
-pub fn setup_node_service<C,TTransport>(config: &NodeConfig,node:Arc<Node_Internal<C,TTransport>>) -> ::grpcio::Server 
-where C: ChainClient+Clone+ Send+Sync+'static,
-TTransport:Transport+Sync+Send+Clone+'static,
-TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
+pub fn setup_node_service<C>(config: &NodeConfig,node:Arc<Node_Internal<C>>) -> ::grpcio::Server 
+where C: ChainClient+Clone+ Send+Sync+'static{
     let client_env = Arc::new(EnvBuilder::new().name_prefix("grpc-node-").build());
 
     let handle = NodeService::new(node);
@@ -38,22 +36,19 @@ TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
 }
 
 #[derive(Clone)]
-pub struct NodeService  <C: ChainClient+Clone+Send+Sync+'static,TTransport:Transport+Sync+Send+Clone+'static>
-    where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
-        node:Arc<Node_Internal<C,TTransport>>
+pub struct NodeService  <C: ChainClient+Clone+Send+Sync+'static>{
+        node:Arc<Node_Internal<C>>
 }
 
-impl<C: ChainClient+Clone +Send+Sync+'static,TTransport:Transport+Sync+Send+Clone+'static> NodeService<C,TTransport> 
-where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
-    pub fn new(node:Arc<Node_Internal<C,TTransport>>) -> Self {
+impl<C: ChainClient+Clone +Send+Sync+'static> NodeService<C> {
+    pub fn new(node:Arc<Node_Internal<C>>) -> Self {
         NodeService { 
             node,
         }
     }
 }
 
-impl<C: ChainClient+Clone +Send+Sync+'static,TTransport:Transport+Sync+Send+Clone+'static> node_proto::proto::node_grpc::Node for NodeService<C,TTransport> 
-where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
+impl<C: ChainClient+Clone +Send+Sync+'static> node_proto::proto::node_grpc::Node for NodeService<C> {
     fn open_channel(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::OpenChannelRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::OpenChannelResponse>){
         println!("open channel");
     }
@@ -71,7 +66,7 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
 
     fn connect(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::ConnectRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::ConnectResponse>){
         let connect_req = ConnectRequest::from_proto(req).unwrap();
-        self.node.connect(connect_req.remote_ip.parse().unwrap(),connect_req.remote_addr);
+        //self.node.connect(connect_req.remote_ip.parse().unwrap(),connect_req.remote_addr);
         let resp=ConnectResponse{}.into_proto();
         provide_grpc_response(Ok(resp),ctx,sink);
     }

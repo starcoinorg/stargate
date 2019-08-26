@@ -26,13 +26,13 @@ pub fn build_libp2p_service(
 pub fn run_network(
     net_srv: Arc<Mutex<Libp2pService<Vec<u8>>>>,
 ) -> (
-    mpsc::Sender<Message>,
-    mpsc::Receiver<Message>,
+    mpsc::UnboundedSender<Message>,
+    mpsc::UnboundedReceiver<Message>,
     impl Future<Item = (), Error = ()>,
 ) {
     println!("Start listen");
-    let (mut _tx, net_rx) = mpsc::channel(10);
-    let (net_tx, mut _rx) = mpsc::channel::<Message>(10);
+    let (mut _tx, net_rx) = mpsc::unbounded();
+    let (net_tx, mut _rx) = mpsc::unbounded::<Message>();
     let net_srv_sender = net_srv.clone();
 
     let network_fut = future::poll_fn(move || {
@@ -41,7 +41,7 @@ pub fn run_network(
                 Async::Ready(Some(ServiceEvent::CustomMessage { peer_id, message })) => {
                     println!("Receive custom message");
                     //TODO: error check
-                    let _ = _tx.try_send(Message {
+                    let _ = _tx.unbounded_send(Message {
                         peer_id,
                         msg: message,
                     });
@@ -88,8 +88,8 @@ pub fn run_network(
 pub fn start_network_thread(
     libp2p_service: Arc<Mutex<Libp2pService<Vec<u8>>>>,
 ) -> (
-    mpsc::Sender<Message>,
-    mpsc::Receiver<Message>,
+    mpsc::UnboundedSender<Message>,
+    mpsc::UnboundedReceiver<Message>,
     thread::JoinHandle<()>,
 ) {
     let mut rt = RuntimeBuilder::new()
@@ -113,8 +113,8 @@ pub fn start_network_thread(
 pub struct Service {
     pub network_thread: thread::JoinHandle<()>,
     pub libp2p_service: Arc<Mutex<Libp2pService<Vec<u8>>>>,
-    pub network_receiver: mpsc::Receiver<Message>,
-    pub network_sender: mpsc::Sender<Message>,
+    pub network_receiver: mpsc::UnboundedReceiver<Message>,
+    pub network_sender: mpsc::UnboundedSender<Message>,
 }
 
 impl Service {
