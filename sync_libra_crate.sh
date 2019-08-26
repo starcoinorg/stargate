@@ -19,4 +19,9 @@ do
   rsync -avu "$FROM" "$TO"
 done
 
+pushd language/vm/vm_genesis/ || exit
+echo "generate new genesis blob"
+cargo run
+popd || exit
+
 git status

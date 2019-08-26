@@ -4,31 +4,30 @@ use chain_client::ChainClient;
 use types::account_address::AccountAddress;
 use types::access_path::AccessPath;
 use crypto::HashValue;
-use tokio::runtime::Runtime;
+use tokio::runtime::{Runtime, TaskExecutor};
 use logger::prelude::*;
 
 pub struct MockChainClient {
-    rt: Runtime,
+    exe: TaskExecutor,
     chain_service: Option<ChainService>,
 }
 
 impl MockChainClient {
-    pub fn new() -> Self {
+    pub fn new(exe: TaskExecutor) -> Self {
         let mut client = Self {
-            rt: Runtime::new().unwrap(),
+            exe,
             chain_service: None,
         };
         client.init();
         client
     }
 
-    fn init(&mut self){
-        self.chain_service = Some(ChainService::new(&mut self.rt))
+    fn init(&mut self) {
+        self.chain_service = Some(ChainService::new(&self.exe))
     }
 }
 
 impl ChainClient for MockChainClient {
-
     fn least_state_root(&self) -> Result<HashValue> {
         Ok(self.chain_service.as_ref().unwrap().least_state_root_inner())
     }
@@ -43,7 +42,7 @@ impl ChainClient for MockChainClient {
     }
 
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()> {
-        self.chain_service.as_ref().unwrap().faucet_inner(address, amount).map(|_|())
+        self.chain_service.as_ref().unwrap().faucet_inner(address, amount).map(|_| ())
     }
 }
 
@@ -54,8 +53,9 @@ mod tests {
 
     #[test]
     fn test_mock_client() {
-        let mut rt = Runtime::new().unwrap();;
-        let client = MockChainClient::new();
+        let rt = Runtime::new().unwrap();
+        ;
+        let client = MockChainClient::new(rt.executor());
         let state = client.get_account_state(&AccountAddress::default()).unwrap().unwrap();
         println!("state: {:#?}", state)
     }
