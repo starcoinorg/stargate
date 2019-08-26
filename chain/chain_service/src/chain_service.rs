@@ -252,22 +252,32 @@ impl ChainService {
         let state_db = self.state_db.lock().unwrap();
         let exist_flag = state_db.exist_account(&receiver);
         if !exist_flag {
-            //TODO :create account
-        }
+            let create_account_signed_tx = self.create_account_or_transfer(receiver, amount, stdlib::transaction_scripts::create_account());
 
+            self.apply_on_chain_transaction(create_account_signed_tx);
+        } else {
+            let transfer_signed_tx = self.create_account_or_transfer(receiver, amount, stdlib::transaction_scripts::peer_to_peer());
+
+            self.apply_on_chain_transaction(transfer_signed_tx);
+        }
+        Ok(())
+    }
+
+    fn create_account_or_transfer(&self, receiver: AccountAddress, amount: u64, code: &str) -> SignedTransaction {
+        let state_db = self.state_db.lock().unwrap();
         let mut args: Vec<TransactionArgument> = Vec::new();
         args.push(TransactionArgument::Address(receiver));
         args.push(TransactionArgument::U64(amount));
 
-        let transfer_compiler = Compiler {
-            code: stdlib::transaction_scripts::peer_to_peer(),
+        let compiler = Compiler {
+            code,
             ..Compiler::default()
         };
-        let program = transfer_compiler.into_program(args).unwrap();
+        let program = compiler.into_program(args).unwrap();
 
         let sender = AccountAddress::from_public_key(&GENESIS_KEYPAIR.1);
         let s_n = state_db.sequence_number(&sender).unwrap() + 1;
-        let signed_tx = RawTransaction::new(
+        RawTransaction::new(
             receiver,
             s_n,
             program,
@@ -276,10 +286,7 @@ impl ChainService {
             Duration::from_secs(u64::max_value()),
         ).sign(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone())
             .unwrap()
-            .into_inner();
-
-        self.apply_on_chain_transaction(signed_tx);
-        Ok(())
+            .into_inner()
     }
 }
 
@@ -488,8 +495,7 @@ mod tests {
         ).sign(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone())
             .unwrap()
             .into_inner();
-
-        let mut rt = Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
         let chain_service = ChainService::new(&rt.executor());
         chain_service.apply_on_chain_transaction(signed_tx);
     }
