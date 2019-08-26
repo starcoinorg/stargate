@@ -1,11 +1,11 @@
-use futures::{future, stream::Stream, Async, Future};
+use futures::{future, stream::Stream, sync::mpsc, Async, Future};
 use network_libp2p::{
     start_service, NetworkConfiguration, PeerId, Service as Libp2pService, ServiceEvent,
 };
 use parking_lot::Mutex;
 use std::sync::Arc;
 use std::{io, thread};
-use tokio::{runtime::Builder as RuntimeBuilder, sync::mpsc};
+use tokio::runtime::Builder as RuntimeBuilder;
 
 #[derive(Clone, Debug)]
 pub struct Message {
@@ -113,20 +113,22 @@ pub fn start_network_thread(
 pub struct Service {
     pub network_thread: thread::JoinHandle<()>,
     pub libp2p_service: Arc<Mutex<Libp2pService<Vec<u8>>>>,
-    pub network_receiver: mpsc::Receiver<Message>,
-    pub network_sender: mpsc::Sender<Message>,
 }
 
 impl Service {
-    pub fn new(cfg: NetworkConfiguration) -> Self {
+    pub fn new(
+        cfg: NetworkConfiguration,
+    ) -> (Service, mpsc::Sender<Message>, mpsc::Receiver<Message>) {
         let libp2p_service = build_libp2p_service(cfg).unwrap();
         let (network_sender, network_receiver, network_thread) =
             start_network_thread(libp2p_service.clone());
-        Self {
-            network_thread,
-            libp2p_service,
-            network_receiver,
+        (
+            Self {
+                network_thread,
+                libp2p_service,
+            },
             network_sender,
-        }
+            network_receiver,
+        )
     }
 }
