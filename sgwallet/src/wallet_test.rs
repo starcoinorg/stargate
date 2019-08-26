@@ -13,6 +13,7 @@ use types::account_config::coin_struct_tag;
 use logger::prelude::*;
 use std::thread::sleep;
 use failure::_core::time::Duration;
+use tokio::runtime::{Runtime,TaskExecutor};
 
 #[test]
 fn test_wallet() {
@@ -20,7 +21,11 @@ fn test_wallet() {
     let amount: u64 = 1_000_000_000;
     let mut rng: StdRng = SeedableRng::from_seed([0; 32]);
     let keypair = KeyPair::generate_for_testing(&mut rng);
-    let client = Arc::new(MockChainClient::new());
+
+    let mut rt = Runtime::new().unwrap();
+    let executor = rt.executor();
+
+    let client = Arc::new(MockChainClient::new(executor));
     //TODO faucet by transaction.
     //wait genesis tx finish.
     sleep(Duration::from_millis(1000));

@@ -7,6 +7,7 @@ use crypto::HashValue;
 use tokio::runtime::{Runtime, TaskExecutor};
 use logger::prelude::*;
 
+#[derive(Clone)]
 pub struct MockChainClient {
     exe: TaskExecutor,
     chain_service: Option<ChainService>,

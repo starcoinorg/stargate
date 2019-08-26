@@ -444,7 +444,7 @@ mod tests {
     #[test]
     fn test_chain_service() {
         let mut rt = Runtime::new().unwrap();
-        let chain_service = ChainService::new(&mut rt);
+        let chain_service = ChainService::new(&rt.executor());
         let print_future = async move {
             let ten_millis = time::Duration::from_millis(100);
             thread::sleep(ten_millis);
@@ -490,7 +490,7 @@ mod tests {
             .into_inner();
 
         let mut rt = Runtime::new().unwrap();
-        let chain_service = ChainService::new(&mut rt);
+        let chain_service = ChainService::new(&rt.executor());
         chain_service.apply_on_chain_transaction(signed_tx);
     }
 }

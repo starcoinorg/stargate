@@ -28,7 +28,7 @@ pub fn gen_node(executor:TaskExecutor,config:&NodeNetworkConfig)->(Node<MockChai
     let amount: u64 = 1_000_000_000;    
     let mut rng: StdRng = SeedableRng::seed_from_u64(get_unix_ts());//SeedableRng::from_seed([0; 32]);
     let keypair = KeyPair::generate_for_testing(&mut rng);
-    let client = Arc::new(MockChainClient::new());
+    let client = Arc::new(MockChainClient::new(executor.clone()));
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     println!("account_address: {}", account_address);
     client.faucet(account_address, amount).unwrap();

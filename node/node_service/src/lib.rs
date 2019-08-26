@@ -21,13 +21,11 @@ use node_internal::node::Node as Node_Internal;
 use netcore::transport::{Transport};
 use chain_client::{ChainClient};
 use types::account_config::coin_struct_tag;
-use node_internal::test_helper::{*};
 
 pub fn setup_node_service<C>(config: &NodeConfig,node:Arc<Node_Internal<C>>) -> ::grpcio::Server 
 where C: ChainClient+Clone+ Send+Sync+'static{
     let client_env = Arc::new(EnvBuilder::new().name_prefix("grpc-node-").build());
 
-    let node = 
     let handle = NodeService::new(node);
     let service = create_node(handle);
     ::grpcio::ServerBuilder::new(Arc::new(EnvBuilder::new().name_prefix("grpc-node-").build()))

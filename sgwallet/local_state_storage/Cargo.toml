@@ -20,6 +20,7 @@ struct_cache = {path = "../../storage/struct_cache" }
 logger = { path = "../../common/logger"}
 atomic_refcell = "0.1.3"
 vm_runtime_types = { path = "../../language/vm/vm_runtime/vm_runtime_types"}
+tokio = "0.1.22"
 
 [dev-dependencies]
 crypto = { path = "../../crypto/crypto", features = ["testing"] }
