@@ -9,9 +9,10 @@ use futures::{
 };
 use memsocket::{MemorySocket};
 use netcore::transport::{memory::MemoryTransport};
+use network::net::{build_network_service,NetworkService};
 use std::io::Result;
 use tokio::runtime::{Runtime,TaskExecutor};
-use node::node::Node;
+
 use switch::{switch::Switch};
 use tokio::codec::{Framed,LengthDelimitedCodec};
 use bytes::Bytes;
@@ -34,7 +35,9 @@ use futures_01::future::Future as Future01;
 use std::time::{SystemTime,UNIX_EPOCH};
 use types::account_config::coin_struct_tag;
 use logger::prelude::*;
-
+use sg_config::config::NodeNetworkConfig;
+use crate::test_helper{*};
+use crate::node::Node;
 
 #[test]
 fn start_server_test() -> Result<()> {
@@ -44,12 +47,12 @@ fn start_server_test() -> Result<()> {
 
     let (mut node1,addr1,keypair1) = gen_node(executor.clone());
     node1.start_server("/memory/10".parse().unwrap());
-        
+
     let (mut node2,addr2,keypair2) = gen_node(executor.clone());
     node2.start_server("/memory/20".parse().unwrap());
 
     node2.connect("/memory/10".parse().unwrap(),addr1);
-    
+
     let neg_msg = create_negotiate_message(addr2,addr1 ,keypair2.private_key);
     node2.open_channel_negotiate(neg_msg);
 
@@ -57,44 +60,8 @@ fn start_server_test() -> Result<()> {
     let offchain_txn = node1.off_chain_pay(coin_struct_tag(), addr2, transfer_amount).unwrap();
     debug!("txn:{:#?}", offchain_txn);
 
-    //wallet.apply_txn(&offchain_txn);
-    //assert_eq!(amount - transfer_amount - offchain_txn.output().gas_used(), wallet.balance());
-
-
-/*     
-        let mut dialer=MemorySocket::connect(10).unwrap();
-        let mut stream = Framed::new(dialer.compat(), LengthDelimitedCodec::new()).sink_compat();
-
-        let f=async move{
-        stream.send(Bytes::from("hello")).await.unwrap();
-        let result = stream.next().await;   
-        match result {
-            Some(Ok(data)) => {assert_eq!(&data[..],b"hello");  },
-            Some(Err(_)) => println!("error"),
-            None    => println!("Cannot divide by 0"),
-        }              
-                      
-    };
-    executor.spawn(f.boxed()
-            .unit_error()
-            .compat(),);
- */ //rt.shutdown_on_idle().wait().unwrap();
+    //rt.shutdown_on_idle().wait().unwrap();
     Ok(())
-}
-
-fn gen_node(executor:TaskExecutor)->(Node<MockChainClient>,AccountAddress,KeyPair<Ed25519PrivateKey,Ed25519PublicKey>){
-    let switch:Switch<MemorySocket> = Switch::new();
-
-    let amount: u64 = 1_000_000_000;    
-    let mut rng: StdRng = SeedableRng::seed_from_u64(get_unix_ts());//SeedableRng::from_seed([0; 32]);
-    let keypair = KeyPair::generate_for_testing(&mut rng);
-    let client = Arc::new(MockChainClient::new());
-    let account_address = AccountAddress::from_public_key(&keypair.public_key);
-    println!("account_address: {}", account_address);
-    client.faucet(account_address, amount).unwrap();
-    let mut wallet = Wallet::new_with_client(account_address, keypair.clone(), client).unwrap();
-
-    (Node::new(executor.clone(),wallet,keypair.clone()),account_address,keypair)
 }
 
 fn create_negotiate_message(sender_addr:AccountAddress,receiver_addr:AccountAddress,private_key:Ed25519PrivateKey)->OpenChannelNodeNegotiateMessage{
@@ -105,10 +72,4 @@ fn create_negotiate_message(sender_addr:AccountAddress,receiver_addr:AccountAddr
     let hash_value = hasher.finish();
     let sender_sign=private_key.sign_message(&hash_value);
     OpenChannelNodeNegotiateMessage::new(rtx,sender_sign,None)
-}
-
-fn get_unix_ts()->u64{
-    let start = SystemTime::now();
-    let since_the_epoch = start.duration_since(UNIX_EPOCH).expect("Time went backwards");;   
-    since_the_epoch.as_millis() as u64
 }

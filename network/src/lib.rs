@@ -86,8 +86,8 @@ mod tests {
             if first_addr.is_none() {
                 first_addr = Some(config.listen_addresses.iter().next().unwrap().clone());
             }
-            let server = NetworkService::new(config);
-            result.push(server);
+            //let server = NetworkService::new(config);
+            //result.push(server);
         }
         result
     }

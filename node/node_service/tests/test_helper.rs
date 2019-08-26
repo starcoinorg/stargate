@@ -9,11 +9,16 @@ use crypto::{
      traits::{Signature, SigningKey, Uniform},
 };
 use rand::{rngs::StdRng, SeedableRng};
+use tokio::runtime::{Runtime,TaskExecutor};
+use node_internal::test_helper::{*};
 
 
-pub fn create_and_start_server(config:&NodeConfig) -> (grpcio::Server) {
+pub fn create_and_start_server(config:&NodeConfig,executor:TaskExecutor) -> (grpcio::Server) {
+
     let client_env = Arc::new(EnvBuilder::new().build());
-    let node_service = create_node(NodeService::new());
+
+    let (node,addr,keypair) = gen_node(executor,&config.node_net_work);
+    let node_service = create_node(NodeService::new(Arc::new(node)));
     let mut node_server = ServerBuilder::new(Arc::new(EnvBuilder::new().build()))
         .register_service(node_service)
         .bind(config.network.address.clone(), config.network.port)
@@ -23,6 +28,7 @@ pub fn create_and_start_server(config:&NodeConfig) -> (grpcio::Server) {
 
     (node_server)
 }
+
 pub fn create_keypair()->(Ed25519PublicKey,Ed25519PrivateKey){
     let mut rng: StdRng = SeedableRng::from_seed([0; 32]);
     let private_key = Ed25519PrivateKey::generate_for_testing(&mut rng);
