@@ -73,7 +73,7 @@ fn run_network(
         loop {
             match net_srv.lock().poll().unwrap() {
                 Async::Ready(Some(ServiceEvent::CustomMessage { peer_id, message })) => {
-                    debug!("Receive custom message");
+                    println!("Receive custom message");
                     let _ = _tx.unbounded_send(Message {
                         peer_id: convert_peer_id_to_account_address(peer_id).unwrap(),
                         msg: message,
@@ -172,3 +172,9 @@ impl NetworkService {
         self.libp2p_service.lock().is_open(peer_id)
     }
 }
+
+pub type NetworkComponent = (
+    NetworkService,
+    mpsc::UnboundedSender<Message>,
+    mpsc::UnboundedReceiver<Message>,
+);

@@ -23,15 +23,17 @@ pub fn convert_account_address_to_peer_id(
 
 #[cfg(test)]
 mod tests {
-    use crate::net::{Message, NetworkService};
+    use crate::net::{build_network_service, Message, NetworkComponent, NetworkService};
     use crate::{convert_account_address_to_peer_id, convert_peer_id_to_account_address};
-    use crypto::ed25519::compat;
+    use crypto::{ed25519::compat, test_utils::KeyPair};
+
     use futures::{
         future::Future,
         stream,
         stream::Stream,
         sync::mpsc::{UnboundedReceiver, UnboundedSender},
     };
+    //TODO: put them to network_libp2p.
     use libp2p::{
         build_multiaddr,
         multiaddr::{Multiaddr, Protocol},
@@ -45,7 +47,14 @@ mod tests {
     use tokio::runtime::Runtime;
     use types::account_address::AccountAddress;
 
-    fn build_network_service(
+    fn build_test_network_pair() -> (NetworkComponent, NetworkComponent) {
+        let mut l = build_test_network_services(2, 50400).into_iter();
+        let a = l.next().unwrap();
+        let b = l.next().unwrap();
+        (a, b)
+    }
+
+    fn build_test_network_services(
         num: usize,
         base_port: u16,
     ) -> Vec<(
@@ -73,39 +82,42 @@ mod tests {
                         .to_string(),
                 );
             }
-            println!("boot nodes:{:?}", boot_nodes);
-            let config = network_libp2p::NetworkConfiguration {
-                listen_addresses: vec![build_multiaddr![
-                    Ip4([127, 0, 0, 1]),
-                    Tcp(base_port + index as u16)
-                ]],
-                boot_nodes,
-                ..network_libp2p::NetworkConfiguration::default()
+            println!("boots {:?}", boot_nodes.clone());
+            let config = sg_config::config::NetworkConfig {
+                listen: format!("/ip4/127.0.0.1/tcp/{}", base_port + index as u16),
+                seeds: boot_nodes,
             };
 
+            let key_pair = compat::generate_keypair(None);
+
             if first_addr.is_none() {
-                first_addr = Some(config.listen_addresses.iter().next().unwrap().clone());
+                first_addr = Some(config.listen.clone().parse().unwrap());
             }
-            //let server = NetworkService::new(config);
-            //result.push(server);
+            let server = build_network_service(
+                &config,
+                KeyPair {
+                    private_key: key_pair.0,
+                    public_key: key_pair.1,
+                },
+            );
+            result.push({
+                let c: NetworkComponent = server;
+                c
+            });
         }
         result
     }
 
     #[test]
     fn test_send_receive() {
-        let (service1, mut service2) = {
-            let mut l = build_network_service(2, 50400).into_iter();
-            let a = l.next().unwrap();
-            let b = l.next().unwrap();
-            (a, b)
-        };
-        let msg_peer_id = service1.0.libp2p_service.lock().peer_id().clone();
-
+        let (mut service1, mut service2) = build_test_network_pair();
+        let msg_peer_id =
+            convert_peer_id_to_account_address(service1.0.libp2p_service.lock().peer_id().clone())
+                .unwrap();
         let sender_fut = stream::repeat(1)
             .and_then(move |_| {
                 match service2.1.unbounded_send(Message {
-                    peer_id: convert_peer_id_to_account_address(msg_peer_id.clone()).unwrap(),
+                    peer_id: msg_peer_id,
                     msg: vec![1, 2],
                 }) {
                     Ok(()) => Ok(Async::Ready(Some(()))),
@@ -122,7 +134,7 @@ mod tests {
 
     #[test]
     fn test_generate_account_and_peer_id() {
-        let (private_key, public_key) = compat::generate_keypair(Option::None);
+        let (private_key, public_key) = compat::generate_keypair(None);
 
         let mut cfg = network_libp2p::NetworkConfiguration::new();
         let seckey = identity::ed25519::SecretKey::from_bytes(&mut private_key.to_bytes()).unwrap();
@@ -147,12 +159,7 @@ mod tests {
 
     #[test]
     fn test_connected_nodes() {
-        let (service1, service2) = {
-            let mut l = build_network_service(2, 50400).into_iter();
-            let a = l.next().unwrap();
-            let b = l.next().unwrap();
-            (a, b)
-        };
+        let (service1, service2) = build_test_network_pair();
         thread::sleep(Duration::new(1, 0));
         for (peer_id, peer) in service1.0.libp2p_service.lock().state().connected_peers {
             println!("id: {:?}, peer: {:?}", peer_id, peer);
