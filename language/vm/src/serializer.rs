@@ -266,7 +266,7 @@ fn serialize_struct_handle(binary: &mut BinaryData, struct_handle: &StructHandle
     write_u16_as_uleb128(binary, struct_handle.module.0)?;
     write_u16_as_uleb128(binary, struct_handle.name.0)?;
     serialize_nominal_resource_flag(binary, struct_handle.is_nominal_resource)?;
-    serialize_kinds(binary, &struct_handle.type_parameters)
+    serialize_kinds(binary, &struct_handle.type_formals)
 }
 
 /// Serializes a `FunctionHandle`.
@@ -440,7 +440,7 @@ fn serialize_function_signature(
     binary.push(SignatureType::FUNCTION_SIGNATURE as u8)?;
     serialize_signature_tokens(binary, &signature.return_types)?;
     serialize_signature_tokens(binary, &signature.arg_types)?;
-    serialize_kinds(binary, &signature.type_parameters)
+    serialize_kinds(binary, &signature.type_formals)
 }
 
 /// Serializes a `LocalsSignature`.
@@ -665,7 +665,6 @@ fn serialize_instruction_inner(binary: &mut BinaryData, opcode: &Bytecode) -> Re
             write_u16_as_uleb128(binary, class_idx.0)?;
             write_u16_as_uleb128(binary, types_idx.0)
         }
-        Bytecode::ReleaseRef => binary.push(Opcodes::RELEASE_REF as u8),
         Bytecode::MoveFrom(class_idx, types_idx) => {
             binary.push(Opcodes::MOVE_FROM as u8)?;
             write_u16_as_uleb128(binary, class_idx.0)?;
