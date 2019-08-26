@@ -26,111 +26,58 @@ use failure::prelude::*;
 use std::{thread, time};
 use std::borrow::Borrow;
 use logger::prelude::*;
+use network::{
+    convert_account_address_to_peer_id,convert_peer_id_to_account_address,
+    net::{Service,Message}
+};
 
 
-pub struct Node <C: ChainClient+ Send+Sync+'static,TTransport:Transport+Sync+Send+'static>
-    where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
+pub struct Node <C: ChainClient>{
     executor: TaskExecutor,
-    //switch:Switch<S>,
-    node_inner:Option<NodeInner<C,TTransport>>,
-    dial_request_tx:UnboundedSender<(Multiaddr,AccountAddress)>,
-    open_channel_negotiate_tx:UnboundedSender<OpenChannelNodeNegotiateMessage>,
-    open_channel_message_tx:UnboundedSender<OpenChannelTransactionMessage>,
-    off_chain_pay_message_tx:UnboundedSender<(types::language_storage::StructTag,AccountAddress,u64)>,
+    node_inner:NodeInner<C>,
 }
 
-struct NodeInner<C: ChainClient+ Send+Sync+'static,TTransport:Transport+ Send+Sync+'static> 
-where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
-    executor:TaskExecutor,
-    transport: TTransport,
-    node_data : Arc<Mutex<NodeData<C>>>,  
-    keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
-    dial_request_rx:UnboundedReceiver<(Multiaddr,AccountAddress)>,
-    open_channel_negotiate_rx:UnboundedReceiver<OpenChannelNodeNegotiateMessage>,
-    open_channel_message_rx:UnboundedReceiver<OpenChannelTransactionMessage>,
-    off_chain_pay_message_rx:UnboundedReceiver<(types::language_storage::StructTag,AccountAddress,u64)>,
-}
-
-struct NodeData<C: ChainClient+ Send+Sync+'static> {
+struct NodeInner<C: ChainClient> {
     local_addr:Option<Multiaddr>,
     wallet:Wallet<C>,
-    sender_map:HashMap<Multiaddr,UnboundedSender<bytes::Bytes>>,   
-    addr_sender_map:HashMap<AccountAddress,Multiaddr>,
+    executor:TaskExecutor,
+    keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
+    network_service:Service,
 }
 
-impl<C:ChainClient+ Send+Sync +'static,TTransport:Transport+ Send+Sync+'static> Node<C,TTransport>
-where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
+impl<C:ChainClient> Node<C>{
 
     pub fn new(executor: TaskExecutor,wallet:Wallet<C>,keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
-        transport:TTransport)->Self{
+        network_service:Service)->Self{
         let executor_clone = executor.clone();
-        let (mut tx,  rx) = futures::channel::mpsc::unbounded();
-        let (mut tx_on,  rx_on) = futures::channel::mpsc::unbounded();
-        let (mut tx_oc,  rx_oc) = futures::channel::mpsc::unbounded();
-        let (mut tx_op,  rx_op) = futures::channel::mpsc::unbounded();
 
-        let node_data = NodeData {
-                wallet,
-                sender_map:HashMap::new(),
-                addr_sender_map:HashMap::new(),
-                local_addr:None,             
-        };
         let node_inner=NodeInner{
-                executor:executor_clone,                
-                transport,
-                node_data:Arc::new(Mutex::new(node_data)),
-                keypair,
-                dial_request_rx:rx,
-                open_channel_message_rx:rx_oc,
-                open_channel_negotiate_rx:rx_on,
-                off_chain_pay_message_rx:rx_op,
-            };
+            executor:executor_clone,
+            keypair,
+            wallet,
+            network_service,
+        };
         Self{
             executor,
-            //switch:switch,
-            node_inner:Some(node_inner),
-            dial_request_tx:tx,
-            open_channel_message_tx:tx_oc,
-            open_channel_negotiate_tx:tx_on,
-            off_chain_pay_message_tx:tx_op,
+            node_inner:node_inner,
         }
     }
 
-    pub fn start_server(&mut self,
-        listen_addr: Multiaddr,
-    )  {
-        let node_inner = self
-            .node_inner
-            .take()
-            .expect("node inner already taken");
-        self.executor.spawn(node_inner.start_listen(listen_addr).boxed().unit_error().compat());
-    }
-
-    pub fn connect(&self,addr: Multiaddr,remote_addr:AccountAddress){
-        self.dial_request_tx.unbounded_send((addr,remote_addr));
-        let ten_millis = time::Duration::from_micros(3000);  
-        thread::sleep(ten_millis);
-    }
-
     pub fn open_channel_negotiate(&self,negotiate_message:OpenChannelNodeNegotiateMessage){
-        self.open_channel_negotiate_tx.unbounded_send(negotiate_message);
     }
 
     pub fn open_channel(&self,open_channel_message:OpenChannelTransactionMessage){
-        self.open_channel_message_tx.unbounded_send(open_channel_message);
     }
 
     pub fn off_chain_pay(&self,coin_resource_tag: types::language_storage::StructTag, receiver_address: AccountAddress, amount: u64)->Result<()>{
-        self.off_chain_pay_message_tx.unbounded_send((coin_resource_tag,receiver_address,amount));
         Ok(())
     }
 
 }
 
-impl<C: ChainClient+ Send+Sync+'static,TTransport:Transport+ Send+Sync+'static> NodeInner<C,TTransport>
-where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
+impl<C: ChainClient> NodeInner<C>{
 
-    async fn start_listen(mut self, listen_addr: Multiaddr){
+    async fn start_listen(mut self){
         let (mut listener, listen_addr) = self.transport
             .listen_on(listen_addr.clone())
             .expect("Transport listen on fails");
@@ -166,7 +113,6 @@ where TTransport::Output: AsyncWrite+AsyncRead+Unpin+Send{
                 complete => break,
             }
         }
-
     }
 
     async fn handle_stream<S>(output:S,addr:Multiaddr,tx:UnboundedSender<bytes::Bytes>,mut rx:UnboundedReceiver<bytes::Bytes>,node_data:Arc<Mutex<NodeData<C>>>)
