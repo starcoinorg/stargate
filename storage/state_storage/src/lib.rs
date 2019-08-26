@@ -25,7 +25,7 @@ use canonical_serialization::{SimpleSerializer, CanonicalSerialize};
 use state_view::StateView;
 use logger::prelude::*;
 use star_types::change_set::{ChangeSet, Changes, StructDefResolve};
-use star_types::resource::{Resource};
+use star_types::resource::Resource;
 use types::language_storage::StructTag;
 use lazy_static::lazy_static;
 use vm_runtime_types::loaded_data::struct_def::StructDef;
@@ -67,7 +67,7 @@ impl AccountState {
         Ok(self.root_hash())
     }
 
-    fn do_update(&self, data_path: DataPath, value: Vec<u8>){
+    fn do_update(&self, data_path: DataPath, value: Vec<u8>) {
         self.state.borrow_mut().insert(data_path, value);
     }
 
@@ -75,7 +75,7 @@ impl AccountState {
         self.get_state(&DataPath::from(path.as_slice()).unwrap())
     }
 
-    pub fn get_state(&self, data_path: &DataPath) -> Option<Vec<u8>>{
+    pub fn get_state(&self, data_path: &DataPath) -> Option<Vec<u8>> {
         self.state.borrow().get(data_path).cloned()
     }
 
@@ -111,17 +111,16 @@ impl Into<Vec<u8>> for &AccountState {
     }
 }
 
-impl Into<BTreeMap<Vec<u8>,Vec<u8>>> for &AccountState {
-
+impl Into<BTreeMap<Vec<u8>, Vec<u8>>> for &AccountState {
     fn into(self) -> BTreeMap<Vec<u8>, Vec<u8>> {
         let map = &*self.state.borrow();
-        map.iter().map(|(k,v)|(k.to_vec(), v.to_vec())).collect()
+        map.iter().map(|(k, v)| (k.to_vec(), v.to_vec())).collect()
     }
 }
 
 impl Into<AccountStateBlob> for &AccountState {
     fn into(self) -> AccountStateBlob {
-        AccountStateBlob::try_from(&Into::<BTreeMap<Vec<u8>,Vec<u8>>>::into(self)).expect("serialize account fail.")
+        AccountStateBlob::try_from(&Into::<BTreeMap<Vec<u8>, Vec<u8>>>::into(self)).expect("serialize account fail.")
     }
 }
 
@@ -164,6 +163,12 @@ impl StateStorage {
         self.account_states.borrow().contains_key(address)
     }
 
+    pub fn sequence_number(&self, address: &AccountAddress) -> Option<u64> {
+        self.account_states.borrow().get(address).and_then(|a_s: &AccountState| -> Option<u64> {
+            a_s.get_account_resource().map(|a_r: AccountResource| -> u64 { a_r.sequence_number() })
+        })
+    }
+
     #[deprecated]
     pub fn create_account(&self, address: AccountAddress, init_amount: u64) -> Result<HashValue> {
         if self.exist_account(&address) {
@@ -193,11 +198,11 @@ impl StateStorage {
 
     //TODO get with proof
     pub fn get_account_state(&self, address: &AccountAddress) -> Option<Vec<u8>> {
-        self.account_states.borrow().get(address).map(|state|state.to_bytes())
+        self.account_states.borrow().get(address).map(|state| state.to_bytes())
     }
 
-    fn ensure_account_state(&self, address: &AccountAddress){
-        if !self.exist_account(address){
+    fn ensure_account_state(&self, address: &AccountAddress) {
+        if !self.exist_account(address) {
             let account_state = AccountState::new();
             self.account_states.borrow_mut().insert(*address, account_state);
         }
@@ -206,11 +211,9 @@ impl StateStorage {
     fn get_by_access_path(&self, access_path: &AccessPath) -> Option<Vec<u8>> {
         self.account_states.borrow().get(&access_path.address).and_then(|state| state.get(&access_path.path))
     }
-
 }
 
 impl StateView for StateStorage {
-
     fn get(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
         Ok(self.get_by_access_path(access_path))
     }
@@ -227,12 +230,9 @@ impl StateView for StateStorage {
     }
 }
 
-impl StateViewPlus for StateStorage {
-
-}
+impl StateViewPlus for StateStorage {}
 
 impl StateStore for StateStorage {
-
     fn update(&self, access_path: &AccessPath, value: Vec<u8>) -> Result<()> {
         self.ensure_account_state(&access_path.address);
         let mut states = self.account_states.borrow_mut();
@@ -259,8 +259,7 @@ impl StateStore for StateStorage {
     }
 }
 
-impl  StructDefResolve for StateStorage {
-
+impl StructDefResolve for StateStorage {
     fn resolve(&self, tag: &StructTag) -> Result<ResourceDef> {
         self.struct_cache.find_struct(tag, self)
     }
