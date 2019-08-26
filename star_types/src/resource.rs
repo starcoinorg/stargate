@@ -1,39 +1,31 @@
 use std::ops::Deref;
 
 use itertools::Itertools;
+use protobuf::well_known_types::Struct;
 
 use canonical_serialization::{CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer, SimpleDeserializer, SimpleSerializer};
 use failure::prelude::*;
 use logger::prelude::*;
 use types::access_path::{Access, Accesses};
 use types::account_address::AccountAddress;
-use types::account_config::{account_struct_tag, AccountResource, COIN_MODULE_NAME, core_code_address, COIN_STRUCT_NAME, coin_struct_tag};
+use types::account_config::{account_struct_tag, AccountResource, COIN_MODULE_NAME, COIN_STRUCT_NAME, coin_struct_tag, core_code_address};
 use types::byte_array::ByteArray;
 use types::language_storage::StructTag;
+
 use crate::{
-    resource_value::{ResourceValue,MutResourceVal},
-    resource_type::{resource_types::ResourceType, resource_def::ResourceDef},
     change_set::{Changeable, ChangeOp, ChangeSet, FieldChanges},
+    resource_type::{resource_def::ResourceDef, resource_types::ResourceType},
+    resource_value::{MutResourceVal, ResourceValue},
 };
-use protobuf::well_known_types::Struct;
 
 #[derive(Clone, Debug)]
-pub struct Resource(StructTag,Vec<MutResourceVal>);
+pub struct Resource(StructTag, Vec<MutResourceVal>);
 
 impl Resource {
     pub fn new(tag: StructTag, fields: Vec<MutResourceVal>) -> Self {
         //TODO check def and fields
         Self(tag, fields)
     }
-
-//    pub fn new_with_value(fields: ResourceValue) -> Result<Self>{
-//        if !fields.is_resource() {
-//            bail!("expect resource but get:{:?}", fields);
-//        }
-//        Ok(Self{
-//            fields:MutResourceVal::new(fields)
-//        })
-//    }
 
     /// Create a empty struct, field with default value.
     pub fn empty(tag: StructTag, def: &ResourceDef) -> Self {
@@ -63,7 +55,7 @@ impl Resource {
     }
 
     pub fn from_changes(changes: &FieldChanges, tag: StructTag, def: &ResourceDef) -> Self {
-        let mut empty_resource = Self::empty(tag,def);
+        let mut empty_resource = Self::empty(tag, def);
         empty_resource.apply_changes(changes);
         empty_resource
     }
@@ -91,16 +83,30 @@ impl Resource {
     }
 
     /// Check current resource is asset resource.
-    /// if a resource only contains a u64 field, it is considered an asset.
     /// TODO add a asset type tag to resource def
-    pub fn is_asset(&self) -> bool{
-        if self.len() == 1 {
-            return match &*self.1[0].peek() {
-                ResourceValue::U64(_) => true,
-                _ => false,
+    pub fn is_asset(&self) -> bool {
+        self.0 == coin_struct_tag()
+    }
+
+    /// if resource is asset, and return it balance
+    pub fn assert_balance(&self) -> Option<u64> {
+        if self.is_asset() {
+            self.1.get(0).and_then(|field| Into::<Option<u64>>::into(field.clone()))
+        } else {
+            None
+        }
+    }
+
+    pub fn visit_asset(&self, visitor: &dyn Fn(&StructTag, &Resource)) {
+        if self.is_asset() {
+            visitor(self.tag(), self)
+        } else {
+            for field in &self.1 {
+                if let ResourceValue::Resource(res) = &*field.peek() {
+                    res.visit_asset(visitor)
+                }
             }
         }
-        return false
     }
 
     pub fn tag(&self) -> &StructTag {
@@ -109,12 +115,6 @@ impl Resource {
 
     pub fn fields(&self) -> &Vec<MutResourceVal> {
         &self.1
-//        if let ResourceValue::Resource(_, fields) = &*self.fields.peek() {
-//            //TODO optimize, not clone.
-//            fields.clone()
-//        } else {
-//            panic!("resource must be struct.")
-//        }
     }
 
     pub fn len(&self) -> usize {
@@ -136,7 +136,7 @@ impl Resource {
     }
 
     pub fn decode(tag: StructTag, def: ResourceDef, bytes: &[u8]) -> Result<Self> {
-        ResourceValue::simple_deserialize(bytes, tag,def).map_err(|vm_error| format_err!("decode resource fail:{:?}", vm_error))
+        ResourceValue::simple_deserialize(bytes, tag, def).map_err(|vm_error| format_err!("decode resource fail:{:?}", vm_error))
     }
 
     pub fn encode(&self) -> Vec<u8> {
@@ -323,8 +323,7 @@ impl std::cmp::PartialEq for Resource {
     }
 }
 
-impl Into<(StructTag,Vec<MutResourceVal>)> for Resource {
-
+impl Into<(StructTag, Vec<MutResourceVal>)> for Resource {
     fn into(self) -> (StructTag, Vec<MutResourceVal>) {
         (self.0, self.1)
     }
@@ -352,7 +351,7 @@ pub fn get_coin_struct_def() -> ResourceDef {
     ResourceDef::new(vec![int_type.clone()])
 }
 
-pub fn get_market_cap_struct_tag() -> StructTag{
+pub fn get_market_cap_struct_tag() -> StructTag {
     StructTag {
         module: COIN_MODULE_NAME.to_string(),
         name: "MarketCap".to_string(),
@@ -366,7 +365,7 @@ pub fn get_market_cap_struct_def() -> ResourceDef {
     ResourceDef::new(vec![int_type.clone()])
 }
 
-pub fn get_mint_capability_struct_tag() -> StructTag{
+pub fn get_mint_capability_struct_tag() -> StructTag {
     StructTag {
         module: COIN_MODULE_NAME.to_string(),
         name: "MintCapability".to_string(),
@@ -415,7 +414,7 @@ pub fn get_block_module_tag() -> StructTag {
         module: "Block".to_string(),
         name: "T".to_string(),
         address: core_code_address(),
-        type_params: vec![]
+        type_params: vec![],
     }
 }
 

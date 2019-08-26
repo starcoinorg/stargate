@@ -1,8 +1,12 @@
+use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
+use crypto::test_utils::KeyPair;
 use futures::{future, stream::Stream, sync::mpsc, Async, Future};
 use network_libp2p::{
-    start_service, NetworkConfiguration, PeerId, Service as Libp2pService, ServiceEvent,
+    identity, start_service, NetworkConfiguration, NodeKeyConfig, PeerId, Secret,
+    Service as Libp2pService, ServiceEvent,
 };
 use parking_lot::Mutex;
+use sg_config::config::NodeNetworkConfig;
 use std::sync::Arc;
 use std::{io, thread};
 use tokio::runtime::Builder as RuntimeBuilder;
@@ -13,7 +17,34 @@ pub struct Message {
     pub msg: Vec<u8>,
 }
 
-pub fn build_libp2p_service(
+pub struct NetworkService {
+    pub network_thread: thread::JoinHandle<()>,
+    pub libp2p_service: Arc<Mutex<Libp2pService<Vec<u8>>>>,
+}
+
+pub fn build_network_service(
+    cfg: &NodeNetworkConfig,
+    key_pair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
+) -> (
+    NetworkService,
+    mpsc::UnboundedSender<Message>,
+    mpsc::UnboundedReceiver<Message>,
+) {
+    let config = NetworkConfiguration {
+        listen_addresses: vec![cfg.listen.parse().unwrap()],
+        boot_nodes: cfg.seeds.clone(),
+        node_key: {
+            let secret =
+                identity::ed25519::SecretKey::from_bytes(&mut key_pair.private_key.to_bytes())
+                    .unwrap();
+            NodeKeyConfig::Ed25519(Secret::Input(secret))
+        },
+        ..NetworkConfiguration::default()
+    };
+    NetworkService::new(config)
+}
+
+fn build_libp2p_service(
     cfg: NetworkConfiguration,
 ) -> Result<Arc<Mutex<Libp2pService<Vec<u8>>>>, io::Error> {
     let protocol = network_libp2p::RegisteredProtocol::<Vec<u8>>::new(&b"tst"[..], &[1]);
@@ -23,7 +54,7 @@ pub fn build_libp2p_service(
     }
 }
 
-pub fn run_network(
+fn run_network(
     net_srv: Arc<Mutex<Libp2pService<Vec<u8>>>>,
 ) -> (
     mpsc::UnboundedSender<Message>,
@@ -85,7 +116,7 @@ pub fn run_network(
     (net_tx, net_rx, network_fut)
 }
 
-pub fn start_network_thread(
+fn start_network_thread(
     libp2p_service: Arc<Mutex<Libp2pService<Vec<u8>>>>,
 ) -> (
     mpsc::UnboundedSender<Message>,
@@ -110,15 +141,14 @@ pub fn start_network_thread(
     (network_sender, network_receiver, thread)
 }
 
-pub struct Service {
-    pub network_thread: thread::JoinHandle<()>,
-    pub libp2p_service: Arc<Mutex<Libp2pService<Vec<u8>>>>,
-}
-
-impl Service {
-    pub fn new(
+impl NetworkService {
+    fn new(
         cfg: NetworkConfiguration,
-    ) -> (Service, mpsc::UnboundedSender<Message>, mpsc::UnboundedReceiver<Message>) {
+    ) -> (
+        NetworkService,
+        mpsc::UnboundedSender<Message>,
+        mpsc::UnboundedReceiver<Message>,
+    ) {
         let libp2p_service = build_libp2p_service(cfg).unwrap();
         let (network_sender, network_receiver, network_thread) =
             start_network_thread(libp2p_service.clone());
@@ -130,5 +160,10 @@ impl Service {
             network_sender,
             network_receiver,
         )
+    }
+
+    pub fn is_connected(&self, peer_id: PeerId) -> bool {
+        //self.libp2p_service.lock().is_open(peer_id)
+        unimplemented!()
     }
 }

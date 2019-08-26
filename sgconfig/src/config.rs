@@ -1,6 +1,6 @@
+use failure::*;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use failure::*;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct NodeConfig {
@@ -18,9 +18,7 @@ pub struct WalletConfig {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct NodeNetworkConfig {
-    pub addr: String,
-    pub max_sockets: u64,
-    pub in_memory: bool,
+    pub listen: String,
     pub seeds: Vec<String>,
 }
 
@@ -38,9 +36,9 @@ pub struct LoggerConfig {
     pub use_std_output: bool,
 }
 
-pub fn load_from(config_file:&str)->Result<NodeConfig>{
-    let content=fs::read_to_string(config_file)?;
-    let node_config=toml::from_str(&content)?;
+pub fn load_from(config_file: &str) -> Result<NodeConfig> {
+    let content = fs::read_to_string(config_file)?;
+    let node_config = toml::from_str(&content)?;
     Ok(node_config)
 }
 
@@ -50,18 +48,16 @@ pub fn get_test_config(addr: String, port: u16) -> (NodeConfig) {
         port,
     };
     let node_network = NodeNetworkConfig {
-        addr: String::from("127.0.0.1:8000"),
-        max_sockets: 0,
-        in_memory: false,
+        listen: String::from("127.0.0.1:8000"),
         seeds: vec![String::from("127.0.0.1:8001")],
     };
-    let wallet_config = WalletConfig{
-        chain_address:addr,
-        chain_port:port,
+    let wallet_config = WalletConfig {
+        chain_address: addr,
+        chain_port: port,
     };
     NodeConfig {
         network,
         node_net_work: node_network,
-        wallet:wallet_config,
+        wallet: wallet_config,
     }
 }
