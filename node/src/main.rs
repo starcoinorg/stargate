@@ -1,42 +1,35 @@
-use std::{
-    fs,
-    sync::Arc,
-    convert::TryFrom,
-};
+use std::{convert::TryFrom, fs, sync::Arc};
 
-use futures::{Stream, Future, future};
-use structopt::StructOpt;
-use node_service::setup_node_service;
-use sg_config::config::{NodeConfig, NetworkConfig, NodeNetworkConfig,WalletConfig,load_from};
-use node::client;
-use crypto::test_utils::KeyPair;
+use chain_client::{ChainClient, RpcChainClient};
 use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
-use types::{
-    account_address::AccountAddress,
-};
-use tokio::runtime::{Runtime,TaskExecutor};
-use chain_client::{RpcChainClient, ChainClient};
-use grpcio::EnvBuilder;
-use sgwallet::wallet::*;
-use node_internal::node::Node;
-use network::net::{NetworkService,build_network_service};
+use crypto::test_utils::KeyPair;
 use failure::*;
-
+use futures::{future, Future, Stream};
+use grpcio::EnvBuilder;
+use network::net::{build_network_service, NetworkService};
+use node::client;
+use node_internal::node::Node;
+use node_service::setup_node_service;
+use sg_config::config::{load_from, NetworkConfig, NodeConfig, RpcConfig, WalletConfig};
+use sgwallet::wallet::*;
+use structopt::StructOpt;
+use tokio::runtime::{Runtime, TaskExecutor};
+use types::account_address::AccountAddress;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
-name = "stargate",
-author = "star-team",
-about = "stargate local node "
+    name = "stargate",
+    author = "star-team",
+    about = "stargate local node "
 )]
 struct Args {
     #[structopt(short = "l", long = "enable_logging")]
     pub enable_logging: bool,
     #[structopt(short = "s", long = "start_client")]
     pub start_client: bool,
-    #[structopt(short = "c", long = "config_dir",default_value="wallet")]
+    #[structopt(short = "c", long = "config_dir", default_value = "wallet")]
     pub config_dir: String,
-    #[structopt(short = "f", long = "faucet_key_path",default_value="wallet/key")]
+    #[structopt(short = "f", long = "faucet_key_path", default_value = "wallet/key")]
     pub faucet_key_path: String,
 }
 
@@ -46,19 +39,19 @@ pub struct Swarm {
 }
 
 fn launch_swarm(args: &Args) -> Result<Swarm> {
-    let node_config = load_from(&(args.config_dir.to_string()+"/node.toml"))?;
+    let node_config = load_from(&(args.config_dir.to_string() + "/node.toml"))?;
     Ok(Swarm {
-        config:node_config,
+        config: node_config,
         tee_logs: true,
     })
 }
 
-fn load_from_file(faucet_account_file: &str)->KeyPair<Ed25519PrivateKey,Ed25519PublicKey>{
+fn load_from_file(faucet_account_file: &str) -> KeyPair<Ed25519PrivateKey, Ed25519PublicKey> {
     match fs::read(faucet_account_file) {
         Ok(data) => {
-            let private_key  = Ed25519PrivateKey::try_from(&data[0..32]).unwrap();
-            let public_key = Ed25519PublicKey::try_from(&data[32..]).unwrap(); 
-            let keypair =KeyPair{
+            let private_key = Ed25519PrivateKey::try_from(&data[0..32]).unwrap();
+            let public_key = Ed25519PublicKey::try_from(&data[32..]).unwrap();
+            let keypair = KeyPair {
                 private_key,
                 public_key,
             };
@@ -73,16 +66,24 @@ fn load_from_file(faucet_account_file: &str)->KeyPair<Ed25519PrivateKey,Ed25519P
     }
 }
 
-fn gen_node(executor:TaskExecutor,keypair:KeyPair<Ed25519PrivateKey,Ed25519PublicKey>,wallet_config:&WalletConfig,network_service:NetworkService)->(Node<RpcChainClient>){
+fn gen_node(
+    executor: TaskExecutor,
+    keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
+    wallet_config: &WalletConfig,
+    network_service: NetworkService,
+) -> (Node<RpcChainClient>) {
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     let env_builder_arc = Arc::new(EnvBuilder::new().build());
-    let client = RpcChainClient::new(&wallet_config.chain_address, wallet_config.chain_port as u32);
+    let client = RpcChainClient::new(
+        &wallet_config.chain_address,
+        wallet_config.chain_port as u32,
+    );
 
-    let mut wallet = Wallet::new_with_client(account_address, keypair.clone(), Arc::new(client)).unwrap();
+    let mut wallet =
+        Wallet::new_with_client(account_address, keypair.clone(), Arc::new(client)).unwrap();
 
-    Node::new(executor.clone(),wallet,keypair.clone(),network_service)
+    Node::new(executor.clone(), wallet, keypair.clone(), network_service)
 }
-
 
 fn main() {
     let args = Args::from_args();
@@ -92,18 +93,18 @@ fn main() {
     let executor = rt.executor();
 
     let keypair = load_from_file(&args.faucet_key_path);
-    let (network_service,tx,rx) = build_network_service(&swarm.config.node_net_work,keypair.clone());
+    let (network_service, tx, rx) =
+        build_network_service(&swarm.config.net_config, keypair.clone());
 
-    let mut node = gen_node(executor,keypair,&swarm.config.wallet,network_service);
+    let mut node = gen_node(executor, keypair, &swarm.config.wallet, network_service);
     //node.start_server(swarm.config.node_net_work.addr.parse().unwrap());
 
-    let mut node_server = setup_node_service(&swarm.config,Arc::new(node));
+    let mut node_server = setup_node_service(&swarm.config, Arc::new(node));
     node_server.start();
 
     if args.start_client {
         let client = client::InteractiveClient::new_with_inherit_io(
-            swarm.config.network.port
-            //Path::new(&faucet_key_file_path),
+            swarm.config.rpc_config.port, //Path::new(&faucet_key_file_path),
         );
         println!("Loading client...");
         let _output = client.output().expect("Failed to wait on child");
@@ -114,7 +115,7 @@ fn main() {
             tx.send(())
                 .expect("failed to send unit when handling CTRL-C");
         })
-            .expect("failed to set CTRL-C handler");
+        .expect("failed to set CTRL-C handler");
         println!("CTRL-C to exit.");
         rx.recv()
             .expect("failed to receive unit when handling CTRL-C");

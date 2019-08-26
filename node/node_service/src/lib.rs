@@ -30,7 +30,7 @@ where C: ChainClient+Clone+ Send+Sync+'static{
     let service = create_node(handle);
     ::grpcio::ServerBuilder::new(Arc::new(EnvBuilder::new().name_prefix("grpc-node-").build()))
         .register_service(service)
-        .bind(config.network.address.clone(), config.network.port)
+        .bind(config.rpc_config.address.clone(), config.rpc_config.port)
         .build()
         .expect("Unable to create grpc server")
 }

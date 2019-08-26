@@ -10,7 +10,7 @@ use network_libp2p::{
     Service as Libp2pService, ServiceEvent,
 };
 use parking_lot::Mutex;
-use sg_config::config::NodeNetworkConfig;
+use sg_config::config::NetworkConfig;
 use std::{io, sync::Arc, thread};
 use tokio::runtime::Builder as RuntimeBuilder;
 use types::account_address::AccountAddress;
@@ -27,7 +27,7 @@ pub struct NetworkService {
 }
 
 pub fn build_network_service(
-    cfg: &NodeNetworkConfig,
+    cfg: &NetworkConfig,
     key_pair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
 ) -> (
     NetworkService,
