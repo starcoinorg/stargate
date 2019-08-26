@@ -110,15 +110,14 @@ impl ChainService {
     }
 
     fn apply_off_chain_transaction(&self, off_chain_tx: OffChainTransaction) {
-        let signed_tx_hash = off_chain_tx.txn().borrow().hash();
+        let signed_tx_hash = off_chain_tx.txn().hash();
         let mut tx_db = self.tx_db.lock().unwrap();
         let exist_flag = tx_db.exist_signed_transaction(signed_tx_hash);
         if !exist_flag {
             let state_db = self.state_db.lock().unwrap();
             let output = off_chain_tx.output();
-            let change_set = output.change_set();
 
-            state_db.apply_change_set(change_set).unwrap();
+            state_db.apply_txn(&off_chain_tx).unwrap();
             let state_hash = state_db.root_hash();
             tx_db.insert_all(state_hash, off_chain_tx.txn().clone());
 

@@ -169,7 +169,7 @@ impl StateStorage {
         if self.exist_account(&address) {
             bail!("account with address: {} already exist.", address);
         }
-        info!("create account:{}", address);
+        info!("create account:{} init_amount:{}", address, init_amount);
         let mut state = AccountState::new();
         //TODO not directly create account
         let event_handle = EventHandle::new_from_address(&address, 0);
@@ -207,19 +207,6 @@ impl StateStorage {
         self.account_states.borrow().get(&access_path.address).and_then(|state| state.get(&access_path.path))
     }
 
-    pub fn apply_txn(&self, txn: &OffChainTransaction) -> Result<HashValue> {
-        self.apply_output(txn.output())
-    }
-
-    pub fn apply_output(&self, txn_output: &TransactionOutput) -> Result<HashValue> {
-        self.apply_change_set(txn_output.change_set())?;
-        Ok(self.root_hash())
-    }
-
-    pub fn apply_libra_output(&self, txn_output: &types::transaction::TransactionOutput) -> Result<HashValue> {
-        self.apply_write_set(txn_output.write_set())?;
-        Ok(self.root_hash())
-    }
 }
 
 impl StateView for StateStorage {
@@ -235,7 +222,8 @@ impl StateView for StateStorage {
     }
 
     fn is_genesis(&self) -> bool {
-        false
+        debug!("is_genesis account_states {}", self.account_states.borrow().len());
+        self.account_states.borrow().is_empty()
     }
 }
 

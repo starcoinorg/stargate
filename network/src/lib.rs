@@ -26,7 +26,12 @@ mod tests {
     use crate::net::{Message, Service};
     use crate::{convert_account_address_to_peer_id, convert_peer_id_to_account_address};
     use crypto::ed25519::compat;
-    use futures::{future::Future, stream, stream::Stream};
+    use futures::{
+        future::Future,
+        stream,
+        stream::Stream,
+        sync::mpsc::{UnboundedReceiver, UnboundedSender},
+    };
     use libp2p::{
         build_multiaddr,
         multiaddr::{Multiaddr, Protocol},
@@ -40,8 +45,19 @@ mod tests {
     use tokio::runtime::Runtime;
     use types::account_address::AccountAddress;
 
-    fn build_network_service(num: usize, base_port: u16) -> Vec<Service> {
-        let mut result: Vec<Service> = Vec::with_capacity(num);
+    fn build_network_service(
+        num: usize,
+        base_port: u16,
+    ) -> Vec<(
+        Service,
+        UnboundedSender<Message>,
+        UnboundedReceiver<Message>,
+    )> {
+        let mut result: Vec<(
+            Service,
+            UnboundedSender<Message>,
+            UnboundedReceiver<Message>,
+        )> = Vec::with_capacity(num);
         let mut first_addr = None::<Multiaddr>;
 
         for index in 0..num {
@@ -52,7 +68,7 @@ mod tests {
                     first_addr
                         .clone()
                         .with(Protocol::P2p(
-                            result[0].libp2p_service.lock().peer_id().clone().into(),
+                            result[0].0.libp2p_service.lock().peer_id().clone().into(),
                         ))
                         .to_string(),
                 );
@@ -84,18 +100,15 @@ mod tests {
             let b = l.next().unwrap();
             (a, b)
         };
-        let msg_peer_id = service1.libp2p_service.lock().peer_id().clone();
+        let msg_peer_id = service1.0.libp2p_service.lock().peer_id().clone();
         let sender_fut = stream::repeat(1)
             .and_then(move |_| {
-                match service2.network_sender.try_send(Message {
+                match service2.1.unbounded_send(Message {
                     peer_id: msg_peer_id.clone(),
                     msg: vec![1, 2],
                 }) {
                     Ok(()) => Ok(Async::Ready(Some(()))),
-                    Err(e) => match e.is_full() {
-                        true => Ok(Async::NotReady),
-                        false => return Err(()),
-                    },
+                    Err(e) => return Err(()),
                 }
             })
             .for_each(|_| Ok(()));
@@ -140,7 +153,7 @@ mod tests {
             (a, b)
         };
         thread::sleep(Duration::new(1, 0));
-        for (peer_id, peer) in service1.libp2p_service.lock().state().connected_peers {
+        for (peer_id, peer) in service1.0.libp2p_service.lock().state().connected_peers {
             println!("id: {:?}, peer: {:?}", peer_id, peer);
         }
     }
