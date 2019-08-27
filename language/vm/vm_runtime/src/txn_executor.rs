@@ -21,6 +21,7 @@ use types::{
     account_config,
     byte_array::ByteArray,
     contract_event::ContractEvent,
+    event::EventKey,
     language_storage::ModuleId,
     transaction::{
         TransactionArgument, TransactionOutput, TransactionStatus, MAX_TRANSACTION_SIZE_IN_BYTES,
@@ -139,7 +140,7 @@ where
         let lhs = try_runtime!(self.execution_stack.pop_as::<T>());
         let result = f(lhs, rhs);
         if let Some(v) = result {
-            self.execution_stack.push(v);
+            try_runtime!(self.execution_stack.push(v));
             Ok(Ok(()))
         } else {
             Ok(Err(VMRuntimeError {
@@ -210,41 +211,43 @@ where
                 }
                 Bytecode::Branch(offset) => return Ok(Ok(offset)),
                 Bytecode::LdConst(int_const) => {
-                    self.execution_stack.push(Local::u64(int_const));
+                    try_runtime!(self.execution_stack.push(Local::u64(int_const)));
                 }
                 Bytecode::LdAddr(idx) => {
                     let top_frame = self.execution_stack.top_frame()?;
                     let addr_ref = top_frame.module().address_at(idx);
-                    self.execution_stack.push(Local::address(*addr_ref));
+                    try_runtime!(self.execution_stack.push(Local::address(*addr_ref)));
                 }
                 Bytecode::LdStr(idx) => {
                     let top_frame = self.execution_stack.top_frame()?;
                     let string_ref = top_frame.module().string_at(idx);
-                    self.execution_stack
-                        .push(Local::string(string_ref.to_string()));
+                    try_runtime!(self
+                        .execution_stack
+                        .push(Local::string(string_ref.to_string())));
                 }
                 Bytecode::LdByteArray(idx) => {
                     let top_frame = self.execution_stack.top_frame()?;
                     let byte_array = top_frame.module().byte_array_at(idx);
-                    self.execution_stack
-                        .push(Local::bytearray(byte_array.clone()));
+                    try_runtime!(self
+                        .execution_stack
+                        .push(Local::bytearray(byte_array.clone())));
                 }
                 Bytecode::LdTrue => {
-                    self.execution_stack.push(Local::bool(true));
+                    try_runtime!(self.execution_stack.push(Local::bool(true)));
                 }
                 Bytecode::LdFalse => {
-                    self.execution_stack.push(Local::bool(false));
+                    try_runtime!(self.execution_stack.push(Local::bool(false)));
                 }
                 Bytecode::CopyLoc(idx) => {
                     let local = self.execution_stack.top_frame()?.get_local(idx)?.clone();
-                    self.execution_stack.push(local);
+                    try_runtime!(self.execution_stack.push(local));
                 }
                 Bytecode::MoveLoc(idx) => {
                     let local = self
                         .execution_stack
                         .top_frame_mut()?
                         .invalidate_local(idx)?;
-                    self.execution_stack.push(local);
+                    try_runtime!(self.execution_stack.push(local));
                 }
                 Bytecode::StLoc(idx) => {
                     let stack_top = self.execution_stack.pop()?;
@@ -274,18 +277,15 @@ where
                             let msg = try_runtime!(self.execution_stack.pop_as::<ByteArray>());
                             let count = try_runtime!(self.execution_stack.pop_as::<u64>());
                             let key = try_runtime!(self.execution_stack.pop_as::<ByteArray>());
-                            let guid = AccountAddress::try_from(key.as_bytes())
+                            let guid = EventKey::try_from(key.as_bytes())
                                 .map_err(|_| VMInvariantViolation::EventKeyMismatch)?;
 
                             // TODO:
                             // 1. Rename the AccessPath here to a new type that represents such
                             //    globally unique id for event streams.
                             // 2. Charge gas for the msg emitted.
-                            self.event_data.push(ContractEvent::new(
-                                AccessPath::new(guid, vec![]),
-                                count,
-                                msg.into_inner(),
-                            ))
+                            self.event_data
+                                .push(ContractEvent::new(guid, count, msg.into_inner()))
                         } else {
                             let mut arguments = VecDeque::new();
                             let expected_args = native_function.num_args();
@@ -323,7 +323,7 @@ where
                                 .gas_meter
                                 .consume_gas(GasUnits::new(cost), &self.execution_stack));
                             for value in return_values {
-                                self.execution_stack.push(value);
+                                try_runtime!(self.execution_stack.push(value));
                             }
                         }
                     // Call stack is not reconstructed for a native call, so we just
@@ -345,7 +345,7 @@ where
                         .borrow_local()
                     {
                         Some(v) => {
-                            self.execution_stack.push(v);
+                            try_runtime!(self.execution_stack.push(v));
                         }
                         None => {
                             return Ok(Err(VMRuntimeError {
@@ -367,7 +367,7 @@ where
                         .borrow_field(u32::from(field_offset))
                     {
                         Some(v) => {
-                            self.execution_stack.push(v);
+                            try_runtime!(self.execution_stack.push(v));
                         }
                         None => {
                             return Ok(Err(VMRuntimeError {
@@ -389,7 +389,7 @@ where
                         .collect();
                     match args {
                         Some(args) => {
-                            self.execution_stack.push(Local::struct_(args));
+                            try_runtime!(self.execution_stack.push(Local::struct_(args)));
                         }
                         None => {
                             return Ok(Err(VMRuntimeError {
@@ -405,7 +405,9 @@ where
                         Some(v) => match &*v.peek() {
                             Value::Struct(fields) => {
                                 for value in fields {
-                                    self.execution_stack.push(Local::Value(value.clone()))
+                                    try_runtime!(self
+                                        .execution_stack
+                                        .push(Local::Value(value.clone())));
                                 }
                             }
                             _ => {
@@ -425,7 +427,7 @@ where
                 }
                 Bytecode::ReadRef => match self.execution_stack.pop()?.read_reference() {
                     Some(v) => {
-                        self.execution_stack.push(v);
+                        try_runtime!(self.execution_stack.push(v));
                     }
                     None => {
                         return Ok(Err(VMRuntimeError {
@@ -478,33 +480,37 @@ where
                 Bytecode::Eq => {
                     let lhs = self.execution_stack.pop()?;
                     let rhs = self.execution_stack.pop()?;
-                    self.execution_stack.push(Local::bool(lhs.equals(rhs)?));
+                    try_runtime!(self.execution_stack.push(Local::bool(lhs.equals(rhs)?)));
                 }
                 Bytecode::Neq => {
                     let lhs = self.execution_stack.pop()?;
                     let rhs = self.execution_stack.pop()?;
-                    self.execution_stack.push(Local::bool(lhs.not_equals(rhs)?));
+                    try_runtime!(self.execution_stack.push(Local::bool(lhs.not_equals(rhs)?)));
                 }
                 Bytecode::GetTxnGasUnitPrice => {
-                    self.execution_stack
-                        .push(Local::u64(self.txn_data.gas_unit_price().get()));
+                    try_runtime!(self
+                        .execution_stack
+                        .push(Local::u64(self.txn_data.gas_unit_price().get())));
                 }
                 Bytecode::GetTxnMaxGasUnits => {
-                    self.execution_stack
-                        .push(Local::u64(self.txn_data.max_gas_amount().get()));
+                    try_runtime!(self
+                        .execution_stack
+                        .push(Local::u64(self.txn_data.max_gas_amount().get())));
                 }
                 Bytecode::GetTxnSequenceNumber => {
-                    self.execution_stack
-                        .push(Local::u64(self.txn_data.sequence_number()));
+                    try_runtime!(self
+                        .execution_stack
+                        .push(Local::u64(self.txn_data.sequence_number())));
                 }
                 Bytecode::GetTxnSenderAddress => {
-                    self.execution_stack
-                        .push(Local::address(self.txn_data.sender()));
+                    try_runtime!(self
+                        .execution_stack
+                        .push(Local::address(self.txn_data.sender())));
                 }
                 Bytecode::GetTxnPublicKey => {
-                    self.execution_stack.push(Local::bytearray(ByteArray::new(
+                    try_runtime!(self.execution_stack.push(Local::bytearray(ByteArray::new(
                         self.txn_data.public_key().to_bytes().to_vec(),
-                    )));
+                    ))));
                 }
                 Bytecode::BorrowGlobal(idx, _) => {
                     let address = try_runtime!(self.execution_stack.pop_as::<AccountAddress>());
@@ -522,7 +528,7 @@ where
                             &self.execution_stack,
                             global_ref.size()
                         ));
-                        self.execution_stack.push(Local::GlobalRef(global_ref));
+                        try_runtime!(self.execution_stack.push(Local::GlobalRef(global_ref)));
                     } else {
                         return Err(VMInvariantViolation::LinkerError);
                     }
@@ -542,7 +548,7 @@ where
                             &self.execution_stack,
                             mem_size
                         ));
-                        self.execution_stack.push(Local::bool(exists));
+                        try_runtime!(self.execution_stack.push(Local::bool(exists)));
                     } else {
                         return Err(VMInvariantViolation::LinkerError);
                     }
@@ -563,7 +569,7 @@ where
                             &self.execution_stack,
                             resource.size()
                         ));
-                        self.execution_stack.push(resource);
+                        try_runtime!(self.execution_stack.push(resource));
                     } else {
                         return Err(VMInvariantViolation::LinkerError);
                     }
@@ -607,11 +613,12 @@ where
                 }
                 Bytecode::Not => {
                     let top = try_runtime!(self.execution_stack.pop_as::<bool>());
-                    self.execution_stack.push(Local::bool(!top));
+                    try_runtime!(self.execution_stack.push(Local::bool(!top)));
                 }
                 Bytecode::GetGasRemaining => {
-                    self.execution_stack
-                        .push(Local::u64(self.gas_meter.remaining_gas().get()));
+                    try_runtime!(self
+                        .execution_stack
+                        .push(Local::u64(self.gas_meter.remaining_gas().get())));
                 }
             }
             pc += 1;
@@ -629,12 +636,18 @@ where
     /// Convert the transaction arguments into move values and push them to the top of the stack.
     pub(crate) fn setup_main_args(&mut self, args: Vec<TransactionArgument>) {
         for arg in args.into_iter() {
-            self.execution_stack.push(match arg {
+            let push_result = self.execution_stack.push(match arg {
                 TransactionArgument::U64(i) => Local::u64(i),
                 TransactionArgument::Address(a) => Local::address(a),
                 TransactionArgument::ByteArray(b) => Local::bytearray(b),
                 TransactionArgument::String(s) => Local::string(s),
             });
+            // The `push_result` will either be `Ok(Ok())` or `Ok(Err())`; `unwrap()`
+            // is safe on the first Result.
+            assume!(push_result.is_ok());
+            push_result
+                .unwrap()
+                .expect("Stack should be empty at beginning of function");
         }
     }
 
@@ -800,7 +813,7 @@ where
         let func = FunctionRef::new(loaded_module, *func_idx);
 
         for arg in args.into_iter() {
-            self.execution_stack.push(arg);
+            try_runtime!(self.execution_stack.push(arg));
         }
 
         self.execute_function_impl(func)
