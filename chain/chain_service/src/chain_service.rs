@@ -91,11 +91,7 @@ impl ChainService {
 
         let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
         let genesis_txn = genesis_checked_txn.into_inner();
-        let mut tx_sender_2 = tx_sender.clone();
-        let genesis_future = async move {
-            tx_sender_2.send(TransactionInner::OnChain(genesis_txn)).await.unwrap();
-        };
-        exe.spawn(genesis_future.boxed().unit_error().compat());
+        chain_service.apply_on_chain_transaction(genesis_txn);
 
         chain_service
     }

@@ -28,7 +28,7 @@ fn test_wallet() {
     let client = Arc::new(MockChainClient::new(executor));
     //TODO faucet by transaction.
     //wait genesis tx finish.
-    sleep(Duration::from_millis(1000));
+    //sleep(Duration::from_millis(1000));
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     debug!("account_address: {}", account_address);
     client.faucet(account_address, amount).unwrap();
