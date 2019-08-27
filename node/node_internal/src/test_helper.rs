@@ -36,7 +36,7 @@ pub fn gen_node(executor:TaskExecutor,config:&NetworkConfig)->(Node<MockChainCli
 
     let (network,tx,rx )= build_network_service(config,keypair.clone());
 
-    (Node::new(executor.clone(),wallet,keypair.clone(),network),account_address,keypair)
+    (Node::new(executor.clone(),wallet,keypair.clone(),network,tx,rx),account_address,keypair)
 }
 
 pub fn create_node_network_config(addr:String,seeds:Vec<String>)->NetworkConfig{

@@ -36,22 +36,24 @@ use std::time::{SystemTime,UNIX_EPOCH};
 use types::account_config::coin_struct_tag;
 use logger::prelude::*;
 use sg_config::config::NetworkConfig;
-use crate::test_helper{*};
+use crate::test_helper::{*};
 use crate::node::Node;
 
 #[test]
-fn start_server_test() -> Result<()> {
+fn node_test() -> Result<()> {
     ::logger::init_for_e2e_testing();
     let mut rt = Runtime::new().unwrap();
     let executor = rt.executor();
 
-    let (mut node1,addr1,keypair1) = gen_node(executor.clone());
-    node1.start_server("/memory/10".parse().unwrap());
+    let network_config1 = create_node_network_config("/ip4/127.0.0.1/tcp/5000".to_string(),vec![]);
+    let (mut node1,addr1,keypair1) = gen_node(executor.clone(),&network_config1);
+    node1.start_server();
 
-    let (mut node2,addr2,keypair2) = gen_node(executor.clone());
-    node2.start_server("/memory/20".parse().unwrap());
+    let network_config2 = create_node_network_config("/ip4/127.0.0.1/tcp/5001".to_string(),vec!["/ip4/127.0.0.1/tcp/5000".to_string()]);
+    let (mut node2,addr2,keypair2) = gen_node(executor.clone(),&network_config2);
+    node2.start_server();
 
-    node2.connect("/memory/10".parse().unwrap(),addr1);
+    //node2.connect("/memory/10".parse().unwrap(),addr1);
 
     let neg_msg = create_negotiate_message(addr2,addr1 ,keypair2.private_key);
     node2.open_channel_negotiate(neg_msg);
@@ -60,7 +62,7 @@ fn start_server_test() -> Result<()> {
     let offchain_txn = node1.off_chain_pay(coin_struct_tag(), addr2, transfer_amount).unwrap();
     debug!("txn:{:#?}", offchain_txn);
 
-    //rt.shutdown_on_idle().wait().unwrap();
+    rt.shutdown_on_idle().wait().unwrap();
     Ok(())
 }
 
