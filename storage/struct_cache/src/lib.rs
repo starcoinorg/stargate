@@ -277,11 +277,6 @@ mod tests {
                 }
 
                 public t(this: &Self.T) {
-                    let g: &u64;
-                    let y: u64;
-                    g = &copy(this).g;
-                    y = *move(g);
-                    release(move(this));
                     return;
                 }
             }
