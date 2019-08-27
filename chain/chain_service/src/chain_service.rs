@@ -519,5 +519,15 @@ mod tests {
         let chain_service = ChainService::new(&rt.executor());
         let receiver = AccountAddress::random();
         chain_service.faucet_inner(receiver, 100);
+
+        let print_future = async move {
+            let ten_millis = time::Duration::from_millis(100);
+            thread::sleep(ten_millis);
+        };
+        rt.block_on(print_future.boxed().unit_error().compat()).unwrap();
+
+        let state_db = chain_service.state_db.lock().unwrap();
+        let exist_flag = state_db.exist_account(&receiver);
+        assert_eq!(exist_flag, true);
     }
 }
