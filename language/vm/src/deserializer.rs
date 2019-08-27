@@ -977,6 +977,8 @@ fn load_code(cursor: &mut Cursor<&[u8]>, code: &mut Vec<Bytecode>) -> BinaryLoad
             Opcodes::GET_TXN_SEQUENCE_NUMBER => Bytecode::GetTxnSequenceNumber,
             Opcodes::GET_TXN_PUBLIC_KEY => Bytecode::GetTxnPublicKey,
             Opcodes::FREEZE_REF => Bytecode::FreezeRef,
+            Opcodes::IS_OFFCHAIN_TXN => Bytecode::IsOffchainTxn,
+            Opcodes::GET_TXN_RECEIVER => Bytecode::GetTxnReceiverAddress,
         };
         code.push(bytecode);
     }
@@ -1150,6 +1152,8 @@ impl Opcodes {
             0x33 => Ok(Opcodes::GET_TXN_SEQUENCE_NUMBER),
             0x34 => Ok(Opcodes::GET_TXN_PUBLIC_KEY),
             0x35 => Ok(Opcodes::FREEZE_REF),
+            0x36 => Ok(Opcodes::IS_OFFCHAIN_TXN),
+            0x37 => Ok(Opcodes::GET_TXN_RECEIVER),
             _ => Err(BinaryError::UnknownOpcode),
         }
     }

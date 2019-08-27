@@ -157,6 +157,9 @@ impl<'a> StackUsageVerifier<'a> {
             Bytecode::CreateAccount => -1,
 
             Bytecode::LdByteArray(_) => 1,
+
+            Bytecode::IsOffchainTxn
+            | Bytecode::GetTxnReceiverAddress => 1,
         }
     }
 }

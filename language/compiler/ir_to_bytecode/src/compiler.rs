@@ -2515,6 +2515,16 @@ impl<S: Scope + Sized> Compiler<S> {
                         };
                         Ok(self.make_singleton_vec_deque(InferredType::Reference(inner_token)))
                     }
+                    Builtin::IsOffchainTxn => {
+                        code.code.push(Bytecode::IsOffchainTxn);
+                        function_frame.push()?;
+                        Ok(self.make_singleton_vec_deque(InferredType::Bool))
+                    }
+                    Builtin::GetTxnReceiver => {
+                        code.code.push(Bytecode::GetTxnReceiverAddress);
+                        function_frame.push()?;
+                        Ok(self.make_singleton_vec_deque(InferredType::Address))
+                    }
                 }
             }
             FunctionCall::ModuleFunctionCall {

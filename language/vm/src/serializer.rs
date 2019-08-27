@@ -678,6 +678,8 @@ fn serialize_instruction_inner(binary: &mut BinaryData, opcode: &Bytecode) -> Re
         Bytecode::CreateAccount => binary.push(Opcodes::CREATE_ACCOUNT as u8),
         Bytecode::GetTxnSequenceNumber => binary.push(Opcodes::GET_TXN_SEQUENCE_NUMBER as u8),
         Bytecode::GetTxnPublicKey => binary.push(Opcodes::GET_TXN_PUBLIC_KEY as u8),
+        Bytecode::IsOffchainTxn => binary.push(Opcodes::IS_OFFCHAIN_TXN as u8),
+        Bytecode::GetTxnReceiverAddress => binary.push(Opcodes::GET_TXN_RECEIVER as u8),
     };
     res?;
     Ok(())

@@ -137,6 +137,8 @@ impl GasMeter {
             | Bytecode::GetTxnPublicKey
             | Bytecode::GetTxnSenderAddress
             | Bytecode::GetTxnSequenceNumber
+            | Bytecode::IsOffchainTxn
+            | Bytecode::GetTxnReceiverAddress
             | Bytecode::Ge
             // Releasing and freezing a reference is not dependent on the size of the underlying data
             | Bytecode::FreezeRef

@@ -302,6 +302,11 @@ pub enum Builtin {
 
     /// Convert a mutable reference into an immutable one
     Freeze,
+
+    /// Check current txn is offchain transaction
+    IsOffchainTxn,
+    /// Returns the address of the current offchain transaction's receiver, if current txn is not offchain transaction, txn will fail.
+    GetTxnReceiver,
 }
 
 /// Enum for different function calls
@@ -1254,6 +1259,8 @@ impl fmt::Display for Builtin {
                 write!(f, "move_to_sender<{}{}>", t, format_type_actuals(tys))
             }
             Builtin::Freeze => write!(f, "freeze"),
+            Builtin::IsOffchainTxn => write!(f, "is_offchain_txn"),
+            Builtin::GetTxnReceiver => write!(f, "get_txn_receiver"),
         }
     }
 }

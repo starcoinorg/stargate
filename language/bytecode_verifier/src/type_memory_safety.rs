@@ -884,6 +884,22 @@ impl<'a> TypeAndMemorySafetyAnalysis<'a> {
                     Err(VMStaticViolation::CreateAccountTypeMismatchError(offset))
                 }
             }
+
+            Bytecode::IsOffchainTxn => {
+                self.stack.push(StackAbstractValue {
+                    signature: SignatureToken::Bool,
+                    value: AbstractValue::full_value(Kind::Unrestricted),
+                });
+                Ok(())
+            }
+
+            Bytecode::GetTxnReceiverAddress => {
+                self.stack.push(StackAbstractValue {
+                    signature: SignatureToken::Address,
+                    value: AbstractValue::full_value(Kind::Unrestricted),
+                });
+                Ok(())
+            }
         }
     }
 }

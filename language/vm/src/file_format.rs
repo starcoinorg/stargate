@@ -1052,6 +1052,10 @@ pub enum Bytecode {
     ///
     /// ```..., -> ..., bytearray_value```
     GetTxnPublicKey,
+    /// Check current txn is Offchain transaction
+    IsOffchainTxn,
+    /// Get offchain transaction's receiver.
+    GetTxnReceiverAddress,
 }
 
 /// The number of bytecode instructions.
@@ -1115,6 +1119,8 @@ impl ::std::fmt::Debug for Bytecode {
             Bytecode::CreateAccount => write!(f, "CreateAccount"),
             Bytecode::GetTxnSequenceNumber => write!(f, "GetTxnSequenceNumber"),
             Bytecode::GetTxnPublicKey => write!(f, "GetTxnPublicKey"),
+            Bytecode::IsOffchainTxn => write!(f, "IsOffchainTxn"),
+            Bytecode::GetTxnReceiverAddress => write!(f, "GetTxnReceiverAddress"),
         }
     }
 }

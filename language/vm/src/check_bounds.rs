@@ -380,7 +380,7 @@ impl FunctionDefinition {
                     | Add | Sub | Mul | Mod | Div | BitOr | BitAnd | Xor | Or | And | Not | Eq
                     | Neq | Lt | Gt | Le | Ge | Abort | GetTxnGasUnitPrice | GetTxnMaxGasUnits
                     | GetGasRemaining | GetTxnSenderAddress | CreateAccount
-                    | GetTxnSequenceNumber | GetTxnPublicKey => None,
+                    | GetTxnSequenceNumber | GetTxnPublicKey | IsOffchainTxn | GetTxnReceiverAddress => None,
                 }
             })
             .collect()

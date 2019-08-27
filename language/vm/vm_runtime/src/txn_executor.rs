@@ -620,6 +620,12 @@ where
                         .execution_stack
                         .push(Local::u64(self.gas_meter.remaining_gas().get())));
                 }
+                Bytecode::IsOffchainTxn => {
+                    unimplemented!()
+                }
+                Bytecode::GetTxnReceiverAddress => {
+                    unimplemented!()
+                }
             }
             pc += 1;
         }

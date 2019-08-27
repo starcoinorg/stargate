@@ -170,6 +170,8 @@ pub enum Opcodes {
     GET_TXN_SEQUENCE_NUMBER = 0x33,
     GET_TXN_PUBLIC_KEY      = 0x34,
     FREEZE_REF              = 0x35,
+    IS_OFFCHAIN_TXN         = 0x36,
+    GET_TXN_RECEIVER        = 0x37,
 }
 
 /// Upper limit on the binary size

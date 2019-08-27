@@ -1,0 +1,17 @@
+//! no-run: verifier, runtime
+
+module M {
+
+    public foo() {
+        let addr: address;
+        let x: bool;
+        x = is_offchain_txn();
+        if (copy(x)) {
+            addr = get_txn_receiver();
+            assert(move(x) == true, 77);
+        }else{
+            assert(move(x) == false, 77);
+        }
+        return;
+    }
+}

@@ -230,6 +230,8 @@ Builtin: Builtin = {
     },
     "get_gas_remaining" => Builtin::GetGasRemaining,
     "freeze" => Builtin::Freeze,
+    "is_offchain_txn" => Builtin::IsOffchainTxn,
+    "get_txn_receiver" => Builtin::GetTxnReceiver,
 }
 
 LValue: LValue = {
