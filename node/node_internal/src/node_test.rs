@@ -45,12 +45,13 @@ fn node_test() -> Result<()> {
     let mut rt = Runtime::new().unwrap();
     let executor = rt.executor();
 
+    let client=Arc::new(MockChainClient::new(executor.clone()));
     let network_config1 = create_node_network_config("/ip4/127.0.0.1/tcp/5000".to_string(),vec![]);
-    let (mut node1,addr1,keypair1) = gen_node(executor.clone(),&network_config1);
+    let (mut node1,addr1,keypair1) = gen_node(executor.clone(),&network_config1,client.clone());
     node1.start_server();
 
     let network_config2 = create_node_network_config("/ip4/127.0.0.1/tcp/5001".to_string(),vec!["/ip4/127.0.0.1/tcp/5000".to_string()]);
-    let (mut node2,addr2,keypair2) = gen_node(executor.clone(),&network_config2);
+    let (mut node2,addr2,keypair2) = gen_node(executor.clone(),&network_config2,client.clone());
     node2.start_server();
 
     //node2.connect("/memory/10".parse().unwrap(),addr1);

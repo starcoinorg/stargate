@@ -26,12 +26,11 @@ use sg_config::config::NetworkConfig;
 use tokio::runtime::{Runtime,TaskExecutor};
 use crate::node::Node;
 
-pub fn gen_node(executor:TaskExecutor,config:&NetworkConfig)->(Node<MockChainClient>,AccountAddress,KeyPair<Ed25519PrivateKey,Ed25519PublicKey>){
+pub fn gen_node(executor:TaskExecutor,config:&NetworkConfig,client:Arc<MockChainClient>)->(Node<MockChainClient>,AccountAddress,KeyPair<Ed25519PrivateKey,Ed25519PublicKey>){
 
-    let amount: u64 = 1_000_000_000;    
+    let amount: u64 = 10_000_000;
     let mut rng: StdRng = SeedableRng::seed_from_u64(get_unix_ts());//SeedableRng::from_seed([0; 32]);
     let keypair = KeyPair::generate_for_testing(&mut rng);
-    let client = Arc::new(MockChainClient::new(executor.clone()));
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     println!("account_address: {}", account_address);
     client.faucet(account_address, amount).unwrap();

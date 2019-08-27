@@ -13,11 +13,13 @@ use node_internal::test_helper::{*};
 
 use sg_config::config::NodeConfig;
 use std::sync::Arc;
+use mock_chain_client::MockChainClient;
 
 pub fn create_and_start_server(config: &NodeConfig,executor:TaskExecutor) -> (grpcio::Server) {
     let client_env = Arc::new(EnvBuilder::new().build());
+    let client=Arc::new(MockChainClient::new(executor.clone()));
 
-    let (node,addr,keypair) = gen_node(executor,&config.net_config);
+    let (node,addr,keypair) = gen_node(executor,&config.net_config,client);
     let node_service = create_node(NodeService::new(Arc::new(node)));
     let mut node_server = ServerBuilder::new(Arc::new(EnvBuilder::new().build()))
         .register_service(node_service)
