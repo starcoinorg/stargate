@@ -4,12 +4,11 @@ use parity_multiaddr::Multiaddr;
 use tokio::{codec::{Framed,LengthDelimitedCodec}, runtime::TaskExecutor};
 use futures::{
     compat::{Sink01CompatExt,Stream01CompatExt,Compat01As03Sink,Compat01As03},
-    future::{FutureExt},
+    future::{FutureExt,Future},
     stream::{Stream,Fuse,StreamExt,FuturesUnordered},
     io::{AsyncRead, AsyncWrite},
     prelude::*,
     sink::{SinkExt},
-    channel::mpsc::{UnboundedReceiver,UnboundedSender},
 };
 use std::sync::{Arc,Mutex};
 use sgwallet::wallet::Wallet;
@@ -23,30 +22,32 @@ use std::collections::HashMap;
 use types::account_address::AccountAddress;
 use failure::prelude::*;
 use std::{thread, time};
-use std::borrow::Borrow;
+use std::borrow::{Borrow,BorrowMut};
 use logger::prelude::*;
 use network::{
     convert_account_address_to_peer_id,convert_peer_id_to_account_address,
-    net::{NetworkService,Message}
+    {NetworkService,Message}
 };
+use futures_01::sync::mpsc::{UnboundedSender,UnboundedReceiver};
 
-
-pub struct Node <C: ChainClient>{
+pub struct Node <C: ChainClient+Send+Sync+'static>{
     executor: TaskExecutor,
-    node_inner:NodeInner<C>,
+    node_inner:Arc<Mutex<NodeInner<C>>>,
 }
 
-struct NodeInner<C: ChainClient> {
+struct NodeInner<C: ChainClient+Send+Sync+'static> {
     wallet:Wallet<C>,
     executor:TaskExecutor,
     keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
     network_service:NetworkService,
+    sender:UnboundedSender<Message>,
+    receiver:Option<UnboundedReceiver<Message>>,
 }
 
-impl<C:ChainClient> Node<C>{
+impl<C:ChainClient+Send+Sync+'static> Node<C>{
 
     pub fn new(executor: TaskExecutor,wallet:Wallet<C>,keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
-        network_service:NetworkService)->Self{
+               network_service:NetworkService,sender:UnboundedSender<Message>,receiver:UnboundedReceiver<Message>)->Self{
         let executor_clone = executor.clone();
 
         let node_inner=NodeInner{
@@ -54,10 +55,12 @@ impl<C:ChainClient> Node<C>{
             keypair,
             wallet,
             network_service,
+            sender,
+            receiver:Some(receiver)
         };
         Self{
             executor,
-            node_inner:node_inner,
+            node_inner:Arc::new(Mutex::new(node_inner)),
         }
     }
 
@@ -71,23 +74,31 @@ impl<C:ChainClient> Node<C>{
         Ok(())
     }
 
-}
+    pub fn start_server(&self){
+        let mut receiver =  self.node_inner.lock().unwrap().receiver.take().expect("receiver already taken");
+        self.executor.spawn(Self::start(self.node_inner.clone(),receiver).boxed().unit_error().compat());
+    }
 
-impl<C: ChainClient> NodeInner<C>{
-
-    async fn start_listen(&mut self,mut receiver:UnboundedReceiver<Message>){
+    async fn start(node_inner:Arc<Mutex<NodeInner<C>>>,mut receiver:UnboundedReceiver<Message>){
+        info!("start receive message");
+        let mut receiver = receiver.compat();
         while let Some(message)=receiver.next().await{
-            let data = bytes::Bytes::from(message.msg);
+            let data = bytes::Bytes::from(message.unwrap().msg);
             let msg_type=parse_message_type(&data);
+            let node_inner=node_inner.lock().unwrap();
             match msg_type {
-                MessageType::OpenChannelNodeNegotiateMessage =>  self.handle_open_channel_negotiate(data[2..].to_vec()),
-                MessageType::OpenChannelTransactionMessage => self.handle_open_channel(data[2..].to_vec()),
-                MessageType::OffChainPayMessage => self.handle_off_chain_pay(data[2..].to_vec()),
+                MessageType::OpenChannelNodeNegotiateMessage => node_inner.handle_open_channel_negotiate(data[2..].to_vec()),
+                MessageType::OpenChannelTransactionMessage => node_inner.handle_open_channel(data[2..].to_vec()),
+                MessageType::OffChainPayMessage => node_inner.handle_off_chain_pay(data[2..].to_vec()),
                 _=>warn!("message type not found {:?}",msg_type),
             };
 
         }
     }
+
+}
+
+impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
 
     fn send_message(&self,account_addr:&AccountAddress,msg:bytes::Bytes){
         //self.network_sender.unbounded_send(msg);

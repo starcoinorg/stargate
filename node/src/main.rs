@@ -6,7 +6,7 @@ use crypto::test_utils::KeyPair;
 use failure::*;
 use futures::{future, Future, Stream};
 use grpcio::EnvBuilder;
-use network::net::{build_network_service, NetworkService};
+use network::{build_network_service, NetworkService,Message};
 use node::client;
 use node_internal::node::Node;
 use node_service::setup_node_service;
@@ -15,6 +15,7 @@ use sgwallet::wallet::*;
 use structopt::StructOpt;
 use tokio::runtime::{Runtime, TaskExecutor};
 use types::account_address::AccountAddress;
+use futures_01::sync::mpsc::{UnboundedReceiver,UnboundedSender};
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -70,7 +71,7 @@ fn gen_node(
     executor: TaskExecutor,
     keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
     wallet_config: &WalletConfig,
-    network_service: NetworkService,
+    network_service: NetworkService,sender:UnboundedSender<Message>,receiver:UnboundedReceiver<Message>
 ) -> (Node<RpcChainClient>) {
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     let env_builder_arc = Arc::new(EnvBuilder::new().build());
@@ -82,7 +83,7 @@ fn gen_node(
     let mut wallet =
         Wallet::new_with_client(account_address, keypair.clone(), Arc::new(client)).unwrap();
 
-    Node::new(executor.clone(), wallet, keypair.clone(), network_service)
+    Node::new(executor.clone(), wallet, keypair.clone(), network_service,sender,receiver)
 }
 
 fn main() {
@@ -96,7 +97,7 @@ fn main() {
     let (network_service, tx, rx) =
         build_network_service(&swarm.config.net_config, keypair.clone());
 
-    let mut node = gen_node(executor, keypair, &swarm.config.wallet, network_service);
+    let mut node = gen_node(executor, keypair, &swarm.config.wallet, network_service,tx,rx);
     //node.start_server(swarm.config.node_net_work.addr.parse().unwrap());
 
     let mut node_server = setup_node_service(&swarm.config, Arc::new(node));

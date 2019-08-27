@@ -14,13 +14,10 @@ memsocket = { path = "memsocket" }
 netcore = { path = "netcore" }
 sg_config = { path = "../sgconfig" }
 crypto = { path = "../crypto/crypto", features = ["testing"] }
-parity-multiaddr = "0.4.0"
-parity-multihash = "0.1.0"
 network_libp2p = { package = "network-libp2p", path = "../network-libp2p" }
 crossbeam-channel = "0.3.6"
 parking_lot = "0.7.1"
 types = { path = "../types" }
-rand = "0.7.0"
-rand_core = "0.5.0"
+rand = "0.6.5"
 failure = {package = "failure_ext", path = "../common/failure_ext"}
 logger = { path = "../common/logger" }
