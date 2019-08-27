@@ -14,6 +14,7 @@ use sg_config::config::NetworkConfig;
 use std::{io, sync::Arc, thread};
 use tokio::runtime::Builder as RuntimeBuilder;
 use types::account_address::AccountAddress;
+use crate::helper::convert_boot_nodes;
 
 #[derive(Clone, Debug)]
 pub struct Message {
@@ -36,7 +37,7 @@ pub fn build_network_service(
 ) {
     let config = NetworkConfiguration {
         listen_addresses: vec![cfg.listen.parse().unwrap()],
-        boot_nodes: cfg.seeds.clone(),
+        boot_nodes: convert_boot_nodes(cfg.seeds.clone()),
         node_key: {
             let secret =
                 identity::ed25519::SecretKey::from_bytes(&mut key_pair.private_key.to_bytes())
@@ -63,7 +64,7 @@ fn run_network(
 ) -> (
     mpsc::UnboundedSender<Message>,
     mpsc::UnboundedReceiver<Message>,
-    impl Future<Item = (), Error = ()>,
+    impl Future<Item=(), Error=()>,
 ) {
     let (mut _tx, net_rx) = mpsc::unbounded();
     let (net_tx, mut _rx) = mpsc::unbounded::<Message>();
@@ -75,14 +76,14 @@ fn run_network(
                 Async::Ready(Some(ServiceEvent::CustomMessage { peer_id, message })) => {
                     println!("Receive custom message");
                     let _ = _tx.unbounded_send(Message {
-                        peer_id: convert_peer_id_to_account_address(peer_id).unwrap(),
+                        peer_id: convert_peer_id_to_account_address(&peer_id).unwrap(),
                         msg: message,
                     });
                 }
                 Async::Ready(Some(ServiceEvent::OpenedCustomProtocol { peer_id, .. })) => {
                     println!(
                         "Connected peer {:?}",
-                        convert_peer_id_to_account_address(peer_id).unwrap()
+                        convert_peer_id_to_account_address(&peer_id).unwrap()
                     );
                 }
                 Async::NotReady => {
@@ -170,6 +171,10 @@ impl NetworkService {
 
     pub fn is_connected(&self, peer_id: &PeerId) -> bool {
         self.libp2p_service.lock().is_open(peer_id)
+    }
+
+    pub fn identify(&self) -> AccountAddress {
+        convert_peer_id_to_account_address(self.libp2p_service.lock().peer_id()).unwrap()
     }
 }
 
