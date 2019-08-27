@@ -1,6 +1,6 @@
 use failure::prelude::*;
 use types::proto::{access_path::AccessPath as ProtoAccessPath, events::Event};
-use types::{transaction::{SignedTransaction, TransactionArgument, TransactionPayload, Program, RawTransaction}, access_path::AccessPath, account_address::AccountAddress};
+use types::{account_config::{core_code_address, association_address}, transaction::{SignedTransaction, TransactionArgument, TransactionPayload, Program, RawTransaction}, access_path::AccessPath, account_address::AccountAddress};
 use futures::{sync::mpsc::{unbounded, UnboundedReceiver}, future::Future, sink::Sink, stream::Stream};
 use super::pub_sub;
 use grpcio::WriteFlags;
@@ -46,6 +46,9 @@ lazy_static! {
     static ref VM_CONFIG:VMConfig = VMConfig{
         publishing_options: VMPublishingOption::Open
     };
+
+    pub static ref CREATE_ACCOUNT: Vec<u8> = { compile_script(stdlib::transaction_scripts::create_account()) };
+    pub static ref PEER_TO_PEER: Vec<u8> = { compile_script(stdlib::transaction_scripts::peer_to_peer()) };
 }
 
 #[derive(Clone)]
@@ -165,9 +168,8 @@ impl ChainService {
                 TransactionPayload::Program(_) | TransactionPayload::Module(_) | TransactionPayload::Script(_) => {
                     let state_db = self.state_db.lock().unwrap();
                     let mut output_vec = MoveVM::execute_block(vec![sign_tx.clone()], &VM_CONFIG, &*state_db);
-
                     output_vec.pop().and_then(|output| {
-                        state_db.apply_write_set(&output.write_set()).unwrap();
+                        state_db.apply_libra_output(&output).unwrap();
                         let state_hash = state_db.root_hash();
                         tx_db.insert_all(state_hash, sign_tx.clone());
 
@@ -251,34 +253,34 @@ impl ChainService {
     pub fn faucet_inner(&self, receiver: AccountAddress, amount: u64) -> Result<()> {
         let state_db = self.state_db.lock().unwrap();
         let exist_flag = state_db.exist_account(&receiver);
+        drop(state_db);
         if !exist_flag {
-            let create_account_signed_tx = self.create_account_or_transfer(receiver, amount, stdlib::transaction_scripts::create_account());
+            let create_account_signed_tx = self.create_account_or_transfer(receiver, amount, CREATE_ACCOUNT.clone());
 
             self.apply_on_chain_transaction(create_account_signed_tx);
         } else {
-            let transfer_signed_tx = self.create_account_or_transfer(receiver, amount, stdlib::transaction_scripts::peer_to_peer());
+            let transfer_signed_tx = self.create_account_or_transfer(receiver, amount, PEER_TO_PEER.clone());
 
             self.apply_on_chain_transaction(transfer_signed_tx);
         }
         Ok(())
     }
 
-    fn create_account_or_transfer(&self, receiver: AccountAddress, amount: u64, code: &str) -> SignedTransaction {
+    fn create_account_or_transfer(&self, receiver: AccountAddress, amount: u64, code: Vec<u8>) -> SignedTransaction {
         let state_db = self.state_db.lock().unwrap();
         let mut args: Vec<TransactionArgument> = Vec::new();
         args.push(TransactionArgument::Address(receiver));
         args.push(TransactionArgument::U64(amount));
 
-        let compiler = Compiler {
-            code,
-            ..Compiler::default()
-        };
-        let program = compiler.into_program(args).unwrap();
+        let program = Program::new(code, vec![], args);
 
-        let sender = AccountAddress::from_public_key(&GENESIS_KEYPAIR.1);
-        let s_n = state_db.sequence_number(&sender).unwrap() + 1;
+        let sender = association_address();//AccountAddress::from_public_key(&GENESIS_KEYPAIR.1);
+        let s_n = match state_db.sequence_number(&sender) {
+            Some(num) => num,
+            _ => 0
+        };
         RawTransaction::new(
-            receiver,
+            sender,
             s_n,
             program,
             10_000 as u64,
@@ -424,6 +426,14 @@ impl Chain for ChainService {
     }
 }
 
+pub fn compile_script(code: &str) -> Vec<u8> {
+    let compiler = Compiler {
+        code,
+        ..Compiler::default()
+    };
+    compiler.into_script_blob().unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR};
@@ -462,7 +472,7 @@ mod tests {
     }
 
     #[test]
-    fn test_program() {
+    fn test_apply_program() {
         let code =
             "
             main() {
@@ -498,5 +508,13 @@ mod tests {
         let rt = Runtime::new().unwrap();
         let chain_service = ChainService::new(&rt.executor());
         chain_service.apply_on_chain_transaction(signed_tx);
+    }
+
+    #[test]
+    fn test_faucet() {
+        let mut rt = Runtime::new().unwrap();
+        let chain_service = ChainService::new(&rt.executor());
+        let receiver = AccountAddress::random();
+        chain_service.faucet_inner(receiver, 100);
     }
 }
