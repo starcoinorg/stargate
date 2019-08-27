@@ -18,7 +18,7 @@ use tokio::runtime::{Runtime,TaskExecutor};
 #[test]
 fn test_wallet() {
     ::logger::init_for_e2e_testing();
-    let amount: u64 = 1_000_000_000;
+    let amount: u64 = 10_000_000;
     let mut rng: StdRng = SeedableRng::from_seed([0; 32]);
     let keypair = KeyPair::generate_for_testing(&mut rng);
 

@@ -261,6 +261,9 @@ impl ChainService {
             let create_account_signed_tx = self.create_account_or_transfer(receiver, amount, CREATE_ACCOUNT.clone());
 
             self.apply_on_chain_transaction(create_account_signed_tx);
+
+            let state_db = self.state_db.lock().unwrap();
+            let exist_flag = state_db.get_account_state(&receiver);
         } else {
             let transfer_signed_tx = self.create_account_or_transfer(receiver, amount, PEER_TO_PEER.clone());
 
@@ -286,7 +289,7 @@ impl ChainService {
             sender,
             s_n,
             program,
-            10_000 as u64,
+            1000_000 as u64,
             1 as u64,
             Duration::from_secs(u64::max_value()),
         ).sign(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone())
@@ -519,5 +522,8 @@ mod tests {
         let chain_service = ChainService::new(&rt.executor());
         let receiver = AccountAddress::random();
         chain_service.faucet_inner(receiver, 100);
+        let state_db = chain_service.state_db.lock().unwrap();
+        let exist_flag = state_db.exist_account(&receiver);
+        assert_eq!(exist_flag, true);
     }
 }
