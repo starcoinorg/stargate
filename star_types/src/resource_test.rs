@@ -1,7 +1,8 @@
 use hex;
 
 use canonical_serialization::{CanonicalSerialize, SimpleDeserializer, SimpleSerializer};
-use types::account_config::{account_struct_tag, AccountResource, EventHandle};
+use types::account_config::{account_struct_tag, AccountResource};
+use types::event::EventHandle;
 
 use crate::resource::*;
 
