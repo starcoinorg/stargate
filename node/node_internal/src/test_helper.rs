@@ -16,7 +16,10 @@ use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
 use crypto::traits::SigningKey;
 use std::sync::{Arc,Mutex};
 use futures_01::future::Future as Future01;
-use std::time::{SystemTime,UNIX_EPOCH};
+use std::{
+    time::{SystemTime,UNIX_EPOCH,Duration},
+    thread,
+};
 use types::account_config::coin_struct_tag;
 use logger::prelude::*;
 use sg_config::config::NetworkConfig;
@@ -32,6 +35,8 @@ pub fn gen_node(executor:TaskExecutor,config:&NetworkConfig)->(Node<MockChainCli
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     println!("account_address: {}", account_address);
     client.faucet(account_address, amount).unwrap();
+
+    thread::sleep( Duration::from_millis(1000));
     let mut wallet = Wallet::new_with_client(account_address, keypair.clone(), client).unwrap();
 
     let (network,tx,rx )= build_network_service(config,keypair.clone());
