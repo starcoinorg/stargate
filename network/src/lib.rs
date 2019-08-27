@@ -25,8 +25,11 @@ pub fn convert_account_address_to_peer_id(
 mod tests {
     use crate::net::{build_network_service, Message, NetworkComponent, NetworkService};
     use crate::{convert_account_address_to_peer_id, convert_peer_id_to_account_address};
-    use crypto::{ed25519::compat, test_utils::KeyPair};
-
+    use crypto::{
+        ed25519::{compat, Ed25519PrivateKey, Ed25519PublicKey},
+        test_utils::KeyPair,
+        Uniform,
+    };
     use futures::{
         future::Future,
         stream,
@@ -41,10 +44,9 @@ mod tests {
         multihash::Multihash,
     };
     use network_libp2p::{identity, NodeKeyConfig, PeerId, PublicKey, Secret};
-    use std::thread;
-    use std::time::Duration;
-    use tokio::prelude::Async;
-    use tokio::runtime::Runtime;
+    use rand::prelude::*;
+    use std::{thread, time::Duration};
+    use tokio::{prelude::Async, runtime::Runtime};
     use types::account_address::AccountAddress;
 
     fn build_test_network_pair() -> (NetworkComponent, NetworkComponent) {
@@ -88,16 +90,18 @@ mod tests {
                 seeds: boot_nodes,
             };
 
-            let key_pair = compat::generate_keypair(None);
+            let mut rng: StdRng = SeedableRng::seed_from_u64(index as u64); //SeedableRng::from_seed([0; 32]);
+            let key_pair = KeyPair::generate_for_testing(&mut rng);
 
             if first_addr.is_none() {
                 first_addr = Some(config.listen.clone().parse().unwrap());
             }
+
             let server = build_network_service(
                 &config,
                 KeyPair {
-                    private_key: key_pair.0,
-                    public_key: key_pair.1,
+                    private_key: key_pair.private_key,
+                    public_key: key_pair.public_key,
                 },
             );
             result.push({
