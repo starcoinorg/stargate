@@ -6,7 +6,7 @@ use crypto::test_utils::KeyPair;
 use failure::*;
 use futures::{future, Future, Stream};
 use grpcio::EnvBuilder;
-use network::net::{build_network_service, NetworkService,Message};
+use network::{build_network_service, NetworkService,Message};
 use node::client;
 use node_internal::node::Node;
 use node_service::setup_node_service;

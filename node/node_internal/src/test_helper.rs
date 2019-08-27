@@ -1,4 +1,4 @@
-use network::net::{build_network_service,NetworkService};
+use network::{build_network_service,NetworkService};
 use std::io::Result;
 
 use rand::prelude::*;

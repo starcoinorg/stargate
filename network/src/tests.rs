@@ -162,4 +162,20 @@ mod tests {
         let account_address_1 = convert_peer_id_to_account_address(peer_id).unwrap();
         assert_eq!(account_address, account_address_1);
     }
+
+    fn generate_peer_id() -> PeerId {
+        let key = identity::Keypair::generate_ed25519().public();
+        key.into_peer_id()
+    }
+
+    #[test]
+    fn test_boot_nodes() {
+        let mut boot_nodes = Vec::new();
+        boot_nodes.push(
+            "/ip4/127.0.0.1/tcp/5000".parse::<Multiaddr>().unwrap()
+                .clone()
+                .with(Protocol::P2p(generate_peer_id().into()))
+                .to_string(),
+        );
+    }
 }

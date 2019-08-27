@@ -9,7 +9,7 @@ use futures::{
 };
 use memsocket::{MemorySocket};
 use netcore::transport::{memory::MemoryTransport};
-use network::net::{build_network_service,NetworkService};
+use network::{build_network_service,NetworkService};
 use std::io::Result;
 use tokio::runtime::{Runtime,TaskExecutor};
 

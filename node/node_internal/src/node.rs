@@ -26,7 +26,7 @@ use std::borrow::{Borrow,BorrowMut};
 use logger::prelude::*;
 use network::{
     convert_account_address_to_peer_id,convert_peer_id_to_account_address,
-    net::{NetworkService,Message}
+    {NetworkService,Message}
 };
 use futures_01::sync::mpsc::{UnboundedSender,UnboundedReceiver};
 
