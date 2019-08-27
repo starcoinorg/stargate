@@ -1,8 +1,9 @@
 use canonical_serialization::{SimpleDeserializer, SimpleSerializer};
 use failure::prelude::*;
 use std::convert::{TryFrom, TryInto};
-use types::account_config::{AccountResource, EventHandle};
+use types::account_config::{AccountResource};
 use types::account_address::AccountAddress;
+use types::event::EventHandle;
 
 //impl TryFrom<Vec<u8>> for AccountResource{
 //    type Error = failure::Error;

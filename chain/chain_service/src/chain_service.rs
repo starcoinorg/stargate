@@ -41,6 +41,7 @@ use proto_conv::{FromProto, IntoProto};
 use protobuf::RepeatedField;
 use state_store::StateStore;
 use compiler::Compiler;
+use types::contract_event::ContractEvent;
 
 lazy_static! {
     static ref VM_CONFIG:VMConfig = VMConfig{
@@ -224,7 +225,9 @@ impl ChainService {
                 if flag {
                     return;
                 }
-                let event_address = AccountAddress::from_proto(e.clone().take_access_path().address).unwrap();
+                //TODO fix unwrap
+                let event:ContractEvent = ContractEvent::from_proto(e.clone()).unwrap();
+                let event_address = event.key().as_access_path().unwrap().address;
                 flag = event_address == address;
             });
 
