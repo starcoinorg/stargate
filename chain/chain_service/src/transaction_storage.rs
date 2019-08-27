@@ -45,7 +45,7 @@ impl TransactionStorage {
         let signed_tx_hash = sign_tx.clone().hash();
         let version = self.insert_signed_transaction(sign_tx.clone());
 
-        let tx_info = TransactionInfo::new(signed_tx_hash, state_hash, HashValue::random(), 0);
+        let tx_info = TransactionInfo::new(signed_tx_hash, state_hash, HashValue::zero(), 0);
         self.insert_transaction_info(tx_info.clone());
 
         let hash_root = self.accumulator_append(tx_info);
