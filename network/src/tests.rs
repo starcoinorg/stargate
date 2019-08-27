@@ -16,17 +16,27 @@ mod tests {
         build_network_service, convert_account_address_to_peer_id,
         convert_peer_id_to_account_address, Message, NetworkComponent, NetworkService,
     };
-    use libp2p::{
-        build_multiaddr,
-        multiaddr::{Multiaddr, Protocol},
-        multihash,
-        multihash::Multihash,
-    };
+    use libp2p::multihash;
     use network_libp2p::{identity, NodeKeyConfig, PeerId, PublicKey, Secret};
     use rand::prelude::*;
-    use std::{thread, time::Duration};
+    use std::{thread, time::Duration, str::FromStr};
     use tokio::{prelude::Async, runtime::Runtime};
     use types::account_address::AccountAddress;
+    use crate::helper::convert_boot_nodes;
+    use hex;
+
+    fn build_seed_node(port: u64) -> NetworkComponent {
+        build_network_service(
+            &sg_config::config::NetworkConfig {
+                listen: format!("/ip4/127.0.0.1/tcp/{}", port),
+                seeds: Vec::new(),
+            },
+            {
+                let mut rng: StdRng = SeedableRng::seed_from_u64(0);
+                KeyPair::<Ed25519PrivateKey, Ed25519PublicKey>::generate_for_testing(&mut rng)
+            },
+        )
+    }
 
     fn build_test_network_pair() -> (NetworkComponent, NetworkComponent) {
         let mut l = build_test_network_services(2, 50400).into_iter();
@@ -48,40 +58,32 @@ mod tests {
             UnboundedSender<Message>,
             UnboundedReceiver<Message>,
         )> = Vec::with_capacity(num);
-        let mut first_addr = None::<Multiaddr>;
+        let mut first_addr = None::<String>;
 
         for index in 0..num {
             let mut boot_nodes = Vec::new();
+            let key_pair = {
+                let mut rng: StdRng = SeedableRng::seed_from_u64(index as u64);
+                KeyPair::<Ed25519PrivateKey, Ed25519PublicKey>::generate_for_testing(&mut rng)
+            };
 
             if let Some(first_addr) = first_addr.as_ref() {
                 boot_nodes.push(
-                    first_addr
-                        .clone()
-                        .with(Protocol::P2p(
-                            result[0].0.libp2p_service.lock().peer_id().clone().into(),
-                        ))
-                        .to_string(),
-                );
+                    format!("{}/p2p/{}",
+                            first_addr,
+                            hex::encode(result[0].0.identify())));
             }
-            println!("boots {:?}", boot_nodes.clone());
             let config = sg_config::config::NetworkConfig {
                 listen: format!("/ip4/127.0.0.1/tcp/{}", base_port + index as u16),
                 seeds: boot_nodes,
             };
-
-            let mut rng: StdRng = SeedableRng::seed_from_u64(index as u64); //SeedableRng::from_seed([0; 32]);
-            let key_pair = KeyPair::generate_for_testing(&mut rng);
-
+            println!("listen:{:?},boots {:?}", config.listen, config.seeds);
             if first_addr.is_none() {
                 first_addr = Some(config.listen.clone().parse().unwrap());
             }
 
             let server = build_network_service(
-                &config,
-                KeyPair {
-                    private_key: key_pair.private_key,
-                    public_key: key_pair.public_key,
-                },
+                &config, key_pair,
             );
             result.push({
                 let c: NetworkComponent = server;
@@ -94,9 +96,8 @@ mod tests {
     #[test]
     fn test_send_receive() {
         let (mut service1, mut service2) = build_test_network_pair();
-        let msg_peer_id =
-            convert_peer_id_to_account_address(service1.0.libp2p_service.lock().peer_id().clone())
-                .unwrap();
+        let msg_peer_id = service1.0.identify();
+
         let sender_fut = stream::repeat(1)
             .and_then(move |_| {
                 match service2.1.unbounded_send(Message {
@@ -135,7 +136,6 @@ mod tests {
         let peer_id = multihash::encode(multihash::Hash::SHA3256, &public_key.to_bytes())
             .unwrap()
             .into_bytes();
-        println!("{:?}", peer_id);
         PeerId::from_bytes(peer_id.clone()).unwrap();
         assert_eq!(address, &peer_id[2..]);
     }
@@ -147,6 +147,10 @@ mod tests {
         for (peer_id, peer) in service1.0.libp2p_service.lock().state().connected_peers {
             println!("id: {:?}, peer: {:?}", peer_id, peer);
         }
+        assert_eq!(
+            AccountAddress::from_str(&hex::encode(service1.0.identify())).unwrap(),
+            service1.0.identify()
+        );
     }
 
     #[test]
@@ -159,23 +163,28 @@ mod tests {
 
         let account_address = AccountAddress::from_public_key(&public_key);
         let peer_id = convert_account_address_to_peer_id(account_address).unwrap();
-        let account_address_1 = convert_peer_id_to_account_address(peer_id).unwrap();
+        let account_address_1 = convert_peer_id_to_account_address(&peer_id).unwrap();
         assert_eq!(account_address, account_address_1);
     }
 
-    fn generate_peer_id() -> PeerId {
-        let key = identity::Keypair::generate_ed25519().public();
-        key.into_peer_id()
+
+    fn generate_account_address() -> String {
+        let (private_key, public_key) = compat::generate_keypair(Option::None);
+        let account_address = AccountAddress::from_public_key(&public_key);
+        hex::encode(account_address)
     }
 
     #[test]
     fn test_boot_nodes() {
         let mut boot_nodes = Vec::new();
+
         boot_nodes.push(
-            "/ip4/127.0.0.1/tcp/5000".parse::<Multiaddr>().unwrap()
-                .clone()
-                .with(Protocol::P2p(generate_peer_id().into()))
-                .to_string(),
+            format!("/ip4/127.0.0.1/tcp/5000/p2p/{:}",
+                    generate_account_address()).to_string()
         );
+        boot_nodes.iter().for_each(|x| println!("{}", x));
+
+        let boot_nodes = convert_boot_nodes(boot_nodes);
+        boot_nodes.iter().for_each(|x| println!("{}", x));
     }
 }
