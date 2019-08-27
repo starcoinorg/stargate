@@ -170,33 +170,6 @@ impl StateStorage {
         })
     }
 
-    #[deprecated]
-    pub fn create_account(&self, address: AccountAddress, init_amount: u64) -> Result<HashValue> {
-        if self.exist_account(&address) {
-            bail!("account with address: {} already exist.", address);
-        }
-        info!("create account:{} init_amount:{}", address, init_amount);
-        let mut state = AccountState::new();
-        //TODO not directly create account
-        let event_handle = EventHandle::new_from_address(&address, 0);
-        let account_resource = AccountResource::new(init_amount, 0, ByteArray::new(address.to_vec()), false, event_handle.clone(), event_handle.clone());
-        let mut serializer = SimpleSerializer::new();
-        account_resource.serialize(&mut serializer);
-        let value: Vec<u8> = serializer.get_output();
-        state.update(account_resource_path(), value);
-        self.update_account(address, state)
-    }
-    #[deprecated]
-    fn update_account(&self, address: AccountAddress, account_state: AccountState) -> Result<HashValue> {
-        {
-            let account_root_hash = account_state.root_hash();
-            self.account_states.borrow_mut().insert(address, account_state);
-            let mut global_state = self.global_state.borrow_mut();
-            *global_state = global_state.update(vec![(address.hash(), AccountStateBlob::from(account_root_hash.to_vec()))], &ProofReader::default()).unwrap();
-        }
-        return Ok(self.root_hash());
-    }
-
     //TODO get with proof
     pub fn get_account_state(&self, address: &AccountAddress) -> Option<Vec<u8>> {
         self.account_states.borrow().get(address).map(|state| state.to_bytes())
