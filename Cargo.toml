@@ -12,6 +12,7 @@ members = [
     "config/config_builder",
     "config/generate_keypair",
     "crypto/crypto",
+    "crypto/crypto_derive",
     "storage/accumulator",
     "storage/state_view",
     "storage/scratchpad",

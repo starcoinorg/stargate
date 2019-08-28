@@ -24,14 +24,27 @@ pub type Loc = Span<ByteIndex>;
 //**************************************************************************************************
 // Program
 //**************************************************************************************************
+
 #[derive(Debug, Clone)]
 /// A set of move modules and a Move transaction script
-
 pub struct Program {
     /// The modules to publish
     pub modules: Vec<ModuleDefinition>,
     /// The transaction script to execute
     pub script: Script,
+}
+
+//**************************************************************************************************
+// ScriptOrModule
+//**************************************************************************************************
+
+#[derive(Debug, Clone)]
+/// A script or a module, used to represent the two types of transactions.
+pub enum ScriptOrModule {
+    /// The script to execute.
+    Script(Script),
+    /// The module to publish.
+    Module(ModuleDefinition),
 }
 
 //**************************************************************************************************
@@ -589,7 +602,7 @@ impl ModuleName {
     }
 
     /// Accessor for the module name's string value
-    pub fn name_ref(&self) -> &String {
+    pub fn name_ref(&self) -> &str {
         &self.0
     }
 }
@@ -723,7 +736,7 @@ impl StructName {
     }
 
     /// Accessor for the name of the struct
-    pub fn name_ref(&self) -> &String {
+    pub fn name_ref(&self) -> &str {
         &self.0
     }
 }
@@ -777,7 +790,7 @@ impl FunctionName {
     }
 
     /// Accessor for the name of the function
-    pub fn name_ref(&self) -> &String {
+    pub fn name_ref(&self) -> &str {
         &self.0
     }
 }
