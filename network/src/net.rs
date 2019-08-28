@@ -159,6 +159,10 @@ impl NetworkService {
         let libp2p_service = build_libp2p_service(cfg).unwrap();
         let (network_sender, network_receiver, network_thread) =
             start_network_thread(libp2p_service.clone());
+        info!("Network started, connected peers:");
+        for p in libp2p_service.lock().connected_peers() {
+            info!("peer_id:{}", p);
+        }
         (
             Self {
                 network_thread,

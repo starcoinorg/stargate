@@ -16,7 +16,7 @@ use types::access_path::{AccessPath, DataPath};
 use std::convert::TryFrom;
 use itertools::Itertools;
 use std::sync::Arc;
-use crate::sparse_merkle::{SparseMerkleTree, ProofRead};
+use crate::sparse_merkle::{SparseMerkleTree, ProofRead, AccountState as MerkleAccountState, node::Node};
 use atomic_refcell::AtomicRefCell;
 use star_types::offchain_transaction::{OffChainTransaction, TransactionOutput};
 use types::account_config::{AccountResource, account_resource_path};
@@ -145,6 +145,8 @@ pub struct StateStorage {
     global_state: Arc<AtomicRefCell<SparseMerkleTree>>,
     account_states: Arc<AtomicRefCell<HashMap<AccountAddress, AccountState>>>,
     struct_cache: Arc<StructCache>,
+    history_state_nodes: Arc<AtomicRefCell<HashMap<HashValue, Node>>>,
+    history_account_states: Arc<AtomicRefCell<HashMap<HashValue, BTreeMap<DataPath, Vec<u8>>>>>,
 }
 
 impl StateStorage {
@@ -153,6 +155,8 @@ impl StateStorage {
             global_state: Arc::new(AtomicRefCell::new(SparseMerkleTree::new(*SPARSE_MERKLE_PLACEHOLDER_HASH))),
             account_states: Arc::new(AtomicRefCell::new(HashMap::new())),
             struct_cache: Arc::new(StructCache::new()),
+            history_state_nodes: Arc::new(AtomicRefCell::new(HashMap::new())),
+            history_account_states: Arc::new(AtomicRefCell::new(HashMap::new())),
         }
     }
 
@@ -212,6 +216,28 @@ impl StateStorage {
     fn get_by_access_path(&self, access_path: &AccessPath) -> Option<Vec<u8>> {
         self.account_states.borrow().get(&access_path.address).and_then(|state| state.get(&access_path.path))
     }
+
+    fn update_root(&self, account_address: AccountAddress, account_root_hash: HashValue) {
+        let mut global_state = self.global_state.borrow_mut();
+        *global_state = global_state.update(vec![(account_address.hash(), AccountStateBlob::from(account_root_hash.to_vec()))], &ProofReader::default()).unwrap();
+
+        let (account_state, nodes) = global_state.get_nodes_by_leaf(account_root_hash);
+        let flag = match account_state {
+            MerkleAccountState::ExistsInDB => { true }
+            MerkleAccountState::ExistsInScratchPad(_data) => { true }
+            _ => { false }
+        };
+        if flag {
+            //TODO:1. save account_state
+
+
+            if nodes.len() > 0 {
+                for node in nodes {
+                    self.history_state_nodes.borrow_mut().insert(node.hash(), node);
+                }
+            }
+        }
+    }
 }
 
 impl StateView for StateStorage {
@@ -237,7 +263,7 @@ impl StateStore for StateStorage {
     fn update(&self, access_path: &AccessPath, value: Vec<u8>) -> Result<()> {
         self.ensure_account_state(&access_path.address);
         let mut states = self.account_states.borrow_mut();
-        //this account state must exist, so use unwrap.
+//this account state must exist, so use unwrap.
         let mut account_state = states.get_mut(&access_path.address).unwrap();
         let account_root_hash = account_state.update(access_path.path.clone(), value)?;
         let mut global_state = self.global_state.borrow_mut();
