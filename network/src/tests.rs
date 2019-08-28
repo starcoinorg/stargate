@@ -20,27 +20,13 @@ mod tests {
     use network_libp2p::{identity, NodeKeyConfig, PeerId, PublicKey, Secret};
     use rand::prelude::*;
     use std::{thread, time::Duration, str::FromStr};
-    use tokio::{prelude::Async, runtime::Runtime};
+    use tokio::{prelude::Async, runtime::Runtime,runtime::TaskExecutor};
     use types::account_address::AccountAddress;
     use crate::helper::convert_boot_nodes;
     use hex;
     use logger::prelude::*;
-
-    fn build_seed_node(port: u64) -> NetworkComponent {
-        build_network_service(
-            &sg_config::config::NetworkConfig {
-                listen: format!("/ip4/127.0.0.1/tcp/{}", port),
-                seeds: Vec::new(),
-            },
-            {
-                let mut rng: StdRng = SeedableRng::seed_from_u64(0);
-                KeyPair::<Ed25519PrivateKey, Ed25519PublicKey>::generate_for_testing(&mut rng)
-            },
-        )
-    }
-
-    fn build_test_network_pair() -> (NetworkComponent, NetworkComponent) {
-        let mut l = build_test_network_services(2, 50400).into_iter();
+    fn build_test_network_pair(executor: TaskExecutor) -> (NetworkComponent, NetworkComponent) {
+        let mut l = build_test_network_services(2, 50400, executor).into_iter();
         let a = l.next().unwrap();
         let b = l.next().unwrap();
         (a, b)
@@ -49,6 +35,7 @@ mod tests {
     fn build_test_network_services(
         num: usize,
         base_port: u16,
+        executor: TaskExecutor,
     ) -> Vec<(
         NetworkService,
         UnboundedSender<Message>,
@@ -60,7 +47,6 @@ mod tests {
             UnboundedReceiver<Message>,
         )> = Vec::with_capacity(num);
         let mut first_addr = None::<String>;
-
         for index in 0..num {
             let mut boot_nodes = Vec::new();
             let key_pair = {
@@ -85,6 +71,7 @@ mod tests {
 
             let server = build_network_service(
                 &config, key_pair,
+                executor.clone(),
             );
             result.push({
                 let c: NetworkComponent = server;
@@ -97,7 +84,9 @@ mod tests {
     #[test]
     fn test_send_receive() {
         ::logger::init_for_e2e_testing();
-        let (mut service1, mut service2) = build_test_network_pair();
+        let rt = Runtime::new().unwrap();
+        let executor = rt.executor();
+        let (mut service1, mut service2) = build_test_network_pair(executor.clone());
         let msg_peer_id = service1.0.identify();
 
         let sender_fut = stream::repeat(1)
@@ -112,8 +101,6 @@ mod tests {
             })
             .for_each(|_| Ok(()));
 
-        let rt = Runtime::new().unwrap();
-        let executor = rt.executor();
         executor.spawn(sender_fut);
         rt.shutdown_on_idle().wait().unwrap();
     }
@@ -144,11 +131,13 @@ mod tests {
 
     #[test]
     fn test_connected_nodes() {
-        let (service1, service2) = build_test_network_pair();
+        let rt = Runtime::new().unwrap();
+        let executor = rt.executor();
+        let (service1, service2) = build_test_network_pair(executor);
         thread::sleep(Duration::new(1, 0));
         for (peer_id, peer) in service1.0.libp2p_service.lock().state().connected_peers {
             println!("id: {:?}, peer: {:?}", peer_id, peer);
-            assert_eq!(peer.open,true);
+            assert_eq!(peer.open, true);
         }
         assert_eq!(
             AccountAddress::from_str(&hex::encode(service1.0.identify())).unwrap(),
