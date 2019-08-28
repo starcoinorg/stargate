@@ -30,11 +30,12 @@ use futures_01::sync::mpsc::{UnboundedSender,UnboundedReceiver};
 use state_storage::AccountState;
 use std::borrow::Borrow;
 use types::account_config::AccountResource;
-
+use star_types::system_event::Event;
 
 pub struct Node <C: ChainClient+Send+Sync+'static>{
     executor: TaskExecutor,
     node_inner:Arc<Mutex<NodeInner<C>>>,
+    event_sender:UnboundedSender<Event>,
 }
 
 struct NodeInner<C: ChainClient+Send+Sync+'static> {
@@ -44,6 +45,7 @@ struct NodeInner<C: ChainClient+Send+Sync+'static> {
     network_service:NetworkService,
     sender:UnboundedSender<Message>,
     receiver:Option<UnboundedReceiver<Message>>,
+    event_receiver:Option<UnboundedReceiver<Event>>,
 }
 
 impl<C:ChainClient+Send+Sync+'static> Node<C>{
@@ -52,17 +54,21 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
                network_service:NetworkService,sender:UnboundedSender<Message>,receiver:UnboundedReceiver<Message>)->Self{
         let executor_clone = executor.clone();
 
+        let (event_sender, event_receiver) = futures_01::sync::mpsc::unbounded();
+
         let node_inner=NodeInner{
             executor:executor_clone,
             keypair,
             wallet,
             network_service,
             sender,
-            receiver:Some(receiver)
+            receiver:Some(receiver),
+            event_receiver:Some(event_receiver),
         };
         Self{
             executor,
             node_inner:Arc::new(Mutex::new(node_inner)),
+            event_sender,
         }
     }
 
@@ -83,7 +89,8 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
 
     pub fn start_server(&self){
         let mut receiver =  self.node_inner.lock().unwrap().receiver.take().expect("receiver already taken");
-        self.executor.spawn(Self::start(self.node_inner.clone(),receiver).boxed().unit_error().compat());
+        let mut event_receiver = self.node_inner.lock().unwrap().event_receiver.take().expect("receiver already taken");
+        self.executor.spawn(Self::start(self.node_inner.clone(),receiver,event_receiver).boxed().unit_error().compat());
     }
 
     pub fn local_balance(&self)->Result<AccountResource>{
@@ -95,21 +102,33 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
         }
     }
 
-    async fn start(node_inner:Arc<Mutex<NodeInner<C>>>,mut receiver:UnboundedReceiver<Message>){
-        info!("start receive message");
-        let mut receiver = receiver.compat();
-        while let Some(message)=receiver.next().await{
-            let data = bytes::Bytes::from(message.unwrap().msg);
-            let msg_type=parse_message_type(&data);
-            let node_inner=node_inner.lock().unwrap();
-            match msg_type {
-                MessageType::OpenChannelNodeNegotiateMessage => node_inner.handle_open_channel_negotiate(data[2..].to_vec()),
-                MessageType::OpenChannelTransactionMessage => node_inner.handle_open_channel(data[2..].to_vec()),
-                MessageType::OffChainPayMessage => node_inner.handle_off_chain_pay(data[2..].to_vec()),
-                _=>warn!("message type not found {:?}",msg_type),
-            };
+    pub fn shutdown(&self){
+        self.event_sender.unbounded_send(Event::SHUTDOWN);
+    }
 
-        }
+    async fn start(node_inner:Arc<Mutex<NodeInner<C>>>,mut receiver:UnboundedReceiver<Message>,mut event_receiver:UnboundedReceiver<Event>){
+        info!("start receive message");
+        let mut receiver = receiver.compat().fuse();
+        let mut event_receiver = event_receiver.compat().fuse();
+        loop{
+            futures::select! {
+                message = receiver.select_next_some() => {
+                    let data = bytes::Bytes::from(message.unwrap().msg);
+                    let msg_type=parse_message_type(&data);
+                    let node_inner=node_inner.lock().unwrap();
+                    match msg_type {
+                        MessageType::OpenChannelNodeNegotiateMessage => node_inner.handle_open_channel_negotiate(data[2..].to_vec()),
+                        MessageType::OpenChannelTransactionMessage => node_inner.handle_open_channel(data[2..].to_vec()),
+                        MessageType::OffChainPayMessage => node_inner.handle_off_chain_pay(data[2..].to_vec()),
+                        _=>warn!("message type not found {:?}",msg_type),
+                    };
+                },
+                _ = event_receiver.select_next_some() => {
+                    break;
+                }
+            }
+        };
+        info!("shutdown server listener");
     }
 
 }
@@ -195,6 +214,7 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
 
     fn off_chain_pay(&self,coin_resource_tag: types::language_storage::StructTag, receiver_address: AccountAddress, amount: u64)->Result<()>{
         let off_chain_pay_tx = self.wallet.transfer(coin_resource_tag,receiver_address,amount)?;
+        self.wallet.apply_txn(&off_chain_pay_tx)?;
         let off_chain_pay_msg = OffChainPayMessage {
             transaction:off_chain_pay_tx,
         };

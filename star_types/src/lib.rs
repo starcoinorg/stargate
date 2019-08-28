@@ -5,6 +5,8 @@ pub mod message;
 pub mod offchain_transaction;
 pub mod proto;
 pub mod resource;
+pub mod system_event;
+
 #[cfg(test)]
 mod resource_test;
 pub mod transaction_output_helper;
