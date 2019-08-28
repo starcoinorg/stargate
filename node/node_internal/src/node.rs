@@ -64,13 +64,18 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
         }
     }
 
-    pub fn open_channel_negotiate(&self,negotiate_message:OpenChannelNodeNegotiateMessage){
+    pub fn open_channel_negotiate(&self,negotiate_message:OpenChannelNodeNegotiateMessage)->Result<()>{
+        self.node_inner.clone().lock().unwrap().open_channel_negotiate(negotiate_message);
+        Ok(())
     }
 
-    pub fn open_channel(&self,open_channel_message:OpenChannelTransactionMessage){
+    pub fn open_channel(&self,open_channel_message:OpenChannelTransactionMessage)->Result<()>{
+        self.node_inner.clone().lock().unwrap().open_channel(open_channel_message);
+        Ok(())
     }
 
     pub fn off_chain_pay(&self,coin_resource_tag: types::language_storage::StructTag, receiver_address: AccountAddress, amount: u64)->Result<()>{
+        self.node_inner.clone().lock().unwrap().off_chain_pay(coin_resource_tag,receiver_address,amount);
         Ok(())
     }
 
@@ -101,7 +106,11 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
 impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
 
     fn send_message(&self,account_addr:&AccountAddress,msg:bytes::Bytes){
-        //self.network_sender.unbounded_send(msg);
+        let message = Message {
+            peer_id:*account_addr,
+            msg:msg.to_vec(),
+        };
+        self.sender.unbounded_send(message);
     }
 
     fn handle_open_channel_negotiate(&self,data:Vec<u8>){

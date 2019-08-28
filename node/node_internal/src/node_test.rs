@@ -50,11 +50,12 @@ fn node_test() -> Result<()> {
     let (mut node1,addr1,keypair1) = gen_node(executor.clone(),&network_config1,client.clone());
     node1.start_server();
 
-    let network_config2 = create_node_network_config("/ip4/127.0.0.1/tcp/5001".to_string(),vec!["/ip4/127.0.0.1/tcp/5000".to_string()]);
+    let addr1_hex=hex::encode(addr1);
+
+    let seed = format!("{}/p2p/{}","/ip4/127.0.0.1/tcp/5000".to_string(),addr1_hex);
+    let network_config2 = create_node_network_config("/ip4/127.0.0.1/tcp/5001".to_string(),vec![]);
     let (mut node2,addr2,keypair2) = gen_node(executor.clone(),&network_config2,client.clone());
     node2.start_server();
-
-    //node2.connect("/memory/10".parse().unwrap(),addr1);
 
     let neg_msg = create_negotiate_message(addr2,addr1 ,keypair2.private_key);
     node2.open_channel_negotiate(neg_msg);

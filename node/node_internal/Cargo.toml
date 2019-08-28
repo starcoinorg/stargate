@@ -33,3 +33,4 @@ crypto = { path = "../../crypto/crypto", features = ["testing"] }
 mock_chain_client = { path = "../../chain/mock_chain_client" }
 proto_conv = { path = "../../common/proto_conv", features = ["derive"] }
 failure = { path = "../../common/failure_ext", package = "failure_ext" }
+hex = { version = "0.3.2", default-features = false }
