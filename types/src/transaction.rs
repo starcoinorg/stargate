@@ -178,6 +178,7 @@ impl RawTransaction {
             public_key,
             signature,
             raw_txn_bytes,
+            receiver: None,
         }))
     }
 
@@ -428,6 +429,10 @@ pub struct SignedTransaction {
 
     // the raw transaction bytes generated from the wallet
     raw_txn_bytes: Vec<u8>,
+
+    ///only offchain transaction is assign receiver.
+    /// TODO refactor this.
+    receiver: Option<AccountAddress>,
 }
 
 /// A transaction for which the signature has been verified. Created by
@@ -482,6 +487,7 @@ impl SignedTransaction {
             signature,
             // In real world raw_txn should be derived from raw_txn_bytes, not the opposite.
             raw_txn_bytes: raw_txn.into_proto_bytes().expect("Should convert."),
+            receiver: None,
         }
     }
 
@@ -523,6 +529,14 @@ impl SignedTransaction {
 
     pub fn raw_txn_bytes_len(&self) -> usize {
         self.raw_txn_bytes.len()
+    }
+
+    pub fn receiver(&self) -> Option<AccountAddress> {
+        self.receiver
+    }
+
+    pub fn set_receiver(&mut self, receiver: AccountAddress){
+        self.receiver = Some(receiver)
     }
 
     /// Checks that the signature of given transaction. Returns `Ok(SignatureCheckedTransaction)` if
@@ -581,6 +595,7 @@ impl FromProto for SignedTransaction {
             public_key: Ed25519PublicKey::try_from(txn.get_sender_public_key())?,
             signature: Ed25519Signature::try_from(txn.get_sender_signature())?,
             raw_txn_bytes: txn.raw_txn_bytes,
+            receiver: None,
         };
 
         // Signature checking is encoded in `SignatureCheckedTransaction`.
@@ -741,6 +756,7 @@ impl CanonicalDeserialize for SignedTransaction {
             public_key: Ed25519PublicKey::try_from(&public_key_bytes[..]).unwrap(),
             signature: Ed25519Signature::try_from(&signature_bytes[..]).unwrap(),
             raw_txn_bytes,
+            receiver: None,
         })
     }
 }

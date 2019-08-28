@@ -1,17 +1,28 @@
-//! no-run: verifier, runtime
+//! account: bob
+//! account: alice
 
-module M {
+//! new-transaction
+//! sender: alice
+main() {
+    let x: bool;
+    x = is_offchain_txn();
 
-    public foo() {
-        let addr: address;
-        let x: bool;
-        x = is_offchain_txn();
-        if (copy(x)) {
-            addr = get_txn_receiver();
-            assert(move(x) == true, 77);
-        }else{
-            assert(move(x) == false, 77);
-        }
-        return;
-    }
+    assert(copy(x) == false, 77);
+    return;
+}
+
+//! new-transaction
+//! sender: alice
+//! receiver: bob
+main() {
+    let x: bool;
+    let receiver: address;
+
+    x = is_offchain_txn();
+    assert(copy(x) == true, 42);
+
+    receiver = get_txn_receiver();
+    assert(copy(receiver) == {{bob}}, 42);
+
+    return;
 }

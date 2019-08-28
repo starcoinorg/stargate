@@ -28,6 +28,7 @@ use vm::{
     errors::VerificationStatus,
     file_format::{CompiledModule, CompiledScript},
 };
+use types::account_address::AccountAddress;
 
 /// A transaction to be evaluated by the testing infra.
 /// Contains code and a transaction config.
@@ -168,6 +169,7 @@ fn make_script_transaction(
     data: &AccountData,
     script: CompiledScript,
     args: Vec<TransactionArgument>,
+    receiver: Option<AccountAddress>,
 ) -> Result<SignedTransaction> {
     let mut blob = vec![];
     script.serialize(&mut blob)?;
@@ -175,7 +177,7 @@ fn make_script_transaction(
 
     let account = data.account();
     let account_resource = exec.read_account_resource(&account).unwrap();
-    Ok(RawTransaction::new_script(
+    let mut txn = RawTransaction::new_script(
         *data.address(),
         account_resource.sequence_number(),
         script,
@@ -183,8 +185,12 @@ fn make_script_transaction(
         1,
         Duration::from_secs(u64::max_value()),
     )
-    .sign(&account.privkey, account.pubkey.clone())?
-    .into_inner())
+        .sign(&account.privkey, account.pubkey.clone())?
+        .into_inner();
+    if let Some(receiver) = receiver {
+        txn.set_receiver(receiver);
+    }
+    Ok(txn)
 }
 
 /// Creates and signs a module transaction.
@@ -296,6 +302,7 @@ pub fn eval(config: &GlobalConfig, transactions: &[Transaction]) -> Result<Evalu
     for transaction in transactions {
         // get the account data of the sender
         let data = config.accounts.get(&transaction.config.sender).unwrap();
+        let receiver = transaction.config.receiver.as_ref().and_then(|receiver|config.accounts.get(receiver)).map(|account_data|account_data.address().clone());
         let addr = data.address();
 
         // start processing a new transaction
@@ -351,6 +358,7 @@ pub fn eval(config: &GlobalConfig, transactions: &[Transaction]) -> Result<Evalu
                     data,
                     compiled_script,
                     transaction.config.args.clone(),
+                    receiver,
                 )?;
                 let txn_output =
                     unwrap_or_log!(run_transaction(&mut exec, script_transaction), res);

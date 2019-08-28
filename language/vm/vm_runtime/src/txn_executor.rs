@@ -621,10 +621,17 @@ where
                         .push(Local::u64(self.gas_meter.remaining_gas().get())));
                 }
                 Bytecode::IsOffchainTxn => {
-                    unimplemented!()
+                    let is_offchain_txn = self.txn_data.is_offchain_txn();
+                    try_runtime!(self.execution_stack.push(Local::bool(is_offchain_txn)));
                 }
                 Bytecode::GetTxnReceiverAddress => {
-                    unimplemented!()
+                    if let Some(receiver) = self.txn_data.receiver() {
+                        try_runtime!(self
+                        .execution_stack
+                        .push(Local::address(receiver)));
+                    }else{
+                        return Err(VMInvariantViolation::LinkerError);
+                    }
                 }
             }
             pc += 1;
