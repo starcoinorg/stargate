@@ -1,23 +1,18 @@
-use switch::{switch::Switch};
-use netcore::transport::{Transport};
-use parity_multiaddr::Multiaddr;
-use tokio::{codec::{Framed,LengthDelimitedCodec}, runtime::TaskExecutor};
+use tokio::{runtime::TaskExecutor};
 use futures::{
-    compat::{Sink01CompatExt,Stream01CompatExt,Compat01As03Sink,Compat01As03},
+    compat::{Stream01CompatExt,Compat01As03},
     future::{FutureExt,Future},
-    stream::{Stream,Fuse,StreamExt,FuturesUnordered},
-    io::{AsyncRead, AsyncWrite},
+    stream::{Stream,Fuse,StreamExt},
     prelude::*,
-    sink::{SinkExt},
 };
 use std::sync::{Arc,Mutex};
 use sgwallet::wallet::Wallet;
 use chain_client::{ChainClient};
-use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
+use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
 use crypto::SigningKey;
 use crypto::test_utils::KeyPair;
 use star_types::message::{*};
-use proto_conv::{IntoProtoBytes,FromProto,FromProtoBytes,IntoProto};
+use proto_conv::{IntoProtoBytes,FromProto,FromProtoBytes};
 use types::account_address::AccountAddress;
 use failure::prelude::*;
 use std::{thread, time};
