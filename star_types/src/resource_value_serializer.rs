@@ -46,7 +46,7 @@ fn deserialize_struct(
                 }
             }
             ResourceType::String => {
-                if let Ok(bytes) = deserializer.decode_variable_length_bytes() {
+                if let Ok(bytes) = deserializer.decode_bytes() {
                     if let Ok(s) = String::from_utf8(bytes) {
                         s_vals.push(MutResourceVal::new(ResourceValue::String(s)));
                         continue;
@@ -55,14 +55,14 @@ fn deserialize_struct(
                 bail!("DataFormatError");
             }
             ResourceType::ByteArray => {
-                if let Ok(bytes) = deserializer.decode_variable_length_bytes() {
+                if let Ok(bytes) = deserializer.decode_bytes() {
                     s_vals.push(MutResourceVal::new(ResourceValue::ByteArray(ByteArray::new(bytes))));
                     continue;
                 }
                 bail!("DataFormatError");
             }
             ResourceType::Address => {
-                if let Ok(bytes) = deserializer.decode_variable_length_bytes() {
+                if let Ok(bytes) = deserializer.decode_bytes() {
                     if let Ok(addr) = AccountAddress::try_from(bytes) {
                         s_vals.push(MutResourceVal::new(ResourceValue::Address(addr)));
                         continue;
@@ -88,7 +88,7 @@ impl CanonicalSerialize for ResourceValue {
             ResourceValue::Address(addr) => {
                 // TODO: this is serializing as a vector but we want just raw bytes
                 // however the AccountAddress story is a bit difficult to work with right now
-                serializer.encode_variable_length_bytes(addr.as_ref())?;
+                serializer.encode_bytes(addr.as_ref())?;
             }
             ResourceValue::Bool(b) => {
                 serializer.encode_bool(*b)?;
@@ -99,7 +99,7 @@ impl CanonicalSerialize for ResourceValue {
             ResourceValue::String(s) => {
                 // TODO: must define an api for canonical serializations of string.
                 // Right now we are just using Rust to serialize the string
-                serializer.encode_variable_length_bytes(s.as_bytes())?;
+                serializer.encode_bytes(s.as_bytes())?;
             }
             ResourceValue::Resource(res) => {
                 for mut_val in res.fields() {
@@ -107,7 +107,7 @@ impl CanonicalSerialize for ResourceValue {
                 }
             }
             ResourceValue::ByteArray(bytearray) => {
-                serializer.encode_variable_length_bytes(bytearray.as_bytes())?;
+                serializer.encode_bytes(bytearray.as_bytes())?;
             }
         }
         Ok(())

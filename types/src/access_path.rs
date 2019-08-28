@@ -74,7 +74,7 @@ impl Field {
         Field(s.to_string())
     }
 
-    pub fn name(&self) -> &String {
+    pub fn name(&self) -> &str {
         &self.0
     }
 }
@@ -576,7 +576,7 @@ impl CanonicalSerialize for AccessPath {
     fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
         serializer
             .encode_struct(&self.address)?
-            .encode_variable_length_bytes(&self.path)?;
+            .encode_bytes(&self.path)?;
         Ok(())
     }
 }
@@ -584,7 +584,7 @@ impl CanonicalSerialize for AccessPath {
 impl CanonicalDeserialize for AccessPath {
     fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self> {
         let address = deserializer.decode_struct::<AccountAddress>()?;
-        let path = deserializer.decode_variable_length_bytes()?;
+        let path = deserializer.decode_bytes()?;
 
         Ok(Self { address, path })
     }
