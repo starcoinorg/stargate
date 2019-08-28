@@ -1,16 +1,14 @@
 use std::{convert::TryFrom, fs, sync::Arc};
 
-use chain_client::{ChainClient, RpcChainClient};
-use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
+use chain_client::{RpcChainClient};
+use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
 use crypto::test_utils::KeyPair;
 use failure::*;
-use futures::{future, Future, Stream};
-use grpcio::EnvBuilder;
 use network::{build_network_service, NetworkService,Message};
 use node::client;
 use node_internal::node::Node;
 use node_service::setup_node_service;
-use sg_config::config::{load_from, NetworkConfig, NodeConfig, RpcConfig, WalletConfig};
+use sg_config::config::{load_from, NodeConfig, WalletConfig};
 use sgwallet::wallet::*;
 use structopt::StructOpt;
 use tokio::runtime::{Runtime, TaskExecutor};
@@ -74,13 +72,12 @@ fn gen_node(
     network_service: NetworkService,sender:UnboundedSender<Message>,receiver:UnboundedReceiver<Message>
 ) -> (Node<RpcChainClient>) {
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
-    let env_builder_arc = Arc::new(EnvBuilder::new().build());
     let client = RpcChainClient::new(
         &wallet_config.chain_address,
         wallet_config.chain_port as u32,
     );
 
-    let mut wallet =
+    let wallet =
         Wallet::new_with_client(account_address, keypair.clone(), Arc::new(client)).unwrap();
 
     Node::new(executor.clone(), wallet, keypair.clone(), network_service,sender,receiver)
@@ -90,14 +87,14 @@ fn main() {
     let args = Args::from_args();
     let swarm = launch_swarm(&args).unwrap();
 
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     let executor = rt.executor();
 
     let keypair = load_from_file(&args.faucet_key_path);
     let (network_service, tx, rx) =
         build_network_service(&swarm.config.net_config, keypair.clone());
 
-    let mut node = gen_node(executor, keypair, &swarm.config.wallet, network_service,tx,rx);
+    let node = gen_node(executor, keypair, &swarm.config.wallet, network_service,tx,rx);
     //node.start_server(swarm.config.node_net_work.addr.parse().unwrap());
 
     let mut node_server = setup_node_service(&swarm.config, Arc::new(node));
