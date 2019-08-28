@@ -195,6 +195,7 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
 
     fn off_chain_pay(&self,coin_resource_tag: types::language_storage::StructTag, receiver_address: AccountAddress, amount: u64)->Result<()>{
         let off_chain_pay_tx = self.wallet.transfer(coin_resource_tag,receiver_address,amount)?;
+        self.wallet.apply_txn(&off_chain_pay_tx)?;
         let off_chain_pay_msg = OffChainPayMessage {
             transaction:off_chain_pay_tx,
         };
