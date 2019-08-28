@@ -1,4 +1,4 @@
-use network::{build_network_service, NetworkService, convert_account_address_to_peer_id,PeerId};
+use network::{build_network_service, NetworkService, convert_account_address_to_peer_id};
 use std::io::Result;
 
 use rand::prelude::*;
@@ -34,14 +34,10 @@ pub fn gen_node(executor: TaskExecutor, config: &NetworkConfig, client: Arc<Mock
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     println!("account_address: {}", account_address);
     client.faucet(account_address, amount).unwrap();
-
     thread::sleep(Duration::from_millis(1000));
     let mut wallet = Wallet::new_with_client(account_address, keypair.clone(), client).unwrap();
-
     let (network, tx, rx) = build_network_service(config, keypair.clone());
-
-    let identify = network.identify();
-    (Node::new(executor.clone(), wallet, keypair.clone(), network, tx, rx), identify, keypair)
+    (Node::new(executor.clone(), wallet, keypair.clone(), network, tx, rx), account_address, keypair)
 }
 
 pub fn create_node_network_config(addr: String, seeds: Vec<String>) -> NetworkConfig {
