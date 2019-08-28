@@ -167,9 +167,7 @@ mod tests {
             assert_eq!(key.encode(), public_key.to_bytes());
         };
         assert_eq!(node_public_key.clone().into_peer_id(), peer_id.clone());
-
-        assert_eq!(account_address.clone().to_vec(), peer_id.as_bytes());
-        //assert_eq!(convert_account_address_to_peer_id(account_address).unwrap(), peer_id);
+        assert_eq!(convert_account_address_to_peer_id(account_address).unwrap(), peer_id);
     }
 
 
