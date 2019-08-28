@@ -103,6 +103,10 @@ fn run_network(
                     net_srv_sender
                         .lock()
                         .send_custom_message(&peer_id, message.msg);
+                    if net_srv_sender.lock().is_open(&peer_id) == false {
+                        error!("Messge send to peer :{} is not connected", convert_peer_id_to_account_address(&peer_id).unwrap());
+                    }
+
                     debug!("Already send message");
                     break;
                 }

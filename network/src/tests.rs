@@ -148,6 +148,7 @@ mod tests {
         thread::sleep(Duration::new(1, 0));
         for (peer_id, peer) in service1.0.libp2p_service.lock().state().connected_peers {
             println!("id: {:?}, peer: {:?}", peer_id, peer);
+            assert_eq!(peer.open,true);
         }
         assert_eq!(
             AccountAddress::from_str(&hex::encode(service1.0.identify())).unwrap(),
