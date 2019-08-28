@@ -80,7 +80,7 @@ impl SparseMerkleNode {
 }
 
 /// The underlying node is either `InternalNode`, `LeafNode`, `SubtreeNode` or `EmptyNode`.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Node {
     Internal(InternalNode),
     Leaf(LeafNode),
@@ -137,7 +137,7 @@ impl Node {
 }
 
 /// An internal node.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InternalNode {
     /// The hash of this internal node which is the root hash of the subtree.
     hash: HashValue,
@@ -197,7 +197,7 @@ pub enum LeafValue {
 }
 
 /// A `LeafNode` represents a single account in the Sparse Merkle Tree.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LeafNode {
     /// The key is the hash of the address.
     key: HashValue,
@@ -235,7 +235,7 @@ impl LeafNode {
 }
 
 /// A subtree node.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SubtreeNode {
     /// The root hash of the subtree represented by this node.
     hash: HashValue,

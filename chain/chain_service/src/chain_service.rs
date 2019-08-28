@@ -224,7 +224,7 @@ impl ChainService {
                     return;
                 }
                 //TODO fix unwrap
-                let event:ContractEvent = ContractEvent::from_proto(e.clone()).unwrap();
+                let event: ContractEvent = ContractEvent::from_proto(e.clone()).unwrap();
                 let event_address = event.key().as_access_path().unwrap().address;
                 flag = event_address == address;
             });
@@ -450,7 +450,7 @@ mod tests {
     };
     use std::{thread, time};
     use compiler::Compiler;
-    use types::{account_address::AccountAddress, transaction::{Program, RawTransaction}};
+    use types::{account_address::AccountAddress, transaction::{Program, RawTransaction}, account_config::{core_code_address, association_address}};
     use std::{time::Duration};
 
     #[test]
@@ -464,26 +464,22 @@ mod tests {
     fn test_chain_service() {
         let mut rt = Runtime::new().unwrap();
         let chain_service = ChainService::new(&rt.executor());
-        let print_future = async move {
-            let ten_millis = time::Duration::from_millis(100);
-            thread::sleep(ten_millis);
-            let root = chain_service.least_state_root_inner();
-            println!("{:?}", root);
-        };
-        rt.block_on(print_future.boxed().unit_error().compat()).unwrap();
+//        let print_future = async move {
+//            let ten_millis = time::Duration::from_millis(100);
+//            thread::sleep(ten_millis);
+        let root = chain_service.least_state_root_inner();
+        println!("{:?}", root);
+//        };
+//        rt.block_on(print_future.boxed().unit_error().compat()).unwrap();
     }
 
     #[test]
     fn test_apply_program() {
+        let rt = Runtime::new().unwrap();
+
         let code =
             "
             main() {
-                let x: u64;
-                if (42 > 0) {
-                    x = 1;
-                } else {
-                    return;
-                }
                 return;
             }
             ";
@@ -495,20 +491,24 @@ mod tests {
 
         let program = compiler.into_program(vec![]).unwrap();
 
-        let account_address = AccountAddress::random();
+        let account_address = association_address();
 
+        let chain_service = ChainService::new(&rt.executor());
+
+        let state_db = chain_service.state_db.lock().unwrap();
+        let s_n = state_db.sequence_number(&account_address).unwrap();
+        drop(state_db);
         let signed_tx = RawTransaction::new(
             account_address,
-            1 as u64,
+            s_n as u64,
             program,
-            10_000 as u64,
+            1_000_000 as u64,
             1 as u64,
             Duration::from_secs(u64::max_value()),
         ).sign(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone())
             .unwrap()
             .into_inner();
-        let rt = Runtime::new().unwrap();
-        let chain_service = ChainService::new(&rt.executor());
+
         chain_service.apply_on_chain_transaction(signed_tx);
     }
 
