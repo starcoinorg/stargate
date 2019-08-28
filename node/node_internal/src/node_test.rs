@@ -42,10 +42,11 @@ use crate::node::Node;
 #[test]
 fn node_test() -> Result<()> {
     ::logger::init_for_e2e_testing();
+    let mut rt1 = Runtime::new().unwrap();
     let mut rt = Runtime::new().unwrap();
     let executor = rt.executor();
 
-    let client=Arc::new(MockChainClient::new(executor.clone()));
+    let client=Arc::new(MockChainClient::new(rt1.executor()));
     let network_config1 = create_node_network_config("/ip4/127.0.0.1/tcp/5000".to_string(),vec![]);
     let (mut node1,addr1,keypair1) = gen_node(executor.clone(),&network_config1,client.clone());
     node1.start_server();
@@ -68,6 +69,7 @@ fn node_test() -> Result<()> {
 
     node1.shutdown();
     node2.shutdown();
+
     rt.shutdown_on_idle().wait().unwrap();
     Ok(())
 }

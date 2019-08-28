@@ -18,7 +18,6 @@ use crypto::SigningKey;
 use crypto::test_utils::KeyPair;
 use star_types::message::{*};
 use proto_conv::{IntoProtoBytes,FromProto,FromProtoBytes,IntoProto};
-use std::collections::HashMap;
 use types::account_address::AccountAddress;
 use failure::prelude::*;
 use std::{thread, time};
