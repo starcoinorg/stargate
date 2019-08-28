@@ -53,7 +53,7 @@ fn node_test() -> Result<()> {
     let addr1_hex=hex::encode(addr1);
 
     let seed = format!("{}/p2p/{}","/ip4/127.0.0.1/tcp/5000".to_string(),addr1_hex);
-    let network_config2 = create_node_network_config("/ip4/127.0.0.1/tcp/5001".to_string(),vec![]);
+    let network_config2 = create_node_network_config("/ip4/127.0.0.1/tcp/5001".to_string(),vec![seed]);
     let (mut node2,addr2,keypair2) = gen_node(executor.clone(),&network_config2,client.clone());
     node2.start_server();
 
