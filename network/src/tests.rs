@@ -158,15 +158,18 @@ mod tests {
     #[test]
     fn test_convert_address_peer_id() {
         let (private_key, public_key) = compat::generate_keypair(Option::None);
-
-        let mut cfg = network_libp2p::NetworkConfiguration::new();
         let seckey = identity::ed25519::SecretKey::from_bytes(&mut private_key.to_bytes()).unwrap();
-        cfg.node_key = NodeKeyConfig::Ed25519(Secret::Input(seckey));
-
+        let node_public_key = NodeKeyConfig::Ed25519(Secret::Input(seckey)).into_keypair().unwrap().public();
         let account_address = AccountAddress::from_public_key(&public_key);
-        let peer_id = convert_account_address_to_peer_id(account_address).unwrap();
-        let account_address_1 = convert_peer_id_to_account_address(&peer_id).unwrap();
-        assert_eq!(account_address, account_address_1);
+        let peer_id = PeerId::from_public_key(node_public_key.clone());
+
+        if let PublicKey::Ed25519(key) = node_public_key.clone() {
+            assert_eq!(key.encode(), public_key.to_bytes());
+        };
+        assert_eq!(node_public_key.clone().into_peer_id(), peer_id.clone());
+
+        assert_eq!(account_address.clone().to_vec(), peer_id.as_bytes());
+        //assert_eq!(convert_account_address_to_peer_id(account_address).unwrap(), peer_id);
     }
 
 
