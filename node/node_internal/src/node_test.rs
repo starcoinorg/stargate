@@ -7,8 +7,6 @@ use futures::{
     compat::{Sink01CompatExt} ,
     prelude::*,
 };
-use memsocket::{MemorySocket};
-use netcore::transport::{memory::MemoryTransport};
 use network::{build_network_service,NetworkService};
 use std::io::Result;
 use tokio::runtime::{Runtime,TaskExecutor};

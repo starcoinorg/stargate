@@ -25,5 +25,4 @@ crypto = { path = "../../crypto/crypto" }
 types = { package = "types", path = "../../types"}
 sg_config = {path="../../sgconfig"}
 chain_client = { path = "../../chain/chain_client"}
-netcore = { path = "../../network/netcore"}
 mock_chain_client = { path = "../../chain/mock_chain_client" }

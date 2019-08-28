@@ -8,8 +8,6 @@ edition = "2018"
 
 [dependencies]
 network = { package = "network", path = "../../network"}
-netcore = { path = "../../network/netcore"}
-memsocket = { path = "../../network/memsocket" }
 
 switch = { package = "switch",path="../../switch"}
 futures = { version = "0.3.0-alpha.16", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }

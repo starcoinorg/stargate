@@ -10,15 +10,12 @@ edition = "2018"
 libp2p = "0.7.0"
 tokio = {version = "0.1"}
 futures = "0.1"
-memsocket = { path = "memsocket" }
-netcore = { path = "netcore" }
 sg_config = { path = "../sgconfig" }
 crypto = { path = "../crypto/crypto", features = ["testing"] }
 network_libp2p = { package = "network-libp2p", path = "../network-libp2p" }
-crossbeam-channel = "0.3.6"
-parking_lot = "0.7.1"
 types = { path = "../types" }
 rand = "0.6.5"
 failure = {package = "failure_ext", path = "../common/failure_ext"}
 logger = { path = "../common/logger" }
 hex = { version = "0.3.2", default-features = false }
+parking_lot = "0.7.1"

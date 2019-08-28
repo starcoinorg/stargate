@@ -18,7 +18,6 @@ use proto_conv::{FromProto, IntoProto};
 use std::sync::{Arc,Mutex,mpsc};
 use sg_config::config::{NodeConfig};
 use node_internal::node::Node as Node_Internal;
-use netcore::transport::{Transport};
 use chain_client::{ChainClient};
 use types::account_config::coin_struct_tag;
 
