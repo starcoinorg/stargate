@@ -3,11 +3,9 @@
 
 use crate::utils;
 use std::{
-    collections::HashMap,
     io::{self, Write},
     path::Path,
     process::{Child, Command, Output, Stdio},
-    sync::Arc,
 };
 
 pub struct InteractiveClient {

@@ -67,23 +67,20 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
     }
 
     pub fn open_channel_negotiate(&self,negotiate_message:OpenChannelNodeNegotiateMessage)->Result<()>{
-        self.node_inner.clone().lock().unwrap().open_channel_negotiate(negotiate_message);
-        Ok(())
+        self.node_inner.clone().lock().unwrap().open_channel_negotiate(negotiate_message)
     }
 
     pub fn open_channel(&self,open_channel_message:OpenChannelTransactionMessage)->Result<()>{
-        self.node_inner.clone().lock().unwrap().open_channel(open_channel_message);
-        Ok(())
+        self.node_inner.clone().lock().unwrap().open_channel(open_channel_message)
     }
 
     pub fn off_chain_pay(&self,coin_resource_tag: types::language_storage::StructTag, receiver_address: AccountAddress, amount: u64)->Result<()>{
-        self.node_inner.clone().lock().unwrap().off_chain_pay(coin_resource_tag,receiver_address,amount);
-        Ok(())
+        self.node_inner.clone().lock().unwrap().off_chain_pay(coin_resource_tag,receiver_address,amount)
     }
 
     pub fn start_server(&self){
-        let mut receiver =  self.node_inner.lock().unwrap().receiver.take().expect("receiver already taken");
-        let mut event_receiver = self.node_inner.lock().unwrap().event_receiver.take().expect("receiver already taken");
+        let receiver =  self.node_inner.lock().unwrap().receiver.take().expect("receiver already taken");
+        let event_receiver = self.node_inner.lock().unwrap().event_receiver.take().expect("receiver already taken");
         self.executor.spawn(Self::start(self.node_inner.clone(),receiver,event_receiver).boxed().unit_error().compat());
     }
 
