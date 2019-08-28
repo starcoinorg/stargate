@@ -64,6 +64,7 @@ fn node_test() -> Result<()> {
     let offchain_txn = node1.off_chain_pay(coin_struct_tag(), addr2, transfer_amount).unwrap();
     debug!("txn:{:#?}", offchain_txn);
 
+    info!("local balance is {:?}",node2.local_balance().unwrap());
     rt.shutdown_on_idle().wait().unwrap();
     Ok(())
 }

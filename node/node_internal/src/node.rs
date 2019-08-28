@@ -22,13 +22,15 @@ use std::collections::HashMap;
 use types::account_address::AccountAddress;
 use failure::prelude::*;
 use std::{thread, time};
-use std::borrow::{Borrow,BorrowMut};
 use logger::prelude::*;
 use network::{
-    convert_account_address_to_peer_id,convert_peer_id_to_account_address,
     {NetworkService,Message}
 };
 use futures_01::sync::mpsc::{UnboundedSender,UnboundedReceiver};
+use state_storage::AccountState;
+use std::borrow::Borrow;
+use types::account_config::AccountResource;
+
 
 pub struct Node <C: ChainClient+Send+Sync+'static>{
     executor: TaskExecutor,
@@ -82,6 +84,15 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
     pub fn start_server(&self){
         let mut receiver =  self.node_inner.lock().unwrap().receiver.take().expect("receiver already taken");
         self.executor.spawn(Self::start(self.node_inner.clone(),receiver).boxed().unit_error().compat());
+    }
+
+    pub fn local_balance(&self)->Result<AccountResource>{
+        let account_state_data=self.node_inner.clone().lock().unwrap().wallet.get_account_state();
+        let account_state=AccountState::from_account_state_blob(account_state_data).unwrap().get_account_resource();
+        match account_state {
+            Some(state)=>Ok(state),
+            None=>bail!("data is not ok")
+        }
     }
 
     async fn start(node_inner:Arc<Mutex<NodeInner<C>>>,mut receiver:UnboundedReceiver<Message>){
