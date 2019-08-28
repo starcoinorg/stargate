@@ -24,6 +24,7 @@ mod tests {
     use types::account_address::AccountAddress;
     use crate::helper::convert_boot_nodes;
     use hex;
+    use logger::prelude::*;
 
     fn build_seed_node(port: u64) -> NetworkComponent {
         build_network_service(
@@ -95,6 +96,7 @@ mod tests {
 
     #[test]
     fn test_send_receive() {
+        ::logger::init_for_e2e_testing();
         let (mut service1, mut service2) = build_test_network_pair();
         let msg_peer_id = service1.0.identify();
 

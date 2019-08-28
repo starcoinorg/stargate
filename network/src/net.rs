@@ -74,14 +74,14 @@ fn run_network(
         loop {
             match net_srv.lock().poll().unwrap() {
                 Async::Ready(Some(ServiceEvent::CustomMessage { peer_id, message })) => {
-                    println!("Receive custom message");
+                    debug!("Receive custom message");
                     let _ = _tx.unbounded_send(Message {
                         peer_id: convert_peer_id_to_account_address(&peer_id).unwrap(),
                         msg: message,
                     });
                 }
                 Async::Ready(Some(ServiceEvent::OpenedCustomProtocol { peer_id, .. })) => {
-                    println!(
+                    info!(
                         "Connected peer {:?}",
                         convert_peer_id_to_account_address(&peer_id).unwrap()
                     );
@@ -90,7 +90,7 @@ fn run_network(
                     break;
                 }
                 _ => {
-                    println!("Error happend");
+                    error!("Error happend");
                     break;
                 }
             }
@@ -103,16 +103,16 @@ fn run_network(
                     net_srv_sender
                         .lock()
                         .send_custom_message(&peer_id, message.msg);
-                    println!("Already send message to {:?}", &message.peer_id);
+                    debug!("Already send message");
                     break;
                 }
                 Ok(Async::NotReady) => break,
                 Ok(Async::Ready(None)) => {
-                    println!("Network channel closed");
+                    info!("Network channel closed");
                     return Err(());
                 }
                 Err(_) => {
-                    println!("Error in poll network channel");
+                    error!("Error in poll network channel");
                     return Err(());
                 }
             }
@@ -139,8 +139,8 @@ fn start_network_thread(
         .name("starnet".to_string())
         .spawn(move || {
             match rt.block_on(network_future) {
-                Ok(()) => println!("Network finish"),
-                Err(_e) => println!("Error in network"),
+                Ok(()) => info!("Network finish"),
+                Err(_e) => error!("Error in network"),
             };
         })
         .unwrap();
