@@ -62,7 +62,7 @@
 // See https://play.rust-lang.org/?version=stable&mode=debug&edition=2018&gist=795cd4f459f1d4a0005a99650726834b
 #![allow(clippy::while_let_loop)]
 
-pub mod node;
+mod node;
 
 #[cfg(test)]
 mod sparse_merkle_test;
@@ -392,53 +392,6 @@ impl SparseMerkleTree {
             }
         };
         ret
-    }
-
-    pub fn get_nodes_by_leaf(&self, key: HashValue) -> (AccountState, Vec<Node>) {
-        let mut current_node = Arc::clone(&self.root);
-        let mut bits = key.iter_bits();
-
-        let mut nodes = vec![];
-        loop {
-            let next_node = if let Node::Internal(node) = &*current_node.borrow() {
-                match bits.next() {
-                    Some(bit) => {
-                        if bit {
-                            node.clone_right_child()
-                        } else {
-                            node.clone_left_child()
-                        }
-                    }
-                    None => panic!("Tree is deeper than {} levels.", HashValue::LENGTH_IN_BITS),
-                }
-            } else {
-                break;
-            };
-
-            let tmp = current_node.borrow().clone();
-            nodes.push(tmp);
-
-            current_node = next_node;
-        }
-
-        let ret = match &*current_node.borrow() {
-            Node::Leaf(node) => {
-                if key == node.key() {
-                    match node.value() {
-                        LeafValue::Blob(blob) => AccountState::ExistsInScratchPad(blob.clone()),
-                        LeafValue::BlobHash(_) => AccountState::ExistsInDB,
-                    }
-                } else {
-                    AccountState::DoesNotExist
-                }
-            }
-            Node::Subtree(_) => AccountState::Unknown,
-            Node::Empty => AccountState::DoesNotExist,
-            Node::Internal(_) => {
-                unreachable!("There is an internal node at the bottom of the tree.")
-            }
-        };
-        (ret, nodes)
     }
 
     /// Returns the root hash of this tree.
