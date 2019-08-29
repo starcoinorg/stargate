@@ -294,6 +294,10 @@ impl ChainService {
             .unwrap()
             .into_inner()
     }
+
+    pub fn sender(&self)->channel::Sender<TransactionInner>{
+        self.sender.clone()
+    }
 }
 
 impl Chain for ChainService {

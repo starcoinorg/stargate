@@ -16,10 +16,14 @@ use watch_transaction_stream::WatchTransactionStream;
 pub mod watch_transaction_stream;
 
 pub trait ChainClient {
+    type WatchResp: Stream<Item = WatchTransactionResponse, Error=grpcio::Error>;
+
     fn least_state_root(&self) -> Result<HashValue>;
     fn get_account_state(&self, address: &AccountAddress) -> Result<Option<Vec<u8>>>;
     fn get_state_by_access_path(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>>;
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()>;
+    fn submit_transaction(&mut self, signed_transaction: SignedTransaction) -> Result<()> ;
+    fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchTransactionStream<Self::WatchResp>>;
 }
 
 #[derive(Clone)]
@@ -45,34 +49,12 @@ impl RpcChainClient {
         self.get_account_state(address)
     }
 
-    pub fn submit_transaction(&mut self, signed_transaction: SignedTransaction) -> Result<()> {
-        let mut req = SubmitTransactionRequest::new();
-        req.set_signed_txn(signed_transaction.into_proto());
-        let resp = self.client.submit_transaction(&req);
-        Ok(())
-    }
-
-    pub fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> WatchTransactionStream {
-        let watch_channel = ChannelBuilder::new(Arc::new(EnvBuilder::new().build())).connect(&self.conn_addr);
-        let watch_client = chain_grpc::ChainClient::new(watch_channel);
-
-//        let print_data = move || {
-        let mut req = WatchTransactionRequest::new();
-        req.set_address(address.to_vec());
-        let items_stream = watch_client.watch_transaction(&req).unwrap();
-        WatchTransactionStream::new(items_stream)
-//            let f = items_stream.for_each(|item| {
-//                println!("received sign {:?}", item);
-//                Ok(())
-//            });
-//            f.wait().unwrap();
-//        };
-
-        //thread::spawn(print_data);
-    }
 }
 
 impl ChainClient for RpcChainClient {
+
+    type WatchResp =grpcio::ClientSStreamReceiver<WatchTransactionResponse>;
+
     fn least_state_root(&self) -> Result<HashValue> {
         let req = LeastRootRequest::new();
         let resp = self.client.least_state_root(&req)?;
@@ -120,4 +102,31 @@ impl ChainClient for RpcChainClient {
         let resp = self.client.faucet(&req)?;
         Ok(())
     }
+
+    fn submit_transaction(&mut self, signed_transaction: SignedTransaction) -> Result<()> {
+        let mut req = SubmitTransactionRequest::new();
+        req.set_signed_txn(signed_transaction.into_proto());
+        let resp = self.client.submit_transaction(&req);
+        Ok(())
+    }
+
+    fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchTransactionStream<Self::WatchResp>>{
+        let watch_channel = ChannelBuilder::new(Arc::new(EnvBuilder::new().build())).connect(&self.conn_addr);
+        let watch_client = chain_grpc::ChainClient::new(watch_channel);
+
+        //        let print_data = move || {
+        let mut req = WatchTransactionRequest::new();
+        req.set_address(address.to_vec());
+        let items_stream = watch_client.watch_transaction(&req).unwrap();
+        Ok(WatchTransactionStream::new(items_stream))
+        //            let f = items_stream.for_each(|item| {
+        //                println!("received sign {:?}", item);
+        //                Ok(())
+        //            });
+        //            f.wait().unwrap();
+        //        };
+
+        //thread::spawn(print_data);
+    }
+
 }

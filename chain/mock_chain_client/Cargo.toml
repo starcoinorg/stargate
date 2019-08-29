@@ -15,6 +15,9 @@ chain_client = {path = "../chain_client"}
 chain_service = {path = "../chain_service"}
 crypto = { path = "../../crypto/crypto" }
 logger = { path = "../../common/logger"}
+futures03 = { package = "futures-preview", version = "=0.3.0-alpha.17", features = ["async-await", "nightly", "io-compat", "compat"] }
+futures = "0.1.28"
+grpcio = "0.4.4"
 
 [dev-dependencies]
 crypto = { path = "../../crypto/crypto", features = ["testing"] }

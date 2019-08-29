@@ -1,11 +1,19 @@
 use failure::prelude::*;
-use chain_service::chain_service::ChainService;
-use chain_client::ChainClient;
-use types::account_address::AccountAddress;
-use types::access_path::AccessPath;
+use chain_service::chain_service::{ChainService,TransactionInner};
+use chain_client::{ChainClient,watch_transaction_stream::WatchTransactionStream};
 use crypto::HashValue;
-use tokio::runtime::{Runtime, TaskExecutor};
+use tokio::runtime::{TaskExecutor};
 use logger::prelude::*;
+use types::{account_address::AccountAddress, access_path::AccessPath, transaction::{SignedTransaction,Version}};
+use futures03::{
+    executor::block_on,
+};
+use futures::{
+    sync::mpsc::{unbounded, UnboundedReceiver},
+    Stream,Poll,
+};
+use star_types::{proto::{chain::{ WatchTransactionResponse}}};
+
 
 #[derive(Clone)]
 pub struct MockChainClient {
@@ -28,7 +36,24 @@ impl MockChainClient {
     }
 }
 
+pub struct MockStreamReceiver<T>{
+    inner_rx:UnboundedReceiver<T>
+}
+
+impl<T> Stream for MockStreamReceiver<T> {
+    type Item = T;
+    type Error = grpcio::Error;
+
+    fn poll(&mut self) -> Poll<Option<T>, Self::Error> {
+        self.inner_rx.poll().map_err(|e|{grpcio::Error::RemoteStopped})
+    }
+}
+
 impl ChainClient for MockChainClient {
+
+    type WatchResp = MockStreamReceiver<WatchTransactionResponse>;
+
+
     fn least_state_root(&self) -> Result<HashValue> {
         Ok(self.chain_service.as_ref().unwrap().least_state_root_inner())
     }
@@ -44,6 +69,19 @@ impl ChainClient for MockChainClient {
 
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()> {
         self.chain_service.as_ref().unwrap().faucet_inner(address, amount).map(|_| ())
+    }
+
+    fn submit_transaction(&mut self, signed_transaction: SignedTransaction) -> Result<()> {
+        let chain_service=self.chain_service.as_ref().unwrap();
+        block_on(chain_service.submit_transaction_inner(chain_service.sender(), TransactionInner::OnChain(signed_transaction)));
+
+        Ok(())
+    }
+
+    fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchTransactionStream<Self::WatchResp>> {
+        let rx=self.chain_service.as_ref().unwrap().watch_transaction_inner(*address,ver);
+        let stream = MockStreamReceiver{inner_rx:rx};
+        Ok(WatchTransactionStream::new(stream))
     }
 }
 
