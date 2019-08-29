@@ -9,7 +9,7 @@ use futures03::{
     executor::block_on,
 };
 use futures::{
-    sync::mpsc::{unbounded, UnboundedReceiver},
+    sync::mpsc::UnboundedReceiver,
     Stream,Poll,
 };
 use star_types::{proto::{chain::{ WatchTransactionResponse}}};

@@ -1,6 +1,6 @@
 extern crate grpcio;
 
-use grpcio::{ClientSStreamReceiver,Error};
+use grpcio::Error;
 use star_types::proto::chain::WatchTransactionResponse;
 use futures::{Stream, Poll, Async};
 use types::transaction::SignedTransaction;
