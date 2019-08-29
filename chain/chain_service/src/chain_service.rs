@@ -58,7 +58,6 @@ pub struct ChainService {
     state_db: Arc<Mutex<StateStorage>>,
     tx_db: Arc<Mutex<TransactionStorage>>,
     vm: Arc<Mutex<MoveVM>>,
-    struct_cache: Arc<Mutex<StructCache>>,
     tx_pub: Arc<Mutex<pub_sub::Pub<WatchTransactionResponse>>>,
     event_pub: Arc<Mutex<pub_sub::Pub<WatchEventResponse>>>,
 }
@@ -76,10 +75,9 @@ impl ChainService {
         let tx_db = Arc::new(Mutex::new(TransactionStorage::new()));
         let state_db = Arc::new(Mutex::new(StateStorage::new()));
         let vm = Arc::new(Mutex::new(MoveVM::new(&VM_CONFIG)));
-        let struct_cache = Arc::new(Mutex::new(StructCache::new()));
         let tx_pub = Arc::new(Mutex::new(pub_sub::Pub::new()));
         let event_pub = Arc::new(Mutex::new(pub_sub::Pub::new()));
-        let chain_service = ChainService { sender: tx_sender.clone(), state_db, tx_db, vm, struct_cache, tx_pub, event_pub };
+        let chain_service = ChainService { sender: tx_sender.clone(), state_db, tx_db, vm, tx_pub, event_pub };
         let chain_service_clone = chain_service.clone();
 
         let receiver_future = async move {
@@ -112,11 +110,10 @@ impl ChainService {
         let mut tx_db = self.tx_db.lock().unwrap();
         let exist_flag = tx_db.exist_signed_transaction(signed_tx_hash);
         if !exist_flag {
+            let ver = tx_db.least_version();
             let state_db = self.state_db.lock().unwrap();
             let output = off_chain_tx.output();
-
-            state_db.apply_txn(&off_chain_tx).unwrap();
-            let state_hash = state_db.root_hash();
+            let state_hash = state_db.apply_txn(ver, &off_chain_tx).unwrap();
             tx_db.insert_all(state_hash, off_chain_tx.txn().clone());
 
             let events: Vec<Event> = output.events().iter().map(|e| -> Event {
@@ -139,14 +136,14 @@ impl ChainService {
         let signed_tx_hash = sign_tx.borrow().hash();
         let mut tx_db = self.tx_db.lock().unwrap();
         let exist_flag = tx_db.exist_signed_transaction(signed_tx_hash);
+        let ver = tx_db.least_version();
         if !exist_flag {
             // 1. state_root
             let payload = sign_tx.borrow().payload().borrow();
             match payload {
                 TransactionPayload::WriteSet(ws) => {
                     let state_db = self.state_db.lock().unwrap();
-                    state_db.apply_write_set(&ws).unwrap();
-                    let state_hash = state_db.root_hash();
+                    let state_hash = state_db.apply_write_set(ver, &ws).unwrap();
                     //let state_hash = SparseMerkleTree::default().root_hash();
 
 //                    // 2. add signed_tx
@@ -166,8 +163,7 @@ impl ChainService {
                     let state_db = self.state_db.lock().unwrap();
                     let mut output_vec = MoveVM::execute_block(vec![sign_tx.clone()], &VM_CONFIG, &*state_db);
                     output_vec.pop().and_then(|output| {
-                        state_db.apply_libra_output(&output).unwrap();
-                        let state_hash = state_db.root_hash();
+                        let state_hash = state_db.apply_libra_output(ver, &output).unwrap();
                         tx_db.insert_all(state_hash, sign_tx.clone());
 
                         let events: Vec<Event> = output.events().iter().map(|e| -> Event {
