@@ -225,8 +225,10 @@ impl ChainService {
                 }
                 //TODO fix unwrap
                 let event: ContractEvent = ContractEvent::from_proto(e.clone()).unwrap();
-                let event_address = event.key().as_access_path().unwrap().address;
-                flag = event_address == address;
+                //TODO fixme
+                //let event_address = event.key().as_access_path().unwrap().address;
+                //flag = event_address == address;
+                flag = true;
             });
 
             flag
