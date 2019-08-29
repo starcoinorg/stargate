@@ -170,8 +170,16 @@ pub enum Opcodes {
     GET_TXN_SEQUENCE_NUMBER = 0x33,
     GET_TXN_PUBLIC_KEY      = 0x34,
     FREEZE_REF              = 0x35,
-    IS_OFFCHAIN_TXN         = 0x36,
-    GET_TXN_RECEIVER        = 0x37,
+    IS_OFFCHAIN_TXN             = 0x36,
+    GET_TXN_RECEIVER            = 0x37,
+    EXIST_SENDER_OFFCHAIN       = 0x38,
+    EXIST_RECEIVER_OFFCHAIN     = 0x39,
+    BORROW_SENDER_OFFCHAIN      = 0x3A,
+    BORROW_RECEIVER_OFFCHAIN    = 0x3B,
+    MOVE_FROM_SENDER_OFFCHAIN   = 0x3C,
+    MOVE_FROM_RECEIVER_OFFCHAIN = 0x3D,
+    MOVE_TO_SENDER_OFFCHAIN     = 0x3E,
+    MOVE_TO_RECEIVER_OFFCHAIN   = 0x3F,
 }
 
 /// Upper limit on the binary size

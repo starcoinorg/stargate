@@ -160,6 +160,15 @@ impl<'a> StackUsageVerifier<'a> {
 
             Bytecode::IsOffchainTxn
             | Bytecode::GetTxnReceiverAddress => 1,
+
+            Bytecode::ExistSenderOffchain(_,_)
+            | Bytecode::ExistReceiverOffchain(_,_) => 1,
+            Bytecode::BorrowSenderOffchain(_,_)
+            | Bytecode::BorrowReceiverOffchain(_,_) => 1,
+            Bytecode::MoveFromSenderOffchain(_,_)
+            | Bytecode::MoveFromReceiverOffchain(_,_) => 1,
+            Bytecode::MoveToSenderOffchain(_,_)
+            | Bytecode::MoveToReceiverOffchain(_,_) => -1,
         }
     }
 }

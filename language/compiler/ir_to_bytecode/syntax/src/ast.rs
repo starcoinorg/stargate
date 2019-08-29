@@ -320,6 +320,25 @@ pub enum Builtin {
     IsOffchainTxn,
     /// Returns the address of the current offchain transaction's receiver, if current txn is not offchain transaction, txn will fail.
     GetTxnReceiver,
+    /// Check if there is a struct object (`StructName` resolved by current module) associated with
+    /// the sender address at offchain
+    ExistSenderOffchain(StructName, Vec<Type>),
+    /// Same as ExistSenderOffchain, but check by receiver address
+    ExistReceiverOffchain(StructName, Vec<Type>),
+    /// Get the struct object (`StructName` resolved by current module) associated with the sender
+    /// address at offchain
+    BorrowSenderOffchain(StructName, Vec<Type>),
+    /// Get the struct object (`StructName` resolved by current module) associated with the receiver
+    /// address at offchain
+    BorrowReceiverOffchain(StructName, Vec<Type>),
+    /// Remove a resource of the given type from the offchain account with the sender address
+    MoveFromSenderOffchain(StructName, Vec<Type>),
+    /// Remove a resource of the given type from the offchain account with the receiver address
+    MoveFromReceiverOffchain(StructName, Vec<Type>),
+    /// Publish an instantiated struct object into sender's offchain account.
+    MoveToSenderOffchain(StructName, Vec<Type>),
+    /// Publish an instantiated struct object into receiver's offchain account.
+    MoveToReceiverOffchain(StructName, Vec<Type>),
 }
 
 /// Enum for different function calls
@@ -1274,6 +1293,14 @@ impl fmt::Display for Builtin {
             Builtin::Freeze => write!(f, "freeze"),
             Builtin::IsOffchainTxn => write!(f, "is_offchain_txn"),
             Builtin::GetTxnReceiver => write!(f, "get_txn_receiver"),
+            Builtin::ExistSenderOffchain(t, tys) => write!(f, "exist_sender_offchain<{}{}>", t, format_type_actuals(tys)),
+            Builtin::ExistReceiverOffchain(t, tys) => write!(f, "exist_receiver_offchain<{}{}>", t, format_type_actuals(tys)),
+            Builtin::BorrowSenderOffchain(t, tys) => write!(f, "borrow_sender_offchain<{}{}>", t, format_type_actuals(tys)),
+            Builtin::BorrowReceiverOffchain(t, tys) => write!(f, "borrow_receiver_offchain<{}{}>", t, format_type_actuals(tys)),
+            Builtin::MoveFromSenderOffchain(t, tys) => write!(f, "move_from_sender_offchain<{}{}>", t, format_type_actuals(tys)),
+            Builtin::MoveFromReceiverOffchain(t, tys) => write!(f, "move_from_receiver_offchain<{}{}>", t, format_type_actuals(tys)),
+            Builtin::MoveToSenderOffchain(t, tys) => write!(f, "move_to_sender_offchain<{}{}>", t, format_type_actuals(tys)),
+            Builtin::MoveToReceiverOffchain(t, tys) => write!(f, "move_to_receiver_offchain<{}{}>", t, format_type_actuals(tys)),
         }
     }
 }

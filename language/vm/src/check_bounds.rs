@@ -374,6 +374,17 @@ impl FunctionDefinition {
                         }
                     }
 
+                    ExistSenderOffchain(idx, _)
+                    | ExistReceiverOffchain(idx, _)
+                    | BorrowSenderOffchain(idx, _)
+                    | BorrowReceiverOffchain(idx, _)
+                    | MoveFromSenderOffchain(idx, _)
+                    | MoveFromReceiverOffchain(idx, _)
+                    | MoveToSenderOffchain(idx, _)
+                    | MoveToReceiverOffchain(idx, _) => {
+                        check_code_unit_bounds_impl(&module.struct_defs, bytecode_offset, *idx)
+                    }
+
                     // List out the other options explicitly so there's a compile error if a new
                     // bytecode gets added.
                     FreezeRef | Pop | Ret | LdConst(_) | LdTrue | LdFalse | ReadRef | WriteRef

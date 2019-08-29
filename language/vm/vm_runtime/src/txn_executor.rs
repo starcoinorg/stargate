@@ -78,6 +78,16 @@ fn make_access_path(
     create_access_path(&address, struct_tag)
 }
 
+fn make_access_path_offchain(
+    module: &impl ModuleAccess,
+    idx: StructDefinitionIndex,
+    address: AccountAddress,
+    participant: AccountAddress,
+) -> AccessPath{
+    let struct_tag = resource_storage_key(module, idx);
+    AccessPath::off_chain_resource_access_path(address,participant,struct_tag)
+}
+
 /// A struct that executes one single transaction.
 /// 'alloc is the lifetime for the code cache, which is the argument type P here. Hence the P should
 /// live as long as alloc.
@@ -633,6 +643,30 @@ where
                         return Err(VMInvariantViolation::LinkerError);
                     }
                 }
+                Bytecode::ExistSenderOffchain(idx, _) => {
+                    try_runtime!(self.exist_offchain(true, instruction, idx));
+                }
+                Bytecode::ExistReceiverOffchain(idx, _) => {
+                    try_runtime!(self.exist_offchain(false, instruction, idx));
+                }
+                Bytecode::BorrowSenderOffchain(idx, _) => {
+                    try_runtime!(self.borrow_offchain(true, instruction, idx));
+                }
+                Bytecode::BorrowReceiverOffchain(idx, _) => {
+                    try_runtime!(self.borrow_offchain(false, instruction, idx));
+                }
+                Bytecode::MoveFromSenderOffchain(idx, _) => {
+                    try_runtime!(self.move_from_offchain(true, instruction, idx));
+                }
+                Bytecode::MoveFromReceiverOffchain(idx, _) => {
+                    try_runtime!(self.move_from_offchain(false, instruction, idx));
+                }
+                Bytecode::MoveToSenderOffchain(idx, _) => {
+                    try_runtime!(self.move_to_offchain(true, instruction, idx));
+                }
+                Bytecode::MoveToReceiverOffchain(idx, _) => {
+                    try_runtime!(self.move_to_offchain(false, instruction, idx));
+                }
             }
             pc += 1;
         }
@@ -644,6 +678,129 @@ where
         } else {
             Err(VMInvariantViolation::ProgramCounterOverflow)
         }
+    }
+
+    fn get_offchain_address_pair(txn_data:&TransactionMetadata, is_sender: bool) -> VMResult<(AccountAddress,AccountAddress)> {
+        let address: AccountAddress;
+        let participant: AccountAddress;
+        if is_sender {
+            address = txn_data.sender;
+            participant = match txn_data.receiver {
+                Some(p) => p,
+                None => return Err(VMInvariantViolation::LinkerError)
+            };
+        }else{
+            participant = txn_data.sender;
+            address = match txn_data.receiver {
+                Some(p) => p,
+                None => return Err(VMInvariantViolation::LinkerError)
+            };
+        }
+        Ok(Ok((address,participant)))
+    }
+
+    fn exist_offchain(&mut self, is_sender: bool, instruction: &Bytecode, idx: StructDefinitionIndex) -> VMResult<()>{
+        let (address,participant) = Self::get_offchain_address_pair(&self.txn_data,is_sender)?.unwrap();
+
+        let curr_module = self.execution_stack.top_frame()?.module();
+        let ap = make_access_path_offchain(curr_module, idx, address, participant);
+        if let Some(struct_def) = try_runtime!(self
+                        .execution_stack
+                        .module_cache
+                        .resolve_struct_def(curr_module, idx, &self.gas_meter))
+        {
+            let (exists, mem_size) = self.data_view.resource_exists(&ap, struct_def)?;
+            try_runtime!(self.gas_meter.calculate_and_consume(
+                            &instruction,
+                            &self.execution_stack,
+                            mem_size
+                        ));
+            try_runtime!(self.execution_stack.push(Local::bool(exists)));
+        } else {
+            return Err(VMInvariantViolation::LinkerError);
+        }
+        Ok(Ok(()))
+    }
+
+    fn borrow_offchain(&mut self, is_sender: bool, instruction: &Bytecode, idx: StructDefinitionIndex) -> VMResult<()>{
+        let (address,participant) = Self::get_offchain_address_pair(&self.txn_data,is_sender)?.unwrap();
+
+        let curr_module = self.execution_stack.top_frame()?.module();
+        let ap = make_access_path_offchain(curr_module, idx, address, participant);
+        if let Some(struct_def) = try_runtime!(self
+                        .execution_stack
+                        .module_cache
+                        .resolve_struct_def(curr_module, idx, &self.gas_meter))
+        {
+            let global_ref =
+                try_runtime!(self.data_view.borrow_global(&ap, struct_def));
+            try_runtime!(self.gas_meter.calculate_and_consume(
+                            &instruction,
+                            &self.execution_stack,
+                            global_ref.size()
+                        ));
+            try_runtime!(self.execution_stack.push(Local::GlobalRef(global_ref)));
+        } else {
+            return Err(VMInvariantViolation::LinkerError);
+        }
+        Ok(Ok(()))
+    }
+
+    fn move_from_offchain(&mut self, is_sender: bool, instruction: &Bytecode, idx: StructDefinitionIndex) -> VMResult<()>{
+        let (address,participant) = Self::get_offchain_address_pair(&self.txn_data,is_sender)?.unwrap();
+
+        let curr_module = self.execution_stack.top_frame()?.module();
+        let ap = make_access_path_offchain(curr_module, idx, address, participant);
+        if let Some(struct_def) = try_runtime!(self
+                        .execution_stack
+                        .module_cache
+                        .resolve_struct_def(curr_module, idx, &self.gas_meter))
+        {
+            let resource =
+                try_runtime!(self.data_view.move_resource_from(&ap, struct_def));
+            try_runtime!(self.gas_meter.calculate_and_consume(
+                            &instruction,
+                            &self.execution_stack,
+                            resource.size()
+                        ));
+            try_runtime!(self.execution_stack.push(resource));
+        } else {
+            return Err(VMInvariantViolation::LinkerError);
+        }
+        Ok(Ok(()))
+    }
+
+    fn move_to_offchain(&mut self, is_sender: bool, instruction: &Bytecode, idx: StructDefinitionIndex) -> VMResult<()>{
+        let (address,participant) = Self::get_offchain_address_pair(&self.txn_data,is_sender)?.unwrap();
+
+        let curr_module = self.execution_stack.top_frame()?.module();
+        let ap = make_access_path_offchain(curr_module, idx, address, participant);
+        if let Some(struct_def) = try_runtime!(self
+                        .execution_stack
+                        .module_cache
+                        .resolve_struct_def(curr_module, idx, &self.gas_meter))
+        {
+            let local = self.execution_stack.pop()?;
+
+            if let Some(resource) = local.value() {
+                try_runtime!(self.gas_meter.calculate_and_consume(
+                                &instruction,
+                                &self.execution_stack,
+                                resource.size()
+                            ));
+                try_runtime!(self
+                                .data_view
+                                .move_resource_to(&ap, struct_def, resource));
+            } else {
+                return Ok(Err(VMRuntimeError {
+                    loc: Location::new(),
+                    err: VMErrorKind::TypeError,
+                }));
+            }
+        } else {
+            return Err(VMInvariantViolation::LinkerError);
+        }
+        Ok(Ok(()))
     }
 
     /// Convert the transaction arguments into move values and push them to the top of the stack.

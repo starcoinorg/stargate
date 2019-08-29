@@ -325,6 +325,14 @@ lazy_static! {
             //TODO ensure gas
             (IsOffchainTxn, 30, 1),
             (GetTxnReceiverAddress, 30, 1),
+            (ExistSenderOffchain(StructDefinitionIndex::new(0), NO_TYPE_ACTUALS), 856, 1),
+            (ExistReceiverOffchain(StructDefinitionIndex::new(0), NO_TYPE_ACTUALS), 856, 1),
+            (BorrowSenderOffchain(StructDefinitionIndex::new(0), NO_TYPE_ACTUALS), 929, 1),
+            (BorrowReceiverOffchain(StructDefinitionIndex::new(0), NO_TYPE_ACTUALS), 929, 1),
+            (MoveFromSenderOffchain(StructDefinitionIndex::new(0), NO_TYPE_ACTUALS), 917, 1),
+            (MoveFromReceiverOffchain(StructDefinitionIndex::new(0), NO_TYPE_ACTUALS), 917, 1),
+            (MoveToSenderOffchain(StructDefinitionIndex::new(0), NO_TYPE_ACTUALS), 774, 1),
+            (MoveToReceiverOffchain(StructDefinitionIndex::new(0), NO_TYPE_ACTUALS), 774, 1),
         ];
         CostTable::new(instrs)
     };

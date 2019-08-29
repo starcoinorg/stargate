@@ -232,6 +232,38 @@ Builtin: Builtin = {
     "freeze" => Builtin::Freeze,
     "is_offchain_txn" => Builtin::IsOffchainTxn,
     "get_txn_receiver" => Builtin::GetTxnReceiver,
+    "exist_sender_offchain<" <name_and_type_actuals: NameAndTypeActuals> ">" => {
+            let (name, type_actuals) = name_and_type_actuals;
+            Builtin::ExistSenderOffchain(StructName::new(name), type_actuals)
+    },
+    "exist_receiver_offchain<" <name_and_type_actuals: NameAndTypeActuals> ">" => {
+            let (name, type_actuals) = name_and_type_actuals;
+            Builtin::ExistReceiverOffchain(StructName::new(name), type_actuals)
+    },
+    "borrow_sender_offchain<" <name_and_type_actuals: NameAndTypeActuals> ">" => {
+            let (name, type_actuals) = name_and_type_actuals;
+            Builtin::BorrowSenderOffchain(StructName::new(name), type_actuals)
+    },
+    "borrow_receiver_offchain<" <name_and_type_actuals: NameAndTypeActuals> ">" => {
+            let (name, type_actuals) = name_and_type_actuals;
+            Builtin::BorrowReceiverOffchain(StructName::new(name), type_actuals)
+    },
+    "move_from_sender_offchain<" <name_and_type_actuals: NameAndTypeActuals> ">" => {
+            let (name, type_actuals) = name_and_type_actuals;
+            Builtin::MoveFromSenderOffchain(StructName::new(name), type_actuals)
+    },
+    "move_from_receiver_offchain<" <name_and_type_actuals: NameAndTypeActuals> ">" => {
+            let (name, type_actuals) = name_and_type_actuals;
+            Builtin::MoveFromReceiverOffchain(StructName::new(name), type_actuals)
+    },
+    "move_to_sender_offchain<" <name_and_type_actuals: NameAndTypeActuals> ">" => {
+            let (name, type_actuals) = name_and_type_actuals;
+            Builtin::MoveToSenderOffchain(StructName::new(name), type_actuals)
+    },
+    "move_to_receiver_offchain<" <name_and_type_actuals: NameAndTypeActuals> ">" => {
+            let (name, type_actuals) = name_and_type_actuals;
+            Builtin::MoveToReceiverOffchain(StructName::new(name), type_actuals)
+    },
 }
 
 LValue: LValue = {

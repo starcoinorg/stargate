@@ -137,8 +137,6 @@ impl GasMeter {
             | Bytecode::GetTxnPublicKey
             | Bytecode::GetTxnSenderAddress
             | Bytecode::GetTxnSequenceNumber
-            | Bytecode::IsOffchainTxn
-            | Bytecode::GetTxnReceiverAddress
             | Bytecode::Ge
             // Releasing and freezing a reference is not dependent on the size of the underlying data
             | Bytecode::FreezeRef
@@ -282,6 +280,26 @@ impl GasMeter {
             // A MoveToSender causes a write of the resource to storage. We therefore charge based
             // on the size of the resource being moved.
             | Bytecode::MoveToSender(_, _) => {
+                let mem_size = if memory_size.get() > 1 {
+                    memory_size.sub(AbstractMemorySize::new(1))
+                } else {
+                    AbstractMemorySize::new(0) // We already charged for size 1
+                };
+                Self::gas_of(static_cost_instr(instr, mem_size))
+            }
+            Bytecode::IsOffchainTxn
+            | Bytecode::GetTxnReceiverAddress => {
+                let default_gas = static_cost_instr(instr, AbstractMemorySize::new(1));
+                Self::gas_of(default_gas)
+            }
+            Bytecode::ExistSenderOffchain(_,_)
+            | Bytecode::ExistReceiverOffchain(_,_)
+            | Bytecode::BorrowSenderOffchain(_,_)
+            | Bytecode::BorrowReceiverOffchain(_,_)
+            | Bytecode::MoveFromSenderOffchain(_,_)
+            | Bytecode::MoveFromReceiverOffchain(_,_)
+            | Bytecode::MoveToSenderOffchain(_,_)
+            | Bytecode::MoveToReceiverOffchain(_,_) => {
                 let mem_size = if memory_size.get() > 1 {
                     memory_size.sub(AbstractMemorySize::new(1))
                 } else {

@@ -14,6 +14,7 @@ use vm::{
     internals::ModuleIndex,
     IndexKind,
 };
+use vm::file_format_common::Opcodes::EXIST_SENDER_OFFCHAIN;
 
 /// Represents a single mutation onto a code unit to make it out of bounds.
 #[derive(Debug)]
@@ -279,6 +280,66 @@ impl<'a> ApplyCodeUnitBoundsContext<'a> {
                         locals_bytecode!(locals_len, bytecode_idx, offset, ImmBorrowLoc)
                     }
 
+                    ExistSenderOffchain(_, _) => struct_bytecode!(
+                        struct_defs_len,
+                        bytecode_idx,
+                        offset,
+                        StructDefinitionIndex,
+                        ExistSenderOffchain
+                    ),
+
+                    ExistReceiverOffchain(_, _) => struct_bytecode!(
+                        struct_defs_len,
+                        bytecode_idx,
+                        offset,
+                        StructDefinitionIndex,
+                        ExistReceiverOffchain
+                    ),
+                    BorrowSenderOffchain(_, _) => struct_bytecode!(
+                        struct_defs_len,
+                        bytecode_idx,
+                        offset,
+                        StructDefinitionIndex,
+                        BorrowSenderOffchain
+                    ),
+
+                    BorrowReceiverOffchain(_, _) => struct_bytecode!(
+                        struct_defs_len,
+                        bytecode_idx,
+                        offset,
+                        StructDefinitionIndex,
+                        BorrowReceiverOffchain
+                    ),
+                    MoveFromSenderOffchain(_, _) => struct_bytecode!(
+                        struct_defs_len,
+                        bytecode_idx,
+                        offset,
+                        StructDefinitionIndex,
+                        MoveFromSenderOffchain
+                    ),
+
+                    MoveFromReceiverOffchain(_, _) => struct_bytecode!(
+                        struct_defs_len,
+                        bytecode_idx,
+                        offset,
+                        StructDefinitionIndex,
+                        MoveFromReceiverOffchain
+                    ),
+                    MoveToSenderOffchain(_, _) => struct_bytecode!(
+                        struct_defs_len,
+                        bytecode_idx,
+                        offset,
+                        StructDefinitionIndex,
+                        MoveToSenderOffchain
+                    ),
+
+                    MoveToReceiverOffchain(_, _) => struct_bytecode!(
+                        struct_defs_len,
+                        bytecode_idx,
+                        offset,
+                        StructDefinitionIndex,
+                        MoveToReceiverOffchain
+                    ),
                     // List out the other options explicitly so there's a compile error if a new
                     // bytecode gets added.
                     FreezeRef | Pop | Ret | LdConst(_) | LdTrue | LdFalse | ReadRef | WriteRef
@@ -326,6 +387,15 @@ fn is_interesting(bytecode: &Bytecode) -> bool {
         | StLoc(_)
         | MutBorrowLoc(_)
         | ImmBorrowLoc(_) => true,
+
+        ExistSenderOffchain(_,_)
+        | ExistReceiverOffchain(_,_)
+        | BorrowSenderOffchain(_,_)
+        | BorrowReceiverOffchain(_,_)
+        | MoveFromSenderOffchain(_,_)
+        | MoveFromReceiverOffchain(_,_)
+        | MoveToSenderOffchain(_,_)
+        | MoveToReceiverOffchain(_,_) => true,
 
         // List out the other options explicitly so there's a compile error if a new
         // bytecode gets added.

@@ -1056,12 +1056,20 @@ pub enum Bytecode {
     IsOffchainTxn,
     /// Get offchain transaction's receiver.
     GetTxnReceiverAddress,
+    ExistSenderOffchain(StructDefinitionIndex, LocalsSignatureIndex),
+    ExistReceiverOffchain(StructDefinitionIndex, LocalsSignatureIndex),
+    BorrowSenderOffchain(StructDefinitionIndex, LocalsSignatureIndex),
+    BorrowReceiverOffchain(StructDefinitionIndex, LocalsSignatureIndex),
+    MoveFromSenderOffchain(StructDefinitionIndex, LocalsSignatureIndex),
+    MoveFromReceiverOffchain(StructDefinitionIndex, LocalsSignatureIndex),
+    MoveToSenderOffchain(StructDefinitionIndex, LocalsSignatureIndex),
+    MoveToReceiverOffchain(StructDefinitionIndex, LocalsSignatureIndex),
 }
 
 /// The number of bytecode instructions.
 /// This is necessary for checking that all instructions are covered since Rust
 /// does not provide a way of determining the number of variants of an enum.
-pub const NUMBER_OF_BYTECODE_INSTRUCTIONS: usize = 55;
+pub const NUMBER_OF_BYTECODE_INSTRUCTIONS: usize = 63;
 
 impl ::std::fmt::Debug for Bytecode {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
@@ -1121,6 +1129,14 @@ impl ::std::fmt::Debug for Bytecode {
             Bytecode::GetTxnPublicKey => write!(f, "GetTxnPublicKey"),
             Bytecode::IsOffchainTxn => write!(f, "IsOffchainTxn"),
             Bytecode::GetTxnReceiverAddress => write!(f, "GetTxnReceiverAddress"),
+            Bytecode::ExistSenderOffchain(a, b) => write!(f, "ExistSenderOffchain({},{:?})", a, b),
+            Bytecode::ExistReceiverOffchain(a, b)=> write!(f, "ExistReceiverOffchain({},{:?})", a, b),
+            Bytecode::BorrowSenderOffchain(a, b)=> write!(f, "BorrowSenderOffchain({},{:?})", a, b),
+            Bytecode::BorrowReceiverOffchain(a, b)=> write!(f, "BorrowReceiverOffchain({},{:?})", a, b),
+            Bytecode::MoveFromSenderOffchain(a, b)=> write!(f, "MoveFromSenderOffchain({},{:?})", a, b),
+            Bytecode::MoveFromReceiverOffchain(a, b)=> write!(f, "MoveFromReceiverOffchain({},{:?})", a, b),
+            Bytecode::MoveToSenderOffchain(a, b)=> write!(f, "MoveToSenderOffchain({},{:?})", a, b),
+            Bytecode::MoveToReceiverOffchain(a, b)=> write!(f, "MoveToReceiverOffchain({},{:?})", a, b),
         }
     }
 }
