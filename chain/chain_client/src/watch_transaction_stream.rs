@@ -1,22 +1,25 @@
 extern crate grpcio;
 
-use grpcio::ClientSStreamReceiver;
+use grpcio::Error;
 use star_types::proto::chain::WatchTransactionResponse;
 use futures::{Stream, Poll, Async};
 use types::transaction::SignedTransaction;
 use proto_conv::FromProto;
 
-pub struct WatchTransactionStream {
-    receive: ClientSStreamReceiver<WatchTransactionResponse>,
+pub struct WatchTransactionStream <S>
+where S:Stream<Item = WatchTransactionResponse, Error=Error>{
+    receive: S,
 }
 
-impl WatchTransactionStream {
-    pub fn new(receive: ClientSStreamReceiver<WatchTransactionResponse>) -> Self {
+impl <S> WatchTransactionStream<S>
+where S:Stream<Item = WatchTransactionResponse, Error=Error>{
+    pub fn new(receive: S) -> Self {
         WatchTransactionStream { receive }
     }
 }
 
-impl Stream for WatchTransactionStream {
+impl<S> Stream for WatchTransactionStream<S>
+where S:Stream<Item = WatchTransactionResponse, Error=Error>{
     type Item = SignedTransaction;
     type Error = Box<grpcio::Error>;
 

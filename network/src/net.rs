@@ -11,10 +11,11 @@ use network_libp2p::{
 };
 use parking_lot::Mutex;
 use sg_config::config::NetworkConfig;
-use std::{io, sync::Arc, thread};
+use std::{io, sync::Arc};
 use tokio::runtime::Builder as RuntimeBuilder;
 use types::account_address::AccountAddress;
 use crate::helper::convert_boot_nodes;
+use tokio::runtime::TaskExecutor;
 
 #[derive(Clone, Debug)]
 pub struct Message {
@@ -23,13 +24,13 @@ pub struct Message {
 }
 
 pub struct NetworkService {
-    pub network_thread: thread::JoinHandle<()>,
     pub libp2p_service: Arc<Mutex<Libp2pService<Vec<u8>>>>,
 }
 
 pub fn build_network_service(
     cfg: &NetworkConfig,
     key_pair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
+    executor: TaskExecutor,
 ) -> (
     NetworkService,
     mpsc::UnboundedSender<Message>,
@@ -46,7 +47,7 @@ pub fn build_network_service(
         },
         ..NetworkConfiguration::default()
     };
-    NetworkService::new(config)
+    NetworkService::new(config, executor)
 }
 
 fn build_libp2p_service(
@@ -129,47 +130,35 @@ fn run_network(
 
 fn start_network_thread(
     libp2p_service: Arc<Mutex<Libp2pService<Vec<u8>>>>,
+    executor: TaskExecutor,
 ) -> (
     mpsc::UnboundedSender<Message>,
     mpsc::UnboundedReceiver<Message>,
-    thread::JoinHandle<()>,
 ) {
-    let mut rt = RuntimeBuilder::new()
-        .name_prefix("starnet-")
-        .build()
-        .unwrap();
     let (network_sender, network_receiver, network_future) = run_network(libp2p_service);
-    let thread = thread::Builder::new()
-        .name("starnet".to_string())
-        .spawn(move || {
-            match rt.block_on(network_future) {
-                Ok(()) => info!("Network finish"),
-                Err(_e) => error!("Error in network"),
-            };
-        })
-        .unwrap();
+    executor.spawn(network_future);
 
-    (network_sender, network_receiver, thread)
+    (network_sender, network_receiver)
 }
 
 impl NetworkService {
     fn new(
         cfg: NetworkConfiguration,
+        executor: TaskExecutor,
     ) -> (
         NetworkService,
         mpsc::UnboundedSender<Message>,
         mpsc::UnboundedReceiver<Message>,
     ) {
         let libp2p_service = build_libp2p_service(cfg).unwrap();
-        let (network_sender, network_receiver, network_thread) =
-            start_network_thread(libp2p_service.clone());
+        let (network_sender, network_receiver) =
+            start_network_thread(libp2p_service.clone(), executor);
         info!("Network started, connected peers:");
         for p in libp2p_service.lock().connected_peers() {
             info!("peer_id:{}", p);
         }
         (
             Self {
-                network_thread,
                 libp2p_service,
             },
             network_sender,
