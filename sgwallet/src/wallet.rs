@@ -26,9 +26,10 @@ use types::transaction_helpers::TransactionSigner;
 use types::vm_error::*;
 use state_store::StateStore;
 use crate::transaction_processor::SubmitTransactionFuture;
-use futures_01::{
+use futures::{
     sync::mpsc::channel,
 };
+use tokio::{runtime::TaskExecutor};
 
 
 pub struct Wallet<C>
@@ -51,16 +52,18 @@ impl<C> Wallet<C>
     const GAS_UNIT_PRICE: u64 = 1;
 
     pub fn new(
+        executor:TaskExecutor,
         account_address: AccountAddress,
         keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
         rpc_host: &str,
         rpc_port: u32,
     ) -> Result<Wallet<RpcChainClient>> {
         let client = Arc::new(RpcChainClient::new(rpc_host, rpc_port));
-        Wallet::new_with_client(account_address, keypair, client)
+        Wallet::new_with_client(executor,account_address, keypair, client)
     }
 
     pub fn new_with_client(
+        executor:TaskExecutor,
         account_address: AccountAddress,
         keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
         client: Arc<C>,

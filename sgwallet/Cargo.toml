@@ -15,14 +15,14 @@ types = { path = "../types" }
 star_types = { path = "../star_types" }
 local_vm = { path = "../language/local_vm"}
 crypto = { path = "../crypto/crypto" }
-futures = { version = "0.3.0-alpha.16", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }
+
 local_state_storage = { path = "./local_state_storage"}
 chain_client = { path = "../chain/chain_client"}
 vm_genesis = { path = "../language/vm/vm_genesis" }
 logger = { path = "../common/logger"}
 state_store = { path = "../storage/state_store"}
 tokio = "0.1.22"
-futures_01 = { package = "futures", version = "0.1.28" }
+futures = { package = "futures", version = "0.1.28" }
 proto_conv = { path = "../common/proto_conv", features = ["derive"] }
 
 [dev-dependencies]

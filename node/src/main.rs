@@ -78,7 +78,7 @@ fn gen_node(
     );
 
     let wallet =
-        Wallet::new_with_client(account_address, keypair.clone(), Arc::new(client)).unwrap();
+        Wallet::new_with_client(executor.clone(),account_address, keypair.clone(), Arc::new(client)).unwrap();
 
     Node::new(executor.clone(), wallet, keypair.clone(), network_service,sender,receiver)
 }

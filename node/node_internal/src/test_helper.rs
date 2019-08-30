@@ -35,7 +35,7 @@ pub fn gen_node(executor: TaskExecutor, config: &NetworkConfig, client: Arc<Mock
     println!("account_address: {}", account_address);
     client.faucet(account_address, amount).unwrap();
     thread::sleep(Duration::from_millis(1000));
-    let mut wallet = Wallet::new_with_client(account_address, keypair.clone(), client).unwrap();
+    let mut wallet = Wallet::new_with_client(executor.clone(),account_address, keypair.clone(), client).unwrap();
     let (network, tx, rx) = build_network_service(config, keypair.clone(),executor.clone());
     (Node::new(executor.clone(), wallet, keypair.clone(), network, tx, rx), account_address, keypair)
 }

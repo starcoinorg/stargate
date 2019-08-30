@@ -1,6 +1,8 @@
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::thread;
 
-use futures_01::{
+use futures::{
     Future,Poll,Async,Stream,
     sync::mpsc::{Receiver,Sender},
     sink::Sink,
@@ -12,9 +14,13 @@ use crypto::{
 use star_types::{proto::{chain::{ WatchTransactionResponse}}};
 use logger::prelude::*;
 use failure::prelude::*;
-use proto_conv::{FromProto, IntoProto};
+use proto_conv::{FromProto};
 use types::transaction::{ SignedTransaction};
 use crypto::hash::CryptoHash;
+use tokio::{runtime::TaskExecutor};
+use chain_client::{ChainClient};
+use types::account_address::AccountAddress;
+
 
 pub struct SubmitTransactionFuture {
     rx:Receiver<WatchTransactionResponse>,
@@ -43,16 +49,17 @@ impl Future for SubmitTransactionFuture {
         while let Async::Ready(v) = self.rx.poll().unwrap() {
             match v {
                 Some(v) => {
-                    //println!("send message {:?}",v);
+                    self.tx_resp = Some(v);
+                    break;
                 }
                 None => {
+                    debug!("no data");
                     break;
-                    //println!("cccccc");
                 }
             }
         }
 
-        Ok(Async::NotReady)
+        Ok(Async::Ready(()))
     }
 }
 
@@ -82,4 +89,21 @@ impl TransactionProcessor {
         Ok(())
     }
 
+}
+
+pub fn start_processor<C>(client:Arc<C>,addr:AccountAddress)->Result<()>
+where C: ChainClient+Sync+Send+'static{
+    let read_stream_future = move || {
+        let tx_stream=client.watch_transaction(&addr,0).unwrap();
+
+        let f = tx_stream.for_each(|item| {
+            println!("received sign {:?}", item);
+            Ok(())
+        });
+        f.wait().unwrap();
+    };
+
+    thread::spawn(read_stream_future);
+
+    Ok(())
 }
