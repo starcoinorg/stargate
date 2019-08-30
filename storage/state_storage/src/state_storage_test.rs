@@ -33,9 +33,7 @@ fn test_state_storage() {
         .unwrap()
         .into_inner();
 
-    let vm_config = VMConfig {
-        publishing_options: VMPublishingOption::Open
-    };
+    let vm_config = VMConfig::onchain();
 
     let mut output_vec = MoveVM::execute_block(vec![signed_tx], &vm_config, &storage);
 
