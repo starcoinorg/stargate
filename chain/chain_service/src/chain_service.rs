@@ -41,9 +41,7 @@ use protobuf::RepeatedField;
 use types::contract_event::ContractEvent;
 
 lazy_static! {
-    static ref VM_CONFIG:VMConfig = VMConfig{
-        publishing_options: VMPublishingOption::Open
-    };
+    static ref VM_CONFIG:VMConfig = VMConfig::onchain();
 }
 
 #[derive(Clone)]
