@@ -26,6 +26,10 @@ use types::transaction_helpers::TransactionSigner;
 use types::vm_error::*;
 use state_store::StateStore;
 use crate::transaction_processor::SubmitTransactionFuture;
+use futures_01::{
+    sync::mpsc::channel,
+};
+
 
 pub struct Wallet<C>
     where
@@ -160,7 +164,10 @@ impl<C> Wallet<C>
     pub fn submit_transaction(&self, signed_transaction: SignedTransaction)->Result<SubmitTransactionFuture> {
         let tx_hash=signed_transaction.hash();
         let resp=self.client.submit_transaction(signed_transaction)?;
-        Ok(SubmitTransactionFuture::new(tx_hash))
+
+        let (tx,rx)=channel(1);
+        let watch_future=SubmitTransactionFuture::new(rx);
+        Ok(watch_future)
     }
 }
 
