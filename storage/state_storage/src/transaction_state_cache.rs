@@ -53,7 +53,10 @@ impl<'a, R> TransactionStateCache<'a, R>
             }
         });
 
-        Self::apply_by_merkle_tree(ver, account_vec, reader)
+        let cache = Self::new_cache(ver, account_vec, reader);
+        cache.apply_write_set(ws);
+
+        Self::apply_by_merkle_tree(ver, cache.get_blobs(), reader)
     }
 
     pub fn apply_libra_output_in_cache(ver: Version, output: &LibraTransactionOutput, reader: &'a R) -> Result<(HashValue, TreeUpdateBatch)> {
@@ -70,20 +73,31 @@ impl<'a, R> TransactionStateCache<'a, R>
             }
         });
 
-        Self::apply_by_merkle_tree(ver, account_vec, reader)
+        let cache = Self::new_cache(ver, account_vec, reader);
+        cache.apply_output(output);
+
+        Self::apply_by_merkle_tree(ver, cache.get_blobs(), reader)
     }
 
-    fn apply_by_merkle_tree(ver: Version, account_vec: Vec<&AccountAddress>, reader: &'a R) -> Result<(HashValue, TreeUpdateBatch)> {
-        let accounts = reader.get_accounts(ver, account_vec)?;
+    fn new_cache(ver: Version, account_vec: Vec<&AccountAddress>, reader: &'a R) -> Self {
+        let accounts = reader.get_accounts(ver, account_vec).unwrap();
         let mut cache = HashMap::new();
-        let mut blob_vec = vec![];
         for (account, state) in accounts {
             cache.insert(account.clone(), state.clone());
-            blob_vec.push((account.hash(), state.to_blob()))
         }
-        let cache = TransactionStateCache { account_states_cache: AtomicRefCell::new(cache), reader };
+        TransactionStateCache { account_states_cache: AtomicRefCell::new(cache), reader }
+    }
 
-        let (root_hashes, tree_update_batch) = JellyfishMerkleTree::new(cache.reader).put_blob_sets(vec![blob_vec], ver)?;
+    fn get_blobs(&self) -> Vec<(HashValue, AccountStateBlob)> {
+        let mut blob_vec = vec![];
+        self.account_states_cache.borrow().iter().for_each(|(account_address, account_state)| {
+            blob_vec.push((account_address.hash(), account_state.to_blob()))
+        });
+        blob_vec
+    }
+
+    fn apply_by_merkle_tree(ver: Version, blob_sets: Vec<(HashValue, AccountStateBlob)>, reader: &'a R) -> Result<(HashValue, TreeUpdateBatch)> {
+        let (root_hashes, tree_update_batch) = JellyfishMerkleTree::new(reader).put_blob_sets(vec![blob_sets], ver)?;
         Ok((root_hashes[0], tree_update_batch))
     }
 

@@ -278,17 +278,19 @@ impl AccountReader for StateStorage {
         let tree = JellyfishMerkleTree::new(self);
 
         let mut accounts = vec![];
-        account_address_vec.iter().for_each(|address| {
-            let addr = address.clone().clone();
-            let proof = tree.get_with_proof(addr.hash(), ver).unwrap().0;
-            match proof {
-                Some(blob) => {
-                    let account = AccountState::from_account_state_blob(blob.into()).unwrap();
-                    accounts.push((addr, account))
-                }
-                None => {}
-            };
-        });
+        if !self.is_genesis() {
+            account_address_vec.iter().for_each(|address| {
+                let addr = address.clone().clone();
+                let proof = tree.get_with_proof(addr.hash(), ver).unwrap().0;
+                match proof {
+                    Some(blob) => {
+                        let account = AccountState::from_account_state_blob(blob.into()).unwrap();
+                        accounts.push((addr, account))
+                    }
+                    None => {}
+                };
+            });
+        }
         Ok(accounts)
     }
 }
