@@ -1,6 +1,6 @@
 use grpc_helpers::spawn_service_thread;
 use super::chain_service::ChainService;
-use tokio::{runtime::{Runtime, TaskExecutor}};
+use tokio::{runtime::{Runtime}};
 use futures::future::Future;
 
 pub struct ServiceConfig {

@@ -1,6 +1,6 @@
 use crypto::HashValue;
 use scratchpad::Accumulator;
-use std::{collections::{HashMap}};
+use std::{collections::HashMap};
 use types::transaction::{SignedTransaction, TransactionInfo, Version};
 use crypto::hash::{CryptoHash, TransactionInfoHasher};
 
@@ -41,7 +41,7 @@ impl TransactionStorage {
         self.accumulator.append(vec![tx_info.hash()]).root_hash()
     }
 
-    pub fn insert_all(&mut self, state_hash:HashValue, sign_tx: SignedTransaction) -> Version  {
+    pub fn insert_all(&mut self, state_hash: HashValue, sign_tx: SignedTransaction) -> Version {
         let signed_tx_hash = sign_tx.clone().hash();
         let version = self.insert_signed_transaction(sign_tx.clone());
 
@@ -54,11 +54,16 @@ impl TransactionStorage {
     }
 
     pub fn least_version(&self) -> Version {
-        self.signed_tx_vec.len() as u64
+        let tmp = self.signed_tx_vec.len() as u64;
+        if tmp > 0 {
+            tmp - 1
+        } else {
+            0
+        }
     }
 
     pub fn least_hash_root(&self) -> HashValue {
         let version = self.least_version();
-        *(self.ledger_info_vec.get(version as usize ).unwrap()) as HashValue
+        *(self.ledger_info_vec.get(version as usize).unwrap()) as HashValue
     }
 }

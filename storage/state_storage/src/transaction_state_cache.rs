@@ -12,7 +12,7 @@ use types::access_path::{AccessPath, DataPath};
 use std::convert::TryFrom;
 use itertools::Itertools;
 use std::sync::Arc;
-use crate::sparse_merkle::{SparseMerkleTree, ProofRead, AccountState as MerkleAccountState};
+use crate::sparse_merkle::{SparseMerkleTree, ProofRead};
 use atomic_refcell::AtomicRefCell;
 use star_types::offchain_transaction::{OffChainTransaction, TransactionOutput as StarTransactionOutput};
 use types::account_config::{AccountResource, account_resource_path};
@@ -43,7 +43,7 @@ impl<'a, R> TransactionStateCache<'a, R>
     where
         R: 'a + StructDefResolve + AccountReader + TreeReader
 {
-    pub fn apply_write_set_in_cache(ver: Version, ws: &WriteSet, reader: &'a R) -> Result<(HashValue, TreeUpdateBatch)> {
+    pub fn apply_write_set_in_cache(genesis_flag: bool, ver: Version, ws: &WriteSet, reader: &'a R) -> Result<(HashValue, TreeUpdateBatch)> {
         let mut account_set = HashSet::new();
         let mut account_vec = vec![];
         ws.iter().for_each(|(a, _op)| {
@@ -54,16 +54,28 @@ impl<'a, R> TransactionStateCache<'a, R>
         });
 
         let cache = Self::new_cache(ver, account_vec, reader);
-        cache.apply_write_set(ws);
+        cache.apply_write_set(ws)?;
 
-        Self::apply_by_merkle_tree(ver, cache.get_blobs(), reader)
+        Self::apply_by_merkle_tree(genesis_flag, ver, cache.get_blobs(), reader)
     }
 
-    pub fn apply_libra_output_in_cache(ver: Version, output: &LibraTransactionOutput, reader: &'a R) -> Result<(HashValue, TreeUpdateBatch)> {
-        Self::apply_write_set_in_cache(ver, output.write_set(), reader)
+    pub fn apply_libra_output_in_cache(genesis_flag: bool, ver: Version, output: &LibraTransactionOutput, reader: &'a R) -> Result<(HashValue, TreeUpdateBatch)> {
+        let mut account_set = HashSet::new();
+        let mut account_vec = vec![];
+        output.write_set().iter().for_each(|(a, _op)| {
+            if !account_set.contains(a.address.borrow()) {
+                account_set.insert(a.address.borrow());
+                account_vec.push(a.address.borrow())
+            }
+        });
+
+        let cache = Self::new_cache(ver, account_vec, reader);
+        cache.apply_libra_output(output)?;
+
+        Self::apply_by_merkle_tree(genesis_flag, ver, cache.get_blobs(), reader)
     }
 
-    pub fn apply_star_output_in_cache(ver: Version, output: &StarTransactionOutput, reader: &'a R) -> Result<(HashValue, TreeUpdateBatch)> {
+    pub fn apply_star_output_in_cache(genesis_flag: bool, ver: Version, output: &StarTransactionOutput, reader: &'a R) -> Result<(HashValue, TreeUpdateBatch)> {
         let mut account_set = HashSet::new();
         let mut account_vec = vec![];
         output.change_set().iter().for_each(|(a, _op)| {
@@ -74,9 +86,9 @@ impl<'a, R> TransactionStateCache<'a, R>
         });
 
         let cache = Self::new_cache(ver, account_vec, reader);
-        cache.apply_output(output);
+        cache.apply_output(output)?;
 
-        Self::apply_by_merkle_tree(ver, cache.get_blobs(), reader)
+        Self::apply_by_merkle_tree(genesis_flag, ver, cache.get_blobs(), reader)
     }
 
     fn new_cache(ver: Version, account_vec: Vec<&AccountAddress>, reader: &'a R) -> Self {
@@ -96,8 +108,11 @@ impl<'a, R> TransactionStateCache<'a, R>
         blob_vec
     }
 
-    fn apply_by_merkle_tree(ver: Version, blob_sets: Vec<(HashValue, AccountStateBlob)>, reader: &'a R) -> Result<(HashValue, TreeUpdateBatch)> {
-        let (root_hashes, tree_update_batch) = JellyfishMerkleTree::new(reader).put_blob_sets(vec![blob_sets], ver)?;
+    fn apply_by_merkle_tree(genesis_flag: bool, ver: Version, blob_sets: Vec<(HashValue, AccountStateBlob)>, reader: &'a R) -> Result<(HashValue, TreeUpdateBatch)> {
+        let (root_hashes, tree_update_batch) = JellyfishMerkleTree::new(reader).put_blob_sets(vec![blob_sets], match genesis_flag {
+            true => 0,
+            false => ver + 1
+        })?;
         Ok((root_hashes[0], tree_update_batch))
     }
 

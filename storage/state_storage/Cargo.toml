@@ -19,10 +19,12 @@ state_view = { path = "../state_view" }
 struct_cache = { path = "../struct_cache" }
 state_store = { path = "../state_store"}
 logger = { path = "../../common/logger"}
-vm_runtime_types = { path = "../../language/vm/vm_runtime/vm_runtime_types"}
-vm_genesis = { path = "../../language/vm/vm_genesis" }
 jellyfish_merkle = { path = "../jellyfish_merkle" }
+vm_runtime_types = { path = "../../language/vm/vm_runtime/vm_runtime_types"}
 
 [dev-dependencies]
 crypto = { path = "../../crypto/crypto", features = ["testing"] }
+vm_runtime = { path = "../../language/vm/vm_runtime" }
+config = { path = "../../config"}
+vm_genesis = { path = "../../language/vm/vm_genesis" }
 

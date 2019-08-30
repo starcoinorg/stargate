@@ -1,4 +1,4 @@
-//#[cfg(test)]
+#[cfg(test)]
 mod state_storage_test;
 pub mod sparse_merkle;
 mod transaction_state_cache;
@@ -56,7 +56,7 @@ impl AccountState {
         let state = Self::new();
         let bmap = BTreeMap::try_from(&AccountStateBlob::from(account_state_blob))?;
         let updates = bmap.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-        Self::update_state(&state, updates);
+        Self::update_state(&state, updates)?;
         Ok(state)
     }
 
@@ -154,7 +154,7 @@ impl ProofRead for ProofReader {
 pub struct StateStorage {
     struct_cache: Arc<StructCache>,
     merkle_nodes: Arc<AtomicRefCell<HashMap<NodeKey, Node>>>,
-    least_version: AtomicU64,
+    next_version: AtomicU64,
 }
 
 impl StateStorage {
@@ -162,7 +162,16 @@ impl StateStorage {
         Self {
             struct_cache: Arc::new(StructCache::new()),
             merkle_nodes: Arc::new(AtomicRefCell::new(HashMap::new())),
-            least_version: AtomicU64::new(0),
+            next_version: AtomicU64::new(0),
+        }
+    }
+
+    fn get_least_version(&self) -> Version {
+        let tmp = self.next_version.load(Ordering::SeqCst);
+        if tmp > 0 {
+            tmp - 1
+        } else {
+            tmp
         }
     }
 
@@ -174,7 +183,7 @@ impl StateStorage {
     }
 
     pub fn exist_account(&self, address: &AccountAddress) -> bool {
-        match self.account_state(self.least_version.load(Ordering::SeqCst), address) {
+        match self.account_state(self.get_least_version(), address) {
             Some(_state) => true,
             _ => false
         }
@@ -187,7 +196,7 @@ impl StateStorage {
     }
 
     pub fn sequence_number(&self, address: &AccountAddress) -> Option<u64> {
-        self.account_state(self.least_version.load(Ordering::SeqCst), address).and_then(|a_s: AccountState| -> Option<u64> {
+        self.account_state(self.get_least_version(), address).and_then(|a_s: AccountState| -> Option<u64> {
             a_s.get_account_resource().map(|a_r: AccountResource| -> u64 { a_r.sequence_number() })
         })
     }
@@ -204,7 +213,7 @@ impl StateStorage {
     }
 
     pub fn get_account_state(&self, address: &AccountAddress) -> Option<Vec<u8>> {
-        let account_state = self.account_state(self.least_version.load(Ordering::SeqCst), address);
+        let account_state = self.account_state(self.get_least_version(), address);
         match account_state {
             Some(state) => {
                 Some(state.to_bytes())
@@ -217,30 +226,30 @@ impl StateStorage {
         self.account_state(ver, &access_path.address).and_then(|state| state.get(&access_path.path))
     }
 
-    fn get_by_access_path(&self, ver: Version, access_path: &AccessPath) -> Option<Vec<u8>> {
-        self.account_state(ver, &access_path.address).and_then(|state| state.get(&access_path.path))
+    fn get_by_access_path(&self, access_path: &AccessPath) -> Option<Vec<u8>> {
+        self.account_state(self.get_least_version(), &access_path.address).and_then(|state| state.get(&access_path.path))
     }
 
-    pub fn apply_txn(&self, ver: Version, txn: &OffChainTransaction) -> Result<HashValue> {
-        TransactionStateCache::apply_star_output_in_cache(ver, txn.output(), self).and_then(|(root_hash, tree_update_batch)| -> Result<HashValue> {
+    pub fn apply_txn(&self, txn: &OffChainTransaction) -> Result<HashValue> {
+        TransactionStateCache::apply_star_output_in_cache(self.is_genesis(), self.get_least_version(), txn.output(), self).and_then(|(root_hash, tree_update_batch)| -> Result<HashValue> {
             self.store_merkle_node(tree_update_batch);
-            self.least_version.fetch_add(1, Ordering::SeqCst);
+            self.next_version.fetch_add(1, Ordering::SeqCst);
             Ok(root_hash)
         })
     }
 
-    pub fn apply_write_set(&self, ver: Version, write_set: &WriteSet) -> Result<HashValue> {
-        TransactionStateCache::apply_write_set_in_cache(ver, write_set, self).and_then(|(root_hash, tree_update_batch)| -> Result<HashValue> {
+    pub fn apply_write_set(&self, write_set: &WriteSet) -> Result<HashValue> {
+        TransactionStateCache::apply_write_set_in_cache(self.is_genesis(), self.get_least_version(), write_set, self).and_then(|(root_hash, tree_update_batch)| -> Result<HashValue> {
             self.store_merkle_node(tree_update_batch);
-            self.least_version.fetch_add(1, Ordering::SeqCst);
+            self.next_version.fetch_add(1, Ordering::SeqCst);
             Ok(root_hash)
         })
     }
 
-    pub fn apply_libra_output(&self, ver: Version, txn_output: &types::transaction::TransactionOutput) -> Result<HashValue> {
-        TransactionStateCache::apply_libra_output_in_cache(ver, txn_output, self).and_then(|(root_hash, tree_update_batch)| -> Result<HashValue> {
+    pub fn apply_libra_output(&self, txn_output: &types::transaction::TransactionOutput) -> Result<HashValue> {
+        TransactionStateCache::apply_libra_output_in_cache(self.is_genesis(), self.get_least_version(), txn_output, self).and_then(|(root_hash, tree_update_batch)| -> Result<HashValue> {
             self.store_merkle_node(tree_update_batch);
-            self.least_version.fetch_add(1, Ordering::SeqCst);
+            self.next_version.fetch_add(1, Ordering::SeqCst);
             Ok(root_hash)
         })
     }
@@ -250,18 +259,30 @@ impl StateStorage {
         merkle_nodes
             .node_batch
             .iter()
-            .for_each(|(node_key, node)| { merkle_nodes_mut.insert(node_key.clone(), node.clone()); });
+            .for_each(|(node_key, node)| {
+                merkle_nodes_mut.insert(node_key.clone(), node.clone());
+            });
     }
 
     fn account_state(&self, ver: Version, address: &AccountAddress) -> Option<AccountState> {
-        let account_blob = JellyfishMerkleTree::new(self).get_with_proof(address.hash(), ver).unwrap().0;
-        match account_blob {
-            Some(blob) => {
-                let account = AccountState::from_account_state_blob(blob.into()).unwrap();
-                Some(account)
-            }
-            None => { None }
+        if !self.is_genesis() {
+            let account_blob = JellyfishMerkleTree::new(self).get_with_proof(address.hash(), ver).unwrap().0;
+            return match account_blob {
+                Some(blob) => {
+                    let account = AccountState::from_account_state_blob(blob.into()).unwrap();
+                    Some(account)
+                }
+                None => {
+                    None
+                }
+            };
+        } else {
+            None
         }
+    }
+
+    pub fn root_hash(&self) -> HashValue {
+        self.root_node(self.get_least_version(), &AccountAddress::default())
     }
 
     fn root_node(&self, ver: Version, address: &AccountAddress) -> HashValue {
@@ -297,12 +318,12 @@ impl AccountReader for StateStorage {
 
 impl StateView for StateStorage {
     fn get(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
-        Ok(self.get_by_access_path(self.least_version.load(Ordering::SeqCst), access_path))
+        Ok(self.get_by_access_path(access_path))
     }
 
     fn multi_get(&self, access_paths: &[AccessPath]) -> Result<Vec<Option<Vec<u8>>>> {
         Ok(access_paths.iter().map(|path| -> Option<Vec<u8>> {
-            self.get_by_access_path(self.least_version.load(Ordering::SeqCst), path)
+            self.get_by_access_path(path)
         }).collect())
     }
 
@@ -320,11 +341,15 @@ impl StructDefResolve for StateStorage {
 
 impl TreeReader for StateStorage {
     fn get_node(&self, node_key: &NodeKey) -> Result<Node> {
-        let node = match self.merkle_nodes.borrow().get(node_key) {
-            Some(data) => { data.clone() }
-            None => { bail!("{:?} : node is not exist", node_key) }
-        };
-        Ok(node)
+        if !self.is_genesis() {
+            let node = match self.merkle_nodes.borrow().get(node_key) {
+                Some(data) => { data.clone() }
+                None => { Node::Null }
+            };
+            Ok(node)
+        } else {
+            Ok(Node::Null)
+        }
     }
 }
 
