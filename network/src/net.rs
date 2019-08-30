@@ -89,6 +89,10 @@ fn run_network(
                 Async::NotReady => {
                     break;
                 }
+                Async::Ready(None) => {
+                    //Network closed
+                    return Ok(Async::Ready(()));
+                }
                 _ => {
                     error!("Error happened");
                     break;
