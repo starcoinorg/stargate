@@ -25,6 +25,7 @@ use types::transaction::{Program, RawTransaction, RawTransactionBytes, SignedTra
 use types::transaction_helpers::TransactionSigner;
 use types::vm_error::*;
 use state_store::StateStore;
+use std::borrow::BorrowMut;
 
 pub struct Wallet<C>
     where
@@ -154,6 +155,11 @@ impl<C> Wallet<C>
 
     pub fn get_address(&self)->AccountAddress{
         self.account_address
+    }
+
+
+    pub fn submit_transaction(&self, signed_transaction: SignedTransaction) {
+        self.client.submit_transaction(signed_transaction);
     }
 }
 

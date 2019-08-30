@@ -22,7 +22,7 @@ pub trait ChainClient {
     fn get_account_state(&self, address: &AccountAddress) -> Result<Option<Vec<u8>>>;
     fn get_state_by_access_path(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>>;
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()>;
-    fn submit_transaction(&mut self, signed_transaction: SignedTransaction) -> Result<()> ;
+    fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<()> ;
     fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchTransactionStream<Self::WatchResp>>;
 }
 
@@ -103,7 +103,7 @@ impl ChainClient for RpcChainClient {
         Ok(())
     }
 
-    fn submit_transaction(&mut self, signed_transaction: SignedTransaction) -> Result<()> {
+    fn submit_transaction(& self, signed_transaction: SignedTransaction) -> Result<()> {
         let mut req = SubmitTransactionRequest::new();
         req.set_signed_txn(signed_transaction.into_proto());
         let resp = self.client.submit_transaction(&req);
