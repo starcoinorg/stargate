@@ -1,37 +1,24 @@
-use std::collections::{HashMap, BTreeMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 use crypto::{
-    hash::{CryptoHash, SPARSE_MERKLE_PLACEHOLDER_HASH},
+    hash::{CryptoHash},
     HashValue,
 };
 use failure::prelude::*;
 use types::account_address::AccountAddress;
 use types::account_state_blob::AccountStateBlob;
-use types::proof::SparseMerkleProof;
-use types::access_path::{AccessPath, DataPath};
-use std::convert::TryFrom;
-use itertools::Itertools;
-use std::sync::Arc;
-use crate::sparse_merkle::{SparseMerkleTree, ProofRead};
+use types::access_path::{AccessPath};
 use atomic_refcell::AtomicRefCell;
-use star_types::offchain_transaction::{OffChainTransaction, TransactionOutput as StarTransactionOutput};
-use types::account_config::{AccountResource, account_resource_path};
-use types::event::EventHandle;
-use types::byte_array::ByteArray;
-use canonical_serialization::{SimpleSerializer, CanonicalSerialize};
+use star_types::offchain_transaction::{TransactionOutput as StarTransactionOutput};
 use state_view::StateView;
 use logger::prelude::*;
-use star_types::change_set::{ChangeSet, Changes, StructDefResolve};
-use star_types::resource::Resource;
+use star_types::change_set::{StructDefResolve};
 use types::language_storage::StructTag;
-use lazy_static::lazy_static;
-use vm_runtime_types::loaded_data::struct_def::StructDef;
 use state_store::{StateStore, StateViewPlus};
-use star_types::account_resource_ext;
 use star_types::resource_type::resource_def::ResourceDef;
-use jellyfish_merkle::{node_type::{NodeKey, Node}, JellyfishMerkleTree, TreeReader, TreeUpdateBatch};
+use jellyfish_merkle::{JellyfishMerkleTree, TreeReader, TreeUpdateBatch};
 use super::{AccountState, AccountReader};
-use types::{write_set::{WriteSet, WriteOp}, transaction::{TransactionOutput as LibraTransactionOutput, Version, SignedTransaction, TransactionArgument, TransactionPayload}};
+use types::{write_set::{WriteSet}, transaction::{TransactionOutput as LibraTransactionOutput, Version}};
 use core::borrow::Borrow;
 
 pub struct TransactionStateCache<'a, R: 'a + StructDefResolve + AccountReader> {
@@ -160,7 +147,7 @@ impl<'a, R> StateStore for TransactionStateCache<'a, R>
     fn update(&self, access_path: &AccessPath, value: Vec<u8>) -> Result<()> {
         self.ensure_account_state(&access_path.address);
         let mut states = self.account_states_cache.borrow_mut();
-        let mut account_state = states.get_mut(&access_path.address).unwrap();
+        let account_state = states.get_mut(&access_path.address).unwrap();
         account_state.update(access_path.path.clone(), value)?;
         Ok(())
     }

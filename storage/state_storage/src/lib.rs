@@ -6,7 +6,7 @@ mod transaction_state_cache;
 use std::collections::{HashMap, BTreeMap};
 
 use crypto::{
-    hash::{CryptoHash, SPARSE_MERKLE_PLACEHOLDER_HASH},
+    hash::{CryptoHash},
     HashValue,
 };
 use failure::prelude::*;
@@ -15,25 +15,17 @@ use types::account_state_blob::AccountStateBlob;
 use types::proof::SparseMerkleProof;
 use types::access_path::{AccessPath, DataPath};
 use std::convert::TryFrom;
-use itertools::Itertools;
 use std::sync::Arc;
-use crate::sparse_merkle::{SparseMerkleTree, ProofRead, AccountState as MerkleAccountState};
+use crate::sparse_merkle::{ProofRead};
 use atomic_refcell::AtomicRefCell;
-use star_types::offchain_transaction::{OffChainTransaction, TransactionOutput};
+use star_types::offchain_transaction::{OffChainTransaction};
 use types::account_config::{AccountResource, account_resource_path};
-use types::event::EventHandle;
-use types::byte_array::ByteArray;
-use canonical_serialization::{SimpleSerializer, CanonicalSerialize};
 use state_view::StateView;
 use logger::prelude::*;
-use star_types::change_set::{ChangeSet, Changes, StructDefResolve};
-use star_types::resource::Resource;
+use star_types::change_set::{StructDefResolve};
 use types::language_storage::StructTag;
 use types::{write_set::WriteSet, transaction::Version};
-use lazy_static::lazy_static;
-use vm_runtime_types::loaded_data::struct_def::StructDef;
 use struct_cache::StructCache;
-use state_store::{StateStore, StateViewPlus};
 use star_types::account_resource_ext;
 use star_types::resource_type::resource_def::ResourceDef;
 use jellyfish_merkle::{node_type::{NodeKey, Node}, JellyfishMerkleTree, TreeReader, TreeUpdateBatch};
