@@ -21,8 +21,8 @@ main(sender_amount:u64, receiver_amount:u64) {
     sender_coin = LibraAccount.withdraw_from_sender(copy(sender_amount));
     receiver_coin = LibraAccount.withdraw_from_receiver(copy(receiver_amount));
 
-    LibraCoin.deposit_to_offchain(move(sender_coin), true);
-    LibraCoin.deposit_to_offchain(move(receiver_coin), false);
+    LibraCoin.deposit_to_channel(move(sender_coin), true);
+    LibraCoin.deposit_to_channel(move(receiver_coin), false);
 
     return;
 }
@@ -38,8 +38,8 @@ import 0x0.LibraCoin;
 main(amount:u64) {
     let transfer_coin: LibraCoin.T;
 
-    transfer_coin = LibraCoin.withdraw_from_offchain(move(amount),true);
-    LibraCoin.deposit_to_offchain(move(transfer_coin), false);
+    transfer_coin = LibraCoin.withdraw_from_channel(move(amount),true);
+    LibraCoin.deposit_to_channel(move(transfer_coin), false);
 
     return;
 }
@@ -53,8 +53,8 @@ import 0x0.LibraCoin;
 
 main() {
 
-    assert(LibraCoin.get_offchain_balance(true) == 90000, 42);
-    assert(LibraCoin.get_offchain_balance(false) == 60000, 42);
+    assert(LibraCoin.get_channel_balance(true) == 90000, 42);
+    assert(LibraCoin.get_channel_balance(false) == 60000, 42);
     return;
 }
 
@@ -76,11 +76,11 @@ main() {
     sender = get_txn_sender();
     receiver = get_txn_receiver();
 
-    sender_balance = LibraCoin.get_offchain_balance(true);
-    receiver_balance = LibraCoin.get_offchain_balance(false);
+    sender_balance = LibraCoin.get_channel_balance(true);
+    receiver_balance = LibraCoin.get_channel_balance(false);
 
-    sender_coin = LibraCoin.withdraw_from_offchain(move(sender_balance),true);
-    receiver_coin = LibraCoin.withdraw_from_offchain(move(receiver_balance),false);
+    sender_coin = LibraCoin.withdraw_from_channel(move(sender_balance),true);
+    receiver_coin = LibraCoin.withdraw_from_channel(move(receiver_balance),false);
 
     LibraAccount.deposit(move(sender), move(sender_coin));
     LibraAccount.deposit(move(receiver), move(receiver_coin));
@@ -97,7 +97,7 @@ import 0x0.LibraCoin;
 
 main() {
 
-    assert(LibraCoin.get_offchain_balance(true) == 0, 42);
-    assert(LibraCoin.get_offchain_balance(false) == 0, 42);
+    assert(LibraCoin.get_channel_balance(true) == 0, 42);
+    assert(LibraCoin.get_channel_balance(false) == 0, 42);
     return;
 }

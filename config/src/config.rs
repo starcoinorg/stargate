@@ -899,9 +899,27 @@ impl NodeConfigHelpers {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Copy)]
+#[serde(tag = "type")]
 pub enum VMMode{
     Onchain,
     Offchain,
+}
+
+impl VMMode{
+
+    pub fn is_offchain(&self) -> bool{
+        match self{
+            VMMode::Offchain => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_onchain(&self) -> bool{
+        match self{
+            VMMode::Onchain => true,
+            _ => false,
+        }
+    }
 }
 
 /// Holds the VM configuration, currently this is only the publishing options for scripts and
@@ -930,17 +948,11 @@ impl VMConfig {
     }
 
     pub fn is_offchain(&self) -> bool {
-       match self.mode{
-           VMMode::Offchain => true,
-           _ => false,
-       }
+       self.mode.is_offchain()
     }
 
     pub fn is_onchain(&self) -> bool {
-        match self.mode{
-            VMMode::Onchain => true,
-            _ => false,
-        }
+        self.mode.is_onchain()
     }
 }
 

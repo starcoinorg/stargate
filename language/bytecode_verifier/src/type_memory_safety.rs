@@ -885,7 +885,7 @@ impl<'a> TypeAndMemorySafetyAnalysis<'a> {
                 }
             }
 
-            Bytecode::IsOffchainTxn => {
+            Bytecode::IsOffchain => {
                 self.stack.push(StackAbstractValue {
                     signature: SignatureToken::Bool,
                     value: AbstractValue::full_value(Kind::Unrestricted),
@@ -902,7 +902,7 @@ impl<'a> TypeAndMemorySafetyAnalysis<'a> {
             }
 
             // TODO: Handle type actuals for generics
-            Bytecode::ExistSenderOffchain(idx, _) => {
+            Bytecode::ExistSenderChannel(idx, _) => {
                 let struct_definition = self.module().struct_def_at(*idx);
                 if !StructDefinitionView::new(self.module(), struct_definition)
                     .is_nominal_resource()
@@ -917,7 +917,7 @@ impl<'a> TypeAndMemorySafetyAnalysis<'a> {
             }
 
             // TODO: Handle type actuals for generics
-            Bytecode::ExistReceiverOffchain(idx, _) => {
+            Bytecode::ExistReceiverChannel(idx, _) => {
                 let struct_definition = self.module().struct_def_at(*idx);
                 if !StructDefinitionView::new(self.module(), struct_definition)
                     .is_nominal_resource()
@@ -932,7 +932,7 @@ impl<'a> TypeAndMemorySafetyAnalysis<'a> {
             }
 
             // TODO: Handle type actuals for generics
-            Bytecode::BorrowSenderOffchain(idx, _) => {
+            Bytecode::BorrowSenderChannel(idx, _) => {
                 let struct_definition = self.module().struct_def_at(*idx);
                 if !StructDefinitionView::new(self.module(), struct_definition)
                     .is_nominal_resource()
@@ -954,7 +954,7 @@ impl<'a> TypeAndMemorySafetyAnalysis<'a> {
             }
 
             // TODO: Handle type actuals for generics
-            Bytecode::BorrowReceiverOffchain(idx, _) => {
+            Bytecode::BorrowReceiverChannel(idx, _) => {
                 let struct_definition = self.module().struct_def_at(*idx);
                 if !StructDefinitionView::new(self.module(), struct_definition)
                     .is_nominal_resource()
@@ -976,7 +976,7 @@ impl<'a> TypeAndMemorySafetyAnalysis<'a> {
             }
 
             // TODO: Handle type actuals for generics
-            Bytecode::MoveFromSenderOffchain(idx, _) => {
+            Bytecode::MoveFromSenderChannel(idx, _) => {
                 let struct_definition = self.module().struct_def_at(*idx);
                 if !StructDefinitionView::new(self.module(), struct_definition)
                     .is_nominal_resource()
@@ -993,7 +993,7 @@ impl<'a> TypeAndMemorySafetyAnalysis<'a> {
             }
 
             // TODO: Handle type actuals for generics
-            Bytecode::MoveFromReceiverOffchain(idx, _) => {
+            Bytecode::MoveFromReceiverChannel(idx, _) => {
                 let struct_definition = self.module().struct_def_at(*idx);
                 if !StructDefinitionView::new(self.module(), struct_definition)
                     .is_nominal_resource()
@@ -1010,7 +1010,7 @@ impl<'a> TypeAndMemorySafetyAnalysis<'a> {
             }
 
             // TODO: Handle type actuals for generics
-            Bytecode::MoveToSenderOffchain(idx, _) => {
+            Bytecode::MoveToSenderChannel(idx, _) => {
                 let struct_definition = self.module().struct_def_at(*idx);
                 if !StructDefinitionView::new(self.module(), struct_definition)
                     .is_nominal_resource()
@@ -1029,7 +1029,7 @@ impl<'a> TypeAndMemorySafetyAnalysis<'a> {
             }
 
             // TODO: Handle type actuals for generics
-            Bytecode::MoveToReceiverOffchain(idx, _) => {
+            Bytecode::MoveToReceiverChannel(idx, _) => {
                 let struct_definition = self.module().struct_def_at(*idx);
                 if !StructDefinitionView::new(self.module(), struct_definition)
                     .is_nominal_resource()
@@ -1045,6 +1045,14 @@ impl<'a> TypeAndMemorySafetyAnalysis<'a> {
                 } else {
                     Err(VMStaticViolation::MoveToSenderTypeMismatchError(offset))
                 }
+            }
+
+            Bytecode::IsChannelTxn => {
+                self.stack.push(StackAbstractValue {
+                    signature: SignatureToken::Bool,
+                    value: AbstractValue::full_value(Kind::Unrestricted),
+                });
+                Ok(())
             }
         }
     }

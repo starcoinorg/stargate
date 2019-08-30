@@ -158,17 +158,18 @@ impl<'a> StackUsageVerifier<'a> {
 
             Bytecode::LdByteArray(_) => 1,
 
-            Bytecode::IsOffchainTxn
-            | Bytecode::GetTxnReceiverAddress => 1,
+            Bytecode::IsOffchain
+            | Bytecode::GetTxnReceiverAddress
+            | Bytecode::IsChannelTxn => 1,
 
-            Bytecode::ExistSenderOffchain(_,_)
-            | Bytecode::ExistReceiverOffchain(_,_) => 1,
-            Bytecode::BorrowSenderOffchain(_,_)
-            | Bytecode::BorrowReceiverOffchain(_,_) => 1,
-            Bytecode::MoveFromSenderOffchain(_,_)
-            | Bytecode::MoveFromReceiverOffchain(_,_) => 1,
-            Bytecode::MoveToSenderOffchain(_,_)
-            | Bytecode::MoveToReceiverOffchain(_,_) => -1,
+            Bytecode::ExistSenderChannel(_, _)
+            | Bytecode::ExistReceiverChannel(_, _) => 1,
+            Bytecode::BorrowSenderChannel(_, _)
+            | Bytecode::BorrowReceiverChannel(_, _) => 1,
+            Bytecode::MoveFromSenderChannel(_, _)
+            | Bytecode::MoveFromReceiverChannel(_, _) => 1,
+            Bytecode::MoveToSenderChannel(_, _)
+            | Bytecode::MoveToReceiverChannel(_, _) => -1,
         }
     }
 }

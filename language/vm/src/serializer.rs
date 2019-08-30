@@ -678,48 +678,49 @@ fn serialize_instruction_inner(binary: &mut BinaryData, opcode: &Bytecode) -> Re
         Bytecode::CreateAccount => binary.push(Opcodes::CREATE_ACCOUNT as u8),
         Bytecode::GetTxnSequenceNumber => binary.push(Opcodes::GET_TXN_SEQUENCE_NUMBER as u8),
         Bytecode::GetTxnPublicKey => binary.push(Opcodes::GET_TXN_PUBLIC_KEY as u8),
-        Bytecode::IsOffchainTxn => binary.push(Opcodes::IS_OFFCHAIN_TXN as u8),
+        Bytecode::IsOffchain => binary.push(Opcodes::IS_OFFCHAIN as u8),
         Bytecode::GetTxnReceiverAddress => binary.push(Opcodes::GET_TXN_RECEIVER as u8),
-        Bytecode::ExistSenderOffchain(class_idx, types_idx) => {
-            binary.push(Opcodes::EXIST_SENDER_OFFCHAIN as u8)?;
+        Bytecode::ExistSenderChannel(class_idx, types_idx) => {
+            binary.push(Opcodes::EXIST_SENDER_CHANNEL as u8)?;
             write_u16_as_uleb128(binary, class_idx.0)?;
             write_u16_as_uleb128(binary, types_idx.0)
         },
-        Bytecode::ExistReceiverOffchain(class_idx, types_idx) => {
-            binary.push(Opcodes::EXIST_RECEIVER_OFFCHAIN as u8)?;
+        Bytecode::ExistReceiverChannel(class_idx, types_idx) => {
+            binary.push(Opcodes::EXIST_RECEIVER_CHANNEL as u8)?;
             write_u16_as_uleb128(binary, class_idx.0)?;
             write_u16_as_uleb128(binary, types_idx.0)
         },
-        Bytecode::BorrowSenderOffchain(class_idx, types_idx) => {
-            binary.push(Opcodes::BORROW_SENDER_OFFCHAIN as u8)?;
+        Bytecode::BorrowSenderChannel(class_idx, types_idx) => {
+            binary.push(Opcodes::BORROW_SENDER_CHANNEL as u8)?;
             write_u16_as_uleb128(binary, class_idx.0)?;
             write_u16_as_uleb128(binary, types_idx.0)
         },
-        Bytecode::BorrowReceiverOffchain(class_idx, types_idx) => {
-            binary.push(Opcodes::BORROW_RECEIVER_OFFCHAIN as u8)?;
+        Bytecode::BorrowReceiverChannel(class_idx, types_idx) => {
+            binary.push(Opcodes::BORROW_RECEIVER_CHANNEL as u8)?;
             write_u16_as_uleb128(binary, class_idx.0)?;
             write_u16_as_uleb128(binary, types_idx.0)
         },
-        Bytecode::MoveFromSenderOffchain(class_idx, types_idx) => {
-            binary.push(Opcodes::MOVE_FROM_SENDER_OFFCHAIN as u8)?;
+        Bytecode::MoveFromSenderChannel(class_idx, types_idx) => {
+            binary.push(Opcodes::MOVE_FROM_SENDER_CHANNEL as u8)?;
             write_u16_as_uleb128(binary, class_idx.0)?;
             write_u16_as_uleb128(binary, types_idx.0)
         },
-        Bytecode::MoveFromReceiverOffchain(class_idx, types_idx) => {
-            binary.push(Opcodes::MOVE_FROM_RECEIVER_OFFCHAIN as u8)?;
+        Bytecode::MoveFromReceiverChannel(class_idx, types_idx) => {
+            binary.push(Opcodes::MOVE_FROM_RECEIVER_CHANNEL as u8)?;
             write_u16_as_uleb128(binary, class_idx.0)?;
             write_u16_as_uleb128(binary, types_idx.0)
         },
-        Bytecode::MoveToSenderOffchain(class_idx, types_idx) => {
-            binary.push(Opcodes::MOVE_TO_SENDER_OFFCHAIN as u8)?;
+        Bytecode::MoveToSenderChannel(class_idx, types_idx) => {
+            binary.push(Opcodes::MOVE_TO_SENDER_CHANNEL as u8)?;
             write_u16_as_uleb128(binary, class_idx.0)?;
             write_u16_as_uleb128(binary, types_idx.0)
         },
-        Bytecode::MoveToReceiverOffchain(class_idx, types_idx) => {
-            binary.push(Opcodes::MOVE_TO_RECEIVER_OFFCHAIN as u8)?;
+        Bytecode::MoveToReceiverChannel(class_idx, types_idx) => {
+            binary.push(Opcodes::MOVE_TO_RECEIVER_CHANNEL as u8)?;
             write_u16_as_uleb128(binary, class_idx.0)?;
             write_u16_as_uleb128(binary, types_idx.0)
         },
+        Bytecode::IsChannelTxn => binary.push(Opcodes::IS_CHANNEL_TXN as u8),
     };
     res?;
     Ok(())

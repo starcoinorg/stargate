@@ -287,19 +287,20 @@ impl GasMeter {
                 };
                 Self::gas_of(static_cost_instr(instr, mem_size))
             }
-            Bytecode::IsOffchainTxn
-            | Bytecode::GetTxnReceiverAddress => {
+            Bytecode::IsOffchain
+            | Bytecode::GetTxnReceiverAddress
+            | Bytecode::IsChannelTxn => {
                 let default_gas = static_cost_instr(instr, AbstractMemorySize::new(1));
                 Self::gas_of(default_gas)
             }
-            Bytecode::ExistSenderOffchain(_,_)
-            | Bytecode::ExistReceiverOffchain(_,_)
-            | Bytecode::BorrowSenderOffchain(_,_)
-            | Bytecode::BorrowReceiverOffchain(_,_)
-            | Bytecode::MoveFromSenderOffchain(_,_)
-            | Bytecode::MoveFromReceiverOffchain(_,_)
-            | Bytecode::MoveToSenderOffchain(_,_)
-            | Bytecode::MoveToReceiverOffchain(_,_) => {
+            Bytecode::ExistSenderChannel(_, _)
+            | Bytecode::ExistReceiverChannel(_, _)
+            | Bytecode::BorrowSenderChannel(_, _)
+            | Bytecode::BorrowReceiverChannel(_, _)
+            | Bytecode::MoveFromSenderChannel(_, _)
+            | Bytecode::MoveFromReceiverChannel(_, _)
+            | Bytecode::MoveToSenderChannel(_, _)
+            | Bytecode::MoveToReceiverChannel(_, _) => {
                 let mem_size = if memory_size.get() > 1 {
                     memory_size.sub(AbstractMemorySize::new(1))
                 } else {

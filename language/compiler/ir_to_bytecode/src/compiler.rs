@@ -2530,8 +2530,8 @@ impl<S: Scope + Sized> Compiler<S> {
                         };
                         Ok(self.make_singleton_vec_deque(InferredType::Reference(inner_token)))
                     }
-                    Builtin::IsOffchainTxn => {
-                        code.code.push(Bytecode::IsOffchainTxn);
+                    Builtin::IsOffchain => {
+                        code.code.push(Bytecode::IsOffchain);
                         function_frame.push()?;
                         Ok(self.make_singleton_vec_deque(InferredType::Bool))
                     }
@@ -2540,29 +2540,29 @@ impl<S: Scope + Sized> Compiler<S> {
                         function_frame.push()?;
                         Ok(self.make_singleton_vec_deque(InferredType::Address))
                     }
-                    Builtin::ExistSenderOffchain(name, tys) => {
+                    Builtin::ExistSenderChannel(name, tys) => {
                         let type_actuals_id = self.make_type_actuals(k, tys)?;
 
                         let (_, def_idx) = self.scope.get_struct_def(name.name_ref())?;
-                        code.code.push(Bytecode::ExistSenderOffchain(def_idx, type_actuals_id));
+                        code.code.push(Bytecode::ExistSenderChannel(def_idx, type_actuals_id));
                         function_frame.pop()?;
                         function_frame.push()?;
                         Ok(self.make_singleton_vec_deque(InferredType::Bool))
                     }
-                    Builtin::ExistReceiverOffchain(name, tys) => {
+                    Builtin::ExistReceiverChannel(name, tys) => {
                         let type_actuals_id = self.make_type_actuals(k, tys)?;
 
                         let (_, def_idx) = self.scope.get_struct_def(name.name_ref())?;
-                        code.code.push(Bytecode::ExistReceiverOffchain(def_idx, type_actuals_id));
+                        code.code.push(Bytecode::ExistReceiverChannel(def_idx, type_actuals_id));
                         function_frame.pop()?;
                         function_frame.push()?;
                         Ok(self.make_singleton_vec_deque(InferredType::Bool))
                     }
-                    Builtin::BorrowSenderOffchain(name, tys) => {
+                    Builtin::BorrowSenderChannel(name, tys) => {
                         let type_actuals_id = self.make_type_actuals(k, tys)?;
 
                         let (_, def_idx) = self.scope.get_struct_def(name.name_ref())?;
-                        code.code.push(Bytecode::BorrowSenderOffchain(def_idx, type_actuals_id));
+                        code.code.push(Bytecode::BorrowSenderChannel(def_idx, type_actuals_id));
                         function_frame.pop()?;
                         function_frame.push()?;
                         let sd = self.scope.get_struct_def_at(def_idx)?;
@@ -2573,11 +2573,11 @@ impl<S: Scope + Sized> Compiler<S> {
                             )),
                         )
                     }
-                    Builtin::BorrowReceiverOffchain(name, tys) => {
+                    Builtin::BorrowReceiverChannel(name, tys) => {
                         let type_actuals_id = self.make_type_actuals(k, tys)?;
 
                         let (_, def_idx) = self.scope.get_struct_def(name.name_ref())?;
-                        code.code.push(Bytecode::BorrowReceiverOffchain(def_idx, type_actuals_id));
+                        code.code.push(Bytecode::BorrowReceiverChannel(def_idx, type_actuals_id));
                         function_frame.pop()?;
                         function_frame.push()?;
                         let sd = self.scope.get_struct_def_at(def_idx)?;
@@ -2588,45 +2588,50 @@ impl<S: Scope + Sized> Compiler<S> {
                             )),
                         )
                     }
-                    Builtin::MoveFromSenderOffchain(name, tys) => {
+                    Builtin::MoveFromSenderChannel(name, tys) => {
                         let type_actuals_id = self.make_type_actuals(k, tys)?;
 
                         let (_, def_idx) = self.scope.get_struct_def(name.name_ref())?;
-                        code.code.push(Bytecode::MoveFromSenderOffchain(def_idx, type_actuals_id));
+                        code.code.push(Bytecode::MoveFromSenderChannel(def_idx, type_actuals_id));
                         function_frame.pop()?;
                         function_frame.push()?;
                         let sd = self.scope.get_struct_def_at(def_idx)?;
                         let sh_idx = sd.struct_handle;
                         Ok(self.make_singleton_vec_deque(InferredType::Struct(sh_idx)))
                     }
-                    Builtin::MoveFromReceiverOffchain(name, tys) => {
+                    Builtin::MoveFromReceiverChannel(name, tys) => {
                         let type_actuals_id = self.make_type_actuals(k, tys)?;
 
                         let (_, def_idx) = self.scope.get_struct_def(name.name_ref())?;
-                        code.code.push(Bytecode::MoveFromReceiverOffchain(def_idx, type_actuals_id));
+                        code.code.push(Bytecode::MoveFromReceiverChannel(def_idx, type_actuals_id));
                         function_frame.pop()?;
                         function_frame.push()?;
                         let sd = self.scope.get_struct_def_at(def_idx)?;
                         let sh_idx = sd.struct_handle;
                         Ok(self.make_singleton_vec_deque(InferredType::Struct(sh_idx)))
                     }
-                    Builtin::MoveToSenderOffchain(name, tys) => {
+                    Builtin::MoveToSenderChannel(name, tys) => {
                         let type_actuals_id = self.make_type_actuals(k, tys)?;
 
                         let (_, def_idx) = self.scope.get_struct_def(name.name_ref())?;
-                        code.code.push(Bytecode::MoveToSenderOffchain(def_idx, type_actuals_id));
+                        code.code.push(Bytecode::MoveToSenderChannel(def_idx, type_actuals_id));
                         function_frame.pop()?;
                         function_frame.push()?;
                         Ok(VecDeque::new())
                     }
-                    Builtin::MoveToReceiverOffchain(name, tys) => {
+                    Builtin::MoveToReceiverChannel(name, tys) => {
                         let type_actuals_id = self.make_type_actuals(k, tys)?;
 
                         let (_, def_idx) = self.scope.get_struct_def(name.name_ref())?;
-                        code.code.push(Bytecode::MoveToReceiverOffchain(def_idx, type_actuals_id));
+                        code.code.push(Bytecode::MoveToReceiverChannel(def_idx, type_actuals_id));
                         function_frame.pop()?;
                         function_frame.push()?;
                         Ok(VecDeque::new())
+                    }
+                    Builtin::IsChannelTxn => {
+                        code.code.push(Bytecode::IsChannelTxn);
+                        function_frame.push()?;
+                        Ok(self.make_singleton_vec_deque(InferredType::Bool))
                     }
                 }
             }

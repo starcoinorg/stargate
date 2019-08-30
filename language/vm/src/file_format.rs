@@ -1052,24 +1052,23 @@ pub enum Bytecode {
     ///
     /// ```..., -> ..., bytearray_value```
     GetTxnPublicKey,
-    /// Check current txn is Offchain transaction
-    IsOffchainTxn,
-    /// Get offchain transaction's receiver.
+    IsOffchain,
     GetTxnReceiverAddress,
-    ExistSenderOffchain(StructDefinitionIndex, LocalsSignatureIndex),
-    ExistReceiverOffchain(StructDefinitionIndex, LocalsSignatureIndex),
-    BorrowSenderOffchain(StructDefinitionIndex, LocalsSignatureIndex),
-    BorrowReceiverOffchain(StructDefinitionIndex, LocalsSignatureIndex),
-    MoveFromSenderOffchain(StructDefinitionIndex, LocalsSignatureIndex),
-    MoveFromReceiverOffchain(StructDefinitionIndex, LocalsSignatureIndex),
-    MoveToSenderOffchain(StructDefinitionIndex, LocalsSignatureIndex),
-    MoveToReceiverOffchain(StructDefinitionIndex, LocalsSignatureIndex),
+    ExistSenderChannel(StructDefinitionIndex, LocalsSignatureIndex),
+    ExistReceiverChannel(StructDefinitionIndex, LocalsSignatureIndex),
+    BorrowSenderChannel(StructDefinitionIndex, LocalsSignatureIndex),
+    BorrowReceiverChannel(StructDefinitionIndex, LocalsSignatureIndex),
+    MoveFromSenderChannel(StructDefinitionIndex, LocalsSignatureIndex),
+    MoveFromReceiverChannel(StructDefinitionIndex, LocalsSignatureIndex),
+    MoveToSenderChannel(StructDefinitionIndex, LocalsSignatureIndex),
+    MoveToReceiverChannel(StructDefinitionIndex, LocalsSignatureIndex),
+    IsChannelTxn,
 }
 
 /// The number of bytecode instructions.
 /// This is necessary for checking that all instructions are covered since Rust
 /// does not provide a way of determining the number of variants of an enum.
-pub const NUMBER_OF_BYTECODE_INSTRUCTIONS: usize = 63;
+pub const NUMBER_OF_BYTECODE_INSTRUCTIONS: usize = 64;
 
 impl ::std::fmt::Debug for Bytecode {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
@@ -1127,16 +1126,17 @@ impl ::std::fmt::Debug for Bytecode {
             Bytecode::CreateAccount => write!(f, "CreateAccount"),
             Bytecode::GetTxnSequenceNumber => write!(f, "GetTxnSequenceNumber"),
             Bytecode::GetTxnPublicKey => write!(f, "GetTxnPublicKey"),
-            Bytecode::IsOffchainTxn => write!(f, "IsOffchainTxn"),
+            Bytecode::IsOffchain => write!(f, "IsOffchain"),
             Bytecode::GetTxnReceiverAddress => write!(f, "GetTxnReceiverAddress"),
-            Bytecode::ExistSenderOffchain(a, b) => write!(f, "ExistSenderOffchain({},{:?})", a, b),
-            Bytecode::ExistReceiverOffchain(a, b)=> write!(f, "ExistReceiverOffchain({},{:?})", a, b),
-            Bytecode::BorrowSenderOffchain(a, b)=> write!(f, "BorrowSenderOffchain({},{:?})", a, b),
-            Bytecode::BorrowReceiverOffchain(a, b)=> write!(f, "BorrowReceiverOffchain({},{:?})", a, b),
-            Bytecode::MoveFromSenderOffchain(a, b)=> write!(f, "MoveFromSenderOffchain({},{:?})", a, b),
-            Bytecode::MoveFromReceiverOffchain(a, b)=> write!(f, "MoveFromReceiverOffchain({},{:?})", a, b),
-            Bytecode::MoveToSenderOffchain(a, b)=> write!(f, "MoveToSenderOffchain({},{:?})", a, b),
-            Bytecode::MoveToReceiverOffchain(a, b)=> write!(f, "MoveToReceiverOffchain({},{:?})", a, b),
+            Bytecode::ExistSenderChannel(a, b) => write!(f, "ExistSenderChannel({},{:?})", a, b),
+            Bytecode::ExistReceiverChannel(a, b)=> write!(f, "ExistReceiverChannel({},{:?})", a, b),
+            Bytecode::BorrowSenderChannel(a, b)=> write!(f, "BorrowSenderChannel({},{:?})", a, b),
+            Bytecode::BorrowReceiverChannel(a, b)=> write!(f, "BorrowReceiverChannel({},{:?})", a, b),
+            Bytecode::MoveFromSenderChannel(a, b)=> write!(f, "MoveFromSenderChannel({},{:?})", a, b),
+            Bytecode::MoveFromReceiverChannel(a, b)=> write!(f, "MoveFromReceiverChannel({},{:?})", a, b),
+            Bytecode::MoveToSenderChannel(a, b)=> write!(f, "MoveToSenderChannel({},{:?})", a, b),
+            Bytecode::MoveToReceiverChannel(a, b)=> write!(f, "MoveToReceiverChannel({},{:?})", a, b),
+            Bytecode::IsChannelTxn => write!(f, "IsChannelTxn"),
         }
     }
 }

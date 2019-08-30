@@ -5,7 +5,7 @@
 //! sender: alice
 main() {
     let x: bool;
-    x = is_offchain_txn();
+    x = is_channel_txn();
 
     assert(copy(x) == false, 77);
     return;
@@ -18,7 +18,7 @@ main() {
     let x: bool;
     let receiver: address;
 
-    x = is_offchain_txn();
+    x = is_channel_txn();
     assert(copy(x) == true, 42);
 
     receiver = get_txn_receiver();

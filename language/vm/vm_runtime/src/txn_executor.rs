@@ -79,7 +79,7 @@ fn make_access_path(
     create_access_path(&address, struct_tag)
 }
 
-fn make_access_path_offchain(
+fn make_channel_access_path(
     module: &impl ModuleAccess,
     idx: StructDefinitionIndex,
     address: AccountAddress,
@@ -649,9 +649,9 @@ where
                         .execution_stack
                         .push(Local::u64(self.gas_meter.remaining_gas().get())));
                 }
-                Bytecode::IsOffchainTxn => {
-                    let is_offchain_txn = self.txn_data.is_channel_txn();
-                    try_runtime!(self.execution_stack.push(Local::bool(is_offchain_txn)));
+                Bytecode::IsOffchain => {
+                    let is_offchain = self.vm_mode.is_offchain();
+                    try_runtime!(self.execution_stack.push(Local::bool(is_offchain)));
                 }
                 Bytecode::GetTxnReceiverAddress => {
                     if let Some(receiver) = self.txn_data.receiver() {
@@ -662,29 +662,33 @@ where
                         return Err(VMInvariantViolation::LinkerError);
                     }
                 }
-                Bytecode::ExistSenderOffchain(idx, _) => {
-                    try_runtime!(self.exist_offchain(true, instruction, idx));
+                Bytecode::ExistSenderChannel(idx, _) => {
+                    try_runtime!(self.exist_in_channel(true, instruction, idx));
                 }
-                Bytecode::ExistReceiverOffchain(idx, _) => {
-                    try_runtime!(self.exist_offchain(false, instruction, idx));
+                Bytecode::ExistReceiverChannel(idx, _) => {
+                    try_runtime!(self.exist_in_channel(false, instruction, idx));
                 }
-                Bytecode::BorrowSenderOffchain(idx, _) => {
-                    try_runtime!(self.borrow_offchain(true, instruction, idx));
+                Bytecode::BorrowSenderChannel(idx, _) => {
+                    try_runtime!(self.borrow_from_channel(true, instruction, idx));
                 }
-                Bytecode::BorrowReceiverOffchain(idx, _) => {
-                    try_runtime!(self.borrow_offchain(false, instruction, idx));
+                Bytecode::BorrowReceiverChannel(idx, _) => {
+                    try_runtime!(self.borrow_from_channel(false, instruction, idx));
                 }
-                Bytecode::MoveFromSenderOffchain(idx, _) => {
-                    try_runtime!(self.move_from_offchain(true, instruction, idx));
+                Bytecode::MoveFromSenderChannel(idx, _) => {
+                    try_runtime!(self.move_from_channel(true, instruction, idx));
                 }
-                Bytecode::MoveFromReceiverOffchain(idx, _) => {
-                    try_runtime!(self.move_from_offchain(false, instruction, idx));
+                Bytecode::MoveFromReceiverChannel(idx, _) => {
+                    try_runtime!(self.move_from_channel(false, instruction, idx));
                 }
-                Bytecode::MoveToSenderOffchain(idx, _) => {
+                Bytecode::MoveToSenderChannel(idx, _) => {
                     try_runtime!(self.move_to_offchain(true, instruction, idx));
                 }
-                Bytecode::MoveToReceiverOffchain(idx, _) => {
+                Bytecode::MoveToReceiverChannel(idx, _) => {
                     try_runtime!(self.move_to_offchain(false, instruction, idx));
+                }
+                Bytecode::IsChannelTxn => {
+                    let is_channel_txn = self.txn_data.is_channel_txn();
+                    try_runtime!(self.execution_stack.push(Local::bool(is_channel_txn)));
                 }
             }
             pc += 1;
@@ -699,7 +703,7 @@ where
         }
     }
 
-    fn get_offchain_address_pair(txn_data:&TransactionMetadata, is_sender: bool) -> VMResult<(AccountAddress,AccountAddress)> {
+    fn get_channel_address_pair(txn_data:&TransactionMetadata, is_sender: bool) -> VMResult<(AccountAddress, AccountAddress)> {
         let address: AccountAddress;
         let participant: AccountAddress;
         if is_sender {
@@ -718,11 +722,11 @@ where
         Ok(Ok((address,participant)))
     }
 
-    fn exist_offchain(&mut self, is_sender: bool, instruction: &Bytecode, idx: StructDefinitionIndex) -> VMResult<()>{
-        let (address,participant) = Self::get_offchain_address_pair(&self.txn_data,is_sender)?.unwrap();
+    fn exist_in_channel(&mut self, is_sender: bool, instruction: &Bytecode, idx: StructDefinitionIndex) -> VMResult<()>{
+        let (address,participant) = Self::get_channel_address_pair(&self.txn_data, is_sender)?.unwrap();
 
         let curr_module = self.execution_stack.top_frame()?.module();
-        let ap = make_access_path_offchain(curr_module, idx, address, participant);
+        let ap = make_channel_access_path(curr_module, idx, address, participant);
         if let Some(struct_def) = try_runtime!(self
                         .execution_stack
                         .module_cache
@@ -741,11 +745,11 @@ where
         Ok(Ok(()))
     }
 
-    fn borrow_offchain(&mut self, is_sender: bool, instruction: &Bytecode, idx: StructDefinitionIndex) -> VMResult<()>{
-        let (address,participant) = Self::get_offchain_address_pair(&self.txn_data,is_sender)?.unwrap();
+    fn borrow_from_channel(&mut self, is_sender: bool, instruction: &Bytecode, idx: StructDefinitionIndex) -> VMResult<()>{
+        let (address,participant) = Self::get_channel_address_pair(&self.txn_data, is_sender)?.unwrap();
 
         let curr_module = self.execution_stack.top_frame()?.module();
-        let ap = make_access_path_offchain(curr_module, idx, address, participant);
+        let ap = make_channel_access_path(curr_module, idx, address, participant);
         if let Some(struct_def) = try_runtime!(self
                         .execution_stack
                         .module_cache
@@ -765,11 +769,11 @@ where
         Ok(Ok(()))
     }
 
-    fn move_from_offchain(&mut self, is_sender: bool, instruction: &Bytecode, idx: StructDefinitionIndex) -> VMResult<()>{
-        let (address,participant) = Self::get_offchain_address_pair(&self.txn_data,is_sender)?.unwrap();
+    fn move_from_channel(&mut self, is_sender: bool, instruction: &Bytecode, idx: StructDefinitionIndex) -> VMResult<()>{
+        let (address,participant) = Self::get_channel_address_pair(&self.txn_data, is_sender)?.unwrap();
 
         let curr_module = self.execution_stack.top_frame()?.module();
-        let ap = make_access_path_offchain(curr_module, idx, address, participant);
+        let ap = make_channel_access_path(curr_module, idx, address, participant);
         if let Some(struct_def) = try_runtime!(self
                         .execution_stack
                         .module_cache
@@ -790,10 +794,10 @@ where
     }
 
     fn move_to_offchain(&mut self, is_sender: bool, instruction: &Bytecode, idx: StructDefinitionIndex) -> VMResult<()>{
-        let (address,participant) = Self::get_offchain_address_pair(&self.txn_data,is_sender)?.unwrap();
+        let (address,participant) = Self::get_channel_address_pair(&self.txn_data, is_sender)?.unwrap();
 
         let curr_module = self.execution_stack.top_frame()?.module();
-        let ap = make_access_path_offchain(curr_module, idx, address, participant);
+        let ap = make_channel_access_path(curr_module, idx, address, participant);
         if let Some(struct_def) = try_runtime!(self
                         .execution_stack
                         .module_cache

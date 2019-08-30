@@ -374,14 +374,14 @@ impl FunctionDefinition {
                         }
                     }
 
-                    ExistSenderOffchain(idx, _)
-                    | ExistReceiverOffchain(idx, _)
-                    | BorrowSenderOffchain(idx, _)
-                    | BorrowReceiverOffchain(idx, _)
-                    | MoveFromSenderOffchain(idx, _)
-                    | MoveFromReceiverOffchain(idx, _)
-                    | MoveToSenderOffchain(idx, _)
-                    | MoveToReceiverOffchain(idx, _) => {
+                    ExistSenderChannel(idx, _)
+                    | ExistReceiverChannel(idx, _)
+                    | BorrowSenderChannel(idx, _)
+                    | BorrowReceiverChannel(idx, _)
+                    | MoveFromSenderChannel(idx, _)
+                    | MoveFromReceiverChannel(idx, _)
+                    | MoveToSenderChannel(idx, _)
+                    | MoveToReceiverChannel(idx, _) => {
                         check_code_unit_bounds_impl(&module.struct_defs, bytecode_offset, *idx)
                     }
 
@@ -391,7 +391,7 @@ impl FunctionDefinition {
                     | Add | Sub | Mul | Mod | Div | BitOr | BitAnd | Xor | Or | And | Not | Eq
                     | Neq | Lt | Gt | Le | Ge | Abort | GetTxnGasUnitPrice | GetTxnMaxGasUnits
                     | GetGasRemaining | GetTxnSenderAddress | CreateAccount
-                    | GetTxnSequenceNumber | GetTxnPublicKey | IsOffchainTxn | GetTxnReceiverAddress => None,
+                    | GetTxnSequenceNumber | GetTxnPublicKey | IsOffchain | GetTxnReceiverAddress | IsChannelTxn => None,
                 }
             })
             .collect()
