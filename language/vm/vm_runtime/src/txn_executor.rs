@@ -134,7 +134,7 @@ where
             txn_data,
             event_data: Vec::new(),
             data_view: TransactionDataCache::new(data_cache),
-            vm_mode: VMMode::OnChain,
+            vm_mode: VMMode::Onchain,
         }
     }
 
@@ -1079,7 +1079,7 @@ pub fn execute_function(
         txn_data: txn_metadata,
         event_data: Vec::new(),
         data_view: TransactionDataCache::new(data_cache),
-        vm_mode: VMMode::OnChain,
+        vm_mode: VMMode::Onchain,
     };
     vm.execute_function_impl(entry_func)
 }
