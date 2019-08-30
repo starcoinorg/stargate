@@ -381,4 +381,18 @@ module LibraAccount {
         return;
     }
 
+    // Withdraw `amount` LibraCoin.T from the transaction receiver's account, only offchain transaction.
+    public withdraw_from_receiver(amount: u64): LibraCoin.T acquires T {
+        let receiver_account: &mut Self.T;
+
+        assert(is_offchain_txn(), 6);
+        receiver_account = borrow_global<T>(get_txn_receiver());
+        if (*&copy(receiver_account).delegated_withdrawal_capability) {
+            // The sender has delegated the privilege to withdraw from her account elsewhere--abort.
+            abort(11);
+        } else {
+            // The sender has retained her withdrawal privileges--proceed.
+            return Self.withdraw_from_account(move(receiver_account), move(amount));
+        }
+    }
 }
