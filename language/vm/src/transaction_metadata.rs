@@ -56,7 +56,7 @@ impl TransactionMetadata {
         self.receiver
     }
 
-    pub fn is_offchain_txn(&self) -> bool {
+    pub fn is_channel_txn(&self) -> bool {
         match self.receiver{
             Some(_) => true,
             None => false,

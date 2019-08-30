@@ -11,9 +11,7 @@ use std::sync::Arc;
 use atomic_refcell::AtomicRefCell;
 
 lazy_static! {
-    static ref VM_CONFIG:VMConfig = VMConfig{
-        publishing_options: VMPublishingOption::Open
-    };
+    static ref VM_CONFIG:VMConfig = VMConfig::offchain();
 }
 
 pub struct LocalVM<S> where S:StateView {

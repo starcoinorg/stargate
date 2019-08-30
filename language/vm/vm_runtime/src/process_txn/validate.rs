@@ -8,7 +8,7 @@ use crate::{
     process_txn::{verify::VerifiedTransaction, ProcessTransaction},
     txn_executor::TransactionExecutor,
 };
-use config::config::VMPublishingOption;
+use config::config::{VMPublishingOption, VMMode};
 use logger::prelude::*;
 use tiny_keccak::Keccak;
 use types::{
@@ -75,6 +75,7 @@ where
         process_txn: ProcessTransaction<'alloc, 'txn, P>,
         mode: ValidationMode,
         publishing_option: &VMPublishingOption,
+        vm_mode: VMMode,
     ) -> Result<Self, VMStatus> {
         let ProcessTransaction {
             txn,
@@ -92,6 +93,7 @@ where
                     data_cache,
                     allocator,
                     mode,
+                    vm_mode,
                     || {
                         // Verify against whitelist if we are locked. Otherwise allow.
                         if !is_allowed_script(&publishing_option, &program.code()) {
@@ -119,6 +121,7 @@ where
                     data_cache,
                     allocator,
                     mode,
+                    vm_mode,
                     || {
                         // Verify against whitelist if we are locked. Otherwise allow.
                         if !is_allowed_script(&publishing_option, &script.code()) {
@@ -137,6 +140,7 @@ where
                     data_cache,
                     allocator,
                     mode,
+                    vm_mode,
                     || {
                         if !publishing_option.is_open() {
                             warn!("[VM] Custom modules not allowed");
@@ -202,6 +206,7 @@ where
         data_cache: &'txn dyn RemoteCache,
         allocator: &'txn Arena<LoadedModule>,
         mode: ValidationMode,
+        vm_mode: VMMode,
         payload_check: impl Fn() -> Result<(), VMStatus>,
     ) -> Result<ValidatedTransactionState<'alloc, 'txn, P>, VMStatus> {
         let raw_bytes_len = AbstractMemorySize::new(txn.raw_txn_bytes_len() as GasCarrier);
@@ -307,7 +312,7 @@ where
 
         let metadata = TransactionMetadata::new(&txn);
         let mut txn_state =
-            ValidatedTransactionState::new(metadata, module_cache, data_cache, allocator);
+            ValidatedTransactionState::new(metadata, module_cache, data_cache, allocator, vm_mode);
 
         // Run the prologue to ensure that clients have enough gas and aren't tricking us by
         // sending us garbage.
@@ -364,10 +369,11 @@ where
         module_cache: P,
         data_cache: &'txn dyn RemoteCache,
         allocator: &'txn Arena<LoadedModule>,
+        vm_mode: VMMode,
     ) -> Self {
         // This temporary cache is used for modules published by a single transaction.
         let txn_module_cache = TransactionModuleCache::new(module_cache, allocator);
-        let txn_executor = TransactionExecutor::new(txn_module_cache, data_cache, metadata);
+        let txn_executor = TransactionExecutor::new_with_vm_mode(txn_module_cache, data_cache, metadata, vm_mode);
         Self { txn_executor }
     }
 }

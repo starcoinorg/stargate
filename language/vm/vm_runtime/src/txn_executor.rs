@@ -41,6 +41,7 @@ use vm_runtime_types::{
     native_functions::dispatch::{dispatch_native_function, NativeReturnStatus},
     value::{Local, MutVal, Reference, Value},
 };
+use config::config::VMMode;
 
 #[cfg(test)]
 #[path = "unit_tests/runtime_tests.rs"]
@@ -110,6 +111,7 @@ where
     txn_data: TransactionMetadata,
     event_data: Vec<ContractEvent>,
     data_view: TransactionDataCache<'txn>,
+    vm_mode: VMMode,
 }
 
 impl<'alloc, 'txn, P> TransactionExecutor<'alloc, 'txn, P>
@@ -132,6 +134,23 @@ where
             txn_data,
             event_data: Vec::new(),
             data_view: TransactionDataCache::new(data_cache),
+            vm_mode: VMMode::OnChain,
+        }
+    }
+
+    pub fn new_with_vm_mode(
+        module_cache: P,
+        data_cache: &'txn dyn RemoteCache,
+        txn_data: TransactionMetadata,
+        vm_mode: VMMode,
+    ) -> Self {
+        TransactionExecutor {
+            execution_stack: ExecutionStack::new(module_cache),
+            gas_meter: GasMeter::new(txn_data.max_gas_amount()),
+            txn_data,
+            event_data: Vec::new(),
+            data_view: TransactionDataCache::new(data_cache),
+            vm_mode,
         }
     }
 
@@ -631,7 +650,7 @@ where
                         .push(Local::u64(self.gas_meter.remaining_gas().get())));
                 }
                 Bytecode::IsOffchainTxn => {
-                    let is_offchain_txn = self.txn_data.is_offchain_txn();
+                    let is_offchain_txn = self.txn_data.is_channel_txn();
                     try_runtime!(self.execution_stack.push(Local::bool(is_offchain_txn)));
                 }
                 Bytecode::GetTxnReceiverAddress => {
@@ -1060,6 +1079,7 @@ pub fn execute_function(
         txn_data: txn_metadata,
         event_data: Vec::new(),
         data_view: TransactionDataCache::new(data_cache),
+        vm_mode: VMMode::OnChain,
     };
     vm.execute_function_impl(entry_func)
 }

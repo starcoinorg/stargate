@@ -898,18 +898,57 @@ impl NodeConfigHelpers {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, Copy)]
+pub enum VMMode{
+    OnChain,
+    OffChain,
+}
+
 /// Holds the VM configuration, currently this is only the publishing options for scripts and
 /// modules, but in the future this may need to be expanded to hold more information.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct VMConfig {
     pub publishing_options: VMPublishingOption,
+    pub mode: VMMode,
+}
+
+impl VMConfig {
+
+    pub fn onchain() -> VMConfig {
+        Self {
+            publishing_options: VMPublishingOption::Open,
+            mode: VMMode::OnChain,
+        }
+    }
+
+    pub fn offchain() -> VMConfig {
+        Self {
+            publishing_options: VMPublishingOption::Open,
+            mode: VMMode::OffChain,
+        }
+    }
+
+    pub fn is_offchain(&self) -> bool {
+       match self.mode{
+           VMMode::OffChain => true,
+           _ => false,
+       }
+    }
+
+    pub fn is_onchain(&self) -> bool {
+        match self.mode{
+            VMMode::OnChain => true,
+            _ => false,
+        }
+    }
 }
 
 impl Default for VMConfig {
     fn default() -> VMConfig {
         VMConfig {
             publishing_options: VMPublishingOption::Open,
+            mode: VMMode::OnChain
         }
     }
 }
@@ -967,6 +1006,7 @@ impl VMConfig {
     pub fn empty_whitelist_FOR_TESTING() -> Self {
         VMConfig {
             publishing_options: VMPublishingOption::Locked(HashSet::new()),
+            mode: VMMode::OnChain,
         }
     }
 
