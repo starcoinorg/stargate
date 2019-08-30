@@ -1,10 +1,9 @@
-use crate::{convert_account_address_to_peer_id, convert_peer_id_to_account_address};
+use crate::{convert_account_address_to_peer_id, convert_peer_id_to_account_address, helper::convert_boot_nodes};
 use crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
 };
-use futures::{future, stream::Stream, sync::mpsc, Async, Future};
-use logger::prelude::*;
+use futures::{future, stream::Stream, sync::mpsc, Async, Future, sync::oneshot};
 use network_libp2p::{
     identity, start_service, NetworkConfiguration, NodeKeyConfig, PeerId, Secret,
     Service as Libp2pService, ServiceEvent,
@@ -12,10 +11,9 @@ use network_libp2p::{
 use parking_lot::Mutex;
 use sg_config::config::NetworkConfig;
 use std::{io, sync::Arc};
-use tokio::runtime::Builder as RuntimeBuilder;
 use types::account_address::AccountAddress;
-use crate::helper::convert_boot_nodes;
 use tokio::runtime::TaskExecutor;
+use logger::prelude::*;
 
 #[derive(Clone, Debug)]
 pub struct Message {
@@ -25,6 +23,7 @@ pub struct Message {
 
 pub struct NetworkService {
     pub libp2p_service: Arc<Mutex<Libp2pService<Vec<u8>>>>,
+    close_tx: oneshot::Sender<()>,
 }
 
 pub fn build_network_service(
@@ -91,7 +90,7 @@ fn run_network(
                     break;
                 }
                 _ => {
-                    error!("Error happend");
+                    error!("Error happened");
                     break;
                 }
             }
@@ -128,15 +127,22 @@ fn run_network(
     (net_tx, net_rx, network_fut)
 }
 
-fn start_network_thread(
+fn spawn_network(
     libp2p_service: Arc<Mutex<Libp2pService<Vec<u8>>>>,
     executor: TaskExecutor,
+    close_rx: oneshot::Receiver<()>,
 ) -> (
     mpsc::UnboundedSender<Message>,
     mpsc::UnboundedReceiver<Message>,
 ) {
     let (network_sender, network_receiver, network_future) = run_network(libp2p_service);
-    executor.spawn(network_future);
+    let fut = network_future
+        .select(close_rx.then(|_| Ok(())))
+        .map(|(val, _)| val)
+        .map_err(|(err, _)| err);
+
+
+    executor.spawn(fut);
 
     (network_sender, network_receiver)
 }
@@ -150,9 +156,12 @@ impl NetworkService {
         mpsc::UnboundedSender<Message>,
         mpsc::UnboundedReceiver<Message>,
     ) {
+        let (close_tx, close_rx) = oneshot::channel::<()>();
         let libp2p_service = build_libp2p_service(cfg).unwrap();
         let (network_sender, network_receiver) =
-            start_network_thread(libp2p_service.clone(), executor);
+            spawn_network(libp2p_service.clone(), executor, close_rx);
+
+
         info!("Network started, connected peers:");
         for p in libp2p_service.lock().connected_peers() {
             info!("peer_id:{}", p);
@@ -160,6 +169,7 @@ impl NetworkService {
         (
             Self {
                 libp2p_service,
+                close_tx,
             },
             network_sender,
             network_receiver,
@@ -172,6 +182,9 @@ impl NetworkService {
 
     pub fn identify(&self) -> AccountAddress {
         convert_peer_id_to_account_address(self.libp2p_service.lock().peer_id()).unwrap()
+    }
+    pub fn shutdown(self) {
+        let _ = self.close_tx.send(());
     }
 }
 
