@@ -71,7 +71,7 @@ impl ChainClient for MockChainClient {
         self.chain_service.as_ref().unwrap().faucet_inner(address, amount).map(|_| ())
     }
 
-    fn submit_transaction(&mut self, signed_transaction: SignedTransaction) -> Result<()> {
+    fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<()> {
         let chain_service=self.chain_service.as_ref().unwrap();
         block_on(chain_service.submit_transaction_inner(chain_service.sender(), TransactionInner::OnChain(signed_transaction)));
 

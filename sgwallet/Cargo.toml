@@ -22,6 +22,8 @@ vm_genesis = { path = "../language/vm/vm_genesis" }
 logger = { path = "../common/logger"}
 state_store = { path = "../storage/state_store"}
 tokio = "0.1.22"
+futures_01 = { package = "futures", version = "0.1.28" }
+
 
 [dev-dependencies]
 crypto = { path = "../crypto/crypto", features = ["testing"] }
