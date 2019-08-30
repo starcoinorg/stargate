@@ -89,11 +89,11 @@ impl ChainClient for MockChainClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::runtime::Runtime;
 
     #[test]
     fn test_mock_client() {
         let rt = Runtime::new().unwrap();
-        ;
         let client = MockChainClient::new(rt.executor());
         let state = client.get_account_state(&AccountAddress::default()).unwrap().unwrap();
         println!("state: {:#?}", state)
