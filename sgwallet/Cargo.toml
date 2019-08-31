@@ -10,6 +10,9 @@ edition = "2018"
 rand = "0.6.5"
 protobuf = "2.7"
 atomic_refcell = "0.1.3"
+load_file = "1.0.0"
+lazy_static = "1.3.0"
+include_dir = "0.2.1"
 failure = { path = "../common/failure_ext", package = "failure_ext" }
 types = { path = "../types" }
 star_types = { path = "../star_types" }
@@ -24,6 +27,8 @@ state_store = { path = "../storage/state_store"}
 tokio = "0.1.22"
 futures = { package = "futures", version = "0.1.28" }
 proto_conv = { path = "../common/proto_conv", features = ["derive"] }
+stdlib = { path = "../language/stdlib" }
+ir_to_bytecode = { path = "../language/compiler/ir_to_bytecode" }
 
 [dev-dependencies]
 crypto = { path = "../crypto/crypto", features = ["testing"] }

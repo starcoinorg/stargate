@@ -1,0 +1,11 @@
+import 0x0.LibraAccount;
+import 0x0.LibraCoin;
+
+main(amount:u64) {
+    let transfer_coin: LibraCoin.T;
+
+    transfer_coin = LibraCoin.withdraw_from_channel(move(amount),true);
+    LibraCoin.deposit_to_channel(move(transfer_coin), false);
+
+    return;
+}

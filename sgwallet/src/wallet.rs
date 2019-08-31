@@ -2,35 +2,36 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 
 use atomic_refcell::AtomicRefCell;
-use protobuf::Message;
-
-use chain_client::{ChainClient, RpcChainClient};
-use crypto::hash::CryptoHash;
-use failure::_core::cell::RefCell;
-use failure::prelude::*;
-use local_state_storage::LocalStateStorage;
-use local_vm::LocalVM;
-use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
-use crypto::SigningKey;
-use crypto::test_utils::KeyPair;
-use star_types::{account_resource_ext, channel::SgChannelStream, transaction_output_helper};
-use star_types::offchain_transaction::{
-    OffChainTransaction, TransactionOutputSigner,TransactionOutput
-};
-use star_types::resource::Resource;
-use types::account_address::AccountAddress;
-use types::account_config::{account_resource_path, AccountResource, coin_struct_tag};
-use types::language_storage::StructTag;
-use types::transaction::{Program, RawTransaction, RawTransactionBytes, SignedTransaction, TransactionStatus};
-use types::transaction_helpers::TransactionSigner;
-use types::vm_error::*;
-use state_store::StateStore;
-use crate::transaction_processor::SubmitTransactionFuture;
 use futures::{
     sync::mpsc::channel,
 };
+use protobuf::Message;
 use tokio::{runtime::TaskExecutor};
 
+use chain_client::{ChainClient, RpcChainClient};
+use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
+use crypto::hash::CryptoHash;
+use crypto::SigningKey;
+use crypto::test_utils::KeyPair;
+use failure::prelude::*;
+use local_state_storage::LocalStateStorage;
+use local_vm::LocalVM;
+use star_types::{account_resource_ext, channel::SgChannelStream, transaction_output_helper};
+use star_types::offchain_transaction::{
+    OffChainTransaction, TransactionOutput, TransactionOutputSigner,
+};
+use star_types::resource::Resource;
+use state_store::{StateStore, StateViewPlus};
+use types::access_path::AccessPath;
+use types::account_address::AccountAddress;
+use types::account_config::{account_resource_path, AccountResource, coin_struct_tag};
+use types::language_storage::StructTag;
+use types::transaction::{Program, RawTransaction, RawTransactionBytes, SignedTransaction, TransactionArgument, TransactionStatus};
+use types::transaction_helpers::TransactionSigner;
+use types::vm_error::*;
+
+use crate::scripts::*;
+use crate::transaction_processor::SubmitTransactionFuture;
 
 pub struct Wallet<C>
     where
@@ -41,6 +42,7 @@ pub struct Wallet<C>
     client: Arc<C>,
     storage: Arc<AtomicRefCell<LocalStateStorage<C>>>,
     vm: LocalVM<LocalStateStorage<C>>,
+    script_registry: AssetScriptRegistry,
 }
 
 impl<C> Wallet<C>
@@ -52,40 +54,43 @@ impl<C> Wallet<C>
     const GAS_UNIT_PRICE: u64 = 1;
 
     pub fn new(
-        executor:TaskExecutor,
+        executor: TaskExecutor,
         account_address: AccountAddress,
         keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
         rpc_host: &str,
         rpc_port: u32,
     ) -> Result<Wallet<RpcChainClient>> {
         let client = Arc::new(RpcChainClient::new(rpc_host, rpc_port));
-        Wallet::new_with_client(executor,account_address, keypair, client)
+        Wallet::new_with_client(executor, account_address, keypair, client)
     }
 
     pub fn new_with_client(
-        executor:TaskExecutor,
+        executor: TaskExecutor,
         account_address: AccountAddress,
         keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
         client: Arc<C>,
     ) -> Result<Self> {
         let storage = Arc::new(AtomicRefCell::new(LocalStateStorage::new(account_address, client.clone())?));
         let vm = LocalVM::new(storage.clone());
+        let script_registry = AssetScriptRegistry::build()?;
         Ok(Self {
             account_address,
             keypair,
             client,
             storage,
             vm,
+            script_registry,
         })
     }
 
-    pub fn execute_transaction(&self, transaction: SignedTransaction) -> TransactionOutput {
+    fn execute_transaction(&self, transaction: SignedTransaction) -> TransactionOutput {
         let libra_output = self.vm.execute_transaction(transaction);
         TransactionOutput::new(
             self.storage.borrow().write_set_to_change_set(libra_output.write_set()).unwrap(),
             libra_output.events().to_vec(),
-            libra_output.gas_used(),
-            libra_output.status().clone()
+            //TODO offchain vm and onchain vm gas.
+            0,
+            libra_output.status().clone(),
         )
     }
 
@@ -97,13 +102,11 @@ impl<C> Wallet<C>
         unimplemented!()
     }
 
-    pub fn transfer(&self, coin_resource_tag: StructTag, receiver_address: AccountAddress, amount: u64) -> Result<OffChainTransaction> {
-        let program = if coin_resource_tag == coin_struct_tag() {
-            vm_genesis::encode_transfer_program(&receiver_address, amount)
-        } else {
-            bail!("unsupported coin resource: {:#?}", coin_resource_tag)
-        };
-        let txn = self.create_signed_txn(program)?;
+    fn execute_channel_op(&self, asset_tag: &StructTag, op: ChannelOp, receiver: AccountAddress, args: Vec<TransactionArgument>) -> Result<OffChainTransaction> {
+        let scripts = self.script_registry.get_scripts(&asset_tag).ok_or(format_err!("Unsupported asset {:?}", asset_tag))?;
+        let script = scripts.get_script(op);
+        let program = script.encode_program(args);
+        let txn = self.create_signed_txn(receiver, program)?;
         let output = self.execute_transaction(txn.clone());
         match output.status() {
             TransactionStatus::Discard(vm_status) => bail!("transaction execute fail for: {:#?}", vm_status),
@@ -112,12 +115,32 @@ impl<C> Wallet<C>
             }
         };
         let output_signature = self.sign_txn_output(&output)?;
-        Ok(OffChainTransaction::new(txn, receiver_address, output, output_signature))
+        Ok(OffChainTransaction::new(txn, receiver, output, output_signature))
+    }
+
+    pub fn fund(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<OffChainTransaction> {
+        self.execute_channel_op(&asset_tag, ChannelOp::Fund, receiver, vec![
+            TransactionArgument::U64(sender_amount),
+            TransactionArgument::U64(receiver_amount),
+        ])
+    }
+
+    pub fn transfer(&self, asset_tag: StructTag, receiver: AccountAddress, amount: u64) -> Result<OffChainTransaction> {
+        self.execute_channel_op(&asset_tag, ChannelOp::Transfer, receiver, vec![
+            TransactionArgument::U64(amount),
+        ])
+    }
+
+    pub fn withdraw(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<OffChainTransaction> {
+        self.execute_channel_op(&asset_tag, ChannelOp::Withdraw, receiver, vec![
+            TransactionArgument::U64(sender_amount),
+            TransactionArgument::U64(receiver_amount),
+        ])
     }
 
     pub fn apply_txn(&self, txn: &OffChainTransaction) -> Result<()> {
         //TODO verify signature
-        self.storage.borrow().apply_txn(txn);
+        self.storage.borrow().apply_txn(txn)?;
         Ok(())
     }
 
@@ -140,16 +163,31 @@ impl<C> Wallet<C>
         self.account_resource().sequence_number()
     }
 
+    //TODO support more asset type
     pub fn balance(&self) -> u64 {
         self.account_resource().balance()
     }
 
+    pub fn get_resource(&self, access_path: &AccessPath) -> Result<Option<Resource>> {
+        self.storage.borrow().get_resource(&access_path)
+    }
+
+    pub fn channel_balance(&self, asset_tag: StructTag, participant: AccountAddress) -> Result<u64> {
+        let access_path = AccessPath::off_chain_resource_access_path(self.account_address, participant, asset_tag.clone());
+        self.get_resource(&access_path)
+            .and_then(|resource| match resource {
+            Some(resource) => resource.assert_balance().ok_or(format_err!("resource {:?} not asset.", asset_tag)),
+            None => Err(format_err!("Can not find resource {:?} by path: {:?}", asset_tag, access_path))
+        })
+    }
+
     /// Craft a transaction request.
-    pub fn create_signed_txn(
+    fn create_signed_txn(
         &self,
+        receiver: AccountAddress,
         program: Program,
     ) -> Result<SignedTransaction> {
-        types::transaction_helpers::create_signed_txn(
+        let mut txn = types::transaction_helpers::create_signed_txn(
             self,
             program,
             self.account_address,
@@ -157,19 +195,21 @@ impl<C> Wallet<C>
             Self::MAX_GAS_AMOUNT,
             Self::GAS_UNIT_PRICE,
             Self::TXN_EXPIRATION,
-        )
+        )?;
+        txn.set_receiver(receiver);
+        Ok(txn)
     }
 
-    pub fn get_address(&self)->AccountAddress{
+    pub fn get_address(&self) -> AccountAddress {
         self.account_address
     }
 
-    pub fn submit_transaction(&self, signed_transaction: SignedTransaction)->Result<SubmitTransactionFuture> {
-        let tx_hash=signed_transaction.hash();
-        let resp=self.client.submit_transaction(signed_transaction)?;
+    pub fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<SubmitTransactionFuture> {
+        let tx_hash = signed_transaction.hash();
+        let resp = self.client.submit_transaction(signed_transaction)?;
 
-        let (tx,rx)=channel(1);
-        let watch_future=SubmitTransactionFuture::new(rx);
+        let (tx, rx) = channel(1);
+        let watch_future = SubmitTransactionFuture::new(rx);
         Ok(watch_future)
     }
 }

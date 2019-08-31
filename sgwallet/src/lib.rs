@@ -2,6 +2,10 @@
 
 pub mod wallet;
 pub mod transaction_processor;
+pub mod scripts;
 
 #[cfg(test)]
 mod wallet_test;
+
+#[macro_use]
+extern crate include_dir;
