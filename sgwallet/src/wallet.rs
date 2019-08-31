@@ -175,12 +175,18 @@ impl<C> Wallet<C>
         self.storage.borrow().get_resource(&access_path)
     }
 
-    pub fn channel_balance(&self, asset_tag: StructTag, participant: AccountAddress) -> Result<u64> {
-        let access_path = AccessPath::off_chain_resource_access_path(self.account_address, participant, asset_tag.clone());
+    pub fn get_channel_resource(&self, participant: AccountAddress, resource_tag: StructTag) -> Result<Option<Resource>>{
+        let access_path = AccessPath::off_chain_resource_access_path(self.account_address, participant, resource_tag);
         self.get_resource(&access_path)
+    }
+
+    pub fn channel_balance(&self,participant: AccountAddress, asset_tag: StructTag) -> Result<u64> {
+        let access_path = AccessPath::off_chain_resource_access_path(self.account_address, participant, asset_tag.clone());
+        self.get_channel_resource(participant, asset_tag.clone())
             .and_then(|resource| match resource {
-            Some(resource) => resource.assert_balance().ok_or(format_err!("resource {:?} not asset.", asset_tag)),
-            None => Err(format_err!("Can not find resource {:?} by path: {:?}", asset_tag, access_path))
+                Some(resource) => resource.assert_balance().ok_or(format_err!("resource {:?} not asset.", asset_tag)),
+                //if channel or resource not exist, take default value 0
+                None => Ok(0)
         })
     }
 

@@ -52,7 +52,7 @@ fn test_wallet() -> Result<()> {
 
     //debug!("txn:{:#?}", fund_txn);
     wallet.apply_txn(&fund_txn)?;
-    let sender_channel_balance = wallet.channel_balance(asset_tag.clone(),receiver)?;
+    let sender_channel_balance = wallet.channel_balance(receiver,asset_tag.clone())?;
     assert_eq!(sender_channel_balance, sender_fund_amount);
 
 
@@ -61,7 +61,7 @@ fn test_wallet() -> Result<()> {
     //debug!("txn:{:#?}", transfer_txn);
     wallet.apply_txn(&transfer_txn)?;
 
-    let sender_channel_balance = wallet.channel_balance(asset_tag.clone(),receiver)?;
+    let sender_channel_balance = wallet.channel_balance(receiver,asset_tag.clone())?;
     assert_eq!(sender_channel_balance, sender_fund_amount - transfer_amount);
 
     let withdraw_txn = wallet.withdraw(asset_tag.clone(), receiver, sender_channel_balance, 1)?;
@@ -69,7 +69,7 @@ fn test_wallet() -> Result<()> {
     //debug!("txn:{:#?}", withdraw_txn);
     wallet.apply_txn(&withdraw_txn)?;
 
-    let sender_channel_balance = wallet.channel_balance(asset_tag.clone(),receiver)?;
+    let sender_channel_balance = wallet.channel_balance(receiver,asset_tag.clone())?;
     assert_eq!(sender_channel_balance, 0);
 
     Ok(())
