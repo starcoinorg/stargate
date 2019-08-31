@@ -17,6 +17,15 @@ service Chain {
     rpc WatchTransaction (WatchTransactionRequest) returns (stream WatchTransactionResponse);
     rpc StateByAccessPath(types.AccessPath) returns (StateByAccessPathResponse);
     rpc WatchEvent(WatchEventRequest) returns (stream WatchEventResponse);
+    rpc GetTransactionByHash(GetTransactionByHashRequest) returns (GetTransactionByHashResponse);
+}
+
+message GetTransactionByHashRequest {
+    bytes state_root_hash = 1;
+}
+
+message GetTransactionByHashResponse {
+    types.SignedTransaction signed_tx = 1;
 }
 
 message WatchEventRequest {

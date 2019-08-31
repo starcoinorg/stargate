@@ -29,6 +29,16 @@ impl TransactionStorage {
         version
     }
 
+    pub fn get_signed_transaction_by_hash(&self, key: &HashValue) -> Option<SignedTransaction> {
+        self.signed_tx_hash_map.get(key).and_then(|ver| -> Option<SignedTransaction> {
+            let data = self.signed_tx_vec.get(ver.clone() as usize);
+            match data {
+                Some(signed_tx) => { Some(signed_tx.clone()) }
+                None => None
+            }
+        })
+    }
+
     pub fn insert_transaction_info(&mut self, tx: TransactionInfo) {
         self.tx_info_vec.push(tx)
     }

@@ -1,6 +1,6 @@
 use failure::prelude::*;
-use types::proto::{access_path::AccessPath as ProtoAccessPath, events::Event};
-use types::{account_config::{association_address}, transaction::{SignedTransaction, TransactionPayload, RawTransaction}, access_path::AccessPath, account_address::AccountAddress};
+use types::proto::{access_path::AccessPath as ProtoAccessPath, events::Event, transaction::SignedTransaction as SignedTransactionProto};
+use types::{account_config::association_address, transaction::{SignedTransaction, TransactionPayload, RawTransaction}, access_path::AccessPath, account_address::AccountAddress};
 use futures::{sync::mpsc::{unbounded, UnboundedReceiver}, future::Future, sink::Sink, stream::Stream};
 use super::pub_sub;
 use grpcio::WriteFlags;
@@ -17,7 +17,7 @@ use futures03::{
     sink::SinkExt,
     executor::block_on,
 };
-use tokio::{runtime::{TaskExecutor}};
+use tokio::{runtime::TaskExecutor};
 use star_types::{offchain_transaction::OffChainTransaction,
                  proto::{chain_grpc::Chain,
                          chain::{LeastRootRequest, LeastRootResponse,
@@ -28,6 +28,7 @@ use star_types::{offchain_transaction::OffChainTransaction,
                                  SubmitTransactionRequest, SubmitTransactionResponse,
                                  StateByAccessPathResponse, AccountResource,
                                  WatchEventRequest, WatchEventResponse,
+                                 GetTransactionByHashRequest, GetTransactionByHashResponse,
                          },
                          off_chain_transaction::OffChainTransaction as OffChainTransactionProto,
                  }};
@@ -49,7 +50,6 @@ pub struct ChainService {
     sender: channel::Sender<TransactionInner>,
     state_db: Arc<Mutex<StateStorage>>,
     tx_db: Arc<Mutex<TransactionStorage>>,
-    vm: Arc<Mutex<MoveVM>>,
     tx_pub: Arc<Mutex<pub_sub::Pub<WatchTransactionResponse>>>,
     event_pub: Arc<Mutex<pub_sub::Pub<WatchEventResponse>>>,
 }
@@ -66,10 +66,9 @@ impl ChainService {
         let (tx_sender, mut tx_receiver) = channel::new(1_024, &gauge);
         let tx_db = Arc::new(Mutex::new(TransactionStorage::new()));
         let state_db = Arc::new(Mutex::new(StateStorage::new()));
-        let vm = Arc::new(Mutex::new(MoveVM::new(&VM_CONFIG)));
         let tx_pub = Arc::new(Mutex::new(pub_sub::Pub::new()));
         let event_pub = Arc::new(Mutex::new(pub_sub::Pub::new()));
-        let chain_service = ChainService { sender: tx_sender.clone(), state_db, tx_db, vm, tx_pub, event_pub };
+        let chain_service = ChainService { sender: tx_sender.clone(), state_db, tx_db, tx_pub, event_pub };
         let chain_service_clone = chain_service.clone();
 
         let receiver_future = async move {
@@ -104,7 +103,7 @@ impl ChainService {
         if !exist_flag {
             let state_db = self.state_db.lock().unwrap();
             let output = off_chain_tx.output();
-            let state_hash = state_db.apply_txn( &off_chain_tx).unwrap();
+            let state_hash = state_db.apply_txn(&off_chain_tx).unwrap();
             tx_db.insert_all(state_hash, off_chain_tx.txn().clone());
 
             let events: Vec<Event> = output.events().iter().map(|e| -> Event {
@@ -267,7 +266,7 @@ impl ChainService {
         Ok(())
     }
 
-    pub fn sender(&self)->channel::Sender<TransactionInner>{
+    pub fn sender(&self) -> channel::Sender<TransactionInner> {
         self.sender.clone()
     }
 }
@@ -403,6 +402,20 @@ impl Chain for ChainService {
                 .map(|_| println!("completed"))
                 .map_err(|e| println!("failed to reply: {:?}", e)),
         );
+    }
+
+    fn get_transaction_by_hash(&mut self, ctx: ::grpcio::RpcContext,
+                               req: GetTransactionByHashRequest,
+                               sink: ::grpcio::UnarySink<GetTransactionByHashResponse>) {
+        let hash = HashValue::from_slice(req.get_state_root_hash()).unwrap();
+        let mut resp = GetTransactionByHashResponse::new();
+        let lock = self.tx_db.lock().unwrap();
+        let signed_tx = lock.get_signed_transaction_by_hash(&hash);
+        match signed_tx {
+            Some(tx) => resp.set_signed_tx(tx.into_proto()),
+            None => {}
+        }
+        provide_grpc_response(Ok(resp), ctx, sink);
     }
 }
 
