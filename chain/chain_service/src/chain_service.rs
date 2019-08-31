@@ -1,5 +1,5 @@
 use failure::prelude::*;
-use types::proto::{access_path::AccessPath as ProtoAccessPath, events::Event, transaction::SignedTransaction as SignedTransactionProto};
+use types::proto::{access_path::AccessPath as ProtoAccessPath};
 use types::{account_config::association_address, transaction::{SignedTransaction, TransactionPayload, RawTransaction}, access_path::AccessPath, account_address::AccountAddress};
 use futures::{sync::mpsc::{unbounded, UnboundedReceiver}, future::Future, sink::Sink, stream::Stream};
 use super::pub_sub;
@@ -34,12 +34,12 @@ use star_types::{offchain_transaction::OffChainTransaction,
                  }};
 use vm_runtime::{MoveVM, VMExecutor};
 use lazy_static::lazy_static;
-use config::config::{VMConfig, VMPublishingOption};
+use config::config::{VMConfig};
 use state_view::StateView;
 use core::borrow::Borrow;
 use proto_conv::{FromProto, IntoProto};
-use protobuf::RepeatedField;
 use types::contract_event::ContractEvent;
+use types::event::EventKey;
 
 lazy_static! {
     static ref VM_CONFIG:VMConfig = VMConfig::onchain();
@@ -106,13 +106,13 @@ impl ChainService {
             let state_hash = state_db.apply_txn(&off_chain_tx).unwrap();
             tx_db.insert_all(state_hash, off_chain_tx.txn().clone());
 
-            let events: Vec<Event> = output.events().iter().map(|e| -> Event {
-                e.clone().into_proto()
-            }).collect();
-            let mut event_resp = WatchEventResponse::new();
-            event_resp.events = RepeatedField::from(events);
             let event_lock = self.event_pub.lock().unwrap();
-            event_lock.send(event_resp).unwrap();
+            output.events().iter().for_each(|e| {
+                let event = e.clone().into_proto();
+                let mut event_resp = WatchEventResponse::new();
+                event_resp.set_event(event);
+                event_lock.send(event_resp).unwrap();
+            });
 
             let mut wt_resp = WatchTransactionResponse::new();
             wt_resp.set_signed_txn(off_chain_tx.txn().clone().into_proto());
@@ -155,13 +155,14 @@ impl ChainService {
                         let state_hash = state_db.apply_libra_output(&output).unwrap();
                         tx_db.insert_all(state_hash, sign_tx.clone());
 
-                        let events: Vec<Event> = output.events().iter().map(|e| -> Event {
-                            e.clone().into_proto()
-                        }).collect();
-                        let mut event_resp = WatchEventResponse::new();
-                        event_resp.events = RepeatedField::from(events);
                         let event_lock = self.event_pub.lock().unwrap();
-                        event_lock.send(event_resp).unwrap();
+                        output.events().iter().for_each(|e| {
+                            let event = e.clone().into_proto();
+                            let mut event_resp = WatchEventResponse::new();
+                            event_resp.set_event(event);
+                            event_lock.send(event_resp).unwrap();
+                        });
+
                         Some(())
                     });
                 }
@@ -198,22 +199,15 @@ impl ChainService {
         receiver
     }
 
-    pub fn watch_event_inner(&self, address: AccountAddress, _index: u64) -> UnboundedReceiver<WatchEventResponse> {
+    pub fn watch_event_inner(&self, address: AccountAddress, keys: Vec<EventKey>, _index: u64) -> UnboundedReceiver<WatchEventResponse> {
         let (sender, receiver) = unbounded::<WatchEventResponse>();
         let id = address.hash();
         let event_lock = self.event_pub.lock().unwrap();
         event_lock.subscribe(id, sender, Box::new(move |event: WatchEventResponse| -> bool {
             let mut flag = false;
-            event.events.iter().for_each(|e| {
-                if flag {
-                    return;
-                }
-                //TODO fix unwrap
-                let event: ContractEvent = ContractEvent::from_proto(e.clone()).unwrap();
-                //TODO fixme
-                //let event_address = event.key().as_access_path().unwrap().address;
-                //flag = event_address == address;
-                flag = true;
+            let event: ContractEvent = ContractEvent::from_proto(event.get_event().clone()).unwrap();
+            keys.iter().for_each(|key| {
+                flag = key == event.key()
             });
 
             flag
@@ -391,7 +385,8 @@ impl Chain for ChainService {
         } else {
             std::u64::MAX
         };
-        let receiver = self.watch_event_inner(AccountAddress::from_proto(req.address).unwrap(), index);
+        let keys = req.get_keys().iter().map(|key| -> EventKey { EventKey::new(u8_32(key.get_key())) }).collect();
+        let receiver = self.watch_event_inner(AccountAddress::try_from(req.get_address().to_vec()).unwrap(), keys, index);
         let stream = receiver
             .map(|e| (e, WriteFlags::default()))
             .map_err(|_| grpcio::Error::RemoteStopped);
@@ -417,6 +412,12 @@ impl Chain for ChainService {
         }
         provide_grpc_response(Ok(resp), ctx, sink);
     }
+}
+
+fn u8_32(value: &[u8]) -> [u8; 32] {
+    let mut tmp = [0u8; 32];
+    tmp.copy_from_slice(value);
+    tmp
 }
 
 #[cfg(test)]

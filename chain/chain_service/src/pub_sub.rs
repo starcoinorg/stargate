@@ -22,13 +22,16 @@ impl<T> Pub<T> where T: Clone {
 
     pub fn send(&self, tx: T) -> Result<(), SendError<T>> {
         let senders = self.senders.lock().unwrap();
-        for (_, inner) in senders.iter() {
+        for (id, inner) in senders.iter() {
             let func = &inner.filter_func;
             let send_flag = (func)(tx.clone());
             if send_flag {
                 match inner.sender.unbounded_send(tx.clone()) {
                     Ok(_) => {}
-                    Err(err) => return Err(err),
+                    Err(err) => return {
+                        self.unsubscribe(id);
+                        Err(err)
+                    },
                 }
             }
         }
@@ -41,9 +44,9 @@ impl<T> Pub<T> where T: Clone {
         senders.insert(id, WatchInner { sender, filter_func: filter });
     }
 
-    pub fn unsubscribe(&self, id: HashValue) {
+    pub fn unsubscribe(&self, id: &HashValue) {
         let mut senders = self.senders.lock().unwrap();
-        senders.remove(&id);
+        senders.remove(id);
     }
 }
 

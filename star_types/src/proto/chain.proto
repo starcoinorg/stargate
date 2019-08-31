@@ -30,13 +30,18 @@ message GetTransactionByHashResponse {
 
 message WatchEventRequest {
     bytes address = 1;
+    repeated EventKey keys = 2;
     oneof start_tx {
-        uint64 index = 2;
+        uint64 index = 3;
     }
 }
 
+message EventKey {
+    bytes key = 1;
+}
+
 message WatchEventResponse {
-    repeated types.Event events = 1;
+    types.Event event = 1;
 }
 
 message LeastRootRequest {
