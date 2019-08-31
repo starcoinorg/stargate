@@ -9,7 +9,7 @@ use types::account_address::AccountAddress;
 use types::account_state_blob::AccountStateBlob;
 use types::access_path::{AccessPath};
 use atomic_refcell::AtomicRefCell;
-use star_types::offchain_transaction::{TransactionOutput as StarTransactionOutput};
+use star_types::channel_transaction::{TransactionOutput as StarTransactionOutput};
 use state_view::StateView;
 use logger::prelude::*;
 use star_types::change_set::{StructDefResolve};

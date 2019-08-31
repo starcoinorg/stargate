@@ -18,7 +18,7 @@ use futures03::{
     executor::block_on,
 };
 use tokio::{runtime::TaskExecutor};
-use star_types::{offchain_transaction::OffChainTransaction,
+use star_types::{channel_transaction::ChannelTransaction,
                  proto::{chain_grpc::Chain,
                          chain::{LeastRootRequest, LeastRootResponse,
                                  FaucetRequest, FaucetResponse,
@@ -30,7 +30,7 @@ use star_types::{offchain_transaction::OffChainTransaction,
                                  WatchEventRequest, WatchEventResponse,
                                  GetTransactionByHashRequest, GetTransactionByHashResponse,
                          },
-                         off_chain_transaction::OffChainTransaction as OffChainTransactionProto,
+                         channel_transaction::ChannelTransaction as OffChainTransactionProto,
                  }};
 use vm_runtime::{MoveVM, VMExecutor};
 use lazy_static::lazy_static;
@@ -57,7 +57,7 @@ pub struct ChainService {
 #[derive(Clone, Debug)]
 pub enum TransactionInner {
     OnChain(SignedTransaction),
-    OffChain(OffChainTransaction),
+    OffChain(ChannelTransaction),
 }
 
 impl ChainService {
@@ -96,7 +96,7 @@ impl ChainService {
         }
     }
 
-    fn apply_off_chain_transaction(&self, off_chain_tx: OffChainTransaction) {
+    fn apply_off_chain_transaction(&self, off_chain_tx: ChannelTransaction) {
         let signed_tx_hash = off_chain_tx.txn().hash();
         let mut tx_db = self.tx_db.lock().unwrap();
         let exist_flag = tx_db.exist_signed_transaction(signed_tx_hash);
@@ -322,7 +322,7 @@ impl Chain for ChainService {
 
     fn submit_off_chain_transaction(&mut self, ctx: ::grpcio::RpcContext, req: OffChainTransactionProto,
                                     sink: ::grpcio::UnarySink<SubmitTransactionResponse>) {
-        let resp = OffChainTransaction::from_proto(req.clone()).and_then(|off_chain_tx| {
+        let resp = ChannelTransaction::from_proto(req.clone()).and_then(|off_chain_tx| {
             block_on(self.submit_transaction_inner(self.sender.clone(), TransactionInner::OffChain(off_chain_tx)));
 
             let mut submit_resp = SubmitTransactionResponse::new();

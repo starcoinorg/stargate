@@ -8,7 +8,7 @@ use star_types::resource::Resource;
 use std::collections::HashMap;
 use types::language_storage::StructTag;
 use failure::_core::cell::RefCell;
-use star_types::offchain_transaction::{OffChainTransaction, TransactionOutput};
+use star_types::channel_transaction::{ChannelTransaction, TransactionOutput};
 use types::account_config::coin_struct_tag;
 
 pub trait StateViewPlus: StateView + StructDefResolve {
@@ -175,7 +175,7 @@ pub trait StateStore : StateViewPlus {
         ChangeSetMut::new(change_set?).freeze()
     }
 
-    fn apply_txn(&self, txn: &OffChainTransaction) -> Result<()> {
+    fn apply_txn(&self, txn: &ChannelTransaction) -> Result<()> {
         self.apply_output(txn.output())
     }
 

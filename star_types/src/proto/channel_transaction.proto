@@ -5,7 +5,7 @@ package star_types;
 import "transaction.proto";
 import "transaction_output.proto";
 
-message OffChainTransaction {
+message ChannelTransaction {
     bytes receiver = 1;
     types.SignedTransaction transaction = 2;
     TransactionOutput transaction_output= 3;

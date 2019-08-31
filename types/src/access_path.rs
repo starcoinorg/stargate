@@ -285,30 +285,30 @@ lazy_static! {
 #[derive(Clone, Eq, PartialEq, Hash, Serialize, Deserialize, Ord, PartialOrd, Debug)]
 pub enum DataPath {
     Code { module_id: ModuleId },
-    OnChainResource { tag: StructTag },
-    OffChainResource { participant: AccountAddress, tag: StructTag },
+    Resource { tag: StructTag },
+    ChannelResource { participant: AccountAddress, tag: StructTag },
 }
 
 impl DataPath {
     //TODO get index by enum
     pub const CODE_TAG: u8 = 0;
-    pub const ON_CHAIN_RESOURCE_TAG: u8 = 1;
-    pub const OFF_CHAIN_RESOURCE_TAG: u8 =2;
+    pub const RESOURCE_TAG: u8 = 1;
+    pub const CHANNEL_RESOURCE_TAG: u8 =2;
 
     pub fn from(path: &[u8]) -> Result<Self> {
         match path[0]{
             DataPath::CODE_TAG => {
                 Ok(DataPath::Code {module_id: SimpleDeserializer::deserialize(&path[1..])?})
             },
-            DataPath::ON_CHAIN_RESOURCE_TAG => {
-                Ok(DataPath::OnChainResource {tag: SimpleDeserializer::deserialize(&path[1..])?})
+            DataPath::RESOURCE_TAG => {
+                Ok(DataPath::Resource {tag: SimpleDeserializer::deserialize(&path[1..])?})
             },
-            DataPath::OFF_CHAIN_RESOURCE_TAG => {
+            DataPath::CHANNEL_RESOURCE_TAG => {
                 let parts = path[1..].split(|byte|*byte == b'/').collect::<Vec<&[u8]>>();
                 if parts.len() < 2 {
                     bail!("invalid access path.");
                 }else {
-                    Ok(DataPath::OffChainResource { participant: AccountAddress::try_from(parts[0])?, tag: SimpleDeserializer::deserialize(parts[1])?})
+                    Ok(DataPath::ChannelResource { participant: AccountAddress::try_from(parts[0])?, tag: SimpleDeserializer::deserialize(parts[1])?})
                 }
             }
             _ => bail!("invalid access path.")
@@ -316,21 +316,21 @@ impl DataPath {
     }
 
     pub fn account_resource_data_path() -> Self {
-        Self::on_chain_resource_path(account_struct_tag())
+        Self::onchain_resource_path(account_struct_tag())
     }
 
     pub fn code_data_path(module_id: ModuleId) -> Self {
         DataPath::Code { module_id }
     }
 
-    pub fn on_chain_resource_path(tag: StructTag) -> Self{
-        DataPath::OnChainResource {
+    pub fn onchain_resource_path(tag: StructTag) -> Self{
+        DataPath::Resource {
             tag,
         }
     }
 
-    pub fn off_chain_resource_path(participant: AccountAddress, tag: StructTag) -> Self{
-        DataPath::OffChainResource {
+    pub fn channel_resource_path(participant: AccountAddress, tag: StructTag) -> Self{
+        DataPath::ChannelResource {
             participant,
             tag,
         }
@@ -347,24 +347,24 @@ impl DataPath {
         }
     }
 
-    pub fn is_on_chain_resource(&self) -> bool {
+    pub fn is_onchain_resource(&self) -> bool {
         match self {
-            DataPath::OnChainResource {..} => true,
+            DataPath::Resource {..} => true,
             _ => false,
         }
     }
 
-    pub fn is_off_chain_resource(&self) -> bool {
+    pub fn is_channel_resource(&self) -> bool {
         match self {
-            DataPath::OffChainResource {..} => true,
+            DataPath::ChannelResource {..} => true,
             _ => false,
         }
     }
 
     pub fn resource_tag(&self) -> Option<&StructTag> {
         match self{
-            DataPath::OnChainResource {tag} => Some(tag),
-            DataPath::OffChainResource {participant,tag} => Some(tag),
+            DataPath::Resource {tag} => Some(tag),
+            DataPath::ChannelResource {participant,tag} => Some(tag),
             _ => None,
         }
     }
@@ -379,15 +379,15 @@ impl From<&DataPath> for Vec<u8> {
                 key.append(&mut SimpleSerializer::serialize(module_id).unwrap());
                 key
             },
-            DataPath::OnChainResource { tag } => {
+            DataPath::Resource { tag } => {
                 let mut key = vec![];
-                key.push(DataPath::ON_CHAIN_RESOURCE_TAG);
+                key.push(DataPath::RESOURCE_TAG);
                 key.append(&mut SimpleSerializer::serialize(tag).unwrap());
                 key
             },
-            DataPath::OffChainResource {participant, tag} => {
+            DataPath::ChannelResource {participant, tag} => {
                 let mut key = vec![];
-                key.push(DataPath::OFF_CHAIN_RESOURCE_TAG);
+                key.push(DataPath::CHANNEL_RESOURCE_TAG);
                 key.append(&mut participant.to_vec());
                 key.push(b'/');
                 key.append(&mut SimpleSerializer::serialize(tag).unwrap());
@@ -467,7 +467,7 @@ impl AccessPath {
 
     pub fn resource_access_vec(tag: &StructTag, accesses: &Accesses) -> Vec<u8> {
 
-        let mut key:Vec<u8> = DataPath::on_chain_resource_path(tag.clone()).into();
+        let mut key:Vec<u8> = DataPath::onchain_resource_path(tag.clone()).into();
 
         // We don't need accesses in production right now. Accesses are appended here just for
         // passing the old tests.
@@ -497,24 +497,24 @@ impl AccessPath {
         Self::new_for_data_path(*key.address(), DataPath::code_data_path(key.clone()))
     }
 
-    pub fn on_chain_resource_access_path(key: &ResourceKey) -> AccessPath {
-        Self::new_for_data_path(key.address(), DataPath::on_chain_resource_path(key.type_().clone()))
+    pub fn onchain_resource_access_path(key: &ResourceKey) -> AccessPath {
+        Self::new_for_data_path(key.address(), DataPath::onchain_resource_path(key.type_().clone()))
     }
 
-    pub fn off_chain_resource_access_path(account: AccountAddress, participant: AccountAddress, tag: StructTag) -> AccessPath {
-        Self::new_for_data_path(account, DataPath::off_chain_resource_path(participant, tag))
+    pub fn channel_resource_access_path(account: AccountAddress, participant: AccountAddress, tag: StructTag) -> AccessPath {
+        Self::new_for_data_path(account, DataPath::channel_resource_path(participant, tag))
     }
 
     pub fn is_code(&self) -> bool {
         !self.path.is_empty() && self.path[0] == DataPath::CODE_TAG
     }
 
-    pub fn is_on_chain_resource(&self) -> bool {
-        !self.path.is_empty() && self.path[0] == DataPath::ON_CHAIN_RESOURCE_TAG
+    pub fn is_onchain_resource(&self) -> bool {
+        !self.path.is_empty() && self.path[0] == DataPath::RESOURCE_TAG
     }
 
-    pub fn is_off_chain_resource(&self) -> bool {
-        !self.path.is_empty() && self.path[0] == DataPath::OFF_CHAIN_RESOURCE_TAG
+    pub fn is_channel_resource(&self) -> bool {
+        !self.path.is_empty() && self.path[0] == DataPath::CHANNEL_RESOURCE_TAG
     }
 
     pub fn data_path(&self) -> Option<DataPath> {
@@ -554,8 +554,8 @@ impl fmt::Display for AccessPath {
         } else {
             write!(f, "AccessPath {{ address: {:x}, ", self.address)?;
             match self.path[0] {
-                DataPath::ON_CHAIN_RESOURCE_TAG => write!(f, "type: OnChain Resource, ")?,
-                DataPath::OFF_CHAIN_RESOURCE_TAG => write!(f, "type: OffChain Resource, ")?,
+                DataPath::RESOURCE_TAG => write!(f, "type: OnChain Resource, ")?,
+                DataPath::CHANNEL_RESOURCE_TAG => write!(f, "type: OffChain Resource, ")?,
                 DataPath::CODE_TAG => write!(f, "type: Module, ")?,
                 tag => write!(f, "type: {:?}, ", tag)?,
             };

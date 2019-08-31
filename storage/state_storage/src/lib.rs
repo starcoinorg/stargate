@@ -18,7 +18,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use crate::sparse_merkle::{ProofRead};
 use atomic_refcell::AtomicRefCell;
-use star_types::offchain_transaction::{OffChainTransaction};
+use star_types::channel_transaction::{ChannelTransaction};
 use types::account_config::{AccountResource, account_resource_path};
 use state_view::StateView;
 use logger::prelude::*;
@@ -222,7 +222,7 @@ impl StateStorage {
         self.account_state(self.get_least_version(), &access_path.address).and_then(|state| state.get(&access_path.path))
     }
 
-    pub fn apply_txn(&self, txn: &OffChainTransaction) -> Result<HashValue> {
+    pub fn apply_txn(&self, txn: &ChannelTransaction) -> Result<HashValue> {
         TransactionStateCache::apply_star_output_in_cache(self.is_genesis(), self.get_least_version(), txn.output(), self).and_then(|(root_hash, tree_update_batch)| -> Result<HashValue> {
             self.store_merkle_node(tree_update_batch);
             self.next_version.fetch_add(1, Ordering::SeqCst);

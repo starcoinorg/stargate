@@ -77,11 +77,11 @@ fn test_access_path_data_path() {
     let access_path = AccessPath::new_for_account_resource(AccountAddress::random());
 
     let data_path = access_path.data_path().unwrap();
-    assert_eq!(data_path.is_on_chain_resource(), true);
+    assert_eq!(data_path.is_onchain_resource(), true);
 
     let account_address = AccountAddress::random();
     let other_address = AccountAddress::random();
-    let off_chain_access_path = AccessPath::off_chain_resource_access_path(account_address, other_address, account_struct_tag());
+    let off_chain_access_path = AccessPath::channel_resource_access_path(account_address, other_address, account_struct_tag());
     let off_chain_data_path = off_chain_access_path.data_path().unwrap();
-    assert_eq!(off_chain_data_path.is_off_chain_resource(), true);
+    assert_eq!(off_chain_data_path.is_channel_resource(), true);
 }

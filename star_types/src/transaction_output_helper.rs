@@ -8,7 +8,7 @@ use super::proto::transaction_output::{TransactionOutput as TransactionOutputPro
 use failure::Result;
 use proto_conv::{FromProto, IntoProto};
 use ::protobuf::RepeatedField;
-use crate::offchain_transaction::TransactionOutput;
+use crate::channel_transaction::TransactionOutput;
 use crate::change_set::{ChangeSet, ChangeSetMut};
 
 pub fn from_pb(mut pb: TransactionOutputProto) -> Result<TransactionOutput> {

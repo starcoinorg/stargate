@@ -2,7 +2,7 @@
 use types::proto::{transaction, events, vm_errors, access_path, proof};
 
 pub mod star_account;
-pub mod off_chain_transaction;
+pub mod channel_transaction;
 pub mod transaction_output;
 pub mod message;
 pub mod chain;

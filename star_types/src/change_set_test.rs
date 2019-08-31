@@ -32,7 +32,7 @@ fn test_change_set_merge() {
     accesses.add_index_to_back(1);
     //coin value filed.
     accesses.add_index_to_back(0);
-    let access_path = AccessPath::on_chain_resource_access_path(&resource_key);
+    let access_path = AccessPath::onchain_resource_access_path(&resource_key);
 
     let change_set0 = ChangeSetMut::new(vec![(access_path.clone(), Changes::Fields(FieldChanges::new(vec![(accesses.clone(), ChangeOp::Plus(100))])))]);
     let change_set1 = ChangeSetMut::new(vec![(access_path.clone(), Changes::Fields(FieldChanges::new(vec![(accesses.clone(), ChangeOp::Plus(110))])))]);
@@ -68,7 +68,7 @@ fn gene_change_set() -> (AccessPath, Accesses, ChangeSetProto) {
     accesses.add_index_to_back(1);
     //coin value filed.
     accesses.add_index_to_back(0);
-    let access_path = AccessPath::on_chain_resource_access_path(&resource_key);
+    let access_path = AccessPath::onchain_resource_access_path(&resource_key);
 
     let changes = Changes::Fields(FieldChanges::new(vec![(accesses.clone(), ChangeOp::Plus(100))]));
     let change_set0 = ChangeSetMut::new(vec![(access_path.clone(), changes)]);

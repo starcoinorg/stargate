@@ -3,7 +3,7 @@ use failure::prelude::*;
 #[cfg(any(test, feature = "testing"))]
 use proptest_derive::Arbitrary;
 use proto_conv::{FromProto, IntoProto};
-use crate::offchain_transaction::OffChainTransaction;
+use crate::channel_transaction::ChannelTransaction;
 use crypto::ed25519::Ed25519Signature;
 use std::convert::{TryFrom};
 use crate::proto::message::ReceiveSignMessage;
@@ -112,12 +112,12 @@ impl StructTag {
 #[derive(Clone, Debug, Eq, PartialEq,FromProto, IntoProto)]
 #[ProtoType(crate::proto::message::OffChainPayMessage)]
 pub struct OffChainPayMessage {
-    pub transaction: OffChainTransaction,
+    pub transaction: ChannelTransaction,
 }
 
 impl OffChainPayMessage {
     pub fn new(
-        transaction: OffChainTransaction,
+        transaction: ChannelTransaction,
     ) -> Self {
         OffChainPayMessage {
             transaction,
@@ -128,12 +128,12 @@ impl OffChainPayMessage {
 #[derive(Clone, Debug, Eq, PartialEq,FromProto, IntoProto)]
 #[ProtoType(crate::proto::message::OffChainPayMessage)]
 pub struct OpenChannelTransactionMessage {
-    pub transaction: OffChainTransaction,
+    pub transaction: ChannelTransaction,
 }
 
 impl OpenChannelTransactionMessage {
     pub fn new(
-        transaction: OffChainTransaction,
+        transaction: ChannelTransaction,
     ) -> Self {
         OpenChannelTransactionMessage {
             transaction,

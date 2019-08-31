@@ -17,8 +17,8 @@ use failure::prelude::*;
 use local_state_storage::LocalStateStorage;
 use local_vm::LocalVM;
 use star_types::{account_resource_ext, channel::SgChannelStream, transaction_output_helper};
-use star_types::offchain_transaction::{
-    OffChainTransaction, TransactionOutput, TransactionOutputSigner,
+use star_types::channel_transaction::{
+    ChannelTransaction, TransactionOutput, TransactionOutputSigner,
 };
 use star_types::resource::Resource;
 use state_store::{StateStore, StateViewPlus};
@@ -102,7 +102,7 @@ impl<C> Wallet<C>
         unimplemented!()
     }
 
-    fn execute_channel_op(&self, asset_tag: &StructTag, op: ChannelOp, receiver: AccountAddress, args: Vec<TransactionArgument>) -> Result<OffChainTransaction> {
+    fn execute_channel_op(&self, asset_tag: &StructTag, op: ChannelOp, receiver: AccountAddress, args: Vec<TransactionArgument>) -> Result<ChannelTransaction> {
         let scripts = self.script_registry.get_scripts(&asset_tag).ok_or(format_err!("Unsupported asset {:?}", asset_tag))?;
         let script = scripts.get_script(op);
         let program = script.encode_program(args);
@@ -115,30 +115,30 @@ impl<C> Wallet<C>
             }
         };
         let output_signature = self.sign_txn_output(&output)?;
-        Ok(OffChainTransaction::new(txn, receiver, output, output_signature))
+        Ok(ChannelTransaction::new(txn, receiver, output, output_signature))
     }
 
-    pub fn fund(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<OffChainTransaction> {
+    pub fn fund(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<ChannelTransaction> {
         self.execute_channel_op(&asset_tag, ChannelOp::Fund, receiver, vec![
             TransactionArgument::U64(sender_amount),
             TransactionArgument::U64(receiver_amount),
         ])
     }
 
-    pub fn transfer(&self, asset_tag: StructTag, receiver: AccountAddress, amount: u64) -> Result<OffChainTransaction> {
+    pub fn transfer(&self, asset_tag: StructTag, receiver: AccountAddress, amount: u64) -> Result<ChannelTransaction> {
         self.execute_channel_op(&asset_tag, ChannelOp::Transfer, receiver, vec![
             TransactionArgument::U64(amount),
         ])
     }
 
-    pub fn withdraw(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<OffChainTransaction> {
+    pub fn withdraw(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<ChannelTransaction> {
         self.execute_channel_op(&asset_tag, ChannelOp::Withdraw, receiver, vec![
             TransactionArgument::U64(sender_amount),
             TransactionArgument::U64(receiver_amount),
         ])
     }
 
-    pub fn apply_txn(&self, txn: &OffChainTransaction) -> Result<()> {
+    pub fn apply_txn(&self, txn: &ChannelTransaction) -> Result<()> {
         if txn.is_travel_txn() {
             //TODO execute on chain and wait output.
         }
@@ -176,12 +176,12 @@ impl<C> Wallet<C>
     }
 
     pub fn get_channel_resource(&self, participant: AccountAddress, resource_tag: StructTag) -> Result<Option<Resource>>{
-        let access_path = AccessPath::off_chain_resource_access_path(self.account_address, participant, resource_tag);
+        let access_path = AccessPath::channel_resource_access_path(self.account_address, participant, resource_tag);
         self.get_resource(&access_path)
     }
 
     pub fn channel_balance(&self,participant: AccountAddress, asset_tag: StructTag) -> Result<u64> {
-        let access_path = AccessPath::off_chain_resource_access_path(self.account_address, participant, asset_tag.clone());
+        let access_path = AccessPath::channel_resource_access_path(self.account_address, participant, asset_tag.clone());
         self.get_channel_resource(participant, asset_tag.clone())
             .and_then(|resource| match resource {
                 Some(resource) => resource.assert_balance().ok_or(format_err!("resource {:?} not asset.", asset_tag)),

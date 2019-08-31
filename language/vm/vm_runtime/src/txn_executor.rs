@@ -86,7 +86,7 @@ fn make_channel_access_path(
     participant: AccountAddress,
 ) -> AccessPath{
     let struct_tag = resource_storage_key(module, idx);
-    AccessPath::off_chain_resource_access_path(address,participant,struct_tag)
+    AccessPath::channel_resource_access_path(address, participant, struct_tag)
 }
 
 /// A struct that executes one single transaction.

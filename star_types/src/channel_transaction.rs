@@ -63,7 +63,7 @@ impl TransactionOutput {
 
     pub fn is_travel_txn(&self) -> bool {
         for (access_path ,_) in self.change_set.iter(){
-            if access_path.is_on_chain_resource(){
+            if access_path.is_onchain_resource(){
                 return true;
             }
         }
@@ -76,7 +76,7 @@ pub trait TransactionOutputSigner {
 }
 
 #[derive(Clone, Eq, PartialEq,Debug)]
-pub struct OffChainTransaction {
+pub struct ChannelTransaction {
     /// The sender signed transaction
     txn: SignedTransaction,
 
@@ -89,7 +89,7 @@ pub struct OffChainTransaction {
     output_signatures: Vec<Ed25519Signature>,
 }
 
-impl OffChainTransaction {
+impl ChannelTransaction {
     pub fn new(txn: SignedTransaction, receiver: AccountAddress, output: TransactionOutput, output_signature: Ed25519Signature) -> Self {
         Self {
             txn,
@@ -127,8 +127,8 @@ impl OffChainTransaction {
     }
 }
 
-impl FromProto for OffChainTransaction {
-    type ProtoType = crate::proto::off_chain_transaction::OffChainTransaction;
+impl FromProto for ChannelTransaction {
+    type ProtoType = crate::proto::channel_transaction::ChannelTransaction;
 
     fn from_proto(mut object: Self::ProtoType) -> Result<Self> {    
         let signed_tnx = SignedTransaction::from_proto(object.take_transaction()).unwrap();
@@ -139,7 +139,7 @@ impl FromProto for OffChainTransaction {
         for sign_bytes in sign_array.iter() {
             sign_vec.push(Ed25519Signature::try_from(sign_bytes.as_slice()).unwrap());
         }
-        Ok(OffChainTransaction{
+        Ok(ChannelTransaction {
             txn:signed_tnx,
             receiver:account_address,
             output:transaction_output, 
@@ -148,8 +148,8 @@ impl FromProto for OffChainTransaction {
     }
 }
 
-impl IntoProto for OffChainTransaction {
-    type ProtoType = crate::proto::off_chain_transaction::OffChainTransaction;
+impl IntoProto for ChannelTransaction {
+    type ProtoType = crate::proto::channel_transaction::ChannelTransaction;
 
     fn into_proto(self) -> Self::ProtoType {
         let mut out = Self::ProtoType::new();

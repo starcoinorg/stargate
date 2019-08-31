@@ -3,7 +3,7 @@ syntax = "proto3";
 package star_types;
 
 import "transaction.proto";
-import "off_chain_transaction.proto";
+import "channel_transaction.proto";
 
 message RawNegotiateMessage {
     bytes sender_addr = 1;
@@ -20,11 +20,11 @@ message OpenChannelNodeNegotiateMessage {
 }
 
 message OpenChannelTransactionMessage {
-    star_types.OffChainTransaction transaction = 1;
+    star_types.ChannelTransaction transaction = 1;
 }
 
 message OffChainPayMessage {
-    star_types.OffChainTransaction transaction = 1;
+    star_types.ChannelTransaction transaction = 1;
 }
 
 message AddressMessage {

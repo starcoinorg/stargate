@@ -1,7 +1,7 @@
 use chain_client::{ChainClient, RpcChainClient};
 use failure::prelude::*;
 use logger::prelude::*;
-use star_types::offchain_transaction::OffChainTransaction;
+use star_types::channel_transaction::ChannelTransaction;
 use state_storage::{AccountState};
 use state_view::StateView;
 use std::collections::HashMap;
