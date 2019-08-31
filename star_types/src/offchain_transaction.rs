@@ -60,6 +60,15 @@ impl TransactionOutput {
     pub fn status(&self) -> &TransactionStatus {
         &self.status
     }
+
+    pub fn is_travel_txn(&self) -> bool {
+        for (access_path ,_) in self.change_set.iter(){
+            if access_path.is_on_chain_resource(){
+                return true;
+            }
+        }
+        return false;
+    }
 }
 
 pub trait TransactionOutputSigner {
@@ -114,12 +123,7 @@ impl OffChainTransaction {
     }
 
     pub fn is_travel_txn(&self) -> bool {
-        for (access_path ,_) in self.output.change_set.iter(){
-            if access_path.is_on_chain_resource(){
-                return true;
-            }
-        }
-        return false;
+        self.output.is_travel_txn()
     }
 }
 

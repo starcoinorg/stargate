@@ -139,6 +139,9 @@ impl<C> Wallet<C>
     }
 
     pub fn apply_txn(&self, txn: &OffChainTransaction) -> Result<()> {
+        if txn.is_travel_txn() {
+            //TODO execute on chain and wait output.
+        }
         //TODO verify signature
         self.storage.borrow().apply_txn(txn)?;
         Ok(())
