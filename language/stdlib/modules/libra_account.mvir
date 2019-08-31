@@ -361,13 +361,13 @@ module LibraAccount {
         let gas_fee: LibraCoin.T;
         let transaction_sequence_number_value: u64;
 
-        transaction_sender = get_txn_sender();
-
-        // Load the transaction sender's account
-        sender_account = borrow_global<T>(copy(transaction_sender));
         // Charge for gas
         // Not charge when tx execute on offchain vm.
         if(!is_offchain()){
+             transaction_sender = get_txn_sender();
+             // Load the transaction sender's account
+             sender_account = borrow_global<T>(copy(transaction_sender));
+
             gas_price = get_txn_gas_unit_price();
             starting_gas_units = get_txn_max_gas_units();
             gas_units_remaining = get_gas_remaining();
@@ -378,10 +378,12 @@ module LibraAccount {
 
             gas_fee = Self.withdraw_from_account(copy(sender_account), move(gas_fee_amount));
             LibraCoin.TODO_REMOVE_burn_gas_fee(move(gas_fee));
+
+            // Bump the sequence number
+            transaction_sequence_number_value = get_txn_sequence_number();
+            *(&mut move(sender_account).sequence_number) = move(transaction_sequence_number_value) + 1;
         }
-        // Bump the sequence number
-        transaction_sequence_number_value = get_txn_sequence_number();
-        *(&mut move(sender_account).sequence_number) = move(transaction_sequence_number_value) + 1;
+
         return;
     }
 
