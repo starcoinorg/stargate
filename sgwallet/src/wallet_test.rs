@@ -48,12 +48,16 @@ fn test_wallet() -> Result<()> {
     assert_eq!(sender_amount, wallet.balance());
     let asset_tag = coin_struct_tag();
     let fund_txn = wallet.fund(asset_tag.clone(), receiver,sender_fund_amount, receiver_fund_amount)?;
+    debug_assert!(fund_txn.is_travel_txn(), "fund_txn must travel txn");
+
     //debug!("txn:{:#?}", fund_txn);
     wallet.apply_txn(&fund_txn)?;
     let sender_channel_balance = wallet.channel_balance(asset_tag.clone(),receiver)?;
     assert_eq!(sender_channel_balance, sender_fund_amount);
 
+
     let transfer_txn = wallet.transfer(asset_tag.clone(), receiver, transfer_amount)?;
+    debug_assert!(!transfer_txn.is_travel_txn(), "transfer_txn must not travel txn");
     //debug!("txn:{:#?}", transfer_txn);
     wallet.apply_txn(&transfer_txn)?;
 
@@ -61,7 +65,8 @@ fn test_wallet() -> Result<()> {
     assert_eq!(sender_channel_balance, sender_fund_amount - transfer_amount);
 
     let withdraw_txn = wallet.withdraw(asset_tag.clone(), receiver, sender_channel_balance, 1)?;
-    debug!("txn:{:#?}", withdraw_txn);
+    debug_assert!(withdraw_txn.is_travel_txn(), "withdraw_txn must travel txn");
+    //debug!("txn:{:#?}", withdraw_txn);
     wallet.apply_txn(&withdraw_txn)?;
 
     let sender_channel_balance = wallet.channel_balance(asset_tag.clone(),receiver)?;

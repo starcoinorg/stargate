@@ -539,9 +539,10 @@ impl fmt::Debug for AccessPath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "AccessPath {{ address: {:x}, path: {} }}",
+            "AccessPath {{ address: {:x}, path: {} data_path: {:?}}}",
             self.address,
-            hex::encode(&self.path)
+            hex::encode(&self.path),
+            self.data_path()
         )
     }
 }

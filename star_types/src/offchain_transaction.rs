@@ -112,6 +112,15 @@ impl OffChainTransaction {
     pub fn output_signatures(&self) -> &Vec<Ed25519Signature> {
         &self.output_signatures
     }
+
+    pub fn is_travel_txn(&self) -> bool {
+        for (access_path ,_) in self.output.change_set.iter(){
+            if access_path.is_on_chain_resource(){
+                return true;
+            }
+        }
+        return false;
+    }
 }
 
 impl FromProto for OffChainTransaction {
