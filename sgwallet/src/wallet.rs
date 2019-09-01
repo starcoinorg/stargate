@@ -1,5 +1,5 @@
 use std::convert::TryFrom;
-use std::sync::Arc;
+use std::sync::{Arc,Mutex};
 
 use atomic_refcell::AtomicRefCell;
 use futures::{
@@ -30,12 +30,19 @@ use types::transaction::{Program, RawTransaction, RawTransactionBytes, SignedTra
 use types::transaction_helpers::TransactionSigner;
 use types::vm_error::*;
 
+use {
+    futures_03::{
+        compat::{Future01CompatExt},
+    },
+};
+
+
 use crate::scripts::*;
-use crate::transaction_processor::SubmitTransactionFuture;
+use crate::transaction_processor::{SubmitTransactionFuture,TransactionProcessor,start_processor};
 
 pub struct Wallet<C>
     where
-        C: ChainClient,
+        C: ChainClient+Send+Sync+'static,
 {
     account_address: AccountAddress,
     keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
@@ -43,11 +50,12 @@ pub struct Wallet<C>
     storage: Arc<AtomicRefCell<LocalStateStorage<C>>>,
     vm: LocalVM<LocalStateStorage<C>>,
     script_registry: AssetScriptRegistry,
+    txn_processor:Arc<Mutex<TransactionProcessor>>,
 }
 
 impl<C> Wallet<C>
     where
-        C: ChainClient,
+    C: ChainClient+Send+Sync+'static,
 {
     const TXN_EXPIRATION: i64 = 1000 * 60;
     const MAX_GAS_AMOUNT: u64 = 1000000;
@@ -73,6 +81,8 @@ impl<C> Wallet<C>
         let storage = Arc::new(AtomicRefCell::new(LocalStateStorage::new(account_address, client.clone())?));
         let vm = LocalVM::new(storage.clone());
         let script_registry = AssetScriptRegistry::build()?;
+        let transaction_processor=Arc::new(Mutex::new(TransactionProcessor::new()));
+        start_processor(client.clone(),account_address,transaction_processor.clone());
         Ok(Self {
             account_address,
             keypair,
@@ -80,6 +90,7 @@ impl<C> Wallet<C>
             storage,
             vm,
             script_registry,
+            txn_processor:transaction_processor,
         })
     }
 
@@ -213,19 +224,24 @@ impl<C> Wallet<C>
         self.account_address
     }
 
-    pub fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<SubmitTransactionFuture> {
+    pub async fn submit_transaction(&self, signed_transaction: SignedTransaction) ->Result<SignedTransaction> {
         let tx_hash = signed_transaction.hash();
-        let resp = self.client.submit_transaction(signed_transaction)?;
+        let _resp = self.client.submit_transaction(signed_transaction)?;
 
         let (tx, rx) = channel(1);
         let watch_future = SubmitTransactionFuture::new(rx);
-        Ok(watch_future)
+
+        self.txn_processor.lock().unwrap().add_future(tx_hash,tx);
+
+        let tx_return=watch_future.compat().await;
+        Ok(tx_return.unwrap())
     }
+
 }
 
 impl<C> TransactionSigner for Wallet<C>
     where
-        C: ChainClient,
+    C: ChainClient+Send+Sync+'static,
 {
     fn sign_txn(&self, raw_txn: RawTransaction) -> Result<SignedTransaction> {
         assert_eq!(self.account_address, raw_txn.sender());
@@ -235,7 +251,7 @@ impl<C> TransactionSigner for Wallet<C>
 
 impl<C> TransactionOutputSigner for Wallet<C>
     where
-        C: ChainClient,
+    C: ChainClient+Send+Sync+'static,
 {
     fn sign_txn_output(&self, txn_output: &TransactionOutput) -> Result<Ed25519Signature> {
         let bytes = transaction_output_helper::into_pb(txn_output.clone()).unwrap().write_to_bytes()?;

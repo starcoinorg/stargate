@@ -29,6 +29,7 @@ futures = { package = "futures", version = "0.1.28" }
 proto_conv = { path = "../common/proto_conv", features = ["derive"] }
 stdlib = { path = "../language/stdlib" }
 ir_to_bytecode = { path = "../language/compiler/ir_to_bytecode" }
+futures_03 = { version = "0.3.0-alpha.16", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }
 
 [dev-dependencies]
 crypto = { path = "../crypto/crypto", features = ["testing"] }
