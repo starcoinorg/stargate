@@ -8,7 +8,6 @@ use tokio::runtime::{Runtime, TaskExecutor};
 use {
     futures_03::{
         future::{FutureExt, TryFutureExt},
-        executor::block_on,
     },
 };
 use chain_client::{ChainClient, RpcChainClient};
@@ -42,6 +41,7 @@ fn test_wallet() -> Result<()> {
 
     let mut rt = Runtime::new()?;
     let executor = rt.executor();
+
 
     let client = Arc::new(MockChainClient::new(executor.clone()));
     let sender = AccountAddress::from_public_key(&sender_keypair.public_key);
@@ -83,13 +83,11 @@ fn test_wallet() -> Result<()> {
         wallet.apply_txn(&withdraw_txn).await;
         let sender_channel_balance = wallet.channel_balance(receiver, asset_tag.clone()).unwrap();
         assert_eq!(sender_channel_balance, 0);
-        println!("test finish.");
+
+        debug!("finish");
+
     };
-    //block_on(f);
-    executor.spawn(f.boxed().unit_error().compat());
 
-
-    rt.shutdown_on_idle().wait().unwrap();
-
+    rt.block_on(f.boxed().unit_error().compat());
     Ok(())
 }
