@@ -15,9 +15,9 @@ service Chain {
     rpc GetAccountStateWithProofByStateRoot(GetAccountStateWithProofByStateRootRequest) returns (GetAccountStateWithProofByStateRootResponse);
     rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse);
     rpc SubmitChannelTransaction(star_types.ChannelTransaction) returns (SubmitTransactionResponse);
-    rpc WatchTransaction (WatchTransactionRequest) returns (stream WatchTransactionResponse);
+    rpc WatchTransaction (WatchTransactionRequest) returns (stream WatchData);
     rpc StateByAccessPath(types.AccessPath) returns (StateByAccessPathResponse);
-    rpc WatchEvent(WatchEventRequest) returns (stream WatchEventResponse);
+    rpc WatchEvent(WatchEventRequest) returns (stream WatchData);
     rpc GetTransactionByHash(GetTransactionByHashRequest) returns (GetTransactionByHashResponse);
 }
 
@@ -115,4 +115,16 @@ message MempoolAddTransactionStatus {
 //AccountStateBlob
 message Blob {
     bytes blob = 1;
+}
+
+message WatchTxData {
+    types.SignedTransaction signed_txn = 1;
+    star_types.TransactionOutput output = 2;
+}
+
+message WatchData {
+    oneof data {
+        WatchTxData tx = 1;
+        types.Event event = 2;
+    }
 }

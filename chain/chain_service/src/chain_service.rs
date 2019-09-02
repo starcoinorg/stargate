@@ -1,5 +1,5 @@
 use failure::prelude::*;
-use types::proto::{access_path::AccessPath as ProtoAccessPath};
+use types::proto::access_path::AccessPath as ProtoAccessPath;
 use types::{account_config::association_address, transaction::{SignedTransaction, TransactionPayload, RawTransaction}, access_path::AccessPath, account_address::AccountAddress};
 use futures::{sync::mpsc::{unbounded, UnboundedReceiver}, future::Future, sink::Sink, stream::Stream};
 use super::pub_sub;
@@ -29,12 +29,13 @@ use star_types::{channel_transaction::ChannelTransaction,
                                  StateByAccessPathResponse, AccountResource,
                                  WatchEventRequest, WatchEventResponse,
                                  GetTransactionByHashRequest, GetTransactionByHashResponse,
+                                 WatchData, WatchTxData,
                          },
                          channel_transaction::ChannelTransaction as OffChainTransactionProto,
-                 }};
+                 }, transaction_output_helper};
 use vm_runtime::{MoveVM, VMExecutor};
 use lazy_static::lazy_static;
-use config::config::{VMConfig};
+use config::config::VMConfig;
 use state_view::StateView;
 use core::borrow::Borrow;
 use proto_conv::{FromProto, IntoProto};
@@ -50,8 +51,8 @@ pub struct ChainService {
     sender: channel::Sender<TransactionInner>,
     state_db: Arc<Mutex<StateStorage>>,
     tx_db: Arc<Mutex<TransactionStorage>>,
-    tx_pub: Arc<Mutex<pub_sub::Pub<WatchTransactionResponse>>>,
-    event_pub: Arc<Mutex<pub_sub::Pub<WatchEventResponse>>>,
+    tx_pub: Arc<Mutex<pub_sub::Pub<WatchData>>>,
+    event_pub: Arc<Mutex<pub_sub::Pub<WatchData>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -109,13 +110,17 @@ impl ChainService {
             let event_lock = self.event_pub.lock().unwrap();
             output.events().iter().for_each(|e| {
                 let event = e.clone().into_proto();
-                let mut event_resp = WatchEventResponse::new();
+                let mut event_resp = WatchData::new();
                 event_resp.set_event(event);
                 event_lock.send(event_resp).unwrap();
             });
 
-            let mut wt_resp = WatchTransactionResponse::new();
-            wt_resp.set_signed_txn(off_chain_tx.txn().clone().into_proto());
+            let mut wt_resp = WatchData::new();
+            let mut watch_tx = WatchTxData::new();
+            let tx_output = transaction_output_helper::into_pb(output.clone()).unwrap();
+            watch_tx.set_signed_txn(off_chain_tx.txn().clone().into_proto());
+            watch_tx.set_output(tx_output);
+            wt_resp.set_tx(watch_tx);
 
             let tx_lock = self.tx_pub.lock().unwrap();
             tx_lock.send(wt_resp).unwrap();
@@ -126,6 +131,7 @@ impl ChainService {
         let signed_tx_hash = sign_tx.borrow().hash();
         let mut tx_db = self.tx_db.lock().unwrap();
         let exist_flag = tx_db.exist_signed_transaction(signed_tx_hash);
+        let mut watch_tx = WatchTxData::new();
         if !exist_flag {
             // 1. state_root
             let payload = sign_tx.borrow().payload().borrow();
@@ -158,18 +164,23 @@ impl ChainService {
                         let event_lock = self.event_pub.lock().unwrap();
                         output.events().iter().for_each(|e| {
                             let event = e.clone().into_proto();
-                            let mut event_resp = WatchEventResponse::new();
+                            let mut event_resp = WatchData::new();
                             event_resp.set_event(event);
                             event_lock.send(event_resp).unwrap();
                         });
+
+                        let star_output = state_db.change_output(&output).unwrap();
+                        watch_tx.set_output(transaction_output_helper::into_pb(star_output).unwrap());
 
                         Some(())
                     });
                 }
             }
 
-            let mut wt_resp = WatchTransactionResponse::new();
-            wt_resp.set_signed_txn(sign_tx.into_proto());
+            let mut wt_resp = WatchData::new();
+            watch_tx.set_signed_txn(sign_tx.into_proto());
+
+            wt_resp.set_tx(watch_tx);
 
             let tx_lock = self.tx_pub.lock().unwrap();
             tx_lock.send(wt_resp).unwrap();
@@ -180,7 +191,7 @@ impl ChainService {
         sender.send(inner_tx).await.unwrap();
     }
 
-    pub fn watch_transaction_inner(&self, address: AccountAddress, index: u64) -> UnboundedReceiver<WatchTransactionResponse> {
+    pub fn watch_transaction_inner(&self, address: AccountAddress, index: u64) -> UnboundedReceiver<WatchData> {
         if index != std::u64::MAX {
             //TODO
             //1. get least tx index
@@ -188,24 +199,24 @@ impl ChainService {
             //3. get tx and send to client
         }
 
-        let (sender, receiver) = unbounded::<WatchTransactionResponse>();
+        let (sender, receiver) = unbounded::<WatchData>();
         let id = address.hash();
         let tx_lock = self.tx_pub.lock().unwrap();
-        tx_lock.subscribe(id, sender, Box::new(move |mut tx: WatchTransactionResponse| -> bool {
-            let signed_tx = SignedTransaction::from_proto(tx.take_signed_txn()).unwrap();
+        tx_lock.subscribe(id, sender, Box::new(move |mut tx: WatchData| -> bool {
+            let signed_tx = SignedTransaction::from_proto(tx.get_tx().get_signed_txn().clone()).unwrap();
             signed_tx.sender() == address
         }));
 
         receiver
     }
 
-    pub fn watch_event_inner(&self, address: AccountAddress, keys: Vec<EventKey>, _index: u64) -> UnboundedReceiver<WatchEventResponse> {
-        let (sender, receiver) = unbounded::<WatchEventResponse>();
+    pub fn watch_event_inner(&self, address: AccountAddress, keys: Vec<EventKey>, _index: u64) -> UnboundedReceiver<WatchData> {
+        let (sender, receiver) = unbounded::<WatchData>();
         let id = address.hash();
         let event_lock = self.event_pub.lock().unwrap();
-        event_lock.subscribe(id, sender, Box::new(move |event: WatchEventResponse| -> bool {
+        event_lock.subscribe(id, sender, Box::new(move |data: WatchData| -> bool {
             let mut flag = false;
-            let event: ContractEvent = ContractEvent::from_proto(event.get_event().clone()).unwrap();
+            let event: ContractEvent = ContractEvent::from_proto(data.get_event().clone()).unwrap();
             keys.iter().for_each(|key| {
                 flag = key == event.key()
             });
@@ -264,7 +275,7 @@ impl ChainService {
         self.sender.clone()
     }
 
-    pub fn get_transaction_by_hash(&self,hash:HashValue)->Result<SignedTransaction>{
+    pub fn get_transaction_by_hash(&self, hash: HashValue) -> Result<SignedTransaction> {
         let lock = self.tx_db.lock().unwrap();
         let signed_tx = lock.get_signed_transaction_by_hash(&hash);
         match signed_tx {
@@ -330,7 +341,7 @@ impl Chain for ChainService {
     }
 
     fn submit_channel_transaction(&mut self, ctx: ::grpcio::RpcContext, req: OffChainTransactionProto,
-                                    sink: ::grpcio::UnarySink<SubmitTransactionResponse>) {
+                                  sink: ::grpcio::UnarySink<SubmitTransactionResponse>) {
         let resp = ChannelTransaction::from_proto(req.clone()).and_then(|off_chain_tx| {
             block_on(self.submit_transaction_inner(self.sender.clone(), TransactionInner::OffChain(off_chain_tx)));
 
@@ -346,7 +357,7 @@ impl Chain for ChainService {
 
     fn watch_transaction(&mut self, ctx: ::grpcio::RpcContext,
                          req: WatchTransactionRequest,
-                         sink: ::grpcio::ServerStreamingSink<WatchTransactionResponse>) {
+                         sink: ::grpcio::ServerStreamingSink<WatchData>) {
         let index = if req.has_index() {
             req.get_index()
         } else {
@@ -388,7 +399,7 @@ impl Chain for ChainService {
 
     fn watch_event(&mut self, ctx: ::grpcio::RpcContext,
                    req: WatchEventRequest,
-                   sink: ::grpcio::ServerStreamingSink<WatchEventResponse>) {
+                   sink: ::grpcio::ServerStreamingSink<WatchData>) {
         let index = if req.has_index() {
             req.get_index()
         } else {

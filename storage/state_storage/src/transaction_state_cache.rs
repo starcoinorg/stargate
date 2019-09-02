@@ -1,24 +1,24 @@
 use std::collections::{HashMap, HashSet};
 
 use crypto::{
-    hash::{CryptoHash},
+    hash::CryptoHash,
     HashValue,
 };
 use failure::prelude::*;
 use types::account_address::AccountAddress;
 use types::account_state_blob::AccountStateBlob;
-use types::access_path::{AccessPath};
+use types::access_path::AccessPath;
 use atomic_refcell::AtomicRefCell;
-use star_types::channel_transaction::{TransactionOutput as StarTransactionOutput};
+use star_types::channel_transaction::TransactionOutput as StarTransactionOutput;
 use state_view::StateView;
 use logger::prelude::*;
-use star_types::change_set::{StructDefResolve};
+use star_types::change_set::StructDefResolve;
 use types::language_storage::StructTag;
 use state_store::{StateStore, StateViewPlus};
 use star_types::resource_type::resource_def::ResourceDef;
 use jellyfish_merkle::{JellyfishMerkleTree, TreeReader, TreeUpdateBatch};
 use super::{AccountState, AccountReader};
-use types::{write_set::{WriteSet}, transaction::{TransactionOutput as LibraTransactionOutput, Version}};
+use types::{write_set::WriteSet, transaction::{TransactionOutput as LibraTransactionOutput, Version}};
 use core::borrow::Borrow;
 
 pub struct TransactionStateCache<'a, R: 'a + StructDefResolve + AccountReader> {
@@ -85,6 +85,21 @@ impl<'a, R> TransactionStateCache<'a, R>
             cache.insert(account.clone(), state.clone());
         }
         TransactionStateCache { account_states_cache: AtomicRefCell::new(cache), reader }
+    }
+
+    pub fn change_libra_output_2_star_output(ver: Version, libra_output: &LibraTransactionOutput, reader: &'a R) -> Result<StarTransactionOutput> {
+        let mut account_set = HashSet::new();
+        let mut account_vec = vec![];
+        libra_output.write_set().iter().for_each(|(a, _op)| {
+            if !account_set.contains(a.address.borrow()) {
+                account_set.insert(a.address.borrow());
+                account_vec.push(a.address.borrow())
+            }
+        });
+
+        let cache = Self::new_cache(ver, account_vec, reader);
+        let write_set = &cache.write_set_to_change_set(libra_output.write_set())?;
+        Ok(StarTransactionOutput::new(write_set.clone(), libra_output.events().to_vec(), libra_output.gas_used(), libra_output.status().clone()))
     }
 
     fn get_blobs(&self) -> Vec<(HashValue, AccountStateBlob)> {

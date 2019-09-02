@@ -6,7 +6,7 @@ mod transaction_state_cache;
 use std::collections::{HashMap, BTreeMap};
 
 use crypto::{
-    hash::{CryptoHash},
+    hash::CryptoHash,
     HashValue,
 };
 use failure::prelude::*;
@@ -16,13 +16,13 @@ use types::proof::SparseMerkleProof;
 use types::access_path::{AccessPath, DataPath};
 use std::convert::TryFrom;
 use std::sync::Arc;
-use crate::sparse_merkle::{ProofRead};
+use crate::sparse_merkle::ProofRead;
 use atomic_refcell::AtomicRefCell;
-use star_types::channel_transaction::{ChannelTransaction};
+use star_types::channel_transaction::{ChannelTransaction, TransactionOutput};
 use types::account_config::{AccountResource, account_resource_path};
 use state_view::StateView;
 use logger::prelude::*;
-use star_types::change_set::{StructDefResolve};
+use star_types::change_set::StructDefResolve;
 use types::language_storage::StructTag;
 use types::{write_set::WriteSet, transaction::Version};
 use struct_cache::StructCache;
@@ -244,6 +244,10 @@ impl StateStorage {
             self.next_version.fetch_add(1, Ordering::SeqCst);
             Ok(root_hash)
         })
+    }
+
+    pub fn change_output(&self, txn_output: &types::transaction::TransactionOutput) -> Result<TransactionOutput> {
+        TransactionStateCache::change_libra_output_2_star_output(self.get_least_version(), txn_output, self)
     }
 
     fn store_merkle_node(&self, merkle_nodes: TreeUpdateBatch) {

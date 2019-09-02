@@ -1,6 +1,6 @@
 use failure::prelude::*;
 use chain_service::chain_service::{ChainService, TransactionInner};
-use chain_client::{ChainClient, watch_transaction_stream::WatchTransactionStream};
+use chain_client::{ChainClient, watch_stream::WatchStream};
 use crypto::HashValue;
 use tokio::runtime::TaskExecutor;
 use logger::prelude::*;
@@ -12,7 +12,7 @@ use futures::{
     sync::mpsc::UnboundedReceiver,
     Stream, Poll,
 };
-use star_types::{proto::{chain::WatchTransactionResponse}, channel_transaction::ChannelTransaction};
+use star_types::{proto::{chain::{WatchData, WatchTransactionResponse}}, channel_transaction::ChannelTransaction};
 
 
 #[derive(Clone)]
@@ -50,8 +50,7 @@ impl<T> Stream for MockStreamReceiver<T> {
 }
 
 impl ChainClient for MockChainClient {
-    type WatchResp = MockStreamReceiver<WatchTransactionResponse>;
-
+    type WatchResp = MockStreamReceiver<WatchData>;
 
     fn least_state_root(&self) -> Result<HashValue> {
         Ok(self.chain_service.as_ref().unwrap().least_state_root_inner())
@@ -84,13 +83,13 @@ impl ChainClient for MockChainClient {
         Ok(())
     }
 
-    fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchTransactionStream<Self::WatchResp>> {
+    fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchStream<Self::WatchResp>> {
         let rx = self.chain_service.as_ref().unwrap().watch_transaction_inner(*address, ver);
         let stream = MockStreamReceiver { inner_rx: rx };
-        Ok(WatchTransactionStream::new(stream))
+        Ok(WatchStream::new(stream))
     }
 
-    fn watch_event(&self, address: &AccountAddress, event_keys: Vec<EventKey>) {
+    fn watch_event(&self, address: &AccountAddress, event_keys: Vec<EventKey>) -> Result<WatchStream<Self::WatchResp>> {
         unimplemented!()
     }
 

@@ -4,22 +4,23 @@ use types::proto::{transaction::SignedTransaction as SignedTransactionProto, acc
 use core::borrow::Borrow;
 use std::str::FromStr;
 use crypto::HashValue;
-use star_types::{proto::{channel_transaction::ChannelTransaction as ChannelTransactionProto, star_account::AccountState, chain::{GetTransactionByHashRequest, WatchEventRequest, EventKey as EventKeyProto}}, channel_transaction::ChannelTransaction, channel::SgChannelStream};
+use star_types::{watch_tx_data::WatchTxData, proto::{chain::WatchData, channel_transaction::ChannelTransaction as ChannelTransactionProto, star_account::AccountState, chain::{GetTransactionByHashRequest, WatchEventRequest, EventKey as EventKeyProto}}, channel_transaction::ChannelTransaction, channel::SgChannelStream};
 use types::transaction::Version;
 use star_types::{proto::{chain_grpc, chain::{FaucetRequest, LeastRootRequest, GetAccountStateWithProofByStateRootRequest, SubmitTransactionRequest, WatchTransactionRequest, WatchTransactionResponse}}, resource::Resource};
 use grpcio::{EnvBuilder, ChannelBuilder};
 use std::{sync::Arc, thread};
 use proto_conv::IntoProto;
 use futures::{Future, Stream};
-use watch_transaction_stream::WatchTransactionStream;
+use watch_stream::WatchStream;
 use protobuf::RepeatedField;
 use types::event::EventKey;
 use proto_conv::FromProto;
+use types::contract_event::ContractEvent;
 
-pub mod watch_transaction_stream;
+pub mod watch_stream;
 
 pub trait ChainClient {
-    type WatchResp: Stream<Item=WatchTransactionResponse, Error=grpcio::Error>;
+    type WatchResp: Stream<Item=WatchData, Error=grpcio::Error>;
 
     fn least_state_root(&self) -> Result<HashValue>;
     fn get_account_state(&self, address: &AccountAddress) -> Result<Option<Vec<u8>>>;
@@ -27,8 +28,8 @@ pub trait ChainClient {
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()>;
     fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<()>;
     fn submit_channel_transaction(&self, channel_transaction: ChannelTransaction) -> Result<()>;
-    fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchTransactionStream<Self::WatchResp>>;
-    fn watch_event(&self, address: &AccountAddress, event_keys: Vec<EventKey>);
+    fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchStream<Self::WatchResp>>;
+    fn watch_event(&self, address: &AccountAddress, event_keys: Vec<EventKey>) -> Result<WatchStream<Self::WatchResp>>;
     fn get_transaction_by_hash(&self, hash: HashValue) -> Result<SignedTransaction>;
 }
 
@@ -57,7 +58,7 @@ impl RpcChainClient {
 }
 
 impl ChainClient for RpcChainClient {
-    type WatchResp = grpcio::ClientSStreamReceiver<WatchTransactionResponse>;
+    type WatchResp = grpcio::ClientSStreamReceiver<WatchData>;
 
     fn least_state_root(&self) -> Result<HashValue> {
         let req = LeastRootRequest::new();
@@ -120,7 +121,7 @@ impl ChainClient for RpcChainClient {
         Ok(())
     }
 
-    fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchTransactionStream<Self::WatchResp>> {
+    fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchStream<Self::WatchResp>> {
         let watch_channel = ChannelBuilder::new(Arc::new(EnvBuilder::new().build())).connect(&self.conn_addr);
         let watch_client = chain_grpc::ChainClient::new(watch_channel);
 
@@ -128,7 +129,7 @@ impl ChainClient for RpcChainClient {
         let mut req = WatchTransactionRequest::new();
         req.set_address(address.to_vec());
         let items_stream = watch_client.watch_transaction(&req).unwrap();
-        Ok(WatchTransactionStream::new(items_stream))
+        Ok(WatchStream::new(items_stream))
         //            let f = items_stream.for_each(|item| {
         //                println!("received sign {:?}", item);
         //                Ok(())
@@ -139,18 +140,17 @@ impl ChainClient for RpcChainClient {
         //thread::spawn(print_data);
     }
 
-    fn watch_event(&self, address: &AccountAddress, event_keys: Vec<EventKey>) {
-//        let keys = event_keys.iter().map(|key| -> EventKeyProto {
-//            let mut event_key = EventKeyProto::new();
-//            event_key.set_key(key.into_proto());
-//            event_key
-//        }).collect();
-//        let mut req = WatchEventRequest::new();
-//        req.set_address(address.to_vec());
-//        req.set_keys(RepeatedField::from_vec(keys));
-//        let event_stream = self.client.watch_event(&req).unwrap();
-//        Ok(WatchTransactionStream::new(tx_stream))
-        unimplemented!()
+    fn watch_event(&self, address: &AccountAddress, event_keys: Vec<EventKey>) -> Result<WatchStream<Self::WatchResp>> {
+        let keys = event_keys.iter().map(|key| -> EventKeyProto {
+            let mut event_key = EventKeyProto::new();
+            event_key.set_key(key.into_proto());
+            event_key
+        }).collect();
+        let mut req = WatchEventRequest::new();
+        req.set_address(address.to_vec());
+        req.set_keys(RepeatedField::from_vec(keys));
+        let event_stream = self.client.watch_event(&req).unwrap();
+        Ok(WatchStream::new(event_stream))
     }
 
     fn get_transaction_by_hash(&self, hash: HashValue) -> Result<SignedTransaction> {
