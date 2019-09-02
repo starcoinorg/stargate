@@ -40,6 +40,7 @@ use {
 
 use crate::scripts::*;
 use crate::transaction_processor::{SubmitTransactionFuture,TransactionProcessor,start_processor};
+use star_types::change_set::ChangeSet;
 
 pub struct Wallet<C>
     where
@@ -52,6 +53,7 @@ pub struct Wallet<C>
     vm: LocalVM<LocalStateStorage<C>>,
     script_registry: AssetScriptRegistry,
     txn_processor:Arc<Mutex<TransactionProcessor>>,
+    merged_change_set:Arc<AtomicRefCell<ChangeSet>>,
 }
 
 impl<C> Wallet<C>
@@ -92,6 +94,7 @@ impl<C> Wallet<C>
             vm,
             script_registry,
             txn_processor:transaction_processor,
+            merged_change_set:Arc::new(AtomicRefCell::new(ChangeSet::empty()))
         })
     }
 
@@ -127,7 +130,7 @@ impl<C> Wallet<C>
             }
         };
         let output_signature = self.sign_txn_output(&output)?;
-        Ok(ChannelTransaction::new(txn, receiver, output, output_signature))
+        Ok(ChannelTransaction::new(txn, receiver, output, output_signature, self.merged_change_set.borrow().clone()))
     }
 
     pub fn fund(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<ChannelTransaction> {

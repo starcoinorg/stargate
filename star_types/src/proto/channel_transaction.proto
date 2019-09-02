@@ -11,9 +11,5 @@ message ChannelTransaction {
     types.SignedTransaction transaction = 2;
     TransactionOutput transaction_output= 3;
     repeated bytes output_signatures = 4;
-    //TODO define general Option
-    oneof merged_change_set {
-        ChangeSet ChangeSetSome = 5;
-        bool ChangeSetNone = 6;
-    }
+    ChangeSet merged_change_set = 5;
 }

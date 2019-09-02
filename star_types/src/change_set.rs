@@ -167,6 +167,11 @@ impl Changeable for MutResourceVal {
 pub struct ChangeSet(ChangeSetMut);
 
 impl ChangeSet {
+
+    pub fn empty() -> Self{
+        ChangeSetMut::empty().freeze().unwrap()
+    }
+
     #[inline]
     pub fn len(&self) -> usize {
         self.0.len()
@@ -438,6 +443,10 @@ pub struct ChangeSetMut {
 impl ChangeSetMut {
     pub fn new(change_set: Vec<(AccessPath, Changes)>) -> Self {
         Self { change_set }
+    }
+
+    pub fn empty() -> Self {
+        Self::new(vec![])
     }
 
     pub fn push(&mut self, item: (AccessPath, Changes)) {
