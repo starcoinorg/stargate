@@ -29,6 +29,7 @@ use types::language_storage::StructTag;
 use types::transaction::{Program, RawTransaction, RawTransactionBytes, SignedTransaction, TransactionArgument, TransactionStatus};
 use types::transaction_helpers::TransactionSigner;
 use types::vm_error::*;
+use proto_conv::IntoProtoBytes;
 
 use {
     futures_03::{
@@ -225,8 +226,25 @@ impl<C> Wallet<C>
     }
 
     pub async fn submit_transaction(&self, signed_transaction: SignedTransaction) ->Result<SignedTransaction> {
-        let tx_hash = signed_transaction.hash();
+        let raw_tx_bytes = signed_transaction.clone().into_raw_transaction().clone().into_proto_bytes()?;
+        let tx_hash = RawTransactionBytes(&raw_tx_bytes).hash();
+
         let _resp = self.client.submit_transaction(signed_transaction)?;
+
+        let (tx, rx) = channel(1);
+        let watch_future = SubmitTransactionFuture::new(rx);
+
+        self.txn_processor.lock().unwrap().add_future(tx_hash,tx);
+
+        let tx_return=watch_future.compat().await;
+        Ok(tx_return.unwrap())
+    }
+
+    pub async fn submit_channel_transaction(&self, channel_transaction:ChannelTransaction) ->Result<SignedTransaction> {
+        let raw_tx_bytes = channel_transaction.clone().txn().clone().into_raw_transaction().clone().into_proto_bytes()?;
+        let tx_hash = RawTransactionBytes(&raw_tx_bytes).hash();
+
+        let _resp = self.client.submit_channel_transaction(channel_transaction)?;
 
         let (tx, rx) = channel(1);
         let watch_future = SubmitTransactionFuture::new(rx);
