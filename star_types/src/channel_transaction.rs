@@ -87,15 +87,19 @@ pub struct ChannelTransaction {
 
     /// sender ans receiver signature for output.
     output_signatures: Vec<Ed25519Signature>,
+
+    //TODO signature include merged_change_set
+    merged_change_set: Option<ChangeSet>,
 }
 
 impl ChannelTransaction {
-    pub fn new(txn: SignedTransaction, receiver: AccountAddress, output: TransactionOutput, output_signature: Ed25519Signature) -> Self {
+    pub fn new(txn: SignedTransaction, receiver: AccountAddress, output: TransactionOutput, output_signature: Ed25519Signature, merged_change_set: Option<ChangeSet>) -> Self {
         Self {
             txn,
             receiver,
             output,
             output_signatures: vec![output_signature],
+            merged_change_set,
         }
     }
 
@@ -125,12 +129,18 @@ impl ChannelTransaction {
     pub fn is_travel_txn(&self) -> bool {
         self.output.is_travel_txn()
     }
+
+    pub fn merged_change_set(&self) -> Option<&ChangeSet>{
+        self.merged_change_set.as_ref()
+    }
 }
 
 impl FromProto for ChannelTransaction {
     type ProtoType = crate::proto::channel_transaction::ChannelTransaction;
 
-    fn from_proto(mut object: Self::ProtoType) -> Result<Self> {    
+    fn from_proto(mut object: Self::ProtoType) -> Result<Self> {
+        use crate::proto::channel_transaction::ChannelTransaction_oneof_merged_change_set;
+
         let signed_tnx = SignedTransaction::from_proto(object.take_transaction()).unwrap();
         let account_address = AccountAddress::from_proto(object.get_receiver().to_vec()).unwrap();
         let transaction_output = crate::transaction_output_helper::from_pb(object.take_transaction_output())?;
@@ -139,11 +149,18 @@ impl FromProto for ChannelTransaction {
         for sign_bytes in sign_array.iter() {
             sign_vec.push(Ed25519Signature::try_from(sign_bytes.as_slice()).unwrap());
         }
+        let merged_change_set = object.merged_change_set.and_then(|cs|
+            match cs{
+                ChannelTransaction_oneof_merged_change_set::ChangeSetSome(cs) => Some(ChangeSet::from_proto(cs).unwrap()),
+                ChannelTransaction_oneof_merged_change_set::ChangeSetNone(_) => None
+            }
+        );
         Ok(ChannelTransaction {
             txn:signed_tnx,
             receiver:account_address,
             output:transaction_output, 
-            output_signatures:sign_vec
+            output_signatures:sign_vec,
+            merged_change_set
         })
     }
 }
@@ -161,6 +178,10 @@ impl IntoProto for ChannelTransaction {
             signs.push(sign.to_bytes().to_vec());
         }
         out.set_output_signatures(RepeatedField::from_vec(signs));
+        match self.merged_change_set{
+            Some(cs) => out.set_ChangeSetSome(ChangeSet::into_proto(cs)),
+            None => out.set_ChangeSetNone(true)
+        }
         out
     }
 }
