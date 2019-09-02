@@ -16,6 +16,12 @@ use failure::_core::time::Duration;
 use tokio::runtime::{Runtime,TaskExecutor};
 use failure::prelude::*;
 use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
+use {
+    futures_03::{
+        future::{FutureExt,TryFutureExt},
+    },
+};
+
 
 #[test]
 fn test_wallet() -> Result<()> {
@@ -44,33 +50,52 @@ fn test_wallet() -> Result<()> {
     client.faucet(sender, sender_amount)?;
     client.faucet(receiver, receiver_amount)?;
 
-    let wallet = Wallet::new_with_client(executor, sender, sender_keypair, client)?;
+    let wallet = Arc::new(Wallet::new_with_client(executor.clone(), sender, sender_keypair, client).unwrap());
+    
     assert_eq!(sender_amount, wallet.balance());
     let asset_tag = coin_struct_tag();
     let fund_txn = wallet.fund(asset_tag.clone(), receiver,sender_fund_amount, receiver_fund_amount)?;
     debug_assert!(fund_txn.is_travel_txn(), "fund_txn must travel txn");
 
     //debug!("txn:{:#?}", fund_txn);
-    wallet.apply_txn(&fund_txn)?;
-    let sender_channel_balance = wallet.channel_balance(receiver,asset_tag.clone())?;
-    assert_eq!(sender_channel_balance, sender_fund_amount);
-
+    let wallet_arc = wallet.clone();
+    let asset_tag_clone = asset_tag.clone();
+    let f = async move{
+        wallet_arc.apply_txn(&fund_txn).await;
+        let sender_channel_balance = wallet_arc.channel_balance(receiver,asset_tag_clone).unwrap();
+        assert_eq!(sender_channel_balance, sender_fund_amount);
+    };
+    executor.spawn(f.boxed().unit_error().compat());
 
     let transfer_txn = wallet.transfer(asset_tag.clone(), receiver, transfer_amount)?;
     debug_assert!(!transfer_txn.is_travel_txn(), "transfer_txn must not travel txn");
     //debug!("txn:{:#?}", transfer_txn);
-    wallet.apply_txn(&transfer_txn)?;
+
+    let wallet_arc = wallet.clone();
+    let asset_tag_clone = asset_tag.clone();
+    let transfer_txn_clone = transfer_txn.clone();
+    let f = async move{
+        wallet_arc.apply_txn(&transfer_txn_clone).await;
+        let sender_channel_balance = wallet_arc.channel_balance(receiver,asset_tag_clone).unwrap();
+        assert_eq!(sender_channel_balance, sender_fund_amount - transfer_amount);
+    };
+    executor.spawn(f.boxed().unit_error().compat());
 
     let sender_channel_balance = wallet.channel_balance(receiver,asset_tag.clone())?;
-    assert_eq!(sender_channel_balance, sender_fund_amount - transfer_amount);
 
     let withdraw_txn = wallet.withdraw(asset_tag.clone(), receiver, sender_channel_balance, 1)?;
     debug_assert!(withdraw_txn.is_travel_txn(), "withdraw_txn must travel txn");
     //debug!("txn:{:#?}", withdraw_txn);
-    wallet.apply_txn(&withdraw_txn)?;
 
-    let sender_channel_balance = wallet.channel_balance(receiver,asset_tag.clone())?;
-    assert_eq!(sender_channel_balance, 0);
+    let wallet_arc = wallet.clone();
+    let asset_tag_clone = asset_tag.clone();
+    let f = async move{
+        wallet_arc.apply_txn(&transfer_txn).await;
+        let sender_channel_balance = wallet_arc.channel_balance(receiver,asset_tag_clone).unwrap();
+        assert_eq!(sender_channel_balance, 0);
+
+    };
+    executor.spawn(f.boxed().unit_error().compat());
 
     Ok(())
 }
