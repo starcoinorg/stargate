@@ -555,7 +555,7 @@ impl fmt::Display for AccessPath {
             write!(f, "AccessPath {{ address: {:x}, ", self.address)?;
             match self.path[0] {
                 DataPath::RESOURCE_TAG => write!(f, "type: OnChain Resource, ")?,
-                DataPath::CHANNEL_RESOURCE_TAG => write!(f, "type: OffChain Resource, ")?,
+                DataPath::CHANNEL_RESOURCE_TAG => write!(f, "type: Channel Resource, ")?,
                 DataPath::CODE_TAG => write!(f, "type: Module, ")?,
                 tag => write!(f, "type: {:?}, ", tag)?,
             };
@@ -564,6 +564,11 @@ impl fmt::Display for AccessPath {
                 "hash: {:?}, ",
                 hex::encode(&self.path[1..=HashValue::LENGTH])
             )?;
+            write!(
+                f,
+                "data_path: {:?}",
+                self.data_path()
+            );
             write!(
                 f,
                 "suffix: {:?} }} ",

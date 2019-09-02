@@ -153,12 +153,27 @@ impl<C> Wallet<C>
         ])
     }
 
+    fn clear_merged_change_set(&self){
+        let mut change_set = self.merged_change_set.borrow_mut();
+        *change_set = ChangeSet::empty();
+    }
+
+    fn merge_change_set(&self, new_change_set: &ChangeSet) -> Result<()>{
+        let mut change_set = self.merged_change_set.borrow_mut();
+        *change_set = ChangeSet::merge(&*change_set, new_change_set)?;
+        Ok(())
+    }
+
     pub async fn apply_txn(&self, txn: &ChannelTransaction) -> Result<()> {
+        //TODO verify signature
         if txn.is_travel_txn() {
             self.submit_channel_transaction(txn.clone()).await;
+            self.clear_merged_change_set();
+            self.storage.borrow().apply_txn(txn)?;
+        }else {
+            self.merge_change_set(txn.output().change_set());
+            self.storage.borrow().apply_txn(txn)?;
         }
-        //TODO verify signature
-        self.storage.borrow().apply_txn(txn)?;
         Ok(())
     }
 
