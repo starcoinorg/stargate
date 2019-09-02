@@ -1,18 +1,18 @@
 use failure::prelude::*;
-use chain_service::chain_service::{ChainService,TransactionInner};
-use chain_client::{ChainClient,watch_transaction_stream::WatchTransactionStream};
+use chain_service::chain_service::{ChainService, TransactionInner};
+use chain_client::{ChainClient, watch_transaction_stream::WatchTransactionStream};
 use crypto::HashValue;
-use tokio::runtime::{TaskExecutor};
+use tokio::runtime::TaskExecutor;
 use logger::prelude::*;
-use types::{account_address::AccountAddress, access_path::AccessPath, transaction::{SignedTransaction,Version}};
+use types::{event::EventKey, account_address::AccountAddress, access_path::AccessPath, transaction::{SignedTransaction, Version}};
 use futures03::{
     executor::block_on,
 };
 use futures::{
     sync::mpsc::UnboundedReceiver,
-    Stream,Poll,
+    Stream, Poll,
 };
-use star_types::{proto::{chain::{ WatchTransactionResponse}}};
+use star_types::{proto::{chain::WatchTransactionResponse}};
 
 
 #[derive(Clone)]
@@ -36,8 +36,8 @@ impl MockChainClient {
     }
 }
 
-pub struct MockStreamReceiver<T>{
-    inner_rx:UnboundedReceiver<T>
+pub struct MockStreamReceiver<T> {
+    inner_rx: UnboundedReceiver<T>
 }
 
 impl<T> Stream for MockStreamReceiver<T> {
@@ -45,12 +45,11 @@ impl<T> Stream for MockStreamReceiver<T> {
     type Error = grpcio::Error;
 
     fn poll(&mut self) -> Poll<Option<T>, Self::Error> {
-        self.inner_rx.poll().map_err(|e|{grpcio::Error::RemoteStopped})
+        self.inner_rx.poll().map_err(|e| { grpcio::Error::RemoteStopped })
     }
 }
 
 impl ChainClient for MockChainClient {
-
     type WatchResp = MockStreamReceiver<WatchTransactionResponse>;
 
 
@@ -72,16 +71,24 @@ impl ChainClient for MockChainClient {
     }
 
     fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<()> {
-        let chain_service=self.chain_service.as_ref().unwrap();
+        let chain_service = self.chain_service.as_ref().unwrap();
         block_on(chain_service.submit_transaction_inner(chain_service.sender(), TransactionInner::OnChain(signed_transaction)));
 
         Ok(())
     }
 
     fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchTransactionStream<Self::WatchResp>> {
-        let rx=self.chain_service.as_ref().unwrap().watch_transaction_inner(*address,ver);
-        let stream = MockStreamReceiver{inner_rx:rx};
+        let rx = self.chain_service.as_ref().unwrap().watch_transaction_inner(*address, ver);
+        let stream = MockStreamReceiver { inner_rx: rx };
         Ok(WatchTransactionStream::new(stream))
+    }
+
+    fn watch_event(&self, address: &AccountAddress, event_keys: Vec<EventKey>) {
+        unimplemented!()
+    }
+
+    fn get_transaction_by_hash(&self, hash: HashValue) -> Result<SignedTransaction> {
+        unimplemented!()
     }
 }
 
