@@ -3,7 +3,7 @@ use crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
 };
-use futures::{future, stream::Stream, sync::mpsc, Async, Future, sync::oneshot};
+use futures::{future, stream::Stream, sync::mpsc, Async, Future, sync::oneshot, stream};
 use network_libp2p::{
     identity, start_service, NetworkConfiguration, NodeKeyConfig, PeerId, Secret,
     Service as Libp2pService, ServiceEvent,
@@ -14,6 +14,7 @@ use std::{io, sync::Arc};
 use types::account_address::AccountAddress;
 use tokio::runtime::TaskExecutor;
 use logger::prelude::*;
+
 
 #[derive(Clone, Debug)]
 pub struct Message {
@@ -64,71 +65,65 @@ fn run_network(
 ) -> (
     mpsc::UnboundedSender<Message>,
     mpsc::UnboundedReceiver<Message>,
-    impl Future<Item=(), Error=()>,
+    impl Future<Item=(), Error=std::io::Error>,
 ) {
     let (mut _tx, net_rx) = mpsc::unbounded();
     let (net_tx, mut _rx) = mpsc::unbounded::<Message>();
     let net_srv_sender = net_srv.clone();
 
-    let network_fut = future::poll_fn(move || {
-        loop {
-            match net_srv.lock().poll().unwrap() {
-                Async::Ready(Some(ServiceEvent::CustomMessage { peer_id, message })) => {
+    let network_fut = stream::poll_fn(move || net_srv.lock().poll()).for_each(
+        move |event| {
+            match event {
+                ServiceEvent::CustomMessage { peer_id, message } => {
                     debug!("Receive custom message");
                     let _ = _tx.unbounded_send(Message {
                         peer_id: convert_peer_id_to_account_address(&peer_id).unwrap(),
                         msg: message,
                     });
                 }
-                Async::Ready(Some(ServiceEvent::OpenedCustomProtocol { peer_id, .. })) => {
+                ServiceEvent::OpenedCustomProtocol { peer_id, version: _, debug_info: _ } => {
                     info!(
                         "Connected peer {:?}",
                         convert_peer_id_to_account_address(&peer_id).unwrap()
                     );
                 }
-                Async::NotReady => {
-                    break;
-                }
-                Async::Ready(None) => {
-                    //Network closed
-                    return Ok(Async::Ready(()));
-                }
-                _ => {
-                    error!("Error happened");
-                    break;
-                }
-            }
+                ServiceEvent::ClosedCustomProtocol { peer_id: _, debug_info: _ } => {}
+                ServiceEvent::Clogged { peer_id: _, messages: _ } => {}
+            };
+            Ok(())
         }
-
-        loop {
-            match _rx.poll() {
-                Ok(Async::Ready(Some(message))) => {
-                    let peer_id = convert_account_address_to_peer_id(message.peer_id).unwrap();
-                    net_srv_sender
-                        .lock()
-                        .send_custom_message(&peer_id, message.msg);
-                    if net_srv_sender.lock().is_open(&peer_id) == false {
-                        error!("Messge send to peer :{} is not connected", convert_peer_id_to_account_address(&peer_id).unwrap());
-                    }
-
-                    debug!("Already send message");
-                    break;
-                }
-                Ok(Async::NotReady) => break,
-                Ok(Async::Ready(None)) => {
-                    info!("Network channel closed");
-                    return Err(());
-                }
-                Err(_) => {
-                    error!("Error in poll network channel");
-                    return Err(());
-                }
+    );
+    let protocol_fut = stream::poll_fn(move || _rx.poll()).for_each(
+        move |message| {
+            let peer_id = convert_account_address_to_peer_id(message.peer_id).unwrap();
+            net_srv_sender
+                .lock()
+                .send_custom_message(&peer_id, message.msg);
+            if net_srv_sender.lock().is_open(&peer_id) == false {
+                error!("Message send to peer :{} is not connected", convert_peer_id_to_account_address(&peer_id).unwrap());
             }
+            debug!("Already send message");
+            Ok(())
         }
-        Ok(Async::NotReady)
+    ).then(|res| {
+        match res {
+            Ok(()) => (),
+            Err(_) => error!("protocol disconnected"),
+        };
+        Ok(())
     });
+    let futures: Vec<Box<Future<Item=(), Error=io::Error> + Send>> = vec![
+        Box::new(protocol_fut) as Box<_>,
+        Box::new(network_fut) as Box<_>
+    ];
 
-    (net_tx, net_rx, network_fut)
+    let futs = futures::select_all(futures)
+        .and_then(move |_| {
+            debug!("Networking ended");
+            Ok(())
+        })
+        .map_err(|(r, _, _)| r);
+    (net_tx, net_rx, futs)
 }
 
 fn spawn_network(
@@ -143,7 +138,7 @@ fn spawn_network(
     let fut = network_future
         .select(close_rx.then(|_| Ok(())))
         .map(|(val, _)| val)
-        .map_err(|(err, _)| err);
+        .map_err(|(err, _)| ());
 
 
     executor.spawn(fut);
