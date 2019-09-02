@@ -59,16 +59,20 @@ fn node_test() -> Result<()> {
     let neg_msg = create_negotiate_message(addr2,addr1 ,keypair2.private_key);
     node2.open_channel_negotiate(neg_msg);
 
-    let transfer_amount = 1_000_000;
-    let offchain_txn = node1.off_chain_pay(coin_struct_tag(), addr2, transfer_amount).unwrap();
+    let fund_amount = 1000000;
+    node2.open_channel(coin_struct_tag(), addr2,fund_amount,fund_amount);
+
+    let transfer_amount = 1_000;
+    let offchain_txn = node2.off_chain_pay(coin_struct_tag(), addr2, transfer_amount).unwrap();
     debug!("txn:{:#?}", offchain_txn);
 
-    assert!(node1.local_balance().unwrap().balance()<10000000);
+    assert!(node2.local_balance().unwrap().balance()<10000000);
 
     node1.shutdown();
     node2.shutdown();
 
-    rt.shutdown_on_idle().wait().unwrap();
+    debug!("here");
+    //rt.shutdown_on_idle().wait().unwrap();
     Ok(())
 }
 

@@ -1,9 +1,10 @@
 use tokio::{runtime::TaskExecutor};
 use futures::{
     compat::{Stream01CompatExt,Compat01As03},
-    future::{FutureExt,Future},
+    future::{FutureExt},
     stream::{Stream,Fuse,StreamExt},
     prelude::*,
+    executor::block_on,
 };
 use std::sync::{Arc,Mutex};
 use sgwallet::wallet::Wallet;
@@ -25,6 +26,7 @@ use state_storage::AccountState;
 use types::account_config::AccountResource;
 use star_types::system_event::Event;
 use types::language_storage::StructTag;
+use futures_01::future::Future;
 
 pub struct Node <C: ChainClient+Send+Sync+'static>{
     executor: TaskExecutor,
@@ -187,7 +189,7 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
                 let msg = add_message_type(off_chain_pay_message.into_proto_bytes().unwrap(), MessageType::OffChainPayMessage);
                 Self::send_message(sender,receiver_addr,msg);
             };
-            self.executor.spawn(f.boxed().unit_error().compat());
+            f.boxed().unit_error().compat().wait();
         }
         if (&raw_transaction.txn().sender() == &local_addr) {
             debug!("receive feed back pay");
@@ -195,7 +197,7 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
             let f=async move {
                 wallet.apply_txn(&raw_transaction).await;
             };
-            self.executor.spawn(f.boxed().unit_error().compat());
+            f.boxed().unit_error().compat().wait();
             info!("tx succ");
         }
     }
@@ -209,9 +211,17 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
     }
 
     fn open_channel(&self,open_channel_message:OpenChannelTransactionMessage)->Result<()>{
-        let addr = &open_channel_message.transaction.receiver();
-        let msg = add_message_type(open_channel_message.into_proto_bytes()?, MessageType::OpenChannelTransactionMessage);
-        Self::send_message(self.sender.clone(),addr,msg);
+        let wallet = self.wallet.clone();
+        let sender = self.sender.clone();
+        let f=async move {
+            let txn = &open_channel_message.transaction.clone();
+            wallet.apply_txn(&txn).await;
+            let addr = &open_channel_message.transaction.receiver();
+            let msg = add_message_type(open_channel_message.into_proto_bytes().unwrap(), MessageType::OpenChannelTransactionMessage);
+            Self::send_message(sender,addr,msg);
+        };
+        f.boxed().unit_error().compat().wait();
+
         Ok(())
     }
 
@@ -227,7 +237,8 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
             let msg = add_message_type(off_chain_pay_msg.into_proto_bytes().unwrap(), MessageType::OffChainPayMessage);
             Self::send_message(sender,&receiver_address ,msg);
         };
-        self.executor.spawn(f.boxed().unit_error().compat());
+        f.boxed().unit_error().compat().wait();
+
         Ok(())
     }
 
