@@ -21,7 +21,7 @@ use {
         future::{FutureExt,TryFutureExt},
     },
 };
-
+use futures::future::Future;
 
 #[test]
 fn test_wallet() -> Result<()> {
@@ -96,6 +96,8 @@ fn test_wallet() -> Result<()> {
 
     };
     executor.spawn(f.boxed().unit_error().compat());
+
+    rt.shutdown_on_idle().wait().unwrap();
 
     Ok(())
 }

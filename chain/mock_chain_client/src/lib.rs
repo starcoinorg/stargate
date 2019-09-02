@@ -78,7 +78,10 @@ impl ChainClient for MockChainClient {
     }
 
     fn submit_channel_transaction(&self, channel_transaction: ChannelTransaction) -> Result<()> {
-        unimplemented!()
+        let chain_service = self.chain_service.as_ref().unwrap();
+        block_on(chain_service.submit_transaction_inner(chain_service.sender(), TransactionInner::OffChain(channel_transaction)));
+
+        Ok(())
     }
 
     fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchTransactionStream<Self::WatchResp>> {
