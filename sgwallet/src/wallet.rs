@@ -150,9 +150,9 @@ impl<C> Wallet<C>
         ])
     }
 
-    pub fn apply_txn(&self, txn: &ChannelTransaction) -> Result<()> {
+    pub async fn apply_txn(&self, txn: &ChannelTransaction) -> Result<()> {
         if txn.is_travel_txn() {
-            //TODO execute on chain and wait output.
+            self.submit_channel_transaction(txn.clone()).await;
         }
         //TODO verify signature
         self.storage.borrow().apply_txn(txn)?;
