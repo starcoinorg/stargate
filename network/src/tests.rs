@@ -20,11 +20,14 @@ mod tests {
     use network_libp2p::{identity, NodeKeyConfig, PeerId, PublicKey, Secret};
     use rand::prelude::*;
     use std::{thread, time::Duration, str::FromStr};
-    use tokio::{prelude::Async, runtime::Runtime,runtime::TaskExecutor};
+    use tokio::{prelude::Async, runtime::Runtime, runtime::TaskExecutor};
     use types::account_address::AccountAddress;
     use crate::helper::convert_boot_nodes;
     use hex;
     use logger::prelude::*;
+    use std::time::Instant;
+    use tokio::timer::{Interval, Delay};
+
     fn build_test_network_pair(executor: TaskExecutor) -> (NetworkComponent, NetworkComponent) {
         let mut l = build_test_network_services(2, 50400, executor).into_iter();
         let a = l.next().unwrap();
@@ -86,22 +89,31 @@ mod tests {
         ::logger::init_for_e2e_testing();
         let rt = Runtime::new().unwrap();
         let executor = rt.executor();
-        let (mut service1, mut service2) = build_test_network_pair(executor.clone());
-        let msg_peer_id = service1.0.identify();
-
-        let sender_fut = stream::repeat(1)
-            .and_then(move |_| {
-                match service2.1.unbounded_send(Message {
+        let ((service1, tx1, rx1),
+            (service2, tx2, rx2)) = build_test_network_pair(executor.clone());
+        let msg_peer_id = service1.identify();
+        let sender_fut = Interval::new(Instant::now(), Duration::from_millis(10))
+            .take(10)
+            .map_err(|e| ())
+            .for_each(move |_| {
+                match tx2.unbounded_send(Message {
                     peer_id: msg_peer_id,
                     msg: vec![1, 2],
                 }) {
-                    Ok(()) => Ok(Async::Ready(Some(()))),
-                    Err(e) => return Err(()),
+                    Ok(()) => Ok(()),
+                    Err(e) => Err(()),
                 }
-            })
-            .for_each(|_| Ok(()));
+            });
 
-        executor.spawn(sender_fut);
+        executor.clone().spawn(sender_fut);
+        let task = Delay::new(Instant::now() + Duration::from_secs(2))
+            .and_then(|_| {
+                service1.shutdown();
+                service2.shutdown();
+                Ok(())
+            })
+            .map_err(|e| panic!("delay errored; err={:?}", e));
+        executor.spawn(task);
         rt.shutdown_on_idle().wait().unwrap();
     }
 
