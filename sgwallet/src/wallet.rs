@@ -30,6 +30,7 @@ use types::transaction::{Program, RawTransaction, RawTransactionBytes, SignedTra
 use types::transaction_helpers::TransactionSigner;
 use types::vm_error::*;
 use proto_conv::IntoProtoBytes;
+use logger::prelude::*;
 
 use {
     futures_03::{
@@ -255,6 +256,7 @@ impl<C> Wallet<C>
         self.txn_processor.lock().unwrap().add_future(tx_hash,tx);
 
         let tx_return=watch_future.compat().await;
+
         Ok(tx_return.unwrap())
     }
 

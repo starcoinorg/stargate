@@ -13,10 +13,12 @@ use crypto::{
 };
 use logger::prelude::*;
 use failure::prelude::*;
-use types::transaction::{ SignedTransaction};
+use types::transaction::{ SignedTransaction,RawTransactionBytes};
 use crypto::hash::CryptoHash;
 use chain_client::{ChainClient};
 use types::account_address::AccountAddress;
+
+use proto_conv::IntoProtoBytes;
 
 
 pub struct SubmitTransactionFuture {
@@ -40,6 +42,7 @@ impl Future for SubmitTransactionFuture {
         while let Async::Ready(v) = self.rx.poll().unwrap() {
             match v {
                 Some(v) => {
+                    warn!("tx is {:?}",v);
                     return Ok(Async::Ready(v));
                 }
                 None => {
@@ -69,9 +72,16 @@ impl TransactionProcessor {
     }
 
     pub fn send_response(&self,mut txn:SignedTransaction)->Result<()> {
-        let  hash = txn.hash();
+        let raw_tx_bytes = txn.clone().into_raw_transaction().clone().into_proto_bytes()?;
+        let hash = RawTransactionBytes(&raw_tx_bytes).hash();
+
         match self.tx_map.get(&hash) {
-            Some(tx) => {tx.clone().send(txn);},
+            Some(tx) => {
+                match tx.clone().send(txn).wait() {
+                    Ok(_new_tx) =>info!("send message succ") ,
+                    Err(_) => warn!("send message error"),
+                };
+            },
             _ => info!("tx hash {} not in map",hash) ,
         }
         Ok(())
@@ -85,7 +95,6 @@ where C: ChainClient+Sync+Send+'static{
         let tx_stream=client.watch_transaction(&addr,0).unwrap();
 
         let f = tx_stream.for_each(|item| {
-            info!("received sign {:?}", item);
             processor.lock().unwrap().send_response(item).unwrap();
             Ok(())
         });
