@@ -22,9 +22,9 @@ use network::{
 };
 use futures_01::sync::mpsc::{UnboundedSender,UnboundedReceiver};
 use state_storage::AccountState;
-use std::borrow::Borrow;
 use types::account_config::AccountResource;
 use star_types::system_event::Event;
+use types::language_storage::StructTag;
 
 pub struct Node <C: ChainClient+Send+Sync+'static>{
     executor: TaskExecutor,
@@ -70,7 +70,9 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
         self.node_inner.clone().lock().unwrap().open_channel_negotiate(negotiate_message)
     }
 
-    pub fn open_channel(&self,open_channel_message:OpenChannelTransactionMessage)->Result<()>{
+    pub fn open_channel(&self,asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64)->Result<()>{
+        let channel_txn = self.node_inner.clone().lock().unwrap().wallet.fund(asset_tag,receiver,sender_amount,receiver_amount)?;
+        let open_channel_message = OpenChannelTransactionMessage::new(channel_txn);
         self.node_inner.clone().lock().unwrap().open_channel(open_channel_message)
     }
 
