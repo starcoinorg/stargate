@@ -263,6 +263,15 @@ impl ChainService {
     pub fn sender(&self) -> channel::Sender<TransactionInner> {
         self.sender.clone()
     }
+
+    pub fn get_transaction_by_hash(&self,hash:HashValue)->Result<SignedTransaction>{
+        let lock = self.tx_db.lock().unwrap();
+        let signed_tx = lock.get_signed_transaction_by_hash(&hash);
+        match signed_tx {
+            Some(tx) => Ok(tx),
+            None => bail!("could not find tx by hash {}",hash),
+        }
+    }
 }
 
 impl Chain for ChainService {

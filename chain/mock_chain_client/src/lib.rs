@@ -88,7 +88,7 @@ impl ChainClient for MockChainClient {
     }
 
     fn get_transaction_by_hash(&self, hash: HashValue) -> Result<SignedTransaction> {
-        unimplemented!()
+        self.chain_service.as_ref().unwrap().get_transaction_by_hash(hash)
     }
 }
 
