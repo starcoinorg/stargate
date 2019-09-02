@@ -4,10 +4,10 @@ use types::proto::{transaction::SignedTransaction as SignedTransactionProto, acc
 use core::borrow::Borrow;
 use std::str::FromStr;
 use crypto::HashValue;
-use star_types::{proto::{star_account::AccountState, chain::{GetTransactionByHashRequest, WatchEventRequest, EventKey as EventKeyProto}}, channel::SgChannelStream};
+use star_types::{proto::{channel_transaction::ChannelTransaction as ChannelTransactionProto, star_account::AccountState, chain::{GetTransactionByHashRequest, WatchEventRequest, EventKey as EventKeyProto}}, channel_transaction::ChannelTransaction, channel::SgChannelStream};
 use types::transaction::Version;
 use star_types::{proto::{chain_grpc, chain::{FaucetRequest, LeastRootRequest, GetAccountStateWithProofByStateRootRequest, SubmitTransactionRequest, WatchTransactionRequest, WatchTransactionResponse}}, resource::Resource};
-use grpcio::{Channel, EnvBuilder, ChannelBuilder};
+use grpcio::{EnvBuilder, ChannelBuilder};
 use std::{sync::Arc, thread};
 use proto_conv::IntoProto;
 use futures::{Future, Stream};
@@ -26,6 +26,7 @@ pub trait ChainClient {
     fn get_state_by_access_path(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>>;
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()>;
     fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<()>;
+    fn submit_channel_transaction(&self, channel_transaction: ChannelTransaction) -> Result<()>;
     fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchTransactionStream<Self::WatchResp>>;
     fn watch_event(&self, address: &AccountAddress, event_keys: Vec<EventKey>);
     fn get_transaction_by_hash(&self, hash: HashValue) -> Result<SignedTransaction>;
@@ -110,6 +111,12 @@ impl ChainClient for RpcChainClient {
         let mut req = SubmitTransactionRequest::new();
         req.set_signed_txn(signed_transaction.into_proto());
         let resp = self.client.submit_transaction(&req);
+        Ok(())
+    }
+
+    fn submit_channel_transaction(&self, channel_transaction: ChannelTransaction) -> Result<()> {
+        let mut req = channel_transaction.into_proto();
+        self.client.submit_channel_transaction(&req);
         Ok(())
     }
 

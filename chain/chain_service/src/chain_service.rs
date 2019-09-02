@@ -329,7 +329,7 @@ impl Chain for ChainService {
         provide_grpc_response(resp, ctx, sink);
     }
 
-    fn submit_off_chain_transaction(&mut self, ctx: ::grpcio::RpcContext, req: OffChainTransactionProto,
+    fn submit_channel_transaction(&mut self, ctx: ::grpcio::RpcContext, req: OffChainTransactionProto,
                                     sink: ::grpcio::UnarySink<SubmitTransactionResponse>) {
         let resp = ChannelTransaction::from_proto(req.clone()).and_then(|off_chain_tx| {
             block_on(self.submit_transaction_inner(self.sender.clone(), TransactionInner::OffChain(off_chain_tx)));

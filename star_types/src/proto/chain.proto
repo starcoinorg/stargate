@@ -7,13 +7,14 @@ import "events.proto";
 import "access_path.proto";
 import "proof.proto";
 import "channel_transaction.proto";
+import "transaction_output.proto";
 
 service Chain {
     rpc LeastStateRoot(LeastRootRequest) returns (LeastRootResponse);
     rpc Faucet(FaucetRequest) returns (FaucetResponse);
     rpc GetAccountStateWithProofByStateRoot(GetAccountStateWithProofByStateRootRequest) returns (GetAccountStateWithProofByStateRootResponse);
     rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse);
-    rpc SubmitOffChainTransaction(star_types.ChannelTransaction) returns (SubmitTransactionResponse);
+    rpc SubmitChannelTransaction(star_types.ChannelTransaction) returns (SubmitTransactionResponse);
     rpc WatchTransaction (WatchTransactionRequest) returns (stream WatchTransactionResponse);
     rpc StateByAccessPath(types.AccessPath) returns (StateByAccessPathResponse);
     rpc WatchEvent(WatchEventRequest) returns (stream WatchEventResponse);
@@ -84,7 +85,7 @@ message WatchTransactionRequest {
 
 message WatchTransactionResponse {
     types.SignedTransaction signed_txn = 1;
-    repeated types.Event events = 2;
+    star_types.TransactionOutput output = 2;
 }
 
 message SubmitTransactionRequest {

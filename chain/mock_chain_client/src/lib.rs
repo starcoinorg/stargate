@@ -12,7 +12,7 @@ use futures::{
     sync::mpsc::UnboundedReceiver,
     Stream, Poll,
 };
-use star_types::{proto::{chain::WatchTransactionResponse}};
+use star_types::{proto::{chain::WatchTransactionResponse}, channel_transaction::ChannelTransaction};
 
 
 #[derive(Clone)]
@@ -75,6 +75,10 @@ impl ChainClient for MockChainClient {
         block_on(chain_service.submit_transaction_inner(chain_service.sender(), TransactionInner::OnChain(signed_transaction)));
 
         Ok(())
+    }
+
+    fn submit_channel_transaction(&self, channel_transaction: ChannelTransaction) -> Result<()> {
+        unimplemented!()
     }
 
     fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchTransactionStream<Self::WatchResp>> {
