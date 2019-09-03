@@ -41,14 +41,14 @@
 use crate::{
     account_address::AccountAddress,
     account_config::{
-        account_received_event_path, account_resource_path, account_sent_event_path,
-        association_address,
+        association_address, ACCOUNT_RECEIVED_EVENT_PATH,
+        ACCOUNT_SENT_EVENT_PATH,
     },
     language_storage::{ModuleId, ResourceKey, StructTag},
     validator_set::validator_set_path,
 };
 use canonical_serialization::{CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer, SimpleSerializer, SimpleDeserializer};
-use crypto::hash::{CryptoHash, HashValue};
+use crypto::hash::{HashValue};
 use failure::prelude::*;
 use hex;
 use lazy_static::lazy_static;
@@ -241,7 +241,7 @@ impl From<Vec<Access>> for Accesses {
 }
 
 impl From<Vec<u8>> for Accesses {
-    fn from(mut raw_bytes: Vec<u8>) -> Accesses {
+    fn from(raw_bytes: Vec<u8>) -> Accesses {
         let access_str = String::from_utf8(raw_bytes).unwrap();
         let fields_str = access_str.split(SEPARATOR).collect::<Vec<&str>>();
         let mut accesses = vec![];
@@ -364,7 +364,7 @@ impl DataPath {
     pub fn resource_tag(&self) -> Option<&StructTag> {
         match self{
             DataPath::Resource {tag} => Some(tag),
-            DataPath::ChannelResource {participant,tag} => Some(tag),
+            DataPath::ChannelResource {participant:_,tag} => Some(tag),
             _ => None,
         }
     }
@@ -452,7 +452,7 @@ impl AccessPath {
     /// That AccessPath can be used as a key into the event storage to retrieve all sent
     /// events for a given account.
     pub fn new_for_sent_event(address: AccountAddress) -> Self {
-        Self::new(address, account_sent_event_path())
+        Self::new(address, ACCOUNT_SENT_EVENT_PATH.to_vec())
     }
 
     /// Create an AccessPath to the event for the target account (the receiver)
@@ -462,7 +462,7 @@ impl AccessPath {
     /// That AccessPath can be used as a key into the event storage to retrieve all received
     /// events for a given account.
     pub fn new_for_received_event(address: AccountAddress) -> Self {
-        Self::new(address, account_received_event_path())
+        Self::new(address, ACCOUNT_RECEIVED_EVENT_PATH.to_vec())
     }
 
     pub fn resource_access_vec(tag: &StructTag, accesses: &Accesses) -> Vec<u8> {
@@ -568,7 +568,7 @@ impl fmt::Display for AccessPath {
                 f,
                 "data_path: {:?}",
                 self.data_path()
-            );
+            )?;
             write!(
                 f,
                 "suffix: {:?} }} ",

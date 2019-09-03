@@ -1,17 +1,16 @@
 use failure::prelude::*;
 use ir_to_bytecode::parser::{parse_program};
-use ir_to_bytecode::{compiler::compile_program, parser::ast};
+use ir_to_bytecode::{compiler::compile_program};
 use lazy_static::lazy_static;
 use stdlib::{
     stdlib_modules,
 };
-use types::transaction::{Script, TransactionArgument, Program};
+use types::transaction::{TransactionArgument, Program};
 use std::collections::HashMap;
 use types::account_config::coin_struct_tag;
 use types::account_address::AccountAddress;
 use types::language_storage::StructTag;
 use std::fmt::{Display, Formatter};
-use load_file::load_str;
 use include_dir::Dir;
 
 
@@ -113,7 +112,7 @@ fn compile_script(asset_folder:&str, op: &ChannelOp) -> Result<Vec<u8>>{
     let script_str = SCRIPTS_DIR.get_file(path.as_str()).and_then(|file|file.contents_utf8()).ok_or(format_err!("Can not find script by path:{}", path))?;
     let ast_program  = parse_program(script_str)?;
     let compiled_program =
-        compile_program(&AccountAddress::default(), &ast_program, stdlib_modules())?;
+        compile_program(AccountAddress::default(), ast_program, stdlib_modules())?;
     let mut script_bytes = vec![];
     compiled_program
         .script

@@ -11,12 +11,10 @@ use futures::{
 use crypto::HashValue;
 use logger::prelude::*;
 use failure::prelude::*;
-use types::transaction::{SignedTransaction, RawTransactionBytes};
+use types::transaction::{SignedTransaction};
 use crypto::hash::CryptoHash;
 use chain_client::{ChainClient, watch_stream::WatchResp};
 use types::account_address::AccountAddress;
-
-use proto_conv::IntoProtoBytes;
 
 
 pub struct SubmitTransactionFuture {
@@ -68,8 +66,7 @@ impl TransactionProcessor {
     }
 
     pub fn send_response(&self, mut txn: SignedTransaction) -> Result<()> {
-        let raw_tx_bytes = txn.clone().into_raw_transaction().clone().into_proto_bytes()?;
-        let hash = RawTransactionBytes(&raw_tx_bytes).hash();
+        let hash = txn.clone().into_raw_transaction().hash();
 
         match self.tx_map.get(&hash) {
             Some(tx) => {

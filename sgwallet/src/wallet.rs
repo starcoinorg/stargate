@@ -1,4 +1,3 @@
-use std::convert::TryFrom;
 use std::sync::{Arc,Mutex};
 
 use atomic_refcell::AtomicRefCell;
@@ -10,13 +9,13 @@ use tokio::{runtime::TaskExecutor};
 
 use chain_client::{ChainClient, RpcChainClient};
 use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
-use crypto::hash::CryptoHash;
+use crypto::hash::{CryptoHash, TestOnlyHasher, CryptoHasher};
 use crypto::SigningKey;
 use crypto::test_utils::KeyPair;
 use failure::prelude::*;
 use local_state_storage::LocalStateStorage;
 use local_vm::LocalVM;
-use star_types::{account_resource_ext, channel::SgChannelStream, transaction_output_helper};
+use star_types::{account_resource_ext, transaction_output_helper};
 use star_types::channel_transaction::{
     ChannelTransaction, TransactionOutput, TransactionOutputSigner,
 };
@@ -24,12 +23,11 @@ use star_types::resource::Resource;
 use state_store::{StateStore, StateViewPlus};
 use types::access_path::AccessPath;
 use types::account_address::AccountAddress;
-use types::account_config::{account_resource_path, AccountResource, coin_struct_tag};
+use types::account_config::{account_resource_path, AccountResource};
 use types::language_storage::StructTag;
-use types::transaction::{Program, RawTransaction, RawTransactionBytes, SignedTransaction, TransactionArgument, TransactionStatus};
+use types::transaction::{Program, RawTransaction, SignedTransaction, TransactionArgument, TransactionStatus};
 use types::transaction_helpers::TransactionSigner;
 use types::vm_error::*;
-use proto_conv::IntoProtoBytes;
 use logger::prelude::*;
 
 use {
@@ -245,8 +243,8 @@ impl<C> Wallet<C>
     }
 
     pub async fn submit_transaction(&self, signed_transaction: SignedTransaction) ->Result<SignedTransaction> {
-        let raw_tx_bytes = signed_transaction.clone().into_raw_transaction().clone().into_proto_bytes()?;
-        let tx_hash = RawTransactionBytes(&raw_tx_bytes).hash();
+        let raw_tx = signed_transaction.clone().into_raw_transaction();
+        let tx_hash = raw_tx.hash();
 
         let _resp = self.client.submit_transaction(signed_transaction)?;
 
@@ -261,8 +259,8 @@ impl<C> Wallet<C>
     }
 
     pub async fn submit_channel_transaction(&self, channel_transaction:ChannelTransaction) ->Result<SignedTransaction> {
-        let raw_tx_bytes = channel_transaction.clone().txn().clone().into_raw_transaction().clone().into_proto_bytes()?;
-        let tx_hash = RawTransactionBytes(&raw_tx_bytes).hash();
+        let raw_tx = channel_transaction.txn().clone().into_raw_transaction();
+        let tx_hash = raw_tx.hash();
 
         let _resp = self.client.submit_channel_transaction(channel_transaction)?;
 
@@ -294,7 +292,9 @@ impl<C> TransactionOutputSigner for Wallet<C>
     fn sign_txn_output(&self, txn_output: &TransactionOutput) -> Result<Ed25519Signature> {
         let bytes = transaction_output_helper::into_pb(txn_output.clone()).unwrap().write_to_bytes()?;
         //TODO use another hash.
-        let hash = RawTransactionBytes(&bytes).hash();
+        let mut hasher = TestOnlyHasher::default();
+        hasher.write(bytes.as_slice());
+        let hash = hasher.finish();
         let signature = self.keypair.private_key.sign_message(&hash);
         Ok(signature)
     }
