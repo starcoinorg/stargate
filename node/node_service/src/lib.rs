@@ -48,7 +48,7 @@ impl<C: ChainClient+Clone +Send+Sync+'static> NodeService<C> {
 impl<C: ChainClient+Clone +Send+Sync+'static> node_proto::proto::node_grpc::Node for NodeService<C> {
     fn open_channel(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::OpenChannelRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::OpenChannelResponse>){
         let request = OpenChannelRequest::from_proto(req).unwrap();
-        self.node.open_channel(coin_struct_tag(), request.remote_addr, request.local_amount,request.remote_amount).unwrap();
+        self.node.open_channel( request.remote_addr, request.local_amount,request.remote_amount).unwrap();
         let resp=OpenChannelResponse{}.into_proto();
         provide_grpc_response(Ok(resp),ctx,sink);
     }

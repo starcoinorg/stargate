@@ -12,7 +12,7 @@ use std::{collections::HashMap, path::Path};
 use types::{
     account_address::AccountAddress,
     proto::transaction::SignedTransaction as ProtoSignedTransaction,
-    transaction::{RawTransaction, RawTransactionBytes, SignedTransaction},
+    transaction::{RawTransaction, SignedTransaction},
     transaction_helpers::TransactionSigner,
 };
 use libra_crypto::traits::Uniform;
