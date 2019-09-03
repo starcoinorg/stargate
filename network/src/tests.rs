@@ -89,8 +89,8 @@ mod tests {
         ::logger::init_for_e2e_testing();
         let rt = Runtime::new().unwrap();
         let executor = rt.executor();
-        let ((service1, tx1, rx1),
-            (service2, tx2, rx2)) = build_test_network_pair(executor.clone());
+        let ((mut service1, tx1, rx1),
+            (mut service2, tx2, rx2)) = build_test_network_pair(executor.clone());
         let msg_peer_id = service1.identify();
         let sender_fut = Interval::new(Instant::now(), Duration::from_millis(10))
             .take(10)
@@ -107,9 +107,9 @@ mod tests {
 
         executor.clone().spawn(sender_fut);
         let task = Delay::new(Instant::now() + Duration::from_secs(2))
-            .and_then(|_| {
-                service1.shutdown();
-                service2.shutdown();
+            .and_then(move|_| {
+                drop(service1);
+                drop(service2);
                 Ok(())
             })
             .map_err(|e| panic!("delay errored; err={:?}", e));

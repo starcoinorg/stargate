@@ -24,7 +24,7 @@ pub struct Message {
 
 pub struct NetworkService {
     pub libp2p_service: Arc<Mutex<Libp2pService<Vec<u8>>>>,
-    close_tx: oneshot::Sender<()>,
+    close_tx: Option<oneshot::Sender<()>>,
 }
 
 pub fn build_network_service(
@@ -181,7 +181,7 @@ impl NetworkService {
         (
             Self {
                 libp2p_service,
-                close_tx,
+                close_tx: Some(close_tx),
             },
             network_sender,
             network_receiver,
@@ -195,8 +195,13 @@ impl NetworkService {
     pub fn identify(&self) -> AccountAddress {
         convert_peer_id_to_account_address(self.libp2p_service.lock().peer_id()).unwrap()
     }
-    pub fn shutdown(self) {
-        let _ = self.close_tx.send(());
+}
+
+impl Drop for NetworkService {
+    fn drop(&mut self) {
+        if let Some(sender) = self.close_tx.take() {
+            let _ = sender.send(());
+        }
     }
 }
 
