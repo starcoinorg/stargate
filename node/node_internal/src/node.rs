@@ -103,6 +103,10 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
         }
     }
 
+    pub fn channel_balance(&self,participant: AccountAddress, asset_tag: StructTag)->Result<u64>{
+        self.node_inner.clone().lock().unwrap().wallet.channel_balance(participant,asset_tag)
+    }
+
     pub fn shutdown(&self){
         self.event_sender.unbounded_send(Event::SHUTDOWN);
     }
