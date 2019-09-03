@@ -87,6 +87,10 @@ where
                     verified_txn: VerTxn::Script(main),
                 })
             }
+            TransactionPayload::Channel(channel_payload) => {
+                //TODO verify.
+                None
+            }
         };
 
         Ok(Self {

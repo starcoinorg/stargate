@@ -171,6 +171,10 @@ where
 
                 None
             }
+            TransactionPayload::Channel(channel_payload) => {
+                //TODO check channel_payload
+                None
+            }
         };
 
         Ok(Self { txn, txn_state })

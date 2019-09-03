@@ -199,6 +199,41 @@ where
                 }
             }
         }
+        TransactionPayload::Channel(channel_payload) => {
+            match channel_payload.script{
+                Some(script) => {
+                    let VerifiedTransactionState {
+                        mut txn_executor,
+                        verified_txn,
+                    } = txn_state.expect("script-based transactions should always have associated state");
+                    let main = match verified_txn {
+                        VerTxn::Script(func) => func,
+                        _ => unreachable!("TransactionPayload::Script expects VerTxn::Program"),
+                    };
+                    //Cache pre offchain tx write_set,then execute script.
+                    txn_executor.cache_write_set(&channel_payload.write_set);
+                    let (_, args) = script.into_inner();
+                    txn_executor.setup_main_args(args);
+                    match txn_executor.execute_function_impl(main) {
+                        Ok(Ok(_)) => txn_executor.transaction_cleanup(vec![]),
+                        Ok(Err(err)) => {
+                            warn!("[VM] User error running script: {:?}", err);
+                            txn_executor.failed_transaction_cleanup(Ok(Err(err)))
+                        }
+                        Err(err) => {
+                            error!("[VM] VM error running script: {:?}", err);
+                            ExecutedTransaction::discard_error_output(&err)
+                        }
+                    }
+                }
+                None => TransactionOutput::new(
+                    channel_payload.write_set,
+                    vec![],
+                    0,
+                    VMStatus::Execution(ExecutionStatus::Executed).into(),
+                )
+           }
+        }
     }
 }
 

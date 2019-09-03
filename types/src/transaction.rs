@@ -40,6 +40,7 @@ mod module;
 mod program;
 mod script;
 mod transaction_argument;
+mod channel_transaction_payload;
 
 #[cfg(test)]
 mod unit_tests;
@@ -50,6 +51,7 @@ use protobuf::well_known_types::UInt64Value;
 pub use script::Script;
 use std::ops::Deref;
 pub use transaction_argument::{parse_as_transaction_argument, TransactionArgument};
+pub use channel_transaction_payload::ChannelTransactionPayload;
 
 pub type Version = u64; // Height - also used for MVCC in StateDB
 
@@ -161,6 +163,24 @@ impl RawTransaction {
         }
     }
 
+    pub fn new_channel(
+        sender: AccountAddress,
+        sequence_number: u64,
+        channel_payload: ChannelTransactionPayload,
+        max_gas_amount: u64,
+        gas_unit_price: u64,
+        expiration_time: Duration,
+    ) -> Self {
+        RawTransaction {
+            sender,
+            sequence_number,
+            payload: TransactionPayload::Channel(channel_payload),
+            max_gas_amount,
+            gas_unit_price,
+            expiration_time,
+        }
+    }
+
     /// Signs the given `RawTransaction`. Note that this consumes the `RawTransaction` and turns it
     /// into a `SignatureCheckedTransaction`.
     ///
@@ -191,6 +211,8 @@ impl RawTransaction {
                 (get_transaction_name(script.code()), script.args())
             }
             TransactionPayload::Module(_) => ("module publishing".to_string(), &empty_vec[..]),
+            //TODO
+            TransactionPayload::Channel(_) => ("channel".to_string(), &empty_vec[..])
         };
         let mut f_args: String = "".to_string();
         for arg in args {
@@ -279,6 +301,8 @@ pub enum TransactionPayload {
     Module(Module),
     /// A transaction that executes code.
     Script(Script),
+    /// Channel transaction payload
+    Channel(ChannelTransactionPayload),
 }
 
 impl CanonicalSerialize for TransactionPayload {
@@ -299,6 +323,10 @@ impl CanonicalSerialize for TransactionPayload {
             TransactionPayload::Module(module) => {
                 serializer.encode_u32(TransactionPayloadType::Module as u32)?;
                 serializer.encode_struct(module)?;
+            }
+            TransactionPayload::Channel(channel_payload) => {
+                serializer.encode_u32(TransactionPayloadType::Channel as u32)?;
+                serializer.encode_struct(channel_payload)?;
             }
         };
         Ok(())
@@ -322,6 +350,9 @@ impl CanonicalDeserialize for TransactionPayload {
             Some(TransactionPayloadType::Module) => {
                 Ok(TransactionPayload::Module(deserializer.decode_struct()?))
             }
+            Some(TransactionPayloadType::Channel) => {
+                Ok(TransactionPayload::Channel(deserializer.decode_struct()?))
+            }
             None => Err(format_err!(
                 "ParseError: Unable to decode TransactionPayloadType, found {}",
                 decoded_payload_type
@@ -336,6 +367,7 @@ enum TransactionPayloadType {
     WriteSet = 1,
     Script = 2,
     Module = 3,
+    Channel = 4,
 }
 
 impl TransactionPayloadType {
@@ -345,6 +377,7 @@ impl TransactionPayloadType {
             1 => Some(TransactionPayloadType::WriteSet),
             2 => Some(TransactionPayloadType::Script),
             3 => Some(TransactionPayloadType::Module),
+            4 => Some(TransactionPayloadType::Channel),
             _ => None,
         }
     }

@@ -175,6 +175,9 @@ impl ChainService {
                         Some(())
                     });
                 }
+                TransactionPayload::Channel(channel_payload) => {
+                    //TODO
+                }
             }
 
             let mut wt_resp = WatchData::new();
