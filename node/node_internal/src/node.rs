@@ -124,6 +124,7 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
         loop{
             futures::select! {
                 message = receiver.select_next_some() => {
+                    info!("receive message ");
                     let data = bytes::Bytes::from(message.unwrap().msg);
                     let msg_type=parse_message_type(&data);
                     let node_inner=node_inner.lock().unwrap();
@@ -156,6 +157,7 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
             peer_id:*account_addr,
             msg:msg.to_vec(),
         };
+        info!("send message ");
         sender.unbounded_send(message);
     }
 
