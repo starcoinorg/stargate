@@ -22,9 +22,10 @@ pub struct Message {
     pub msg: Vec<u8>,
 }
 
+
 pub struct NetworkService {
     pub libp2p_service: Arc<Mutex<Libp2pService<Vec<u8>>>>,
-    close_tx: Option<oneshot::Sender<()>>,
+    pub close_tx: Option<oneshot::Sender<()>>,
 }
 
 pub fn build_network_service(
@@ -149,7 +150,10 @@ fn spawn_network(
 ) {
     let (network_sender, network_receiver, network_future) = run_network(libp2p_service);
     let fut = network_future
-        .select(close_rx.then(|_| Ok(())))
+        .select(close_rx.then(|_| {
+            debug!("Receive shutdown event");
+            Ok(())
+        }))
         .map(|(val, _)| val)
         .map_err(|(err, _)| ());
 
