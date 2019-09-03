@@ -15,7 +15,7 @@ impl Command for NodeCommand {
             Box::new(NodeCommandConnect {}),
             Box::new(NodeCommandOpenChannel {}),
             Box::new(NodeCommandPay {}),
-            Box::new(NodeCommandCloseChannel{}),
+            Box::new(NodeCommandWithdrawChannel{}),
         ];
 
         subcommand_execute(&params[0], commands, client, &params[1..]);
@@ -50,8 +50,13 @@ impl Command for NodeCommandOpenChannel {
     fn get_description(&self) -> &'static str {
         "open channel with remote addr"
     }
-    fn execute(&self, client: &mut ClientProxy, _params: &[&str]) {
-        println!(">> Open channel with remote addr");
+    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+        match client.open_channel(params,true) {
+            Ok(result) => println!(
+                "open channel success"),
+            Err(e) => report_error("Error pay account", e),
+
+        }
     }
 }
 
@@ -75,16 +80,21 @@ impl Command for NodeCommandPay {
     }
 }
 
-pub struct NodeCommandCloseChannel {}
+pub struct NodeCommandWithdrawChannel {}
 
-impl Command for NodeCommandCloseChannel {
+impl Command for NodeCommandWithdrawChannel {
     fn get_aliases(&self) -> Vec<&'static str> {
-        vec!["close channel ", "cc"]
+        vec!["withdraw", "wd"]
     }
     fn get_description(&self) -> &'static str {
-        "close channel with remote addr"
+        "withdraw money from channel"
     }
-    fn execute(&self, client: &mut ClientProxy, _params: &[&str]) {
-        println!(">> Close channel with remote addr");
+    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+        match client.off_chain_pay(params,true) {
+            Ok(result) => println!(
+                "withdraw success"),
+            Err(e) => report_error("Error pay account", e),
+
+        }
     }
 }
