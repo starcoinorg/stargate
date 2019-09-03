@@ -3,7 +3,7 @@ use crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
 };
-use futures::{future, stream::Stream, sync::mpsc, Async, Future, sync::oneshot, stream};
+use futures::{future, stream::Stream, sync::mpsc, Async, Future, sync::oneshot, stream, try_ready};
 use network_libp2p::{
     identity, start_service, NetworkConfiguration, NodeKeyConfig, PeerId, Secret,
     Service as Libp2pService, ServiceEvent,
@@ -70,6 +70,16 @@ fn run_network(
     let (mut _tx, net_rx) = mpsc::unbounded();
     let (net_tx, mut _rx) = mpsc::unbounded::<Message>();
     let net_srv_sender = net_srv.clone();
+    let net_srv_1 = net_srv.clone();
+    let connected_fut = future::poll_fn(move || {
+        match try_ready!(net_srv_1.lock().poll()) {
+            Some(ServiceEvent::OpenedCustomProtocol { peer_id, .. }) => {
+                debug!("Connected peer{}", peer_id);
+                Ok(Async::Ready(()))
+            }
+            _ => { panic!("No") }
+        }
+    });
 
     let network_fut = stream::poll_fn(move || net_srv.lock().poll()).for_each(
         move |event| {
@@ -123,6 +133,9 @@ fn run_network(
             Ok(())
         })
         .map_err(|(r, _, _)| r);
+
+    let futs = connected_fut.and_then(move |_| futs);
+
     (net_tx, net_rx, futs)
 }
 
