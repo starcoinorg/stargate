@@ -25,7 +25,7 @@ fn test_node_service_basic() {
     );
 
     let remote_addr = AccountAddress::random();
-    let open_channel_req = OpenChannelRequest::new(remote_addr);
+    let open_channel_req = OpenChannelRequest::new(remote_addr,1,1);
     let _response = node_client.open_channel(open_channel_req);
     node_server.shutdown().wait().unwrap();
 
