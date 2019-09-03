@@ -1,6 +1,6 @@
 use node_proto::{
     proto::{ node_grpc},
-    OpenChannelRequest,OpenChannelResponse,PayRequest,PayResponse,ConnectRequest,ConnectResponse,
+    OpenChannelRequest,OpenChannelResponse,PayRequest,PayResponse,ConnectRequest,ConnectResponse,WithdrawRequest,WithdrawResponse,
 };
 use failure::{bail, Result};
 use grpcio::{ChannelBuilder, Environment};
@@ -38,6 +38,14 @@ impl NodeClient {
         let proto_request = request.into_proto();
         match self.client.connect(&proto_request) {
             Ok(proto_response) => Ok(ConnectResponse::from_proto(proto_response)?),
+            Err(err) => bail!("GRPC error: {}", err),
+        }
+    }
+
+    pub fn withdraw(&self, request: WithdrawRequest) -> Result<WithdrawResponse> {
+        let proto_request = request.into_proto();
+        match self.client.withdraw(&proto_request) {
+            Ok(proto_response) => Ok(WithdrawResponse::from_proto(proto_response)?),
             Err(err) => bail!("GRPC error: {}", err),
         }
     }
