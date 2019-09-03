@@ -19,7 +19,7 @@ message OpenChannelNodeNegotiateMessage {
     ReceiveSignMessage receiver_sign = 3 ;
 }
 
-message OpenChannelTransactionMessage {
+message ChannelTransactionMessage {
     star_types.ChannelTransaction transaction = 1;
 }
 

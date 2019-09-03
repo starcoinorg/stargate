@@ -126,16 +126,16 @@ impl OffChainPayMessage {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq,FromProto, IntoProto)]
-#[ProtoType(crate::proto::message::OffChainPayMessage)]
-pub struct OpenChannelTransactionMessage {
+#[ProtoType(crate::proto::message::ChannelTransactionMessage)]
+pub struct ChannelTransactionMessage {
     pub transaction: ChannelTransaction,
 }
 
-impl OpenChannelTransactionMessage {
+impl ChannelTransactionMessage {
     pub fn new(
         transaction: ChannelTransaction,
     ) -> Self {
-        OpenChannelTransactionMessage {
+        ChannelTransactionMessage{
             transaction,
         }
     }
@@ -180,7 +180,7 @@ impl IntoProto for AddressMessage {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MessageType {
     OpenChannelNodeNegotiateMessage,
-    OpenChannelTransactionMessage,
+    ChannelTransactionMessage,
     OffChainPayMessage,
 }
 
@@ -189,7 +189,7 @@ impl MessageType {
     pub fn get_type(self)->u16{
         match self {
             MessageType::OpenChannelNodeNegotiateMessage => 1,
-            MessageType::OpenChannelTransactionMessage => 2,
+            MessageType::ChannelTransactionMessage => 2,
             MessageType::OffChainPayMessage => 3,
         }
     }
@@ -197,7 +197,7 @@ impl MessageType {
     pub fn from_type(msg_type:u16)->Result<Self>{
         match msg_type {
             1 => Ok(MessageType::OpenChannelNodeNegotiateMessage),
-            2 => Ok(MessageType::OpenChannelTransactionMessage),
+            2 => Ok(MessageType::ChannelTransactionMessage),
             3 => Ok(MessageType::OffChainPayMessage),
             _ => bail!("no such type"),
         }

@@ -74,8 +74,14 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
 
     pub fn open_channel(&self,asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64)->Result<()>{
         let channel_txn = self.node_inner.clone().lock().unwrap().wallet.fund(asset_tag,receiver,sender_amount,receiver_amount)?;
-        let open_channel_message = OpenChannelTransactionMessage::new(channel_txn);
-        self.node_inner.clone().lock().unwrap().open_channel(open_channel_message)
+        let open_channel_message = ChannelTransactionMessage::new(channel_txn);
+        self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message,MessageType::ChannelTransactionMessage)
+    }
+
+    pub fn withdraw(&self,asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64)->Result<()>{
+        let channel_txn = self.node_inner.clone().lock().unwrap().wallet.withdraw(asset_tag,receiver,sender_amount,receiver_amount)?;
+        let open_channel_message = ChannelTransactionMessage::new(channel_txn);
+        self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message,MessageType::ChannelTransactionMessage)
     }
 
     pub fn off_chain_pay(&self,coin_resource_tag: types::language_storage::StructTag, receiver_address: AccountAddress, amount: u64)->Result<()>{
@@ -113,7 +119,7 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
                     let node_inner=node_inner.lock().unwrap();
                     match msg_type {
                         MessageType::OpenChannelNodeNegotiateMessage => node_inner.handle_open_channel_negotiate(data[2..].to_vec()),
-                        MessageType::OpenChannelTransactionMessage => node_inner.handle_open_channel(data[2..].to_vec()),
+                        MessageType::ChannelTransactionMessage => node_inner.handle_channel(data[2..].to_vec()),
                         MessageType::OffChainPayMessage => node_inner.handle_off_chain_pay(data[2..].to_vec()),
                         _=>warn!("message type not found {:?}",msg_type),
                     };
@@ -157,11 +163,17 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
         }
     }
 
-    fn handle_open_channel(&self,data:Vec<u8>){
+    fn handle_channel(&self,data:Vec<u8>){
         debug!("handle_open_channel");
-        let open_channel_message = OpenChannelTransactionMessage::from_proto_bytes(&data).unwrap();
+        let open_channel_message = ChannelTransactionMessage::from_proto_bytes(&data).unwrap();
         if (&open_channel_message.transaction.receiver() == &self.wallet.get_address()){
-            // sign message ,verify messsage,send back
+            // sign message ,verify messsage,no send back
+            let wallet = self.wallet.clone();
+            let txn = &open_channel_message.transaction.clone();
+            let f=async move {
+                wallet.apply_txn(&txn).await;
+            };
+            f.boxed().unit_error().compat().wait();
         }
         if (&open_channel_message.transaction.txn().sender() == &self.wallet.get_address()) {
             if (open_channel_message.transaction.output_signatures().len()==2){
@@ -179,6 +191,7 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
         let local_addr =self.wallet.get_address();
         if (&raw_transaction.receiver() == &local_addr){
             // sign message ,verify messsage, execute tx local
+            debug!("off chain txn as receiver");
             let wallet = self.wallet.clone();
             let sender = self.sender.clone();
             let raw_transaction = raw_transaction.clone();
@@ -193,11 +206,12 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
         }
         if (&raw_transaction.txn().sender() == &local_addr) {
             debug!("receive feed back pay");
+            /**
             let wallet = self.wallet.clone();
             let f=async move {
                 wallet.apply_txn(&raw_transaction).await;
             };
-            f.boxed().unit_error().compat().wait();
+            f.boxed().unit_error().compat().wait();*/
             info!("tx succ");
         }
     }
@@ -210,14 +224,14 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
         Ok(())
     }
 
-    fn open_channel(&self,open_channel_message:OpenChannelTransactionMessage)->Result<()>{
+    fn channel_txn_onchain(&self,open_channel_message:ChannelTransactionMessage,msg_type:MessageType)->Result<()>{
         let wallet = self.wallet.clone();
         let sender = self.sender.clone();
         let f=async move {
             let txn = &open_channel_message.transaction.clone();
             wallet.apply_txn(&txn).await;
             let addr = &open_channel_message.transaction.receiver();
-            let msg = add_message_type(open_channel_message.into_proto_bytes().unwrap(), MessageType::OpenChannelTransactionMessage);
+            let msg = add_message_type(open_channel_message.into_proto_bytes().unwrap(), msg_type);
             Self::send_message(sender,addr,msg);
         };
         f.boxed().unit_error().compat().wait();
