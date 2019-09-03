@@ -122,13 +122,10 @@ impl ChainClient for RpcChainClient {
     }
 
     fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchStream<Self::WatchResp>> {
-        let watch_channel = ChannelBuilder::new(Arc::new(EnvBuilder::new().build())).connect(&self.conn_addr);
-        let watch_client = chain_grpc::ChainClient::new(watch_channel);
-
         //        let print_data = move || {
         let mut req = WatchTransactionRequest::new();
         req.set_address(address.to_vec());
-        let items_stream = watch_client.watch_transaction(&req).unwrap();
+        let items_stream = self.client.watch_transaction(&req).unwrap();
         Ok(WatchStream::new(items_stream))
         //            let f = items_stream.for_each(|item| {
         //                println!("received sign {:?}", item);
