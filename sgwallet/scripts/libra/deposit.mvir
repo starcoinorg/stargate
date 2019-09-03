@@ -1,0 +1,20 @@
+import 0x0.LibraAccount;
+import 0x0.LibraCoin;
+
+main(sender_amount:u64, receiver_amount:u64) {
+    let sender:address;
+    let receiver:address;
+    let sender_coin: LibraCoin.T;
+    let receiver_coin: LibraCoin.T;
+
+    sender = get_txn_sender();
+    receiver = get_txn_receiver();
+
+    sender_coin = LibraAccount.withdraw_from_sender(copy(sender_amount));
+    receiver_coin = LibraAccount.withdraw_from_receiver(copy(receiver_amount));
+
+    LibraCoin.deposit_to_channel(move(sender_coin), true);
+    LibraCoin.deposit_to_channel(move(receiver_coin), false);
+
+    return;
+}

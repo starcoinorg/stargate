@@ -60,7 +60,7 @@ fn node_test() -> Result<()> {
     node2.open_channel_negotiate(neg_msg);
 
     let fund_amount = 10000000;
-    node2.open_channel(coin_struct_tag(), addr1,fund_amount,fund_amount);
+    node2.open_channel(addr1,fund_amount,fund_amount);
 
     assert!(node2.channel_balance(addr1,coin_struct_tag()).unwrap()==fund_amount);
 

@@ -21,14 +21,20 @@ lazy_static! {
 }
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
 pub enum ChannelOp{
-    Fund,
+    Open,
+    Deposit,
     Transfer,
     Withdraw,
+    Close,
 }
 
 impl ChannelOp {
     pub fn values() -> Vec<ChannelOp>{
-        vec![ChannelOp::Fund, ChannelOp::Transfer, ChannelOp::Withdraw]
+        vec![ChannelOp::Open, ChannelOp::Deposit, ChannelOp::Transfer, ChannelOp::Withdraw, ChannelOp::Close]
+    }
+
+    pub fn asset_op_values() -> Vec<ChannelOp>{
+        vec![ChannelOp::Deposit, ChannelOp::Transfer, ChannelOp::Withdraw]
     }
 }
 
@@ -36,9 +42,11 @@ impl Display for ChannelOp{
 
     fn fmt(&self, f: &mut Formatter) -> ::std::fmt::Result {
         match self{
-            ChannelOp::Fund => write!(f, "fund"),
+            ChannelOp::Open => write!(f, "open"),
+            ChannelOp::Deposit => write!(f, "deposit"),
             ChannelOp::Transfer => write!(f, "transfer"),
             ChannelOp::Withdraw => write!(f, "withdraw"),
+            ChannelOp::Close => write!(f, "close"),
         }
     }
 }
@@ -86,30 +94,48 @@ impl AssetChannelScripts {
 }
 
 #[derive(Debug, Clone)]
-pub struct AssetScriptRegistry(HashMap<StructTag, AssetChannelScripts>);
+pub struct AssetScriptRegistry{
+    open_script: ScriptCode,
+    asset_scripts: HashMap<StructTag, AssetChannelScripts>,
+    close_script: ScriptCode,
+}
 
 impl AssetScriptRegistry {
 
     pub fn build() -> Result<Self>{
-        let mut registry = HashMap::new();
+        let mut asset_scripts = HashMap::new();
+        let open_script = compile_script("open.mvir")?;
         for (asset_folder, asset_tag) in ASSET_SCRIPT_FOLDERS.clone(){
             let mut scripts = HashMap::new();
-            for op in ChannelOp::values(){
-                let script = compile_script(asset_folder, &op)?;
+            for op in ChannelOp::asset_op_values(){
+                let path = format!("{}/{}.mvir", asset_folder, op);
+                let script = compile_script(path.as_str())?;
                 scripts.insert(op, ScriptCode::new(op,script));
             }
-            registry.insert(asset_tag, AssetChannelScripts::new(scripts));
+            asset_scripts.insert(asset_tag, AssetChannelScripts::new(scripts));
         }
-        Ok(Self(registry))
+        let close_script = compile_script("close.mvir")?;
+        Ok(Self{
+            open_script:ScriptCode::new(ChannelOp::Open, open_script),
+            asset_scripts,
+            close_script:ScriptCode::new(ChannelOp::Close, close_script),
+         })
     }
     pub fn get_scripts(&self, coin_tag: &StructTag) -> Option<&AssetChannelScripts> {
-        self.0.get(coin_tag)
+        self.asset_scripts.get(coin_tag)
+    }
+
+    pub fn open_script(&self) -> &ScriptCode {
+        &self.open_script
+    }
+
+    pub fn close_script(&self) -> &ScriptCode {
+        &self.close_script
     }
 }
 
-fn compile_script(asset_folder:&str, op: &ChannelOp) -> Result<Vec<u8>>{
-    let path = format!("{}/{}.mvir", asset_folder, op);
-    let script_str = SCRIPTS_DIR.get_file(path.as_str()).and_then(|file|file.contents_utf8()).ok_or(format_err!("Can not find script by path:{}", path))?;
+fn compile_script(path: &str) -> Result<Vec<u8>>{
+    let script_str = SCRIPTS_DIR.get_file(path).and_then(|file|file.contents_utf8()).ok_or(format_err!("Can not find script by path:{}", path))?;
     let ast_program  = parse_program(script_str)?;
     let compiled_program =
         compile_program(AccountAddress::default(), ast_program, stdlib_modules())?;

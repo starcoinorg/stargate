@@ -72,8 +72,8 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
         self.node_inner.clone().lock().unwrap().open_channel_negotiate(negotiate_message)
     }
 
-    pub fn open_channel(&self,asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64)->Result<()>{
-        let channel_txn = self.node_inner.clone().lock().unwrap().wallet.fund(asset_tag,receiver,sender_amount,receiver_amount)?;
+    pub fn open_channel(&self,receiver: AccountAddress, sender_amount: u64, receiver_amount: u64)->Result<()>{
+        let channel_txn = self.node_inner.clone().lock().unwrap().wallet.open(receiver,sender_amount,receiver_amount)?;
         let open_channel_message = ChannelTransactionMessage::new(channel_txn);
         self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message,MessageType::ChannelTransactionMessage)
     }
