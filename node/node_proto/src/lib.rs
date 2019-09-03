@@ -13,17 +13,21 @@ use proto_conv::{FromProto, IntoProto};
 #[ProtoType(crate::proto::node::OpenChannelRequest)]
 #[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct OpenChannelRequest {
-    pub remote_addr: AccountAddress,
+    pub remote_addr:AccountAddress,
+    pub local_amount:u64,
+    pub remote_amount:u64,
 }
 
 impl OpenChannelRequest {
-    pub fn new(
-        remote_addr: AccountAddress,
-    ) -> Self {
-        OpenChannelRequest {
+
+    pub fn new(remote_addr:AccountAddress,local_amount:u64,remote_amount:u64)->Self{
+        Self{
             remote_addr,
+            local_amount,
+            remote_amount,
         }
     }
+
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -142,3 +146,72 @@ impl ConnectResponse {
     }
 
 }
+
+#[derive(Clone, Debug, Eq, PartialEq,FromProto,IntoProto)]
+#[ProtoType(crate::proto::node::DepositRequest)]
+#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
+pub struct DepositRequest {
+    pub remote_addr:AccountAddress,
+    pub local_amount:u64,
+    pub remote_amount:u64,
+}
+
+impl DepositRequest {
+    pub fn new(remote_addr:AccountAddress,local_amount:u64,remote_amount:u64)->Self{
+        Self{
+            remote_addr,
+            local_amount,
+            remote_amount,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq,FromProto,IntoProto)]
+#[ProtoType(crate::proto::node::DepositResponse)]
+#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
+pub struct DepositResponse {
+}
+
+impl DepositResponse {
+    pub fn new(
+    ) -> Self {
+        Self {
+        }
+    }
+
+}
+
+#[derive(Clone, Debug, Eq, PartialEq,FromProto,IntoProto)]
+#[ProtoType(crate::proto::node::WithdrawRequest)]
+#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
+pub struct WithdrawRequest {
+    pub remote_addr:AccountAddress,
+    pub local_amount:u64,
+    pub remote_amount:u64,
+}
+
+impl WithdrawRequest {
+    pub fn new(remote_addr:AccountAddress,local_amount:u64,remote_amount:u64)->Self{
+        Self{
+            remote_addr,
+            local_amount,
+            remote_amount,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq,FromProto,IntoProto)]
+#[ProtoType(crate::proto::node::WithdrawResponse)]
+#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
+pub struct WithdrawResponse {
+}
+
+impl WithdrawResponse {
+    pub fn new(
+    ) -> Self {
+        Self {
+        }
+    }
+
+}
+

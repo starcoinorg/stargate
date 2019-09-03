@@ -2,15 +2,13 @@
 
 //use config::config::NodeConfig;
 use node_proto::{
-    OpenChannelRequest,OpenChannelResponse,PayRequest,PayResponse,ConnectRequest,ConnectResponse,
+    OpenChannelRequest,OpenChannelResponse,PayRequest,PayResponse,ConnectRequest,ConnectResponse,DepositRequest,DepositResponse,WithdrawRequest,WithdrawResponse,
     proto::node_grpc::create_node
 };
 use failure::Result;
 use futures01::future::Future;
 use futures03::{
     channel::oneshot,
-    future::{FutureExt, TryFutureExt},
-    io::{AsyncRead, AsyncWrite},
 };
 use grpc_helpers::{provide_grpc_response, spawn_service_thread_with_drop_closure, ServerHandle,default_reply_error_logger};
 use grpcio::{RpcStatus, RpcStatusCode,EnvBuilder};
@@ -49,7 +47,10 @@ impl<C: ChainClient+Clone +Send+Sync+'static> NodeService<C> {
 
 impl<C: ChainClient+Clone +Send+Sync+'static> node_proto::proto::node_grpc::Node for NodeService<C> {
     fn open_channel(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::OpenChannelRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::OpenChannelResponse>){
-        println!("open channel");
+        let request = OpenChannelRequest::from_proto(req).unwrap();
+        self.node.open_channel(coin_struct_tag(), request.remote_addr, request.local_amount,request.remote_amount).unwrap();
+        let resp=OpenChannelResponse{}.into_proto();
+        provide_grpc_response(Ok(resp),ctx,sink);
     }
 
     fn pay(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::PayRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::PayResponse>){
@@ -69,6 +70,21 @@ impl<C: ChainClient+Clone +Send+Sync+'static> node_proto::proto::node_grpc::Node
         let resp=ConnectResponse{}.into_proto();
         provide_grpc_response(Ok(resp),ctx,sink);
     }
+
+    fn deposit(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::DepositRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::DepositResponse>){
+        let request = DepositRequest::from_proto(req).unwrap();
+        //self.node.off_c(coin_struct_tag(), request.remote_addr, request.amount).unwrap();
+        let resp=DepositResponse{}.into_proto();
+        provide_grpc_response(Ok(resp),ctx,sink);
+    }
+
+    fn withdraw(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::WithdrawRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::WithdrawResponse>){
+        let request = WithdrawRequest::from_proto(req).unwrap();
+        self.node.withdraw(coin_struct_tag(), request.remote_addr, request.local_amount,request.remote_amount).unwrap();
+        let resp=WithdrawResponse{}.into_proto();
+        provide_grpc_response(Ok(resp),ctx,sink);
+    }
+
 }
 
 async fn process_response<T>(
