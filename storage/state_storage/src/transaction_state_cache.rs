@@ -41,7 +41,7 @@ impl<'a, R> TransactionStateCache<'a, R>
         });
 
         let cache = Self::new_cache(ver, account_vec, reader);
-        cache.apply_write_set(ws)?;
+        cache.apply_write_set(ws, 0)?;
 
         Self::apply_by_merkle_tree(genesis_flag, ver, cache.get_blobs(), reader)
     }
