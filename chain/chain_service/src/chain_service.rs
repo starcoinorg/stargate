@@ -108,10 +108,10 @@ impl ChainService {
         if !exist_flag {
             let state_db = self.state_db.lock().unwrap();
             let output = off_chain_tx.output();
-            let state_hash = state_db.apply_txn(&off_chain_tx).unwrap();
+            let state_hash = state_db.apply_txn(&off_chain_tx).expect("apply txn err.");
             let ver = tx_db.least_version();
             let event_hash = self.event_storage.borrow_mut().insert_events(ver + 1, off_chain_tx.output().events()).expect("insert events err.");
-            tx_db.insert_all(state_hash, event_hash, off_chain_tx.txn().clone());
+            tx_db.insert_tx(state_hash, event_hash, off_chain_tx.txn().clone());
 
             let event_lock = self.event_pub.lock().unwrap();
             output.events().iter().for_each(|e| {
@@ -160,7 +160,7 @@ impl ChainService {
 //                    let hash_root = tx_db.accumulator_append(tx_info);
 //                    tx_db.insert_ledger_info(hash_root);
 
-                    tx_db.insert_all(state_hash, HashValue::zero(), sign_tx.clone());
+                    tx_db.insert_tx(state_hash, HashValue::zero(), sign_tx.clone());
                 }
                 TransactionPayload::Program(_) | TransactionPayload::Module(_) | TransactionPayload::Script(_) => {
                     let state_db = self.state_db.lock().unwrap();
@@ -168,7 +168,7 @@ impl ChainService {
                     output_vec.pop().and_then(|output| {
                         let state_hash = state_db.apply_libra_output(&output).unwrap();
                         let event_hash = self.event_storage.borrow_mut().insert_events(ver + 1, output.events()).expect("insert event err.");
-                        tx_db.insert_all(state_hash, event_hash, sign_tx.clone());
+                        tx_db.insert_tx(state_hash, event_hash, sign_tx.clone());
                         let event_lock = self.event_pub.lock().unwrap();
                         output.events().iter().for_each(|e| {
                             let event = e.clone().into_proto();

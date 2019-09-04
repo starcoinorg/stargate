@@ -51,7 +51,7 @@ impl TransactionStorage {
         self.accumulator.append(vec![tx_info.hash()]).root_hash()
     }
 
-    pub fn insert_all(&mut self, state_hash: HashValue, event_hash: HashValue, sign_tx: SignedTransaction) -> Version {
+    pub fn insert_tx(&mut self, state_hash: HashValue, event_hash: HashValue, sign_tx: SignedTransaction) -> Version {
         let signed_tx_hash = sign_tx.clone().hash();
         let version = self.insert_signed_transaction(sign_tx.clone());
 
