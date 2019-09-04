@@ -38,6 +38,8 @@ bytecode_verifier = { path = "../../language/bytecode_verifier" }
 struct_cache = { path = "../../storage/struct_cache" }
 clap = "2.32"
 stdlib = { path = "../../language/stdlib" }
+accumulator = {path = "../../storage/accumulator" }
+atomic_refcell = "0.1.3"
 
 [dependencies.ed25519-dalek]
 version = "1.0.0-pre.1"

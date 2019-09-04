@@ -41,6 +41,8 @@ use core::borrow::Borrow;
 use proto_conv::{FromProto, IntoProto};
 use types::contract_event::ContractEvent;
 use types::event::EventKey;
+use super::event_storage::EventStorage;
+use atomic_refcell::AtomicRefCell;
 
 lazy_static! {
     static ref VM_CONFIG:VMConfig = VMConfig::onchain();
@@ -51,6 +53,7 @@ pub struct ChainService {
     sender: channel::Sender<TransactionInner>,
     state_db: Arc<Mutex<StateStorage>>,
     tx_db: Arc<Mutex<TransactionStorage>>,
+    event_storage: Arc<AtomicRefCell<EventStorage>>,
     tx_pub: Arc<Mutex<pub_sub::Pub<WatchData>>>,
     event_pub: Arc<Mutex<pub_sub::Pub<WatchData>>>,
 }
@@ -67,9 +70,10 @@ impl ChainService {
         let (tx_sender, mut tx_receiver) = channel::new(1_024, &gauge);
         let tx_db = Arc::new(Mutex::new(TransactionStorage::new()));
         let state_db = Arc::new(Mutex::new(StateStorage::new()));
+        let event_storage = Arc::new(AtomicRefCell::new(EventStorage::new()));
         let tx_pub = Arc::new(Mutex::new(pub_sub::Pub::new()));
         let event_pub = Arc::new(Mutex::new(pub_sub::Pub::new()));
-        let chain_service = ChainService { sender: tx_sender.clone(), state_db, tx_db, tx_pub, event_pub };
+        let chain_service = ChainService { sender: tx_sender.clone(), state_db, tx_db, event_storage, tx_pub, event_pub };
         let chain_service_clone = chain_service.clone();
 
         let receiver_future = async move {
@@ -105,7 +109,9 @@ impl ChainService {
             let state_db = self.state_db.lock().unwrap();
             let output = off_chain_tx.output();
             let state_hash = state_db.apply_txn(&off_chain_tx).unwrap();
-            tx_db.insert_all(state_hash, off_chain_tx.txn().clone());
+            let ver = tx_db.least_version();
+            let event_hash = self.event_storage.borrow_mut().insert_events(ver + 1, off_chain_tx.output().events()).expect("insert events err.");
+            tx_db.insert_all(state_hash, event_hash, off_chain_tx.txn().clone());
 
             let event_lock = self.event_pub.lock().unwrap();
             output.events().iter().for_each(|e| {
@@ -130,6 +136,7 @@ impl ChainService {
     fn apply_on_chain_transaction(&self, sign_tx: SignedTransaction) {
         let signed_tx_hash = sign_tx.borrow().hash();
         let mut tx_db = self.tx_db.lock().unwrap();
+        let ver = tx_db.least_version();
         let exist_flag = tx_db.exist_signed_transaction(signed_tx_hash);
         let mut watch_tx = WatchTxData::new();
         if !exist_flag {
@@ -139,6 +146,7 @@ impl ChainService {
                 TransactionPayload::WriteSet(ws) => {
                     let state_db = self.state_db.lock().unwrap();
                     let state_hash = state_db.apply_write_set(&ws).unwrap();
+                    // event hash
                     //let state_hash = SparseMerkleTree::default().root_hash();
 
 //                    // 2. add signed_tx
@@ -152,15 +160,15 @@ impl ChainService {
 //                    let hash_root = tx_db.accumulator_append(tx_info);
 //                    tx_db.insert_ledger_info(hash_root);
 
-                    tx_db.insert_all(state_hash, sign_tx.clone());
+                    tx_db.insert_all(state_hash, HashValue::zero(), sign_tx.clone());
                 }
                 TransactionPayload::Program(_) | TransactionPayload::Module(_) | TransactionPayload::Script(_) => {
                     let state_db = self.state_db.lock().unwrap();
                     let mut output_vec = MoveVM::execute_block(vec![sign_tx.clone()], &VM_CONFIG, &*state_db);
                     output_vec.pop().and_then(|output| {
                         let state_hash = state_db.apply_libra_output(&output).unwrap();
-                        tx_db.insert_all(state_hash, sign_tx.clone());
-
+                        let event_hash = self.event_storage.borrow_mut().insert_events(ver + 1, output.events()).expect("insert event err.");
+                        tx_db.insert_all(state_hash, event_hash, sign_tx.clone());
                         let event_lock = self.event_pub.lock().unwrap();
                         output.events().iter().for_each(|e| {
                             let event = e.clone().into_proto();
