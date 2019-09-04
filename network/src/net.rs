@@ -75,10 +75,10 @@ fn run_network(
     let connected_fut = future::poll_fn(move || {
         match try_ready!(net_srv_1.lock().poll()) {
             Some(ServiceEvent::OpenedCustomProtocol { peer_id, .. }) => {
-                debug!("Connected peer{}", peer_id);
+                debug!("Connected peer: {}", convert_peer_id_to_account_address(&peer_id).unwrap());
                 Ok(Async::Ready(()))
             }
-            _ => { panic!("No") }
+            _ => { panic!("Not hannpen") }
         }
     });
 
@@ -98,8 +98,8 @@ fn run_network(
                         convert_peer_id_to_account_address(&peer_id).unwrap()
                     );
                 }
-                ServiceEvent::ClosedCustomProtocol { peer_id: _, debug_info: _ } => {}
-                ServiceEvent::Clogged { peer_id: _, messages: _ } => {}
+                ServiceEvent::ClosedCustomProtocol { peer_id: _, debug_info: _ } => { debug!("Network close custom protol") }
+                ServiceEvent::Clogged { peer_id: _, messages: _ } => { debug!("Network clogged") }
             };
             Ok(())
         }

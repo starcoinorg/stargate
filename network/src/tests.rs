@@ -92,22 +92,28 @@ mod tests {
         let ((mut service1, tx1, rx1),
             (mut service2, tx2, rx2)) = build_test_network_pair(executor.clone());
         let msg_peer_id = service1.identify();
-        let sender_fut = Interval::new(Instant::now(), Duration::from_millis(10))
-            .take(10)
+        let mut count: u8 = 0;
+        let sender_fut = Interval::new(Instant::now(), Duration::from_millis(1000))
+            .take(3)
             .map_err(|e| ())
             .for_each(move |_| {
+                count += 1;
                 match tx2.unbounded_send(Message {
                     peer_id: msg_peer_id,
-                    msg: vec![1, 2],
+                    msg: vec![1, count],
                 }) {
                     Ok(()) => Ok(()),
                     Err(e) => Err(()),
                 }
             });
-
+        let receive_fut = rx1.for_each(|msg| {
+            println!("{:?}", msg);
+            Ok(())
+        });
+        executor.clone().spawn(receive_fut);
         executor.clone().spawn(sender_fut);
-        let task = Delay::new(Instant::now() + Duration::from_secs(2))
-            .and_then(move|_| {
+        let task = Delay::new(Instant::now() + Duration::from_secs(5))
+            .and_then(move |_| {
                 drop(service1);
                 drop(service2);
                 Ok(())
