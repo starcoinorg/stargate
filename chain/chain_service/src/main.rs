@@ -11,19 +11,19 @@ fn main() {
         .about("Tool to manage and create chain config")
         .arg(
             Arg::with_name(IP_ARG)
-            .short("i")
-            .long(IP_ARG)
-            .takes_value(true)
-            .default_value("127.0.0.1")
-            .help("ip"),
+                .short("i")
+                .long(IP_ARG)
+                .takes_value(true)
+                .default_value("127.0.0.1")
+                .help("ip"),
         ).arg(
-            Arg::with_name(PORT_ARG)
+        Arg::with_name(PORT_ARG)
             .short("p")
             .long(PORT_ARG)
             .takes_value(true)
             .default_value("3000")
             .help("port")
-        ).arg(
+    ).arg(
         Arg::with_name(SERVICE_NAME_ARG)
             .short("s")
             .long(SERVICE_NAME_ARG)

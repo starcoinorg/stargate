@@ -23,11 +23,11 @@ use star_types::{channel_transaction::ChannelTransaction,
                          chain::{LeastRootRequest, LeastRootResponse,
                                  FaucetRequest, FaucetResponse,
                                  GetAccountStateWithProofByStateRootRequest, GetAccountStateWithProofByStateRootResponse, Blob,
-                                 WatchTransactionRequest, WatchTransactionResponse,
+                                 WatchTransactionRequest,
                                  MempoolAddTransactionStatus, MempoolAddTransactionStatusCode,
                                  SubmitTransactionRequest, SubmitTransactionResponse,
                                  StateByAccessPathResponse, AccountResource,
-                                 WatchEventRequest, WatchEventResponse,
+                                 WatchEventRequest,
                                  GetTransactionByHashRequest, GetTransactionByHashResponse,
                                  WatchData, WatchTxData,
                          },
@@ -210,7 +210,7 @@ impl ChainService {
         let (sender, receiver) = unbounded::<WatchData>();
         let id = address.hash();
         let tx_lock = self.tx_pub.lock().unwrap();
-        tx_lock.subscribe(id, sender, Box::new(move |mut tx: WatchData| -> bool {
+        tx_lock.subscribe(id, sender, Box::new(move |tx: WatchData| -> bool {
             let signed_tx = SignedTransaction::from_proto(tx.get_tx().get_signed_txn().clone()).unwrap();
             signed_tx.sender() == address
         }));

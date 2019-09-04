@@ -5,12 +5,10 @@ use crypto::{
     HashValue,
 };
 use types::{
-    account_address::AccountAddress,
     contract_event::ContractEvent,
     event::EventKey,
     proof::{position::Position}, transaction::Version};
 use accumulator::{HashReader, MerkleAccumulator};
-use core::borrow::BorrowMut;
 
 type SeqNum = u64;
 type Key = (EventKey, SeqNum);
