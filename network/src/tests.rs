@@ -89,18 +89,18 @@ mod tests {
         ::logger::init_for_e2e_testing();
         let rt = Runtime::new().unwrap();
         let executor = rt.executor();
-        let ((mut service1, tx1, rx1),
-            (mut service2, tx2, rx2)) = build_test_network_pair(executor.clone());
+        let ((service1, tx1, rx1),
+            (service2, tx2, rx2)) = build_test_network_pair(executor.clone());
         let msg_peer_id = service1.identify();
-        let mut count: u8 = 0;
-        let sender_fut = Interval::new(Instant::now(), Duration::from_millis(1000))
+        // Once sender has been droped, the select_all will return directly. clone it to prevent it.
+        let tx22=tx2.clone();
+        let sender_fut = Interval::new(Instant::now(), Duration::from_millis(10))
             .take(3)
             .map_err(|e| ())
             .for_each(move |_| {
-                count += 1;
                 match tx2.unbounded_send(Message {
                     peer_id: msg_peer_id,
-                    msg: vec![1, count],
+                    msg: vec![1, 0],
                 }) {
                     Ok(()) => Ok(()),
                     Err(e) => Err(()),
@@ -112,7 +112,7 @@ mod tests {
         });
         executor.clone().spawn(receive_fut);
         executor.clone().spawn(sender_fut);
-        let task = Delay::new(Instant::now() + Duration::from_secs(5))
+        let task = Delay::new(Instant::now() + Duration::from_millis(100))
             .and_then(move |_| {
                 drop(service1);
                 drop(service2);

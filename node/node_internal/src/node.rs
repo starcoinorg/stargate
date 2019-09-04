@@ -136,9 +136,8 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
                     };
                 },
                 _ = event_receiver.select_next_some() => {
-                    debug!("shutdown node");
                     if let Some(sender) = net_close_tx{
-                       debug!("shutdown network");
+                       debug!("To shutdown network");
                        let _ = sender.send(());
                     }
                     break;

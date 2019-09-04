@@ -103,7 +103,11 @@ fn run_network(
             };
             Ok(())
         }
-    );
+    ).then(|_| {
+        debug!("Finish network poll");
+        Ok(())
+    });
+
     let protocol_fut = stream::poll_fn(move || _rx.poll()).for_each(
         move |message| {
             let peer_id = convert_account_address_to_peer_id(message.peer_id).unwrap();
@@ -118,14 +122,16 @@ fn run_network(
         }
     ).then(|res| {
         match res {
-            Ok(()) => (),
+            Ok(()) => {
+                debug!("Finish prototol poll");
+            }
             Err(_) => error!("protocol disconnected"),
         };
         Ok(())
     });
     let futures: Vec<Box<Future<Item=(), Error=io::Error> + Send>> = vec![
+        Box::new(network_fut) as Box<_>,
         Box::new(protocol_fut) as Box<_>,
-        Box::new(network_fut) as Box<_>
     ];
 
     let futs = futures::select_all(futures)
@@ -151,7 +157,7 @@ fn spawn_network(
     let (network_sender, network_receiver, network_future) = run_network(libp2p_service);
     let fut = network_future
         .select(close_rx.then(|_| {
-            debug!("Receive shutdown event");
+            debug!("Shutdown network");
             Ok(())
         }))
         .map(|(val, _)| val)
