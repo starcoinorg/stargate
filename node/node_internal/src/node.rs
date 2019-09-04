@@ -26,7 +26,7 @@ use state_storage::AccountState;
 use types::account_config::AccountResource;
 use star_types::system_event::Event;
 use types::language_storage::StructTag;
-use futures_01::future::Future;
+use futures_01::{future::Future, sync::oneshot};
 
 pub struct Node <C: ChainClient+Send+Sync+'static>{
     executor: TaskExecutor,
@@ -39,17 +39,19 @@ struct NodeInner<C: ChainClient+Send+Sync+'static> {
     executor:TaskExecutor,
     keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
     network_service:NetworkService,
+    network_service_close_tx: Option<oneshot::Sender<()>>,
     sender:UnboundedSender<Message>,
     receiver:Option<UnboundedReceiver<Message>>,
     event_receiver:Option<UnboundedReceiver<Event>>,
+
 }
 
 impl<C:ChainClient+Send+Sync+'static> Node<C>{
 
-    pub fn new(executor: TaskExecutor,wallet:Wallet<C>,keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
-               network_service:NetworkService,sender:UnboundedSender<Message>,receiver:UnboundedReceiver<Message>)->Self{
+    pub fn new(executor: TaskExecutor, wallet:Wallet<C>, keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
+               mut network_service:NetworkService, sender:UnboundedSender<Message>, receiver:UnboundedReceiver<Message>) ->Self{
         let executor_clone = executor.clone();
-
+        let net_close_tx= network_service.close_tx.take();
         let (event_sender, event_receiver) = futures_01::sync::mpsc::unbounded();
 
         let node_inner=NodeInner{
@@ -57,6 +59,7 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
             keypair,
             wallet:Arc::new(wallet),
             network_service,
+            network_service_close_tx: net_close_tx,
             sender,
             receiver:Some(receiver),
             event_receiver:Some(event_receiver),
@@ -108,6 +111,7 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
     }
 
     pub fn shutdown(&self){
+        debug!("node send shutdown event");
         self.event_sender.unbounded_send(Event::SHUTDOWN);
     }
 
@@ -115,9 +119,12 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
         info!("start receive message");
         let mut receiver = receiver.compat().fuse();
         let mut event_receiver = event_receiver.compat().fuse();
+        let net_close_tx = node_inner.clone().lock().unwrap().network_service_close_tx.take();
+
         loop{
             futures::select! {
                 message = receiver.select_next_some() => {
+                    info!("receive message ");
                     let data = bytes::Bytes::from(message.unwrap().msg);
                     let msg_type=parse_message_type(&data);
                     let node_inner=node_inner.lock().unwrap();
@@ -129,6 +136,11 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
                     };
                 },
                 _ = event_receiver.select_next_some() => {
+                    debug!("shutdown node");
+                    if let Some(sender) = net_close_tx{
+                       debug!("shutdown network");
+                       let _ = sender.send(());
+                    }
                     break;
                 }
             }
@@ -145,6 +157,7 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
             peer_id:*account_addr,
             msg:msg.to_vec(),
         };
+        info!("send message ");
         sender.unbounded_send(message);
     }
 
@@ -188,7 +201,7 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
         }
     }
 
-    fn handle_off_chain_pay(&self,data:Vec<u8>){ 
+    fn handle_off_chain_pay(&self,data:Vec<u8>){
         debug!("off chain pay");
         let off_chain_pay_message = OffChainPayMessage::from_proto_bytes(&data).unwrap();
         let raw_transaction = off_chain_pay_message.transaction.clone();
@@ -220,7 +233,7 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
         }
     }
 
-    fn open_channel_negotiate(&self,negotiate_message:OpenChannelNodeNegotiateMessage)->Result<()>{  
+    fn open_channel_negotiate(&self,negotiate_message:OpenChannelNodeNegotiateMessage)->Result<()>{
         let addr = negotiate_message.raw_negotiate_message.receiver_addr;
         let msg = negotiate_message.into_proto_bytes()?;
         let msg = add_message_type(msg, MessageType::OpenChannelNodeNegotiateMessage);
@@ -264,7 +277,7 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
 
 fn parse_message_type(data:&bytes::Bytes)->MessageType{
     let data_slice = &data[0..2];
-    let type_u16=u16::from_be_bytes([data_slice[0],data_slice[1]]);    
+    let type_u16=u16::from_be_bytes([data_slice[0],data_slice[1]]);
     MessageType::from_type(type_u16).unwrap()
 }
 

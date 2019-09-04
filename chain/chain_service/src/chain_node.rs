@@ -2,6 +2,7 @@ use grpc_helpers::spawn_service_thread;
 use super::chain_service::ChainService;
 use tokio::{runtime::{Runtime}};
 use futures::future::Future;
+use std::thread;
 
 pub struct ServiceConfig {
     pub service_name: String,
@@ -31,6 +32,8 @@ impl ChainNode {
         );
 
         println!("{}", "Started chain Service");
-        rt.shutdown_on_idle().wait().unwrap();
+        loop {
+            thread::park();
+        }
     }
 }
