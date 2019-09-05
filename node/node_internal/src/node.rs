@@ -192,11 +192,11 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
             f.boxed().unit_error().compat().wait();
         }
         if (&open_channel_message.transaction.txn().sender() == &self.wallet.get_address()) {
-            if (open_channel_message.transaction.output_signatures().len()==2){
-                // wallet open channel
-            }else {
-                debug!("sign should eq 2");
-            }
+//            if (open_channel_message.transaction.output_signatures().len()==2){
+//                // wallet open channel
+//            }else {
+//                debug!("sign should eq 2");
+//            }
         }
     }
 

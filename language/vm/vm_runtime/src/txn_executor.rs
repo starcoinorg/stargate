@@ -1026,12 +1026,17 @@ where
     ) -> VMRuntimeResult<TransactionOutput> {
         // This should only be used for bookkeeping. The gas is already deducted from the sender's
         // account in the account module's epilogue.
-        let gas: u64 = self
-            .txn_data
-            .max_gas_amount
-            .sub(self.gas_meter.remaining_gas())
-            .mul(self.txn_data.gas_unit_price)
-            .get();
+        let gas: u64 = match self.vm_mode {
+            VMMode::Onchain => {
+                self.txn_data
+                    .max_gas_amount
+                    .sub(self.gas_meter.remaining_gas())
+                    .mul(self.txn_data.gas_unit_price)
+                    .get()
+            }
+            VMMode::Offchain => 0
+        };
+
         let write_set = self.data_view.make_write_set(to_be_published_modules)?;
 
         Ok(TransactionOutput::new(
@@ -1046,6 +1051,14 @@ where
                 Err(ref err) => TransactionStatus::from(VMStatus::from(err)),
             },
         ))
+    }
+    /// Cache pre write_set then execute script, just for channel transaction.
+    pub fn cache_write_set(&mut self, write_set: &WriteSet){
+        self.data_view.cache_write_set(write_set);
+    }
+
+    pub fn vm_mode(&self) -> VMMode {
+        self.vm_mode
     }
 }
 

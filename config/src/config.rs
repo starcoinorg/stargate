@@ -906,7 +906,7 @@ impl NodeConfigHelpers {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Copy)]
+#[derive(Clone, Debug, Deserialize, Serialize, Copy, Eq, PartialEq)]
 #[serde(tag = "type")]
 pub enum VMMode{
     Onchain,

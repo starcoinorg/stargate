@@ -8,7 +8,7 @@ use star_types::resource::Resource;
 use std::collections::HashMap;
 use types::language_storage::StructTag;
 use failure::_core::cell::RefCell;
-use star_types::channel_transaction::{ChannelTransaction, TransactionOutput};
+use star_types::channel_transaction::{ChannelTransaction};
 use types::account_config::coin_struct_tag;
 
 pub trait StateViewPlus: StateView + StructDefResolve {
@@ -69,11 +69,11 @@ pub trait StateStore : StateViewPlus {
                         old_resources.push(self.get_resource(access_path)?.ok_or(format_err!("get resource by {:?} fail", access_path))?);
                     }
                 },
-                Changes::Value(value) => {},
+                Changes::Value(_) => {},
                 Changes::Fields(field_changes) => {
                     let old_resource = self.get_resource(access_path)?;
                     match old_resource {
-                        Some(mut old_resource) => {
+                        Some(old_resource) => {
                             let mut new_resource = old_resource.clone();
                             new_resource.apply_changes(field_changes)?;
                             new_resources.push(new_resource);
@@ -110,6 +110,51 @@ pub trait StateStore : StateViewPlus {
         Ok(())
     }
 
+    fn check_asset_balance_by_write_set(&self, write_set: &WriteSet, gas_used:u64) -> Result<()>{
+        let mut old_resources = vec![];
+        let mut new_resources = vec![];
+        for (access_path, op) in write_set {
+            debug!("check_asset_balance path:{:?} op:{:?}", access_path, op);
+            match op {
+                WriteOp::Deletion => {
+                    if !access_path.is_code() {
+                        old_resources.push(self.get_resource(access_path)?.ok_or(format_err!("get resource by {:?} fail", access_path))?);
+                    }
+                },
+                WriteOp::Value(value) => {
+                    if !access_path.is_code() {
+                        let tag = access_path.resource_tag().ok_or(format_err!("get resource tag from path fail."))?;
+                        let def = self.resolve(&tag)?;
+                        let new_resource = Resource::decode(tag, def, value.as_slice())?;
+                        new_resources.push(new_resource);
+                        if let Some(old_resource) = self.get_resource(access_path)?{
+                            old_resources.push(old_resource);
+                        }
+                    }
+                }
+            }
+        }
+        debug!("old resources {:?}", old_resources);
+        debug!("new resources {:?}", new_resources);
+        let old_assets = AssetCollector::new();
+        let new_assets = AssetCollector::new();
+        for resource in old_resources {
+            resource.visit_asset(&|tag,resource|{
+                old_assets.visitor(tag, resource)
+            })
+        }
+        for resource in new_resources {
+            resource.visit_asset(&|tag,resource|{
+                new_assets.visitor(tag, resource)
+            })
+        }
+        new_assets.incr(&coin_struct_tag(), gas_used);
+        debug!("old assets {:?}", old_assets);
+        debug!("new assets {:?}", new_assets);
+        ensure!(old_assets == new_assets, "old assets {:?} and new assets {:?} is not equals.");
+        Ok(())
+    }
+
     fn apply_change_set(&self, change_set: &ChangeSet, gas_used: u64) -> Result<()>{
         if !self.is_genesis() {
             self.check_asset_balance(change_set, gas_used)?;
@@ -120,8 +165,17 @@ pub trait StateStore : StateViewPlus {
         Ok(())
     }
 
-    fn apply_write_set(&self, write_set: &WriteSet) -> Result<()> {
-        self.apply_change_set(&self.write_set_to_change_set(write_set)?, 0)
+    fn apply_write_set(&self, write_set: &WriteSet, gas_used: u64) -> Result<()> {
+        if !self.is_genesis() {
+            self.check_asset_balance_by_write_set(write_set, gas_used)?;
+        }
+        for (access_path, op) in write_set {
+            match op {
+                WriteOp::Deletion => self.delete(access_path)?,
+                WriteOp::Value(value) => self.update(access_path, value.clone())?,
+            }
+        }
+        Ok(())
     }
 
     fn apply_changes(&self, access_path: &AccessPath, changes: &Changes) -> Result<()>{
@@ -176,16 +230,11 @@ pub trait StateStore : StateViewPlus {
     }
 
     fn apply_txn(&self, txn: &ChannelTransaction) -> Result<()> {
-        self.apply_output(txn.output())
-    }
-
-    fn apply_output(&self, txn_output: &TransactionOutput) -> Result<()> {
-        self.apply_change_set(txn_output.change_set(), txn_output.gas_used())?;
-        Ok(())
+        self.apply_write_set(&txn.witness_payload.write_set, 0)
     }
 
     fn apply_libra_output(&self, txn_output: &types::transaction::TransactionOutput) -> Result<()> {
-        self.apply_change_set(&self.write_set_to_change_set(txn_output.write_set())?, txn_output.gas_used())?;
+        self.apply_write_set(txn_output.write_set(), txn_output.gas_used())?;
         Ok(())
     }
 

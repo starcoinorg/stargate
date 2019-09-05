@@ -29,6 +29,8 @@ use vm::{
     file_format::{CompiledModule, CompiledScript},
 };
 use types::account_address::AccountAddress;
+use types::transaction::ChannelScriptPayload;
+use types::write_set::WriteSet;
 
 /// A transaction to be evaluated by the testing infra.
 /// Contains code and a transaction config.
@@ -177,19 +179,27 @@ fn make_script_transaction(
 
     let account = data.account();
     let account_resource = exec.read_account_resource(&account).unwrap();
-    let mut txn = RawTransaction::new_script(
-        *data.address(),
-        account_resource.sequence_number(),
-        script,
-        account_resource.balance(),
-        1,
-        Duration::from_secs(u64::max_value()),
-    )
-        .sign(&account.privkey, account.pubkey.clone())?
-        .into_inner();
-    if let Some(receiver) = receiver {
-        txn.set_receiver(receiver);
-    }
+    let mut txn = match receiver {
+        //TODO support channel sequence number
+        Some(receiver) => RawTransaction::new_channel_script(
+            *data.address(),
+            account_resource.sequence_number(),
+            ChannelScriptPayload::new(0, WriteSet::default(), receiver, script),
+            account_resource.balance(),
+            1,
+            Duration::from_secs(u64::max_value()),
+        ).sign(&account.privkey, account.pubkey.clone())?
+            .into_inner(),
+        None => RawTransaction::new_script(
+            *data.address(),
+            account_resource.sequence_number(),
+            script,
+            account_resource.balance(),
+            1,
+            Duration::from_secs(u64::max_value()),
+        ).sign(&account.privkey, account.pubkey.clone())?
+            .into_inner()
+    };
     Ok(txn)
 }
 
