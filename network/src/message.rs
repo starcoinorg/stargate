@@ -4,7 +4,13 @@ use parity_codec::{Encode, Decode};
 #[derive(Debug, PartialEq, Eq, Clone, Encode, Decode)]
 pub enum Message {
     Ack(Vec<u8>),
-    CustomData(Vec<u8>),
+    Payload(Payload),
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Encode, Decode)]
+pub struct Payload {
+    pub id: u64,
+    pub data: Vec<u8>,
 }
 
 impl CustomMessage for Message

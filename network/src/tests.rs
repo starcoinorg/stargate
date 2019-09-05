@@ -11,7 +11,7 @@ mod tests {
         stream::Stream,
         sync::mpsc::{UnboundedReceiver, UnboundedSender},
     };
-    //TODO: put them to network_libp2p.
+    
     use crate::{build_network_service, convert_account_address_to_peer_id, convert_peer_id_to_account_address, NetworkMessage, NetworkComponent, NetworkService, Message};
     use libp2p::multihash;
     use network_libp2p::{identity, NodeKeyConfig, PeerId, PublicKey, Secret, CustomMessage};
@@ -20,11 +20,12 @@ mod tests {
     use tokio::{prelude::Async, runtime::Runtime, runtime::TaskExecutor};
     use types::account_address::AccountAddress;
     use crate::helper::convert_boot_nodes;
+    use crate::message::Payload;
     use hex;
     use logger::prelude::*;
     use std::time::Instant;
     use tokio::timer::{Interval, Delay};
-    use crate::message::Message::CustomData;
+
 
     fn build_test_network_pair(executor: TaskExecutor) -> (NetworkComponent, NetworkComponent) {
         let mut l = build_test_network_services(2, 50400, executor).into_iter();
@@ -96,7 +97,7 @@ mod tests {
             .take(3)
             .map_err(|e| ())
             .for_each(move |_| {
-                let message = Message::CustomData(vec![1, 0]);
+                let message = Message::Payload(Payload { id: 10, data: vec![1, 0] });
                 match tx2.unbounded_send(NetworkMessage { peer_id: msg_peer_id, msg: message }) {
                     Ok(()) => Ok(()),
                     Err(e) => Err(()),

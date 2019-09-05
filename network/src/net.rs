@@ -15,6 +15,9 @@ use types::account_address::AccountAddress;
 use tokio::runtime::TaskExecutor;
 use logger::prelude::*;
 use crate::message::Message;
+use crate::message::Message::{Ack, Payload};
+use futures::sync::oneshot::{Canceled, Sender};
+use std::collections::HashMap;
 
 
 #[derive(Clone, Debug)]
@@ -23,10 +26,10 @@ pub struct NetworkMessage {
     pub msg: Message,
 }
 
-
 pub struct NetworkService {
     pub libp2p_service: Arc<Mutex<Libp2pService<Message>>>,
     pub close_tx: Option<oneshot::Sender<()>>,
+    acks: HashMap<u64, Sender<()>>,
 }
 
 pub fn build_network_service(
@@ -88,6 +91,15 @@ fn run_network(
             match event {
                 ServiceEvent::CustomMessage { peer_id, message } => {
                     debug!("Receive custom message");
+                    /*match message {
+                        CustomData(custom_data) => {
+                            //send ack msg.
+
+                        }
+                        Ack(ack) => {
+                            //poll back.
+                        }
+                    } */
                     let _ = _tx.unbounded_send(NetworkMessage {
                         peer_id: convert_peer_id_to_account_address(&peer_id).unwrap(),
                         msg: message,
@@ -189,10 +201,12 @@ impl NetworkService {
         for p in libp2p_service.lock().connected_peers() {
             info!("peer_id:{}", p);
         }
+
         (
             Self {
                 libp2p_service,
                 close_tx: Some(close_tx),
+                acks: HashMap::new(),
             },
             network_sender,
             network_receiver,
@@ -205,6 +219,12 @@ impl NetworkService {
 
     pub fn identify(&self) -> AccountAddress {
         convert_peer_id_to_account_address(self.libp2p_service.lock().peer_id()).unwrap()
+    }
+
+    pub fn send_message(&mut self, peer_id: &PeerId, message: Message) -> impl Future<Item=(), Error=Canceled> {
+        let (tx, rx) = oneshot::channel::<()>();
+        self.libp2p_service.lock().send_custom_message(peer_id, message);
+        rx
     }
 }
 
