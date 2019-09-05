@@ -7,7 +7,7 @@ use crypto::{
 use types::{
     contract_event::ContractEvent,
     event::EventKey,
-    proof::{position::Position}, transaction::Version};
+    proof::{position::Position, AccumulatorProof}, transaction::Version};
 use accumulator::{HashReader, MerkleAccumulator};
 
 type SeqNum = u64;
@@ -64,5 +64,10 @@ impl EventStorage {
         self.event_accumulator_store.insert(version as usize, hash_values);
 
         Ok(root_hash)
+    }
+
+    pub fn get_proof(ver: Version, event_index: Position) -> AccumulatorProof {
+        //TODO
+        unimplemented!()
     }
 }
