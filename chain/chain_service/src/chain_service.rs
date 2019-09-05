@@ -1,10 +1,10 @@
 use failure::prelude::*;
-use types::proto::access_path::AccessPath as ProtoAccessPath;
-use types::{account_config::association_address, transaction::{SignedTransaction, TransactionPayload, RawTransaction}, access_path::AccessPath, account_address::AccountAddress};
+use types::proto::{access_path::AccessPath as ProtoAccessPath, account_state_blob::{AccountStateBlob as AccountStateBlobProto, AccountStateWithProof}};
+use types::{proof::SparseMerkleProof, account_state_blob::AccountStateBlob, account_config::association_address, transaction::{SignedTransaction, TransactionPayload, RawTransaction}, access_path::AccessPath, account_address::AccountAddress};
 use futures::{sync::mpsc::{unbounded, UnboundedReceiver}, future::Future, sink::Sink, stream::Stream};
 use super::pub_sub;
 use grpcio::WriteFlags;
-use state_storage::StateStorage;
+use state_storage::{StateStorage, AccountState};
 use super::transaction_storage::TransactionStorage;
 use std::{sync::{Arc, Mutex}, time::Duration, convert::TryFrom};
 use crypto::{hash::CryptoHash, HashValue};
@@ -22,12 +22,12 @@ use star_types::{channel_transaction::ChannelTransaction,
                  proto::{chain_grpc::Chain,
                          chain::{LeastRootRequest, LeastRootResponse,
                                  FaucetRequest, FaucetResponse,
-                                 GetAccountStateWithProofByStateRootRequest, GetAccountStateWithProofByStateRootResponse, Blob,
-                                 WatchTransactionRequest, WatchTransactionResponse,
+                                 GetAccountStateWithProofRequest, GetAccountStateWithProofResponse, Blob,
+                                 WatchTransactionRequest,
                                  MempoolAddTransactionStatus, MempoolAddTransactionStatusCode,
                                  SubmitTransactionRequest, SubmitTransactionResponse,
                                  StateByAccessPathResponse, AccountResource,
-                                 WatchEventRequest, WatchEventResponse,
+                                 WatchEventRequest,
                                  GetTransactionByHashRequest, GetTransactionByHashResponse,
                                  WatchData, WatchTxData,
                          },
@@ -55,6 +55,7 @@ pub struct ChainService {
     sender: channel::Sender<TransactionInner>,
     state_db: Arc<Mutex<StateStorage>>,
     tx_db: Arc<Mutex<TransactionStorage>>,
+    event_storage: Arc<AtomicRefCell<EventStorage>>,
     tx_pub: Arc<Mutex<pub_sub::Pub<WatchData>>>,
     event_pub: Arc<Mutex<pub_sub::Pub<WatchData>>>,
 }
@@ -71,9 +72,10 @@ impl ChainService {
         let (tx_sender, mut tx_receiver) = channel::new(1_024, &gauge);
         let tx_db = Arc::new(Mutex::new(TransactionStorage::new()));
         let state_db = Arc::new(Mutex::new(StateStorage::new()));
+        let event_storage = Arc::new(AtomicRefCell::new(EventStorage::new()));
         let tx_pub = Arc::new(Mutex::new(pub_sub::Pub::new()));
         let event_pub = Arc::new(Mutex::new(pub_sub::Pub::new()));
-        let chain_service = ChainService { sender: tx_sender.clone(), state_db, tx_db, tx_pub, event_pub };
+        let chain_service = ChainService { sender: tx_sender.clone(), state_db, tx_db, event_storage, tx_pub, event_pub };
         let chain_service_clone = chain_service.clone();
 
         let receiver_future = async move {
@@ -110,7 +112,8 @@ impl ChainService {
             let write_set = off_chain_tx.witness_payload_write_set();
             let state_hash = state_db.apply_txn(&off_chain_tx).expect("apply txn err.");
             let ver = tx_db.least_version();
-            let event_hash = self.event_storage.borrow_mut().insert_events(ver + 1, vec![]).expect("insert events err.");
+            let output = TransactionOutput::new(write_set.clone(), vec![], 0 , VMStatus::Execution(ExecutionStatus::Executed).into());
+            let event_hash = self.event_storage.borrow_mut().insert_events(ver + 1, output.events()).expect("insert events err.");
             tx_db.insert_tx(state_hash, event_hash, off_chain_tx.txn().clone());
 
             let event_lock = self.event_pub.lock().unwrap();
@@ -118,7 +121,7 @@ impl ChainService {
 
             let mut wt_resp = WatchData::new();
             let mut watch_tx = WatchTxData::new();
-            let output = TransactionOutput::new(write_set.clone(), vec![], 0 , VMStatus::Execution(ExecutionStatus::Executed).into());
+
             let tx_output = transaction_output_helper::into_pb(output).unwrap();
             watch_tx.set_signed_txn(off_chain_tx.txn().clone().into_proto());
             watch_tx.set_output(tx_output);
@@ -132,6 +135,7 @@ impl ChainService {
     fn apply_on_chain_transaction(&self, sign_tx: SignedTransaction) {
         let signed_tx_hash = sign_tx.borrow().hash();
         let mut tx_db = self.tx_db.lock().unwrap();
+        let ver = tx_db.least_version();
         let exist_flag = tx_db.exist_signed_transaction(signed_tx_hash);
         let mut watch_tx = WatchTxData::new();
         if !exist_flag {
@@ -141,6 +145,7 @@ impl ChainService {
                 TransactionPayload::WriteSet(ws) => {
                     let state_db = self.state_db.lock().unwrap();
                     let state_hash = state_db.apply_write_set(&ws).unwrap();
+                    // event hash
                     //let state_hash = SparseMerkleTree::default().root_hash();
 
 //                    // 2. add signed_tx
