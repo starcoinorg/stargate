@@ -914,7 +914,6 @@ where
 					self.peerset_report_disconnect(id);
 				}
 				Ok(Async::Ready(None)) => {
-					error!(target: "sub-libp2p", "Peerset receiver stream has returned None");
 					break;
 				}
 				Ok(Async::NotReady) => break,

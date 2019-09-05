@@ -40,6 +40,7 @@ use crate::node::Node;
 #[test]
 fn node_test() -> Result<()> {
     ::logger::init_for_e2e_testing();
+    env_logger::init();
     let mut rt1 = Runtime::new().unwrap();
     let mut rt = Runtime::new().unwrap();
     let executor = rt.executor();

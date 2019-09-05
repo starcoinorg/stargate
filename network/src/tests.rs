@@ -87,6 +87,8 @@ mod tests {
     #[test]
     fn test_send_receive() {
         ::logger::init_for_e2e_testing();
+        env_logger::init();
+
         let rt = Runtime::new().unwrap();
         let executor = rt.executor();
         let ((service1, tx1, rx1),
