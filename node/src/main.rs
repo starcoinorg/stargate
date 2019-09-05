@@ -4,7 +4,7 @@ use chain_client::{RpcChainClient};
 use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
 use crypto::test_utils::KeyPair;
 use failure::*;
-use network::{build_network_service, NetworkService,Message};
+use network::{build_network_service, NetworkService, NetworkMessage};
 use node::client;
 use node_internal::node::Node;
 use node_service::setup_node_service;
@@ -69,7 +69,7 @@ fn gen_node(
     executor: TaskExecutor,
     keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
     wallet_config: &WalletConfig,
-    network_service: NetworkService,sender:UnboundedSender<Message>,receiver:UnboundedReceiver<Message>
+    network_service: NetworkService, sender:UnboundedSender<NetworkMessage>, receiver:UnboundedReceiver<NetworkMessage>
 ) -> (Node<RpcChainClient>) {
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     let client = RpcChainClient::new(

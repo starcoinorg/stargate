@@ -17,7 +17,7 @@ use logger::prelude::*;
 
 
 #[derive(Clone, Debug)]
-pub struct Message {
+pub struct NetworkMessage {
     pub peer_id: AccountAddress,
     pub msg: Vec<u8>,
 }
@@ -34,8 +34,8 @@ pub fn build_network_service(
     executor: TaskExecutor,
 ) -> (
     NetworkService,
-    mpsc::UnboundedSender<Message>,
-    mpsc::UnboundedReceiver<Message>,
+    mpsc::UnboundedSender<NetworkMessage>,
+    mpsc::UnboundedReceiver<NetworkMessage>,
 ) {
     let config = NetworkConfiguration {
         listen_addresses: vec![cfg.listen.parse().unwrap()],
@@ -64,12 +64,12 @@ fn build_libp2p_service(
 fn run_network(
     net_srv: Arc<Mutex<Libp2pService<Vec<u8>>>>,
 ) -> (
-    mpsc::UnboundedSender<Message>,
-    mpsc::UnboundedReceiver<Message>,
+    mpsc::UnboundedSender<NetworkMessage>,
+    mpsc::UnboundedReceiver<NetworkMessage>,
     impl Future<Item=(), Error=std::io::Error>,
 ) {
     let (mut _tx, net_rx) = mpsc::unbounded();
-    let (net_tx, mut _rx) = mpsc::unbounded::<Message>();
+    let (net_tx, mut _rx) = mpsc::unbounded::<NetworkMessage>();
     let net_srv_sender = net_srv.clone();
     let net_srv_1 = net_srv.clone();
     let connected_fut = future::poll_fn(move || {
@@ -87,7 +87,7 @@ fn run_network(
             match event {
                 ServiceEvent::CustomMessage { peer_id, message } => {
                     debug!("Receive custom message");
-                    let _ = _tx.unbounded_send(Message {
+                    let _ = _tx.unbounded_send(NetworkMessage {
                         peer_id: convert_peer_id_to_account_address(&peer_id).unwrap(),
                         msg: message,
                     });
@@ -151,8 +151,8 @@ fn spawn_network(
     executor: TaskExecutor,
     close_rx: oneshot::Receiver<()>,
 ) -> (
-    mpsc::UnboundedSender<Message>,
-    mpsc::UnboundedReceiver<Message>,
+    mpsc::UnboundedSender<NetworkMessage>,
+    mpsc::UnboundedReceiver<NetworkMessage>,
 ) {
     let (network_sender, network_receiver, network_future) = run_network(libp2p_service);
     let fut = network_future
@@ -175,8 +175,8 @@ impl NetworkService {
         executor: TaskExecutor,
     ) -> (
         NetworkService,
-        mpsc::UnboundedSender<Message>,
-        mpsc::UnboundedReceiver<Message>,
+        mpsc::UnboundedSender<NetworkMessage>,
+        mpsc::UnboundedReceiver<NetworkMessage>,
     ) {
         let (close_tx, close_rx) = oneshot::channel::<()>();
         let libp2p_service = build_libp2p_service(cfg).unwrap();
@@ -217,6 +217,6 @@ impl Drop for NetworkService {
 
 pub type NetworkComponent = (
     NetworkService,
-    mpsc::UnboundedSender<Message>,
-    mpsc::UnboundedReceiver<Message>,
+    mpsc::UnboundedSender<NetworkMessage>,
+    mpsc::UnboundedReceiver<NetworkMessage>,
 );

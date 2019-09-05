@@ -19,7 +19,7 @@ use failure::prelude::*;
 use std::{thread, time};
 use logger::prelude::*;
 use network::{
-    {NetworkService,Message}
+    {NetworkService, NetworkMessage}
 };
 use futures_01::sync::mpsc::{UnboundedSender,UnboundedReceiver};
 use state_storage::AccountState;
@@ -40,8 +40,8 @@ struct NodeInner<C: ChainClient+Send+Sync+'static> {
     keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
     network_service:NetworkService,
     network_service_close_tx: Option<oneshot::Sender<()>>,
-    sender:UnboundedSender<Message>,
-    receiver:Option<UnboundedReceiver<Message>>,
+    sender:UnboundedSender<NetworkMessage>,
+    receiver:Option<UnboundedReceiver<NetworkMessage>>,
     event_receiver:Option<UnboundedReceiver<Event>>,
 
 }
@@ -49,7 +49,7 @@ struct NodeInner<C: ChainClient+Send+Sync+'static> {
 impl<C:ChainClient+Send+Sync+'static> Node<C>{
 
     pub fn new(executor: TaskExecutor, wallet:Wallet<C>, keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
-               mut network_service:NetworkService, sender:UnboundedSender<Message>, receiver:UnboundedReceiver<Message>) ->Self{
+               mut network_service:NetworkService, sender:UnboundedSender<NetworkMessage>, receiver:UnboundedReceiver<NetworkMessage>) ->Self{
         let executor_clone = executor.clone();
         let net_close_tx= network_service.close_tx.take();
         let (event_sender, event_receiver) = futures_01::sync::mpsc::unbounded();
@@ -115,7 +115,7 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
         self.event_sender.unbounded_send(Event::SHUTDOWN);
     }
 
-    async fn start(node_inner:Arc<Mutex<NodeInner<C>>>,mut receiver:UnboundedReceiver<Message>,mut event_receiver:UnboundedReceiver<Event>){
+    async fn start(node_inner:Arc<Mutex<NodeInner<C>>>, mut receiver:UnboundedReceiver<NetworkMessage>, mut event_receiver:UnboundedReceiver<Event>){
         info!("start receive message");
         let mut receiver = receiver.compat().fuse();
         let mut event_receiver = event_receiver.compat().fuse();
@@ -151,8 +151,8 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
 
 impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
 
-    fn send_message(sender:UnboundedSender<Message>,account_addr:&AccountAddress,msg:bytes::Bytes){
-        let message = Message {
+    fn send_message(sender:UnboundedSender<NetworkMessage>, account_addr:&AccountAddress, msg:bytes::Bytes){
+        let message = NetworkMessage {
             peer_id:*account_addr,
             msg:msg.to_vec(),
         };

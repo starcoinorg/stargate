@@ -14,7 +14,7 @@ mod tests {
     //TODO: put them to network_libp2p.
     use crate::{
         build_network_service, convert_account_address_to_peer_id,
-        convert_peer_id_to_account_address, Message, NetworkComponent, NetworkService,
+        convert_peer_id_to_account_address, NetworkMessage, NetworkComponent, NetworkService,
     };
     use libp2p::multihash;
     use network_libp2p::{identity, NodeKeyConfig, PeerId, PublicKey, Secret};
@@ -41,13 +41,13 @@ mod tests {
         executor: TaskExecutor,
     ) -> Vec<(
         NetworkService,
-        UnboundedSender<Message>,
-        UnboundedReceiver<Message>,
+        UnboundedSender<NetworkMessage>,
+        UnboundedReceiver<NetworkMessage>,
     )> {
         let mut result: Vec<(
             NetworkService,
-            UnboundedSender<Message>,
-            UnboundedReceiver<Message>,
+            UnboundedSender<NetworkMessage>,
+            UnboundedReceiver<NetworkMessage>,
         )> = Vec::with_capacity(num);
         let mut first_addr = None::<String>;
         for index in 0..num {
@@ -98,7 +98,7 @@ mod tests {
             .take(3)
             .map_err(|e| ())
             .for_each(move |_| {
-                match tx2.unbounded_send(Message {
+                match tx2.unbounded_send(NetworkMessage {
                     peer_id: msg_peer_id,
                     msg: vec![1, 0],
                 }) {
