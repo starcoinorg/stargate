@@ -16,6 +16,7 @@ impl Command for NodeCommand {
             Box::new(NodeCommandOpenChannel {}),
             Box::new(NodeCommandPay {}),
             Box::new(NodeCommandWithdrawChannel{}),
+            Box::new(NodeCommandChannelBalance{}),
         ];
 
         subcommand_execute(&params[0], commands, client, &params[1..]);
@@ -93,6 +94,25 @@ impl Command for NodeCommandWithdrawChannel {
         match client.off_chain_pay(params,true) {
             Ok(result) => println!(
                 "withdraw success"),
+            Err(e) => report_error("Error pay account", e),
+
+        }
+    }
+}
+
+pub struct NodeCommandChannelBalance {}
+
+impl Command for NodeCommandChannelBalance {
+    fn get_aliases(&self) -> Vec<&'static str> {
+        vec!["channel balance ", "cb"]
+    }
+    fn get_description(&self) -> &'static str {
+        "get balance of channel"
+    }
+    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+        match client.channel_balance(params,true) {
+            Ok(result) => println!(
+                "balance is {}",result.balance),
             Err(e) => report_error("Error pay account", e),
 
         }
