@@ -25,7 +25,7 @@ use logger::prelude::*;
 use star_types::{account_resource_ext, transaction_output_helper};
 use star_types::change_set::ChangeSet;
 use star_types::channel_transaction::{
-    ChannelTransaction, TransactionOutput, TransactionOutputSigner,
+    ChannelTransaction,
 };
 use star_types::resource::Resource;
 use state_store::{StateStore, StateViewPlus};
@@ -33,13 +33,14 @@ use types::access_path::AccessPath;
 use types::account_address::AccountAddress;
 use types::account_config::{account_resource_path, AccountResource, coin_struct_tag};
 use types::language_storage::StructTag;
-use types::transaction::{Program, RawTransaction, SignedTransaction, TransactionArgument, TransactionStatus, ChannelScriptPayload, Script, TransactionPayload};
-use types::transaction_helpers::TransactionSigner;
+use types::transaction::{Program, RawTransaction, SignedTransaction, TransactionArgument, TransactionStatus, ChannelScriptPayload, Script, TransactionPayload, TransactionOutput, ChannelWriteSetPayload};
+use types::transaction_helpers::{TransactionSigner, ChannelPayloadSigner};
 use types::vm_error::*;
 
 use crate::scripts::*;
 use crate::transaction_processor::{start_processor, SubmitTransactionFuture, TransactionProcessor};
 use types::write_set::WriteSet;
+use std::collections::HashMap;
 
 lazy_static! {
     pub static ref DEFAULT_ASSET:StructTag = coin_struct_tag();
@@ -56,7 +57,8 @@ pub struct Wallet<C>
     vm: LocalVM<LocalStateStorage<C>>,
     script_registry: AssetScriptRegistry,
     txn_processor: Arc<Mutex<TransactionProcessor>>,
-    merged_change_set: Arc<AtomicRefCell<ChangeSet>>,
+    //TODO save write_sets with channel state.
+    witness_data: Arc<AtomicRefCell<HashMap<AccountAddress,(ChannelWriteSetPayload, Ed25519Signature)>>>,
 }
 
 impl<C> Wallet<C>
@@ -97,7 +99,7 @@ impl<C> Wallet<C>
             vm,
             script_registry,
             txn_processor: transaction_processor,
-            merged_change_set: Arc::new(AtomicRefCell::new(ChangeSet::empty())),
+            witness_data: Arc::new(AtomicRefCell::new(HashMap::new())),
         })
     }
 
@@ -105,15 +107,15 @@ impl<C> Wallet<C>
         DEFAULT_ASSET.clone()
     }
 
-    fn execute_transaction(&self, transaction: SignedTransaction) -> TransactionOutput {
-        let libra_output = self.vm.execute_transaction(transaction);
-        TransactionOutput::new(
-            self.storage.borrow().write_set_to_change_set(libra_output.write_set()).unwrap(),
-            libra_output.events().to_vec(),
-            //TODO offchain vm and onchain vm gas.
-            0,
-            libra_output.status().clone(),
-        )
+    fn execute_transaction(&self, transaction: SignedTransaction) -> Result<TransactionOutput> {
+        let output = self.vm.execute_transaction(transaction);
+        match output.status() {
+            TransactionStatus::Discard(vm_status) => bail!("transaction execute fail for: {:#?}", vm_status),
+            _ => {
+                //continue
+            }
+        };
+        Ok(output)
     }
 
     pub fn validate_transaction(&self, transaction: SignedTransaction) -> Option<VMStatus> {
@@ -132,16 +134,32 @@ impl<C> Wallet<C>
 
     fn execute_script(&self, script: &ScriptCode, receiver: AccountAddress, args: Vec<TransactionArgument>) -> Result<ChannelTransaction> {
         let program = script.encode_script(args);
-        let txn = self.create_signed_script_txn(receiver, program)?;
-        let output = self.execute_transaction(txn.clone());
-        match output.status() {
-            TransactionStatus::Discard(vm_status) => bail!("transaction execute fail for: {:#?}", vm_status),
-            _ => {
-                //continue
-            }
-        };
-        let output_signature = self.sign_txn_output(&output)?;
-        Ok(ChannelTransaction::new(txn, receiver, output, output_signature, self.merged_change_set.borrow().clone()))
+        //TODO read sequence number from channel state.
+        let channel_sequence_number = 0;
+        let txn = self.create_signed_script_txn(channel_sequence_number, receiver, program)?;
+        let output = self.execute_transaction(txn.clone())?;
+        //TODO handle travel txn
+        let write_set = output.write_set();
+        let witness_payload = ChannelWriteSetPayload::new(channel_sequence_number, write_set.clone(), receiver);
+        let signature = self.sign_write_set_payload(&witness_payload)?;
+        Ok(ChannelTransaction::new(txn, witness_payload, signature))
+    }
+
+    /// Verify channel participant's txn
+    pub fn verify_txn(&self, channel_txn: &ChannelTransaction) -> Result<ChannelTransaction> {
+        ensure!(channel_txn.receiver() == self.account_address, "check receiver fail.");
+        let mut txn = channel_txn.txn().clone();
+        let txn_signature = self.sign_script_payload(channel_txn.channel_script_payload().ok_or(format_err!("txn must be channel script txn."))?)?;
+        txn.set_receiver_public_key_and_signature(self.keypair.public_key.clone(), txn_signature);
+
+        let output = self.execute_transaction(txn.clone())?;
+        let write_set = output.write_set();
+        let sender_payload = channel_txn.witness_payload();
+        ensure!(write_set == &sender_payload.write_set, "check write_set fail.");
+        let witness_payload = ChannelWriteSetPayload::new(sender_payload.channel_sequence_number, write_set.clone(), channel_txn.sender());
+        let witness_signature = self.sign_write_set_payload(&witness_payload)?;
+
+        Ok(ChannelTransaction::new(txn, witness_payload, witness_signature))
     }
 
     /// Open channel and deposit default asset.
@@ -189,25 +207,43 @@ impl<C> Wallet<C>
         self.execute_script(self.script_registry.close_script(), receiver, vec![])
     }
 
-    fn clear_merged_change_set(&self) {
-        let mut change_set = self.merged_change_set.borrow_mut();
-        *change_set = ChangeSet::empty();
+    fn clear_witness_data(&self, participant: AccountAddress) {
+        let mut witness_data = self.witness_data.borrow_mut();
+        witness_data.remove(&participant);
     }
 
-    fn merge_change_set(&self, new_change_set: &ChangeSet) -> Result<()> {
-        let mut change_set = self.merged_change_set.borrow_mut();
-        *change_set = ChangeSet::merge(&*change_set, new_change_set)?;
-        Ok(())
+    fn get_witness_data(&self, participant: AccountAddress) -> Option<(ChannelWriteSetPayload,Ed25519Signature)> {
+        let witness_data = self.witness_data.borrow();
+        witness_data.get(&participant).cloned()
+    }
+
+    fn set_witness_data(&self, participant: AccountAddress, witness_payload: ChannelWriteSetPayload, witness_signature: Ed25519Signature){
+        let mut witness_data = self.witness_data.borrow_mut();
+        witness_data.insert(participant, (witness_payload, witness_signature));
     }
 
     pub async fn apply_txn(&self, txn: &ChannelTransaction) -> Result<()> {
+        let txn_sender = txn.txn().sender();
+        let witness_receiver = txn.witness_payload().receiver;
+        ensure!(witness_receiver == self.account_address, "unexpect witness_payload receiver: {}", witness_receiver);
+        let participant = if txn_sender == self.account_address {
+            txn.receiver()
+        }else{
+            txn.sender()
+        };
         //TODO verify signature
         if txn.is_travel_txn() {
-            self.submit_channel_transaction(txn.clone()).await?;
-            self.clear_merged_change_set();
+            // sender submit transaction to channel.
+            if txn_sender == self.account_address {
+                self.submit_channel_transaction(txn.clone()).await?;
+            }else{
+                //TODO receiver should watch chain response.
+            }
+            self.clear_witness_data(participant);
+            //TODO use chain response output.
             self.storage.borrow().apply_txn(txn)?;
         } else {
-            self.merge_change_set(txn.output().change_set())?;
+            self.set_witness_data(participant, txn.witness_payload.clone(), txn.witness_signature.clone());
             self.storage.borrow().apply_txn(txn)?;
         }
         Ok(())
@@ -263,10 +299,15 @@ impl<C> Wallet<C>
     /// Craft a transaction request.
     fn create_signed_script_txn(
         &self,
+        channel_sequence_number: u64,
         receiver: AccountAddress,
         script: Script,
     ) -> Result<SignedTransaction> {
-        let channel_script = ChannelScriptPayload::new(0, WriteSet::default(), receiver, script);
+        let write_set = match self.get_witness_data(receiver){
+            Some((payload,_)) => payload.write_set,
+            None => WriteSet::default(),
+        };
+        let channel_script = ChannelScriptPayload::new(channel_sequence_number, write_set, receiver, script);
         let mut txn = types::transaction_helpers::create_signed_payload_txn(
             self,
             TransactionPayload::ChannelScript(channel_script),
@@ -325,17 +366,11 @@ impl<C> TransactionSigner for Wallet<C>
     }
 }
 
-impl<C> TransactionOutputSigner for Wallet<C>
+impl<C> ChannelPayloadSigner for  Wallet<C>
     where
         C: ChainClient + Send + Sync + 'static,
 {
-    fn sign_txn_output(&self, txn_output: &TransactionOutput) -> Result<Ed25519Signature> {
-        let bytes = transaction_output_helper::into_pb(txn_output.clone()).unwrap().write_to_bytes()?;
-        //TODO use another hash.
-        let mut hasher = TestOnlyHasher::default();
-        hasher.write(bytes.as_slice());
-        let hash = hasher.finish();
-        let signature = self.keypair.private_key.sign_message(&hash);
-        Ok(signature)
+    fn sign_bytes(&self, bytes: Vec<u8>) -> Result<Ed25519Signature> {
+        self.keypair.sign_bytes(bytes)
     }
 }

@@ -41,6 +41,8 @@ use core::borrow::Borrow;
 use proto_conv::{FromProto, IntoProto};
 use types::contract_event::ContractEvent;
 use types::event::EventKey;
+use types::transaction::{TransactionOutput, TransactionStatus};
+use types::vm_error::{VMStatus, ExecutionStatus};
 
 lazy_static! {
     static ref VM_CONFIG:VMConfig = VMConfig::onchain();
@@ -103,21 +105,17 @@ impl ChainService {
         let exist_flag = tx_db.exist_signed_transaction(signed_tx_hash);
         if !exist_flag {
             let state_db = self.state_db.lock().unwrap();
-            let output = off_chain_tx.output();
+            let write_set = off_chain_tx.witness_payload_write_set();
             let state_hash = state_db.apply_txn(&off_chain_tx).unwrap();
             tx_db.insert_all(state_hash, off_chain_tx.txn().clone());
 
             let event_lock = self.event_pub.lock().unwrap();
-            output.events().iter().for_each(|e| {
-                let event = e.clone().into_proto();
-                let mut event_resp = WatchData::new();
-                event_resp.set_event(event);
-                event_lock.send(event_resp).unwrap();
-            });
+
 
             let mut wt_resp = WatchData::new();
             let mut watch_tx = WatchTxData::new();
-            let tx_output = transaction_output_helper::into_pb(output.clone()).unwrap();
+            let output = TransactionOutput::new(write_set.clone(), vec![], 0 , VMStatus::Execution(ExecutionStatus::Executed).into());
+            let tx_output = transaction_output_helper::into_pb(output).unwrap();
             watch_tx.set_signed_txn(off_chain_tx.txn().clone().into_proto());
             watch_tx.set_output(tx_output);
             wt_resp.set_tx(watch_tx);
@@ -169,8 +167,7 @@ impl ChainService {
                             event_lock.send(event_resp).unwrap();
                         });
 
-                        let star_output = state_db.change_output(&output).unwrap();
-                        watch_tx.set_output(transaction_output_helper::into_pb(star_output).unwrap());
+                        watch_tx.set_output(transaction_output_helper::into_pb(output).unwrap());
 
                         Some(())
                     });

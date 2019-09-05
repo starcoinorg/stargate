@@ -18,7 +18,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use crate::sparse_merkle::ProofRead;
 use atomic_refcell::AtomicRefCell;
-use star_types::channel_transaction::{ChannelTransaction, TransactionOutput};
+use star_types::channel_transaction::{ChannelTransaction};
 use types::account_config::{AccountResource, account_resource_path};
 use state_view::StateView;
 use logger::prelude::*;
@@ -223,7 +223,7 @@ impl StateStorage {
     }
 
     pub fn apply_txn(&self, txn: &ChannelTransaction) -> Result<HashValue> {
-        TransactionStateCache::apply_star_output_in_cache(self.is_genesis(), self.get_least_version(), txn.output(), self).and_then(|(root_hash, tree_update_batch)| -> Result<HashValue> {
+        TransactionStateCache::apply_write_set_in_cache(self.is_genesis(), self.get_least_version(), txn.witness_payload_write_set(), self).and_then(|(root_hash, tree_update_batch)| -> Result<HashValue> {
             self.store_merkle_node(tree_update_batch);
             self.next_version.fetch_add(1, Ordering::SeqCst);
             Ok(root_hash)
@@ -244,10 +244,6 @@ impl StateStorage {
             self.next_version.fetch_add(1, Ordering::SeqCst);
             Ok(root_hash)
         })
-    }
-
-    pub fn change_output(&self, txn_output: &types::transaction::TransactionOutput) -> Result<TransactionOutput> {
-        TransactionStateCache::change_libra_output_2_star_output(self.get_least_version(), txn_output, self)
     }
 
     fn store_merkle_node(&self, merkle_nodes: TreeUpdateBatch) {
@@ -324,7 +320,6 @@ impl StateView for StateStorage {
     }
 
     fn is_genesis(&self) -> bool {
-        debug!("is_genesis account_states {}", self.merkle_nodes.borrow().len());
         self.merkle_nodes.borrow().is_empty()
     }
 }
