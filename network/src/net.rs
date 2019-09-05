@@ -14,17 +14,18 @@ use std::{io, sync::Arc};
 use types::account_address::AccountAddress;
 use tokio::runtime::TaskExecutor;
 use logger::prelude::*;
+use crate::message::Message;
 
 
 #[derive(Clone, Debug)]
 pub struct NetworkMessage {
     pub peer_id: AccountAddress,
-    pub msg: Vec<u8>,
+    pub msg: Message,
 }
 
 
 pub struct NetworkService {
-    pub libp2p_service: Arc<Mutex<Libp2pService<Vec<u8>>>>,
+    pub libp2p_service: Arc<Mutex<Libp2pService<Message>>>,
     pub close_tx: Option<oneshot::Sender<()>>,
 }
 
@@ -53,8 +54,8 @@ pub fn build_network_service(
 
 fn build_libp2p_service(
     cfg: NetworkConfiguration,
-) -> Result<Arc<Mutex<Libp2pService<Vec<u8>>>>, io::Error> {
-    let protocol = network_libp2p::RegisteredProtocol::<Vec<u8>>::new(&b"tst"[..], &[1]);
+) -> Result<Arc<Mutex<Libp2pService<Message>>>, io::Error> {
+    let protocol = network_libp2p::RegisteredProtocol::<Message>::new(&b"tst"[..], &[1]);
     match start_service(cfg, protocol) {
         Ok((srv, _)) => Ok(Arc::new(Mutex::new(srv))),
         Err(err) => Err(err.into()),
@@ -62,7 +63,7 @@ fn build_libp2p_service(
 }
 
 fn run_network(
-    net_srv: Arc<Mutex<Libp2pService<Vec<u8>>>>,
+    net_srv: Arc<Mutex<Libp2pService<Message>>>,
 ) -> (
     mpsc::UnboundedSender<NetworkMessage>,
     mpsc::UnboundedReceiver<NetworkMessage>,
@@ -147,7 +148,7 @@ fn run_network(
 }
 
 fn spawn_network(
-    libp2p_service: Arc<Mutex<Libp2pService<Vec<u8>>>>,
+    libp2p_service: Arc<Mutex<Libp2pService<Message>>>,
     executor: TaskExecutor,
     close_rx: oneshot::Receiver<()>,
 ) -> (
