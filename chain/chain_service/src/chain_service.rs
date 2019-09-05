@@ -43,6 +43,8 @@ use types::contract_event::ContractEvent;
 use types::event::EventKey;
 use types::transaction::{TransactionOutput, TransactionStatus};
 use types::vm_error::{VMStatus, ExecutionStatus};
+use super::event_storage::EventStorage;
+use atomic_refcell::AtomicRefCell;
 
 lazy_static! {
     static ref VM_CONFIG:VMConfig = VMConfig::onchain();
@@ -106,8 +108,10 @@ impl ChainService {
         if !exist_flag {
             let state_db = self.state_db.lock().unwrap();
             let write_set = off_chain_tx.witness_payload_write_set();
-            let state_hash = state_db.apply_txn(&off_chain_tx).unwrap();
-            tx_db.insert_all(state_hash, off_chain_tx.txn().clone());
+            let state_hash = state_db.apply_txn(&off_chain_tx).expect("apply txn err.");
+            let ver = tx_db.least_version();
+            let event_hash = self.event_storage.borrow_mut().insert_events(ver + 1, vec![]).expect("insert events err.");
+            tx_db.insert_tx(state_hash, event_hash, off_chain_tx.txn().clone());
 
             let event_lock = self.event_pub.lock().unwrap();
 
@@ -150,15 +154,15 @@ impl ChainService {
 //                    let hash_root = tx_db.accumulator_append(tx_info);
 //                    tx_db.insert_ledger_info(hash_root);
 
-                    tx_db.insert_all(state_hash, sign_tx.clone());
+                    tx_db.insert_tx(state_hash, HashValue::zero(), sign_tx.clone());
                 }
                 TransactionPayload::Program(_) | TransactionPayload::Module(_) | TransactionPayload::Script(_) => {
                     let state_db = self.state_db.lock().unwrap();
                     let mut output_vec = MoveVM::execute_block(vec![sign_tx.clone()], &VM_CONFIG, &*state_db);
                     output_vec.pop().and_then(|output| {
                         let state_hash = state_db.apply_libra_output(&output).unwrap();
-                        tx_db.insert_all(state_hash, sign_tx.clone());
-
+                        let event_hash = self.event_storage.borrow_mut().insert_events(ver + 1, output.events()).expect("insert event err.");
+                        tx_db.insert_tx(state_hash, event_hash, sign_tx.clone());
                         let event_lock = self.event_pub.lock().unwrap();
                         output.events().iter().for_each(|e| {
                             let event = e.clone().into_proto();
@@ -205,7 +209,7 @@ impl ChainService {
         let (sender, receiver) = unbounded::<WatchData>();
         let id = address.hash();
         let tx_lock = self.tx_pub.lock().unwrap();
-        tx_lock.subscribe(id, sender, Box::new(move |mut tx: WatchData| -> bool {
+        tx_lock.subscribe(id, sender, Box::new(move |tx: WatchData| -> bool {
             let signed_tx = SignedTransaction::from_proto(tx.get_tx().get_signed_txn().clone()).unwrap();
             signed_tx.sender() == address
         }));
@@ -234,9 +238,20 @@ impl ChainService {
         self.tx_db.lock().unwrap().least_hash_root()
     }
 
-    pub fn get_account_state_with_proof_by_state_root_inner(&self, account_address: AccountAddress) -> Option<Vec<u8>> {
+    pub fn get_account_state_inner(&self, account_address: &AccountAddress, ver: Option<u64>) -> Option<Vec<u8>> {
         let state_db = self.state_db.lock().unwrap();
-        state_db.get_account_state(&account_address)
+        //TODO
+        match ver {
+            Some(version) => { state_db.get_account_state_by_version(version, account_address) }
+            None => {
+                state_db.get_account_state(account_address)
+            }
+        }
+    }
+
+    pub fn get_account_state_with_proof_inner(&self, account_address: &AccountAddress, ver: Option<u64>) -> Option<(u64, Option<AccountStateBlob>, SparseMerkleProof)> {
+        let state_db = self.state_db.lock().unwrap();
+        state_db.account_state_with_proof(ver, account_address)
     }
 
     pub fn state_by_access_path_inner(&self, account_address: AccountAddress, path: Vec<u8>) -> Result<Option<Vec<u8>>> {
@@ -307,18 +322,25 @@ impl Chain for ChainService {
         provide_grpc_response(resp, ctx, sink);
     }
 
-    fn get_account_state_with_proof_by_state_root(&mut self, ctx: ::grpcio::RpcContext,
-                                                  req: GetAccountStateWithProofByStateRootRequest,
-                                                  sink: ::grpcio::UnarySink<GetAccountStateWithProofByStateRootResponse>) {
+    fn get_account_state_with_proof(&mut self, ctx: ::grpcio::RpcContext,
+                                    req: GetAccountStateWithProofRequest,
+                                    sink: ::grpcio::UnarySink<GetAccountStateWithProofResponse>) {
         let resp = AccountAddress::try_from(req.get_address().to_vec()).and_then(|account_address| {
-            Ok(self.get_account_state_with_proof_by_state_root_inner(account_address))
-        }).and_then(|a_s_bytes| {
-            let mut get_resp = GetAccountStateWithProofByStateRootResponse::new();
-            match a_s_bytes {
-                Some(a_s) => {
-                    let mut blob = Blob::new();
-                    blob.set_blob(a_s);
-                    get_resp.set_account_state_blob(blob);
+            let ver = if req.has_ver() { Some(req.get_ver()) } else { None };
+            Ok(self.get_account_state_with_proof_inner(&account_address, ver))
+        }).and_then(|query| {
+            let mut get_resp = GetAccountStateWithProofResponse::new();
+            match query {
+                Some((v, a, p)) => {
+                    get_resp.set_version(v);
+                    get_resp.set_sparse_merkle_proof(p.into_proto());
+
+                    match a {
+                        Some(account) => {
+                            get_resp.set_account_state_blob(account.into_proto());
+                        }
+                        _ => {}
+                    }
                 }
                 None => {}
             };
@@ -529,5 +551,29 @@ mod tests {
         let state_db = chain_service.state_db.lock().unwrap();
         let exist_flag = state_db.exist_account(&receiver);
         assert_eq!(exist_flag, true);
+    }
+
+    #[test]
+    fn test_account_state_proof() {
+        let mut rt = Runtime::new().unwrap();
+        let chain_service = ChainService::new(&rt.executor());
+
+        let mut query_addr: AccountAddress = AccountAddress::random();
+        for i in 1..10 {
+            let receiver = AccountAddress::random();
+            if i == 5 {
+                query_addr = receiver.clone();
+            }
+            chain_service.faucet_inner(receiver, 100);
+        }
+
+        let proof = chain_service.get_account_state_with_proof_inner(&query_addr, Some(8));
+        match proof {
+            Some((v, a, b)) => {
+                println!("{:?}", query_addr.hash());
+                println!("{:?}", b);
+            }
+            None => {}
+        }
     }
 }

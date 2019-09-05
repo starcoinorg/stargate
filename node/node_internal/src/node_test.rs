@@ -78,7 +78,6 @@ fn node_test() -> Result<()> {
 
     node1.shutdown();
     node2.shutdown();
-
     debug!("here");
     rt.shutdown_on_idle().wait().unwrap();
     Ok(())

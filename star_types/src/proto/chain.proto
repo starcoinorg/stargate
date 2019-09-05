@@ -5,14 +5,15 @@ package chain;
 import "transaction.proto";
 import "events.proto";
 import "access_path.proto";
-import "proof.proto";
 import "channel_transaction.proto";
 import "transaction_output.proto";
+import "account_state_blob.proto";
+import "proof.proto";
 
 service Chain {
     rpc LeastStateRoot(LeastRootRequest) returns (LeastRootResponse);
     rpc Faucet(FaucetRequest) returns (FaucetResponse);
-    rpc GetAccountStateWithProofByStateRoot(GetAccountStateWithProofByStateRootRequest) returns (GetAccountStateWithProofByStateRootResponse);
+    rpc GetAccountStateWithProof(GetAccountStateWithProofRequest) returns (GetAccountStateWithProofResponse);
     rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse);
     rpc SubmitChannelTransaction(star_types.ChannelTransaction) returns (SubmitTransactionResponse);
     rpc WatchTransaction (WatchTransactionRequest) returns (stream WatchData);
@@ -67,13 +68,17 @@ message StateByAccessPathResponse {
     AccountResource account_resource = 1;
 }
 
-message GetAccountStateWithProofByStateRootRequest {
+message GetAccountStateWithProofRequest {
     bytes address = 1;
-    bytes state_root_hash = 2;
+    oneof version {
+        uint64 ver = 2;
+    }
 }
 
-message GetAccountStateWithProofByStateRootResponse {
-    Blob account_state_blob = 1;
+message GetAccountStateWithProofResponse {
+    uint64 version = 1;
+    types.AccountStateBlob account_state_blob = 2;
+    types.SparseMerkleProof sparse_merkle_proof = 3;
 }
 
 message WatchTransactionRequest {

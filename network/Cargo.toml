@@ -19,3 +19,4 @@ failure = {package = "failure_ext", path = "../common/failure_ext"}
 logger = { path = "../common/logger" }
 hex = { version = "0.3.2", default-features = false }
 parking_lot = "0.7.1"
+parity-codec = { version = "3.2", features = ["derive"] }

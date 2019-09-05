@@ -1,8 +1,11 @@
 use grpc_helpers::spawn_service_thread;
 use super::chain_service::ChainService;
-use tokio::{runtime::{Runtime}};
-use futures::future::Future;
-use std::thread;
+use tokio::{runtime::Runtime};
+use signal_hook;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 pub struct ServiceConfig {
     pub service_name: String,
@@ -32,8 +35,30 @@ impl ChainNode {
         );
 
         println!("{}", "Started chain Service");
-        loop {
-            thread::park();
+        do_exit();
+    }
+}
+
+fn do_exit() {
+    let term = Arc::new(AtomicBool::new(false));
+    for signal in &[
+        signal_hook::SIGTERM,
+        signal_hook::SIGINT,
+        signal_hook::SIGHUP,
+    ] {
+        let term_clone = Arc::clone(&term);
+        let thread = std::thread::current();
+        unsafe {
+            signal_hook::register(*signal, move || {
+                println!("{}", "server exit.");
+                term_clone.store(true, Ordering::Release);
+                thread.unpark();
+            })
+                .expect("failed to register signal handler");
         }
+    }
+
+    while !term.load(Ordering::Acquire) {
+        std::thread::park();
     }
 }

@@ -6,7 +6,7 @@ use std::str::FromStr;
 use crypto::HashValue;
 use star_types::{watch_tx_data::WatchTxData, proto::{chain::WatchData, channel_transaction::ChannelTransaction as ChannelTransactionProto, star_account::AccountState, chain::{GetTransactionByHashRequest, WatchEventRequest, EventKey as EventKeyProto}}, channel_transaction::ChannelTransaction, channel::SgChannelStream};
 use types::transaction::Version;
-use star_types::{proto::{chain_grpc, chain::{FaucetRequest, LeastRootRequest, GetAccountStateWithProofByStateRootRequest, SubmitTransactionRequest, WatchTransactionRequest, WatchTransactionResponse}}, resource::Resource};
+use star_types::{proto::{chain_grpc, chain::{FaucetRequest, LeastRootRequest, GetAccountStateWithProofRequest, SubmitTransactionRequest, WatchTransactionRequest, WatchTransactionResponse}}, resource::Resource};
 use grpcio::{EnvBuilder, ChannelBuilder};
 use std::{sync::Arc, thread};
 use proto_conv::IntoProto;
@@ -52,7 +52,7 @@ impl RpcChainClient {
         }
     }
 
-    pub fn get_account_state_with_proof_by_state_root(&self, address: &AccountAddress, state_root_hash: HashValue) -> Result<Option<Vec<u8>>> {
+    pub fn get_account_state_with_proof(&self, address: &AccountAddress, state_root_hash: HashValue) -> Result<Option<Vec<u8>>> {
         self.get_account_state(address)
     }
 }
@@ -67,18 +67,15 @@ impl ChainClient for RpcChainClient {
     }
 
     fn get_account_state(&self, address: &AccountAddress) -> Result<Option<Vec<u8>>> {
-        let mut req = GetAccountStateWithProofByStateRootRequest::new();
+        let mut req = GetAccountStateWithProofRequest::new();
         req.set_address(address.to_vec());
-        self.client.get_account_state_with_proof_by_state_root(&req).map_err(|e| {
+        self.client.get_account_state_with_proof(&req).map_err(|e| {
             format_err!("{:?}", e)
         }).and_then(|resp| {
-            let tmp = match resp.account_state_blob.into_option() {
-                Some(blob) => {
-                    Some(blob.blob)
-                }
-                _ => {
-                    None
-                }
+            let tmp = if resp.has_account_state_blob() {
+                Some(resp.get_account_state_blob().get_blob().to_vec())
+            } else {
+                None
             };
             Ok(tmp)
         })

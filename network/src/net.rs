@@ -17,7 +17,7 @@ use logger::prelude::*;
 
 
 #[derive(Clone, Debug)]
-pub struct Message {
+pub struct NetworkMessage {
     pub peer_id: AccountAddress,
     pub msg: Vec<u8>,
 }
@@ -34,8 +34,8 @@ pub fn build_network_service(
     executor: TaskExecutor,
 ) -> (
     NetworkService,
-    mpsc::UnboundedSender<Message>,
-    mpsc::UnboundedReceiver<Message>,
+    mpsc::UnboundedSender<NetworkMessage>,
+    mpsc::UnboundedReceiver<NetworkMessage>,
 ) {
     let config = NetworkConfiguration {
         listen_addresses: vec![cfg.listen.parse().unwrap()],
@@ -64,21 +64,21 @@ fn build_libp2p_service(
 fn run_network(
     net_srv: Arc<Mutex<Libp2pService<Vec<u8>>>>,
 ) -> (
-    mpsc::UnboundedSender<Message>,
-    mpsc::UnboundedReceiver<Message>,
+    mpsc::UnboundedSender<NetworkMessage>,
+    mpsc::UnboundedReceiver<NetworkMessage>,
     impl Future<Item=(), Error=std::io::Error>,
 ) {
     let (mut _tx, net_rx) = mpsc::unbounded();
-    let (net_tx, mut _rx) = mpsc::unbounded::<Message>();
+    let (net_tx, mut _rx) = mpsc::unbounded::<NetworkMessage>();
     let net_srv_sender = net_srv.clone();
     let net_srv_1 = net_srv.clone();
     let connected_fut = future::poll_fn(move || {
         match try_ready!(net_srv_1.lock().poll()) {
             Some(ServiceEvent::OpenedCustomProtocol { peer_id, .. }) => {
-                debug!("Connected peer{}", peer_id);
+                debug!("Connected peer: {}", convert_peer_id_to_account_address(&peer_id).unwrap());
                 Ok(Async::Ready(()))
             }
-            _ => { panic!("No") }
+            _ => { panic!("Not hannpen") }
         }
     });
 
@@ -87,7 +87,7 @@ fn run_network(
             match event {
                 ServiceEvent::CustomMessage { peer_id, message } => {
                     debug!("Receive custom message");
-                    let _ = _tx.unbounded_send(Message {
+                    let _ = _tx.unbounded_send(NetworkMessage {
                         peer_id: convert_peer_id_to_account_address(&peer_id).unwrap(),
                         msg: message,
                     });
@@ -98,12 +98,16 @@ fn run_network(
                         convert_peer_id_to_account_address(&peer_id).unwrap()
                     );
                 }
-                ServiceEvent::ClosedCustomProtocol { peer_id: _, debug_info: _ } => {}
-                ServiceEvent::Clogged { peer_id: _, messages: _ } => {}
+                ServiceEvent::ClosedCustomProtocol { peer_id: _, debug_info: _ } => { debug!("Network close custom protol") }
+                ServiceEvent::Clogged { peer_id: _, messages: _ } => { debug!("Network clogged") }
             };
             Ok(())
         }
-    );
+    ).then(|_| {
+        debug!("Finish network poll");
+        Ok(())
+    });
+
     let protocol_fut = stream::poll_fn(move || _rx.poll()).for_each(
         move |message| {
             let peer_id = convert_account_address_to_peer_id(message.peer_id).unwrap();
@@ -118,14 +122,16 @@ fn run_network(
         }
     ).then(|res| {
         match res {
-            Ok(()) => (),
+            Ok(()) => {
+                debug!("Finish prototol poll");
+            }
             Err(_) => error!("protocol disconnected"),
         };
         Ok(())
     });
     let futures: Vec<Box<Future<Item=(), Error=io::Error> + Send>> = vec![
+        Box::new(network_fut) as Box<_>,
         Box::new(protocol_fut) as Box<_>,
-        Box::new(network_fut) as Box<_>
     ];
 
     let futs = futures::select_all(futures)
@@ -145,13 +151,13 @@ fn spawn_network(
     executor: TaskExecutor,
     close_rx: oneshot::Receiver<()>,
 ) -> (
-    mpsc::UnboundedSender<Message>,
-    mpsc::UnboundedReceiver<Message>,
+    mpsc::UnboundedSender<NetworkMessage>,
+    mpsc::UnboundedReceiver<NetworkMessage>,
 ) {
     let (network_sender, network_receiver, network_future) = run_network(libp2p_service);
     let fut = network_future
         .select(close_rx.then(|_| {
-            debug!("Receive shutdown event");
+            debug!("Shutdown network");
             Ok(())
         }))
         .map(|(val, _)| val)
@@ -169,8 +175,8 @@ impl NetworkService {
         executor: TaskExecutor,
     ) -> (
         NetworkService,
-        mpsc::UnboundedSender<Message>,
-        mpsc::UnboundedReceiver<Message>,
+        mpsc::UnboundedSender<NetworkMessage>,
+        mpsc::UnboundedReceiver<NetworkMessage>,
     ) {
         let (close_tx, close_rx) = oneshot::channel::<()>();
         let libp2p_service = build_libp2p_service(cfg).unwrap();
@@ -211,6 +217,6 @@ impl Drop for NetworkService {
 
 pub type NetworkComponent = (
     NetworkService,
-    mpsc::UnboundedSender<Message>,
-    mpsc::UnboundedReceiver<Message>,
+    mpsc::UnboundedSender<NetworkMessage>,
+    mpsc::UnboundedReceiver<NetworkMessage>,
 );

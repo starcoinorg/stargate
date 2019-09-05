@@ -14,7 +14,7 @@ mod tests {
     //TODO: put them to network_libp2p.
     use crate::{
         build_network_service, convert_account_address_to_peer_id,
-        convert_peer_id_to_account_address, Message, NetworkComponent, NetworkService,
+        convert_peer_id_to_account_address, NetworkMessage, NetworkComponent, NetworkService,
     };
     use libp2p::multihash;
     use network_libp2p::{identity, NodeKeyConfig, PeerId, PublicKey, Secret};
@@ -41,13 +41,13 @@ mod tests {
         executor: TaskExecutor,
     ) -> Vec<(
         NetworkService,
-        UnboundedSender<Message>,
-        UnboundedReceiver<Message>,
+        UnboundedSender<NetworkMessage>,
+        UnboundedReceiver<NetworkMessage>,
     )> {
         let mut result: Vec<(
             NetworkService,
-            UnboundedSender<Message>,
-            UnboundedReceiver<Message>,
+            UnboundedSender<NetworkMessage>,
+            UnboundedReceiver<NetworkMessage>,
         )> = Vec::with_capacity(num);
         let mut first_addr = None::<String>;
         for index in 0..num {
@@ -89,25 +89,31 @@ mod tests {
         ::logger::init_for_e2e_testing();
         let rt = Runtime::new().unwrap();
         let executor = rt.executor();
-        let ((mut service1, tx1, rx1),
-            (mut service2, tx2, rx2)) = build_test_network_pair(executor.clone());
+        let ((service1, tx1, rx1),
+            (service2, tx2, rx2)) = build_test_network_pair(executor.clone());
         let msg_peer_id = service1.identify();
+        // Once sender has been droped, the select_all will return directly. clone it to prevent it.
+        let tx22=tx2.clone();
         let sender_fut = Interval::new(Instant::now(), Duration::from_millis(10))
-            .take(10)
+            .take(3)
             .map_err(|e| ())
             .for_each(move |_| {
-                match tx2.unbounded_send(Message {
+                match tx2.unbounded_send(NetworkMessage {
                     peer_id: msg_peer_id,
-                    msg: vec![1, 2],
+                    msg: vec![1, 0],
                 }) {
                     Ok(()) => Ok(()),
                     Err(e) => Err(()),
                 }
             });
-
+        let receive_fut = rx1.for_each(|msg| {
+            println!("{:?}", msg);
+            Ok(())
+        });
+        executor.clone().spawn(receive_fut);
         executor.clone().spawn(sender_fut);
-        let task = Delay::new(Instant::now() + Duration::from_secs(2))
-            .and_then(move|_| {
+        let task = Delay::new(Instant::now() + Duration::from_millis(100))
+            .and_then(move |_| {
                 drop(service1);
                 drop(service2);
                 Ok(())
