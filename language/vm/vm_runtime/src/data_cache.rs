@@ -18,8 +18,6 @@ use vm_runtime_types::{
     loaded_data::struct_def::StructDef,
     value::{GlobalRef, Local, MutVal, Reference, Value},
 };
-use std::rc::Rc;
-use std::cell::RefCell;
 
 /// The wrapper around the StateVersionView for the block.
 /// It keeps track of the value that have been changed during execution of a block.

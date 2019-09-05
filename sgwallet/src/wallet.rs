@@ -33,12 +33,13 @@ use types::access_path::AccessPath;
 use types::account_address::AccountAddress;
 use types::account_config::{account_resource_path, AccountResource, coin_struct_tag};
 use types::language_storage::StructTag;
-use types::transaction::{Program, RawTransaction, SignedTransaction, TransactionArgument, TransactionStatus};
+use types::transaction::{Program, RawTransaction, SignedTransaction, TransactionArgument, TransactionStatus, ChannelScriptPayload, Script, TransactionPayload};
 use types::transaction_helpers::TransactionSigner;
 use types::vm_error::*;
 
 use crate::scripts::*;
 use crate::transaction_processor::{start_processor, SubmitTransactionFuture, TransactionProcessor};
+use types::write_set::WriteSet;
 
 lazy_static! {
     pub static ref DEFAULT_ASSET:StructTag = coin_struct_tag();
@@ -130,8 +131,8 @@ impl<C> Wallet<C>
     }
 
     fn execute_script(&self, script: &ScriptCode, receiver: AccountAddress, args: Vec<TransactionArgument>) -> Result<ChannelTransaction> {
-        let program = script.encode_program(args);
-        let txn = self.create_signed_txn(receiver, program)?;
+        let program = script.encode_script(args);
+        let txn = self.create_signed_script_txn(receiver, program)?;
         let output = self.execute_transaction(txn.clone());
         match output.status() {
             TransactionStatus::Discard(vm_status) => bail!("transaction execute fail for: {:#?}", vm_status),
@@ -260,21 +261,21 @@ impl<C> Wallet<C>
     }
 
     /// Craft a transaction request.
-    fn create_signed_txn(
+    fn create_signed_script_txn(
         &self,
         receiver: AccountAddress,
-        program: Program,
+        script: Script,
     ) -> Result<SignedTransaction> {
-        let mut txn = types::transaction_helpers::create_signed_txn(
+        let channel_script = ChannelScriptPayload::new(0, WriteSet::default(), receiver, script);
+        let mut txn = types::transaction_helpers::create_signed_payload_txn(
             self,
-            program,
+            TransactionPayload::ChannelScript(channel_script),
             self.account_address,
             self.sequence_number(),
             Self::MAX_GAS_AMOUNT,
             Self::GAS_UNIT_PRICE,
             Self::TXN_EXPIRATION,
         )?;
-        txn.set_receiver(receiver);
         Ok(txn)
     }
 

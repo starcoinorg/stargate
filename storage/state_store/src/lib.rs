@@ -69,11 +69,11 @@ pub trait StateStore : StateViewPlus {
                         old_resources.push(self.get_resource(access_path)?.ok_or(format_err!("get resource by {:?} fail", access_path))?);
                     }
                 },
-                Changes::Value(value) => {},
+                Changes::Value(_) => {},
                 Changes::Fields(field_changes) => {
                     let old_resource = self.get_resource(access_path)?;
                     match old_resource {
-                        Some(mut old_resource) => {
+                        Some(old_resource) => {
                             let mut new_resource = old_resource.clone();
                             new_resource.apply_changes(field_changes)?;
                             new_resources.push(new_resource);

@@ -175,7 +175,10 @@ impl ChainService {
                         Some(())
                     });
                 }
-                TransactionPayload::Channel(channel_payload) => {
+                TransactionPayload::ChannelWriteSet(channel_write_set) => {
+                    //TODO
+                }
+                TransactionPayload::ChannelScript(channel_script) => {
                     //TODO
                 }
             }

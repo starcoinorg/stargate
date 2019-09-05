@@ -1051,6 +1051,10 @@ where
     pub fn cache_write_set(&mut self, write_set: &WriteSet){
         self.data_view.cache_write_set(write_set);
     }
+
+    pub fn vm_mode(&self) -> VMMode {
+        self.vm_mode
+    }
 }
 
 #[inline]

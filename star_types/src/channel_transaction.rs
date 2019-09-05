@@ -67,7 +67,7 @@ impl TransactionOutput {
                 return true;
             }
         }
-        return false;
+        return false
     }
 }
 

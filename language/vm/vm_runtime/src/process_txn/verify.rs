@@ -87,9 +87,21 @@ where
                     verified_txn: VerTxn::Script(main),
                 })
             }
-            TransactionPayload::Channel(channel_payload) => {
-                //TODO verify.
+            TransactionPayload::ChannelWriteSet(_chanel_write_set) => {
+                //TODO(jole) do more verify.
                 None
+            }
+            TransactionPayload::ChannelScript(channel_payload) => {
+                //TODO(jole) do more verify.
+                let txn_state = txn_state
+                    .expect("script-based transactions should always have associated state");
+
+                let main = Self::verify_script(&channel_payload.script, script_cache)?;
+
+                Some(VerifiedTransactionState {
+                    txn_executor: txn_state.txn_executor,
+                    verified_txn: VerTxn::Script(main),
+                })
             }
         };
 
