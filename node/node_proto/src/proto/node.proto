@@ -14,6 +14,8 @@ service Node {
     rpc Deposit(DepositRequest) returns (DepositResponse) {}
 
     rpc Withdraw(WithdrawRequest) returns (WithdrawResponse) {}
+
+    rpc ChannelBalance(ChannelBalanceRequest) returns (ChannelBalanceResponse) {}
 }
   
 message OpenChannelRequest {
@@ -70,4 +72,12 @@ message SendOffLineTxRequest{
 
 message SendOffLineTxResponse {
 
+}
+
+message ChannelBalanceRequest{
+    bytes remote_addr=1;
+}
+
+message ChannelBalanceResponse{
+        uint64 balance=1;        
 }

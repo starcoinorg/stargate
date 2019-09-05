@@ -215,3 +215,32 @@ impl WithdrawResponse {
 
 }
 
+#[derive(Clone, Debug, Eq, PartialEq,FromProto,IntoProto)]
+#[ProtoType(crate::proto::node::ChannelBalanceRequest)]
+#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
+pub struct ChannelBalanceRequest {
+    pub remote_addr:AccountAddress,
+}
+
+impl ChannelBalanceRequest {
+    pub fn new(remote_addr:AccountAddress)->Self{
+        Self{
+            remote_addr,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq,FromProto,IntoProto)]
+#[ProtoType(crate::proto::node::ChannelBalanceResponse)]
+#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
+pub struct ChannelBalanceResponse {
+    pub balance:u64,
+}
+
+impl ChannelBalanceResponse {
+    pub fn new(balance:u64)->Self{
+        Self{
+            balance,
+        }
+    }
+}

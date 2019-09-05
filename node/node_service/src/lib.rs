@@ -2,7 +2,7 @@
 
 //use config::config::NodeConfig;
 use node_proto::{
-    OpenChannelRequest,OpenChannelResponse,PayRequest,PayResponse,ConnectRequest,ConnectResponse,DepositRequest,DepositResponse,WithdrawRequest,WithdrawResponse,
+    OpenChannelRequest,OpenChannelResponse,PayRequest,PayResponse,ConnectRequest,ConnectResponse,DepositRequest,DepositResponse,WithdrawRequest,WithdrawResponse,ChannelBalanceRequest,ChannelBalanceResponse,
     proto::node_grpc::create_node
 };
 use failure::Result;
@@ -82,6 +82,13 @@ impl<C: ChainClient+Clone +Send+Sync+'static> node_proto::proto::node_grpc::Node
         let request = WithdrawRequest::from_proto(req).unwrap();
         self.node.withdraw(coin_struct_tag(), request.remote_addr, request.local_amount,request.remote_amount).unwrap();
         let resp=WithdrawResponse{}.into_proto();
+        provide_grpc_response(Ok(resp),ctx,sink);
+    }
+
+    fn channel_balance(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::ChannelBalanceRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::ChannelBalanceResponse>){
+        let request = ChannelBalanceRequest::from_proto(req).unwrap();
+        let balance=self.node.channel_balance(request.remote_addr,coin_struct_tag()).unwrap();
+        let resp=ChannelBalanceResponse::new(balance).into_proto();
         provide_grpc_response(Ok(resp),ctx,sink);
     }
 
