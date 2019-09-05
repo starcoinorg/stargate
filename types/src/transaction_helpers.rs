@@ -16,7 +16,7 @@ use crypto::{
     HashValue,
 };
 use failure::prelude::*;
-use crate::transaction::{ChannelScriptPayload, TransactionPayload};
+use crate::transaction::{ChannelScriptPayload, TransactionPayload, ChannelWriteSetPayload};
 use crypto::hash::{TestOnlyHasher, CryptoHasher};
 
 /// Used to get the digest of a set of signed transactions.  This is used by a validator
@@ -74,7 +74,11 @@ pub trait TransactionSigner {
 
 pub trait ChannelPayloadSigner {
 
-    fn sign_channel_payload(&self, channel_payload:&ChannelScriptPayload) -> Result<Ed25519Signature>{
+    fn sign_script_payload(&self, channel_payload:&ChannelScriptPayload) -> Result<Ed25519Signature>{
+        self.sign_bytes(SimpleSerializer::serialize(channel_payload)?)
+    }
+
+    fn sign_write_set_payload(&self, channel_payload:&ChannelWriteSetPayload) -> Result<Ed25519Signature>{
         self.sign_bytes(SimpleSerializer::serialize(channel_payload)?)
     }
 

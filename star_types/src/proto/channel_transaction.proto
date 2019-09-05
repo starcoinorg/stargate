@@ -2,14 +2,6 @@ syntax = "proto3";
 
 package star_types;
 
-import "change_set.proto";
-import "transaction.proto";
-import "transaction_output.proto";
-
 message ChannelTransaction {
-    bytes receiver = 1;
-    types.SignedTransaction transaction = 2;
-    TransactionOutput transaction_output= 3;
-    repeated bytes output_signatures = 4;
-    ChangeSet merged_change_set = 5;
+    bytes payload = 1;
 }

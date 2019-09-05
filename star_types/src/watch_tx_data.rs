@@ -1,5 +1,5 @@
-use super::{channel_transaction::TransactionOutput, transaction_output_helper};
-use types::transaction::SignedTransaction;
+use super::{transaction_output_helper};
+use types::transaction::{SignedTransaction, TransactionOutput};
 use proto_conv::FromProto;
 use failure::prelude::*;
 use core::borrow::Borrow;
@@ -12,11 +12,11 @@ pub struct WatchTxData {
 
 impl WatchTxData {
     pub fn get_signed_tx(&self) -> &SignedTransaction {
-        return self.signed_tx.borrow();
+        return self.signed_tx.borrow()
     }
 
     pub fn get_output(&self) -> &Option<TransactionOutput> {
-        return self.output.borrow();
+        return self.output.borrow()
     }
 }
 

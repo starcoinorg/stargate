@@ -8,7 +8,7 @@ import "events.proto";
 import "vm_errors.proto";
 
 message TransactionOutput {
-    ChangeSet change_set = 1;
+    bytes write_set = 1;
     repeated types.Event events = 2;
     uint64 gas_used = 3;
     TransactionStatus status = 4;

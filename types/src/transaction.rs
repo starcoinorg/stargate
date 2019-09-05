@@ -51,8 +51,7 @@ use protobuf::well_known_types::UInt64Value;
 pub use script::Script;
 use std::ops::Deref;
 pub use transaction_argument::{parse_as_transaction_argument, TransactionArgument};
-pub use channel_transaction_payload::ChannelScriptPayload;
-use crate::transaction::channel_transaction_payload::ChannelWriteSetPayload;
+pub use channel_transaction_payload::{ChannelWriteSetPayload, ChannelScriptPayload};
 
 pub type Version = u64; // Height - also used for MVCC in StateDB
 
@@ -235,6 +234,10 @@ impl RawTransaction {
 
     pub fn into_payload(self) -> TransactionPayload {
         self.payload
+    }
+
+    pub fn payload(&self) -> &TransactionPayload {
+        &self.payload
     }
 
     pub fn format_for_client(&self, get_transaction_name: impl Fn(&[u8]) -> String) -> String {
@@ -584,6 +587,10 @@ impl SignedTransaction {
         self.transaction_length
     }
 
+    pub fn raw_txn(&self) -> &RawTransaction {
+        &self.raw_txn
+    }
+
     pub fn receiver(&self) -> Option<AccountAddress> {
         match &self.raw_txn.payload {
             TransactionPayload::ChannelScript(channel_payload) => Some(channel_payload.receiver),
@@ -894,6 +901,10 @@ impl TransactionOutput {
 
     pub fn status(&self) -> &TransactionStatus {
         &self.status
+    }
+
+    pub fn is_travel_txn(&self) -> bool {
+        self.write_set.contains_onchain_resource()
     }
 }
 

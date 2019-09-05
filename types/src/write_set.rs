@@ -120,6 +120,15 @@ impl WriteSet {
         self.0
     }
 
+    pub fn contains_onchain_resource(&self) -> bool{
+        for (access_path ,_) in self.iter(){
+            if access_path.is_onchain_resource(){
+                return true;
+            }
+        }
+        return false
+    }
+
     pub fn merge(first:&WriteSet, second:&WriteSet) -> Self{
         WriteSetMut::merge(&first.0,&second.0).freeze().expect("freeze should success.")
     }
