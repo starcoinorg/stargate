@@ -1,137 +1,109 @@
-use serde::{Deserialize, Serialize};
-
 use failure::prelude::*;
 use crypto::ed25519::{Ed25519PublicKey, Ed25519Signature};
 use types::account_address::AccountAddress;
-use types::transaction::{RawTransaction, SignedTransaction, TransactionStatus};
+use types::transaction::{RawTransaction, SignedTransaction, TransactionStatus, ChannelWriteSetPayload, TransactionOutput, ChannelScriptPayload, TransactionPayload};
 use types::contract_event::ContractEvent;
 use types::write_set::WriteSet;
 use types::vm_error::VMStatus;
 use proto_conv::{FromProto, IntoProto};
 use core::convert::TryFrom;
-use super::transaction_output_helper;
 use protobuf::RepeatedField;
 use crate::change_set::ChangeSet;
+use canonical_serialization::{CanonicalSerialize, CanonicalSerializer, CanonicalDeserializer, CanonicalDeserialize, SimpleDeserializer, SimpleSerializer};
+use serde::{Deserialize, Serialize};
 
-
-/// The output of executing a transaction.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TransactionOutput {
-    /// The list of changes this transaction intends to do.
-    change_set: ChangeSet,
-
-    /// The list of events emitted during this transaction.
-    events: Vec<ContractEvent>,
-
-    /// The amount of gas used during execution.
-    gas_used: u64,
-
-    /// The execution status.
-    status: TransactionStatus,
-}
-
-impl TransactionOutput {
-    pub fn new(
-        change_set: ChangeSet,
-        events: Vec<ContractEvent>,
-        gas_used: u64,
-        status: TransactionStatus,
-    ) -> Self {
-        TransactionOutput {
-            change_set,
-            events,
-            gas_used,
-            status,
-        }
-    }
-
-    pub fn change_set(&self) -> &ChangeSet {
-        &self.change_set
-    }
-
-    pub fn events(&self) -> &[ContractEvent] {
-        &self.events
-    }
-
-    pub fn gas_used(&self) -> u64 {
-        self.gas_used
-    }
-
-    pub fn status(&self) -> &TransactionStatus {
-        &self.status
-    }
-
-    pub fn is_travel_txn(&self) -> bool {
-        for (access_path ,_) in self.change_set.iter(){
-            if access_path.is_onchain_resource(){
-                return true;
-            }
-        }
-        return false;
-    }
-}
-
-pub trait TransactionOutputSigner {
-    fn sign_txn_output(&self, txn_output: &TransactionOutput) -> Result<Ed25519Signature>;
-}
-
-#[derive(Clone, Eq, PartialEq,Debug)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ChannelTransaction {
     /// The sender signed transaction
-    txn: SignedTransaction,
+    pub txn: SignedTransaction,
 
-    receiver: AccountAddress,
+    pub witness_payload: ChannelWriteSetPayload,
 
-    /// transaction output
-    output: TransactionOutput,
-
-    /// sender ans receiver signature for output.
-    output_signatures: Vec<Ed25519Signature>,
-
-    //TODO signature include merged_change_set
-    merged_change_set: ChangeSet,
+    /// the signature of witness_payload
+    pub witness_signature: Ed25519Signature,
 }
 
 impl ChannelTransaction {
-    pub fn new(txn: SignedTransaction, receiver: AccountAddress, output: TransactionOutput, output_signature: Ed25519Signature, merged_change_set: ChangeSet) -> Self {
+    pub fn new(txn: SignedTransaction, witness_payload: ChannelWriteSetPayload, witness_signature: Ed25519Signature) -> Self {
         Self {
             txn,
-            receiver,
-            output,
-            output_signatures: vec![output_signature],
-            merged_change_set,
+            witness_payload,
+            witness_signature,
         }
     }
 
-    pub fn sign_by_receiver(&mut self, signer: impl TransactionOutputSigner) -> Result<()>{
-        assert_eq!(1, self.output_signatures.len());
-        let signature = signer.sign_txn_output(&self.output)?;
-        self.output_signatures.push(signature);
-        Ok(())
-    }
+//    pub fn sign_by_receiver(&mut self, signer: impl TransactionOutputSigner) -> Result<()>{
+//        assert_eq!(1, self.output_signatures.len());
+//        let signature = signer.sign_txn_output(&self.output)?;
+//        self.output_signatures.push(signature);
+//        Ok(())
+//    }
 
     pub fn txn(&self) -> &SignedTransaction {
         &self.txn
     }
 
-    pub fn receiver(&self) -> AccountAddress {
-        self.receiver
+    pub fn channel_script_payload(&self) -> Option<&ChannelScriptPayload> {
+        match self.txn.payload(){
+            TransactionPayload::ChannelScript(payload) => Some(payload),
+            _ => None
+        }
     }
 
-    pub fn output(&self) -> &TransactionOutput {
-        &self.output
+    pub fn channel_write_set_payload(&self) -> Option<&ChannelWriteSetPayload> {
+        match self.txn.payload(){
+            TransactionPayload::ChannelWriteSet(payload) => Some(payload),
+            _ => None
+        }
     }
 
-    pub fn output_signatures(&self) -> &Vec<Ed25519Signature> {
-        &self.output_signatures
+    pub fn witness_payload(&self) -> &ChannelWriteSetPayload{
+        &self.witness_payload
+    }
+
+    pub fn witness_signature(&self) -> &Ed25519Signature {
+        &self.witness_signature
     }
 
     pub fn is_travel_txn(&self) -> bool {
-        self.output.is_travel_txn()
+        self.witness_payload.write_set.contains_onchain_resource()
     }
 
-    pub fn merged_change_set(&self) -> &ChangeSet{
-        &self.merged_change_set
+    pub fn sender(&self) -> AccountAddress {
+        self.txn.sender()
+    }
+
+    pub fn receiver(&self) -> AccountAddress {
+        self.txn.receiver().expect("channel txn must contains receiver")
+    }
+
+    pub fn witness_payload_write_set(&self) -> &WriteSet {
+        &self.witness_payload.write_set
+    }
+}
+
+impl CanonicalSerialize for ChannelTransaction{
+
+    fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
+        serializer.encode_struct(&self.txn)?
+            .encode_struct(&self.witness_payload)?
+            .encode_bytes(&self.witness_signature.to_bytes())?;
+        Ok(())
+    }
+}
+
+impl CanonicalDeserialize for ChannelTransaction{
+
+    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self> where
+        Self: Sized {
+        let txn = deserializer.decode_struct()?;
+        let witness_payload = deserializer.decode_struct()?;
+        let signature_bytes = deserializer.decode_bytes()?;
+        Ok(Self{
+            txn,
+            witness_payload,
+            witness_signature: Ed25519Signature::try_from(signature_bytes.as_slice())?
+        })
     }
 }
 
@@ -139,22 +111,8 @@ impl FromProto for ChannelTransaction {
     type ProtoType = crate::proto::channel_transaction::ChannelTransaction;
 
     fn from_proto(mut object: Self::ProtoType) -> Result<Self> {
-        let signed_tnx = SignedTransaction::from_proto(object.take_transaction()).unwrap();
-        let account_address = AccountAddress::from_proto(object.get_receiver().to_vec()).unwrap();
-        let transaction_output = crate::transaction_output_helper::from_pb(object.take_transaction_output())?;
-        let sign_array = object.get_output_signatures();
-        let mut sign_vec : Vec<Ed25519Signature> = vec![];
-        for sign_bytes in sign_array.iter() {
-            sign_vec.push(Ed25519Signature::try_from(sign_bytes.as_slice()).unwrap());
-        }
-        let merged_change_set = ChangeSet::from_proto(object.take_merged_change_set()).unwrap();
-        Ok(ChannelTransaction {
-            txn:signed_tnx,
-            receiver:account_address,
-            output:transaction_output, 
-            output_signatures:sign_vec,
-            merged_change_set
-        })
+        let bytes = object.take_payload();
+        Ok(SimpleDeserializer::deserialize(bytes.as_slice())?)
     }
 }
 
@@ -163,15 +121,7 @@ impl IntoProto for ChannelTransaction {
 
     fn into_proto(self) -> Self::ProtoType {
         let mut out = Self::ProtoType::new();
-        out.set_transaction(self.txn.into_proto());
-        out.set_receiver(self.receiver.into_proto());
-        out.set_transaction_output(transaction_output_helper::into_pb(self.output).unwrap());
-        let mut signs:Vec<Vec<u8>> = vec![];
-        for sign in self.output_signatures {
-            signs.push(sign.to_bytes().to_vec());
-        }
-        out.set_output_signatures(RepeatedField::from_vec(signs));
-        out.set_merged_change_set(ChangeSet::into_proto(self.merged_change_set));
+        out.set_payload(SimpleSerializer::serialize(&self).expect("serialize must success."));
         out
     }
 }

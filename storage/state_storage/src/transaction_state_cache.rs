@@ -9,7 +9,6 @@ use types::account_address::AccountAddress;
 use types::account_state_blob::AccountStateBlob;
 use types::access_path::AccessPath;
 use atomic_refcell::AtomicRefCell;
-use star_types::channel_transaction::TransactionOutput as StarTransactionOutput;
 use state_view::StateView;
 use logger::prelude::*;
 use star_types::change_set::StructDefResolve;
@@ -41,7 +40,7 @@ impl<'a, R> TransactionStateCache<'a, R>
         });
 
         let cache = Self::new_cache(ver, account_vec, reader);
-        cache.apply_write_set(ws)?;
+        cache.apply_write_set(ws, 0)?;
 
         Self::apply_by_merkle_tree(genesis_flag, ver, cache.get_blobs(), reader)
     }
@@ -62,22 +61,6 @@ impl<'a, R> TransactionStateCache<'a, R>
         Self::apply_by_merkle_tree(genesis_flag, ver, cache.get_blobs(), reader)
     }
 
-    pub fn apply_star_output_in_cache(genesis_flag: bool, ver: Version, output: &StarTransactionOutput, reader: &'a R) -> Result<(HashValue, TreeUpdateBatch)> {
-        let mut account_set = HashSet::new();
-        let mut account_vec = vec![];
-        output.change_set().iter().for_each(|(a, _op)| {
-            if !account_set.contains(a.address.borrow()) {
-                account_set.insert(a.address.borrow());
-                account_vec.push(a.address.borrow())
-            }
-        });
-
-        let cache = Self::new_cache(ver, account_vec, reader);
-        cache.apply_output(output)?;
-
-        Self::apply_by_merkle_tree(genesis_flag, ver, cache.get_blobs(), reader)
-    }
-
     fn new_cache(ver: Version, account_vec: Vec<&AccountAddress>, reader: &'a R) -> Self {
         let accounts = reader.get_accounts(ver, account_vec).unwrap();
         let mut cache = HashMap::new();
@@ -85,21 +68,6 @@ impl<'a, R> TransactionStateCache<'a, R>
             cache.insert(account.clone(), state.clone());
         }
         TransactionStateCache { account_states_cache: AtomicRefCell::new(cache), reader }
-    }
-
-    pub fn change_libra_output_2_star_output(ver: Version, libra_output: &LibraTransactionOutput, reader: &'a R) -> Result<StarTransactionOutput> {
-        let mut account_set = HashSet::new();
-        let mut account_vec = vec![];
-        libra_output.write_set().iter().for_each(|(a, _op)| {
-            if !account_set.contains(a.address.borrow()) {
-                account_set.insert(a.address.borrow());
-                account_vec.push(a.address.borrow())
-            }
-        });
-
-        let cache = Self::new_cache(ver, account_vec, reader);
-        let write_set = &cache.write_set_to_change_set(libra_output.write_set())?;
-        Ok(StarTransactionOutput::new(write_set.clone(), libra_output.events().to_vec(), libra_output.gas_used(), libra_output.status().clone()))
     }
 
     fn get_blobs(&self) -> Vec<(HashValue, AccountStateBlob)> {

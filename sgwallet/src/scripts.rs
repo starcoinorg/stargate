@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use stdlib::{
     stdlib_modules,
 };
-use types::transaction::{TransactionArgument, Program};
+use types::transaction::{TransactionArgument, Program, Script};
 use std::collections::HashMap;
 use types::account_config::coin_struct_tag;
 use types::account_address::AccountAddress;
@@ -76,6 +76,10 @@ impl ScriptCode {
             vec![],
             args,
         )
+    }
+
+    pub fn encode_script(&self, args: Vec<TransactionArgument>) -> Script {
+        Script::new(self.code.clone(), args)
     }
 }
 

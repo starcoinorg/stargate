@@ -7,18 +7,13 @@ use super::proto::transaction_output::{TransactionOutput as TransactionOutputPro
 use failure::Result;
 use proto_conv::{FromProto, IntoProto};
 use ::protobuf::RepeatedField;
-use crate::channel_transaction::TransactionOutput;
 use crate::change_set::{ChangeSet, ChangeSetMut};
+use types::transaction::TransactionOutput;
+use canonical_serialization::{SimpleDeserializer, SimpleSerializer};
 
 pub fn from_pb(mut pb: TransactionOutputProto) -> Result<TransactionOutput> {
-    let cs = {
-        if pb.has_change_set() {
-            let mut from_cs = pb.take_change_set();
-            ChangeSet::from_proto(from_cs)?
-        } else {
-            ChangeSetMut::new(vec![]).freeze()?
-        }
-    };
+    let mut from_cs = pb.take_write_set();
+    let ws = SimpleDeserializer::deserialize(from_cs.as_slice())?;
 
     let status = {
         if pb.has_status() {
@@ -34,11 +29,11 @@ pub fn from_pb(mut pb: TransactionOutputProto) -> Result<TransactionOutput> {
         events.push(ContractEvent::from_proto(e).unwrap());
     }
 
-    let mut output = TransactionOutput::new(cs, events, 0, status);
+    let mut output = TransactionOutput::new(ws, events, 0, status);
     Ok(output)
 }
 
-pub fn into_pb(mut tx_output: TransactionOutput) -> Result<TransactionOutputProto> {
+pub fn into_pb(tx_output: TransactionOutput) -> Result<TransactionOutputProto> {
     let mut output = TransactionOutputProto::new();
 
     let mut events: Vec<Event> = vec![];
@@ -48,12 +43,10 @@ pub fn into_pb(mut tx_output: TransactionOutput) -> Result<TransactionOutputProt
     }
 
     let status = to_pb_status(tx_output.status().clone())?;
-    let cs = ChangeSet::into_proto(tx_output.change_set().clone());
-
     output.set_events(RepeatedField::from_vec(events.to_vec()));
     output.set_status(status);
-    output.set_change_set(cs);
-    output.set_gas_used(0);
+    output.set_write_set(SimpleSerializer::serialize(tx_output.write_set())?);
+    output.set_gas_used(tx_output.gas_used());
     Ok(output)
 }
 
