@@ -1,8 +1,7 @@
-use types::{transaction::{RawTransaction, SignedTransaction, TransactionStatus},
+use types::{transaction::{TransactionStatus},
             contract_event::ContractEvent,
-            write_set::{WriteSet, WriteSetMut},
-            vm_error::{VMStatus, VMValidationStatus, VMInvariantViolationError, BinaryError, ExecutionStatus},
-            proto::{transaction::WriteSet as WriteSetProto, vm_errors::{VMStatus as VMStatusProto, VMVerificationStatusList}, events::Event}};
+            vm_error::{VMStatus},
+            proto::{events::Event}};
 use super::proto::transaction_output::{TransactionOutput as TransactionOutputProto, TransactionStatus as TransactionStatusProto,
                                        TransactionStatus_oneof_transaction_status};
 use failure::Result;
@@ -31,7 +30,7 @@ pub fn from_pb(mut pb: TransactionOutputProto) -> Result<TransactionOutput> {
     };
 
     let mut events: Vec<ContractEvent> = vec![];
-    for e in (pb.take_events().into_vec()) {
+    for e in pb.take_events().into_vec() {
         events.push(ContractEvent::from_proto(e).unwrap());
     }
 

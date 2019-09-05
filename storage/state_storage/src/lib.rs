@@ -262,8 +262,8 @@ impl StateStorage {
 
     fn account_state(&self, ver: Version, address: &AccountAddress) -> Option<AccountState> {
         if !self.is_genesis() {
-            let account_blob = JellyfishMerkleTree::new(self).get_with_proof(address.hash(), ver).unwrap().0;
-            return match account_blob {
+            let (account_blob, _) = JellyfishMerkleTree::new(self).get_with_proof(address.hash(), ver).unwrap();
+            match account_blob {
                 Some(blob) => {
                     let account = AccountState::from_account_state_blob(blob.into()).unwrap();
                     Some(account)
@@ -271,7 +271,20 @@ impl StateStorage {
                 None => {
                     None
                 }
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn account_state_with_proof(&self, ver: Option<Version>, address: &AccountAddress) -> Option<(Version, Option<AccountStateBlob>, SparseMerkleProof)> {
+        if !self.is_genesis() {
+            let version = match ver {
+                Some(v) => { v }
+                None => { self.get_least_version() }
             };
+            let (account_blob, proof) = JellyfishMerkleTree::new(self).get_with_proof(address.hash(), version).unwrap();
+            Some((version, account_blob, proof))
         } else {
             None
         }
