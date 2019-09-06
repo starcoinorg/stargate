@@ -139,7 +139,11 @@ impl StructCache {
                 type_params: vec![],
             };
             match &struct_def.field_information {
-                StructFieldInformation::Native => bail!("VMInvariantViolation::LinkerError"),
+                StructFieldInformation::Native => {
+                    //bail!("VMInvariantViolation::LinkerError")
+                    //TODO support native
+                    (struct_tag, ResourceDef::new(vec![]))
+                },
                 StructFieldInformation::Declared {
                     field_count,
                     fields,
