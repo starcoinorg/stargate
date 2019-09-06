@@ -54,8 +54,8 @@ impl<'a, R> TransactionStateCache<'a, R>
                 account_vec.push(a.address.borrow())
             }
         });
-
         let cache = Self::new_cache(ver, account_vec, reader);
+
         cache.apply_libra_output(output)?;
 
         Self::apply_by_merkle_tree(genesis_flag, ver, cache.get_blobs(), reader)

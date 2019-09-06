@@ -1,5 +1,5 @@
 use failure::prelude::*;
-use chain_service::chain_service::{ChainService, TransactionInner};
+use chain_service::chain_service::ChainService;
 use chain_client::{ChainClient, watch_stream::WatchStream};
 use crypto::HashValue;
 use tokio::runtime::TaskExecutor;
@@ -13,26 +13,28 @@ use futures::{
     Stream, Poll,
 };
 use star_types::{proto::{chain::{WatchData, WatchTransactionResponse}}, channel_transaction::ChannelTransaction};
-
+use atomic_refcell::{AtomicRefCell, AtomicRef};
+use std::sync::Arc;
+use core::borrow::{Borrow, BorrowMut};
 
 #[derive(Clone)]
 pub struct MockChainClient {
-    exe: TaskExecutor,
-    chain_service: Option<ChainService>,
+    //exe: TaskExecutor,
+    chain_service: Arc<AtomicRefCell<ChainService>>,
 }
 
 impl MockChainClient {
     pub fn new(exe: TaskExecutor) -> Self {
         let mut client = Self {
-            exe,
-            chain_service: None,
+            //exe,
+            chain_service:  Arc::new(AtomicRefCell::new(ChainService::new(&exe))),
         };
         client.init();
         client
     }
 
     fn init(&mut self) {
-        self.chain_service = Some(ChainService::new(&self.exe))
+//        self.chain_service = ;
     }
 }
 
@@ -53,11 +55,13 @@ impl ChainClient for MockChainClient {
     type WatchResp = MockStreamReceiver<WatchData>;
 
     fn least_state_root(&self) -> Result<HashValue> {
-        Ok(self.chain_service.as_ref().unwrap().least_state_root_inner())
+        let chain_service = self.chain_service.as_ref().borrow();
+        Ok(chain_service.least_state_root_inner())
     }
 
     fn get_account_state(&self, address: &AccountAddress) -> Result<Option<Vec<u8>>> {
-        let account = self.chain_service.as_ref().unwrap().get_account_state_with_proof_inner(address, None).unwrap().1;
+        let chain_service = self.chain_service.as_ref().borrow();
+        let account = chain_service.get_account_state_with_proof_inner(address, None).unwrap().1;
         let blob = match account {
             Some(a) => { Some(a.as_ref().to_vec()) }
             None => { None }
@@ -67,29 +71,31 @@ impl ChainClient for MockChainClient {
 
     fn get_state_by_access_path(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
         debug!("get_state_by_access_path:{}", access_path);
-        self.chain_service.as_ref().unwrap().state_by_access_path_inner(access_path.address, access_path.path.clone())
+        let chain_service = self.chain_service.as_ref().borrow();
+        chain_service.state_by_access_path_inner(access_path.address, access_path.path.clone())
     }
 
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()> {
-        self.chain_service.as_ref().unwrap().faucet_inner(address, amount).map(|_| ())
+        let mut chain_service = self.chain_service.as_ref().borrow();
+        chain_service.faucet_inner(address, amount).map(|_| ())
     }
 
     fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<()> {
-        let chain_service = self.chain_service.as_ref().unwrap();
-        block_on(chain_service.submit_transaction_inner(chain_service.sender(), TransactionInner::OnChain(signed_transaction)));
+        let mut chain_service = self.chain_service.as_ref().borrow();
+        chain_service.send_tx(signed_transaction);
 
         Ok(())
     }
 
     fn submit_channel_transaction(&self, channel_transaction: ChannelTransaction) -> Result<()> {
-        let chain_service = self.chain_service.as_ref().unwrap();
-        block_on(chain_service.submit_transaction_inner(chain_service.sender(), TransactionInner::OffChain(channel_transaction)));
-
+        let mut chain_service = self.chain_service.as_ref().borrow();
+        chain_service.send_tx(channel_transaction.txn);
         Ok(())
     }
 
     fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchStream<Self::WatchResp>> {
-        let rx = self.chain_service.as_ref().unwrap().watch_transaction_inner(*address, ver);
+        let chain_service = self.chain_service.as_ref().borrow();
+        let rx = chain_service.watch_transaction_inner(*address, ver);
         let stream = MockStreamReceiver { inner_rx: rx };
         Ok(WatchStream::new(stream))
     }
@@ -99,7 +105,8 @@ impl ChainClient for MockChainClient {
     }
 
     fn get_transaction_by_hash(&self, hash: HashValue) -> Result<SignedTransaction> {
-        self.chain_service.as_ref().unwrap().get_transaction_by_hash(hash)
+        let chain_service = self.chain_service.as_ref().borrow();
+        chain_service.get_transaction_by_hash(hash)
     }
 }
 

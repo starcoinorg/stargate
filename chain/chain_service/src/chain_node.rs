@@ -1,11 +1,11 @@
 use grpc_helpers::spawn_service_thread;
 use super::chain_service::ChainService;
-use tokio::{runtime::Runtime};
 use signal_hook;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
+use tokio::runtime::{TaskExecutor, Runtime};
 
 pub struct ServiceConfig {
     pub service_name: String,
@@ -24,9 +24,9 @@ impl ChainNode {
 
     pub fn run(&self) -> () {
         println!("{}", "Starting chain Service");
-        let rt = Runtime::new().unwrap();
-        let chain_service = ChainService::new(&rt.executor());
-        let service = star_types::proto::chain_grpc::create_chain(chain_service);
+        let mut rt = Runtime::new().unwrap();
+        let exe = rt.executor();
+        let service = star_types::proto::chain_grpc::create_chain(ChainService::new(&exe));
         let _chain_handle = spawn_service_thread(
             service,
             self.config.address.clone(),
@@ -36,6 +36,7 @@ impl ChainNode {
 
         println!("{}", "Started chain Service");
         do_exit();
+        rt.shutdown_now();
     }
 }
 

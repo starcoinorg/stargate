@@ -239,6 +239,7 @@ impl<C> Wallet<C>
             }else{
                 //TODO receiver should watch chain response.
             }
+
             self.clear_witness_data(participant);
             //TODO use chain response output.
             self.storage.borrow().apply_txn(txn)?;

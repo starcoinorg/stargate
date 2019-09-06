@@ -46,13 +46,13 @@ fn test_wallet() -> Result<()> {
     let mut rt = Runtime::new()?;
     let executor = rt.executor();
 
-
     let client = Arc::new(MockChainClient::new(executor.clone()));
     let sender = AccountAddress::from_public_key(&sender_keypair.public_key);
     let receiver = AccountAddress::from_public_key(&receiver_keypair.public_key);
 
     debug!("sender_address: {}", sender);
     debug!("receiver_address: {}", receiver);
+
     client.faucet(sender, sender_amount)?;
     client.faucet(receiver, receiver_amount)?;
 
@@ -70,14 +70,15 @@ fn test_wallet() -> Result<()> {
         let receiver_open_txn = receiver_wallet.verify_txn(&open_txn).unwrap();
 
         receiver_wallet.apply_txn(&open_txn).await.unwrap();
+
         sender_wallet.apply_txn(&receiver_open_txn).await.unwrap();
 
         let sender_channel_balance = sender_wallet.channel_balance_default(receiver).unwrap();
+
         assert_eq!(sender_channel_balance, sender_fund_amount);
 
         let receiver_channel_balance = receiver_wallet.channel_balance_default(sender).unwrap();
         assert_eq!(receiver_channel_balance, receiver_fund_amount);
-
 
         let deposit_txn = sender_wallet.deposit_default(receiver, sender_deposit_amount, receiver_deposit_amount).unwrap();
         debug_assert!(deposit_txn.is_travel_txn(), "open_txn must travel txn");
