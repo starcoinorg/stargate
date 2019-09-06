@@ -1,8 +1,6 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-#![allow(clippy::unit_arg)]
-
 use crate::{
     access_path::{AccessPath, Accesses},
     account_address::AccountAddress,
@@ -42,9 +40,6 @@ pub const COIN_STRUCT_NAME: &str = "T";
 // Account
 pub const ACCOUNT_MODULE_NAME: &str = "LibraAccount";
 pub const ACCOUNT_STRUCT_NAME: &str = "T";
-
-// Hash
-pub const HASH_MODULE_NAME: &str = "Hash";
 
 pub fn core_code_address() -> AccountAddress {
     AccountAddress::default()

@@ -23,11 +23,13 @@ use vm::{
     views::{FunctionHandleView, StructHandleView},
 };
 use vm_cache_map::{Arena, CacheRefMap};
-use vm_runtime_types::loaded_data::{struct_def::StructDef, types::Type};
+use vm_runtime_types::{
+    loaded_data::{struct_def::StructDef, types::Type},
+    type_context::TypeContext,
+};
 
 #[cfg(test)]
-#[path = "../unit_tests/module_cache_tests.rs"]
-mod module_cache_tests;
+use crate::code_cache::module_adapter::FakeFetcher;
 
 /// Trait that describe a cache for modules. The idea is that this trait will in charge of
 /// loading resolving all dependencies of needed module from the storage.
@@ -241,6 +243,7 @@ impl<'alloc> VMModuleCache<'alloc> {
         &'txn self,
         module: &LoadedModule,
         tok: &SignatureToken,
+        type_context: &TypeContext,
         gas_meter: &GasMeter,
         fetcher: &F,
     ) -> VMResult<Option<Type>> {
@@ -250,23 +253,52 @@ impl<'alloc> VMModuleCache<'alloc> {
             SignatureToken::String => Ok(Ok(Some(Type::String))),
             SignatureToken::ByteArray => Ok(Ok(Some(Type::ByteArray))),
             SignatureToken::Address => Ok(Ok(Some(Type::Address))),
-            SignatureToken::TypeParameter(_) => unimplemented!(),
-            SignatureToken::Struct(sh_idx, _) => {
+            SignatureToken::TypeParameter(idx) => Ok(Ok(Some(type_context.get_type(*idx)?))),
+            SignatureToken::Struct(sh_idx, tys) => {
+                let ctx = {
+                    let mut ctx = vec![];
+                    for ty in tys.iter() {
+                        let resolved_type = try_runtime!(self
+                            .resolve_signature_token_with_fetcher(
+                                module,
+                                ty,
+                                type_context,
+                                gas_meter,
+                                fetcher
+                            ));
+                        if let Some(t) = resolved_type {
+                            ctx.push(t);
+                        } else {
+                            return Ok(Ok(None));
+                        }
+                    }
+                    TypeContext::new(ctx)
+                };
                 let struct_def =
                     try_runtime!(self
-                        .resolve_struct_handle_with_fetcher(module, *sh_idx, gas_meter, fetcher));
+                        .resolve_struct_handle_with_fetcher(module, *sh_idx, gas_meter, fetcher))
+                    .map(|def| ctx.subst_struct_def(&def))
+                    .transpose()?;
                 Ok(Ok(struct_def.map(Type::Struct)))
             }
             SignatureToken::Reference(sub_tok) => {
-                let inner_ty =
-                    try_runtime!(self
-                        .resolve_signature_token_with_fetcher(module, sub_tok, gas_meter, fetcher));
+                let inner_ty = try_runtime!(self.resolve_signature_token_with_fetcher(
+                    module,
+                    sub_tok,
+                    type_context,
+                    gas_meter,
+                    fetcher
+                ));
                 Ok(Ok(inner_ty.map(|t| Type::Reference(Box::new(t)))))
             }
             SignatureToken::MutableReference(sub_tok) => {
-                let inner_ty =
-                    try_runtime!(self
-                        .resolve_signature_token_with_fetcher(module, sub_tok, gas_meter, fetcher));
+                let inner_ty = try_runtime!(self.resolve_signature_token_with_fetcher(
+                    module,
+                    sub_tok,
+                    type_context,
+                    gas_meter,
+                    fetcher
+                ));
                 Ok(Ok(inner_ty.map(|t| Type::MutableReference(Box::new(t)))))
             }
         }
@@ -286,6 +318,9 @@ impl<'alloc> VMModuleCache<'alloc> {
         }
         let def = {
             let struct_def = module.struct_def_at(idx);
+            let struct_handle = module.struct_handle_at(struct_def.struct_handle);
+            let type_context =
+                TypeContext::identity_mapping(struct_handle.type_formals.len() as u16);
             match &struct_def.field_information {
                 // TODO we might want a more informative error here
                 StructFieldInformation::Native => return Err(VMInvariantViolation::LinkerError),
@@ -298,6 +333,7 @@ impl<'alloc> VMModuleCache<'alloc> {
                         let ty = try_runtime!(self.resolve_signature_token_with_fetcher(
                             module,
                             &module.type_signature_at(field.signature).0,
+                            &type_context,
                             gas_meter,
                             fetcher
                         ));
@@ -389,6 +425,13 @@ where
             vm_cache,
             storage: module_fetcher,
         }
+    }
+}
+
+#[cfg(test)]
+impl<'alloc, 'blk> BlockModuleCache<'alloc, 'blk, FakeFetcher> {
+    pub(crate) fn clear(&mut self) {
+        self.storage.clear();
     }
 }
 

@@ -1,6 +1,5 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
-#![allow(clippy::unit_arg)]
 
 use crate::{
     access_path::AccessPath,
@@ -166,7 +165,7 @@ impl Arbitrary for AccountInfoUniverse {
 }
 
 #[derive(Arbitrary, Debug)]
-struct RawTransactionGen {
+pub struct RawTransactionGen {
     payload: TransactionPayload,
     max_gas_amount: u64,
     gas_unit_price: u64,
@@ -355,7 +354,7 @@ impl SignatureCheckedTransaction {
 }
 
 #[derive(Arbitrary, Debug)]
-struct SignatureCheckedTransactionGen {
+pub struct SignatureCheckedTransactionGen {
     raw_transaction_gen: RawTransactionGen,
 }
 

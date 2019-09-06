@@ -1,18 +1,27 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use super::*;
-use crate::{code_cache::module_cache::VMModuleCache, txn_executor::TransactionExecutor};
+use crate::{
+    code_cache::module_cache::{ModuleCache, VMModuleCache},
+    data_cache::RemoteCache,
+    loaded_data::{
+        function::{FunctionRef, FunctionReference},
+        loaded_module::LoadedModule,
+    },
+    txn_executor::TransactionExecutor,
+};
 use bytecode_verifier::{VerifiedModule, VerifiedScript};
 use crypto::ed25519::compat;
 use std::collections::HashMap;
 use types::{access_path::AccessPath, account_address::AccountAddress, byte_array::ByteArray};
 use vm::{
+    access::ModuleAccess,
+    errors::{VMErrorKind, VMInvariantViolation, VMResult},
     file_format::{
         AddressPoolIndex, Bytecode, CodeUnit, CompiledModuleMut, CompiledScript, CompiledScriptMut,
         FunctionDefinition, FunctionHandle, FunctionHandleIndex, FunctionSignature,
         FunctionSignatureIndex, LocalsSignature, LocalsSignatureIndex, ModuleHandle,
-        ModuleHandleIndex, SignatureToken, StringPoolIndex, NO_TYPE_ACTUALS,
+        ModuleHandleIndex, SignatureToken, StringPoolIndex, UserStringIndex, NO_TYPE_ACTUALS,
     },
     gas_schedule::{AbstractMemorySize, GasAlgebra, GasPrice, GasUnits},
     transaction_metadata::TransactionMetadata,
@@ -70,6 +79,7 @@ fn fake_script() -> VerifiedScript {
         }],
         locals_signatures: vec![LocalsSignature(vec![])],
         string_pool: vec!["hello".to_string()],
+        user_strings: vec!["hello world".into()],
         byte_array_pool: vec![ByteArray::new(vec![0u8; 32])],
         address_pool: vec![AccountAddress::default()],
     }
@@ -264,9 +274,9 @@ fn test_simple_instruction_transition() {
 
     test_simple_instruction(
         &mut vm,
-        Bytecode::LdStr(StringPoolIndex::new(0)),
+        Bytecode::LdStr(UserStringIndex::new(0)),
         vec![],
-        vec![Local::string("hello".to_string())],
+        vec![Local::string("hello world".into())],
         vec![],
         vec![],
         1,
@@ -594,6 +604,7 @@ fn fake_module_with_calls(sigs: Vec<(Vec<SignatureToken>, FunctionSignature)>) -
         function_signatures: function_sigs,
         locals_signatures: local_sigs.into_iter().map(LocalsSignature).collect(),
         string_pool: names,
+        user_strings: vec![],
         byte_array_pool: vec![],
         address_pool: vec![AccountAddress::default()],
     }
@@ -730,7 +741,6 @@ fn test_transaction_info() {
             max_gas_amount: GasUnits::new(100_000_009),
             gas_unit_price: GasPrice::new(5),
             transaction_size: AbstractMemorySize::new(100),
-            receiver: None,
         }
     };
     let data_cache = FakeDataCache::new();

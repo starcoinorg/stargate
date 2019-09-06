@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use config::config::{VMConfig, VMPublishingOption};
-use crypto::ed25519::*;
+use crypto::{ed25519::*, HashValue};
 use failure::prelude::*;
 use ir_to_bytecode::{compiler::compile_program, parser::ast};
 use lazy_static::lazy_static;
@@ -16,7 +16,6 @@ use stdlib::{
         ROTATE_AUTHENTICATION_KEY_TXN_BODY,
     },
 };
-use tiny_keccak::Keccak;
 use types::{
     access_path::AccessPath,
     account_address::AccountAddress,
@@ -143,7 +142,7 @@ impl Accounts {
             gas_unit_price,
             Duration::from_secs(u64::max_value()),
         )
-        .sign(&sender_account.privkey.into(), sender_account.pubkey.into())
+        .sign(&sender_account.privkey, sender_account.pubkey)
         .unwrap()
     }
 
@@ -257,14 +256,7 @@ pub fn allowing_script_hashes() -> Vec<[u8; SCRIPT_HASH_LENGTH]> {
         CREATE_ACCOUNT_TXN.clone(),
     ]
     .into_iter()
-    .map(|s| {
-        let mut hash = [0u8; SCRIPT_HASH_LENGTH];
-        let mut keccak = Keccak::new_sha3_256();
-
-        keccak.update(&s);
-        keccak.finalize(&mut hash);
-        hash
-    })
+    .map(|s| *HashValue::from_sha3_256(&s).as_ref())
     .collect()
 }
 
@@ -351,6 +343,15 @@ pub fn encode_genesis_transaction_with_validator(
                     "rotate_authentication_key",
                     vec![Local::bytearray(genesis_auth_key)],
                 )
+                .unwrap()
+                .unwrap();
+
+            // Bump the sequence number for the Association account. If we don't do this and a
+            // subsequent transaction (e.g., minting) is sent from the Assocation account, a problem
+            // arises: both the genesis transaction and the subsequent transaction have sequence
+            // number 0
+            txn_executor
+                .execute_function(&ACCOUNT_MODULE, "epilogue", vec![])
                 .unwrap()
                 .unwrap();
 

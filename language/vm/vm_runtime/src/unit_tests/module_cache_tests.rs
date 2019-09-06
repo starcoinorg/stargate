@@ -1,21 +1,30 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use super::*;
 use crate::{
-    code_cache::{module_adapter::FakeFetcher, module_cache::ModuleCache},
-    loaded_data::function::{FunctionRef, FunctionReference},
+    code_cache::{
+        module_adapter::FakeFetcher,
+        module_cache::{BlockModuleCache, ModuleCache, TransactionModuleCache, VMModuleCache},
+    },
+    gas_meter::GasMeter,
+    loaded_data::{
+        function::{FunctionRef, FunctionReference},
+        loaded_module::LoadedModule,
+    },
 };
 use assert_matches::assert_matches;
-use bytecode_verifier::VerifiedScript;
+use bytecode_verifier::{VerifiedModule, VerifiedScript};
 use compiler::Compiler;
 use hex;
-use types::account_address::AccountAddress;
+use types::{account_address::AccountAddress, language_storage::ModuleId};
 use vm::{
+    access::ModuleAccess,
+    errors::{VMErrorKind, VMRuntimeError, VerificationStatus},
     file_format::*,
     gas_schedule::{GasAlgebra, GasUnits},
 };
 use vm_cache_map::Arena;
+use vm_runtime_types::loaded_data::{struct_def::StructDef, types::Type};
 
 fn test_module(name: String) -> VerifiedModule {
     let compiled_module = CompiledModuleMut {
@@ -76,6 +85,7 @@ fn test_module(name: String) -> VerifiedModule {
         ],
         locals_signatures: vec![LocalsSignature(vec![])],
         string_pool: vec![name, "func1".to_string(), "func2".to_string()],
+        user_strings: vec![],
         byte_array_pool: vec![],
         address_pool: vec![AccountAddress::default()],
     }
@@ -145,6 +155,7 @@ fn test_script() -> VerifiedScript {
             "func2".to_string(),
             "main".to_string(),
         ],
+        user_strings: vec![],
         byte_array_pool: vec![],
         address_pool: vec![AccountAddress::default()],
     }
@@ -293,7 +304,7 @@ fn test_cache_with_storage() {
         assert_eq!(func2.code_definition(), vec![Bytecode::Ret].as_slice());
 
         // Clean the fetcher so that there's nothing in the fetcher.
-        block_cache.storage.clear();
+        block_cache.clear();
 
         let func1 = block_cache
             .resolve_function_ref(entry_module, FunctionHandleIndex::new(1))
@@ -434,6 +445,7 @@ fn test_multi_level_cache_write_back() {
             "func2".to_string(),
             "main".to_string(),
         ],
+        user_strings: vec![],
         byte_array_pool: vec![],
         address_pool: vec![AccountAddress::default()],
     }

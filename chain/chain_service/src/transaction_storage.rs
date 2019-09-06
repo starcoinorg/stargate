@@ -1,5 +1,5 @@
 use crypto::HashValue;
-use scratchpad::Accumulator;
+use types::proof::accumulator::Accumulator;
 use std::{collections::HashMap};
 use types::transaction::{SignedTransaction, TransactionInfo, Version};
 use crypto::hash::{CryptoHash, TransactionInfoHasher};

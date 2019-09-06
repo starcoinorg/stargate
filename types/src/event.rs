@@ -1,5 +1,3 @@
-#![allow(clippy::unit_arg)]
-
 #[cfg(any(test, feature = "testing"))]
 use crate::account_address::AccountAddress;
 #[cfg(any(test, feature = "testing"))]
@@ -16,8 +14,6 @@ use proptest_derive::Arbitrary;
 use proto_conv::{FromProto, IntoProto};
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
-#[cfg(any(test, feature = "testing"))]
-use tiny_keccak::sha3_256;
 
 /// Size of an event key.
 pub const EVENT_KEY_LENGTH: usize = 32;
@@ -59,7 +55,7 @@ impl EventKey {
         serializer
             .encode_struct(addr)
             .expect("Can't serialize address");
-        EventKey(sha3_256(&serializer.get_output()))
+        EventKey(*HashValue::from_sha3_256(&serializer.get_output()).as_ref())
     }
 }
 

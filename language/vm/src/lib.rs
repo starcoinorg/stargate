@@ -25,6 +25,7 @@ pub mod resolver;
 pub mod serializer;
 pub mod transaction_metadata;
 pub mod views;
+pub mod vm_string;
 
 #[cfg(test)]
 mod unit_tests;
@@ -44,10 +45,12 @@ pub enum IndexKind {
     FunctionSignature,
     LocalsSignature,
     StringPool,
+    UserString,
     ByteArrayPool,
     AddressPool,
     LocalPool,
     CodeDefinition,
+    TypeParameter,
 }
 
 impl IndexKind {
@@ -66,9 +69,11 @@ impl IndexKind {
             FunctionSignature,
             LocalsSignature,
             StringPool,
+            UserString,
             AddressPool,
             LocalPool,
             CodeDefinition,
+            TypeParameter,
         ]
     }
 }
@@ -88,16 +93,19 @@ impl fmt::Display for IndexKind {
             FunctionSignature => "function signature",
             LocalsSignature => "locals signature",
             StringPool => "string pool",
+            UserString => "user string",
             ByteArrayPool => "byte_array pool",
             AddressPool => "address pool",
             LocalPool => "local pool",
             CodeDefinition => "code definition pool",
+            TypeParameter => "type parameter",
         };
 
         f.write_str(desc)
     }
 }
 
+// TODO: is this outdated?
 /// Represents the kind of a signature token.
 #[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum SignatureTokenKind {

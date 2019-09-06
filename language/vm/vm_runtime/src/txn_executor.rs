@@ -35,6 +35,7 @@ use vm::{
     file_format::{Bytecode, CodeOffset, CompiledScript, StructDefinitionIndex},
     gas_schedule::{AbstractMemorySize, GasAlgebra, GasUnits},
     transaction_metadata::TransactionMetadata,
+    vm_string::VMString,
 };
 use vm_cache_map::Arena;
 use vm_runtime_types::{
@@ -42,10 +43,6 @@ use vm_runtime_types::{
     value::{Local, MutVal, Reference, Value},
 };
 use config::config::VMMode;
-
-#[cfg(test)]
-#[path = "unit_tests/runtime_tests.rs"]
-mod runtime_tests;
 
 // Metadata needed for resolving the account module.
 lazy_static! {
@@ -249,10 +246,8 @@ where
                 }
                 Bytecode::LdStr(idx) => {
                     let top_frame = self.execution_stack.top_frame()?;
-                    let string_ref = top_frame.module().string_at(idx);
-                    try_runtime!(self
-                        .execution_stack
-                        .push(Local::string(string_ref.to_string())));
+                    let string_ref = top_frame.module().user_string_at(idx);
+                    try_runtime!(self.execution_stack.push(Local::string(string_ref.into())));
                 }
                 Bytecode::LdByteArray(idx) => {
                     let top_frame = self.execution_stack.top_frame()?;
@@ -833,7 +828,7 @@ where
                 TransactionArgument::U64(i) => Local::u64(i),
                 TransactionArgument::Address(a) => Local::address(a),
                 TransactionArgument::ByteArray(b) => Local::bytearray(b),
-                TransactionArgument::String(s) => Local::string(s),
+                TransactionArgument::String(s) => Local::string(VMString::new(s)),
             });
             // The `push_result` will either be `Ok(Ok())` or `Ok(Err())`; `unwrap()`
             // is safe on the first Result.

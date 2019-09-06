@@ -564,7 +564,7 @@ fn get_external_deps(imports: &[ImportDefinition]) -> Vec<ModuleId> {
     let mut deps = HashSet::new();
     for dep in imports.iter() {
         if let ModuleIdent::Qualified(id) = &dep.ident {
-            deps.insert(ModuleId::new(id.address, id.name.name()));
+            deps.insert(ModuleId::new(id.address, id.name.clone().into_inner()));
         }
     }
     deps.into_iter().collect()
@@ -612,18 +612,13 @@ impl ModuleName {
         ModuleName::new(ModuleName::SELF.to_string())
     }
 
-    /// Returns the raw bytes of the module name's string value
-    pub fn as_bytes(&self) -> Vec<u8> {
-        self.0.as_bytes().to_vec()
-    }
-
-    /// Returns a cloned copy of the module name's string value
-    pub fn name(&self) -> String {
-        self.0.clone()
+    /// Converts self into a string.
+    pub fn into_inner(self) -> String {
+        self.0
     }
 
     /// Accessor for the module name's string value
-    pub fn name_ref(&self) -> &str {
+    pub fn as_inner(&self) -> &str {
         &self.0
     }
 }
@@ -636,18 +631,18 @@ impl QualifiedModuleIdent {
     }
 
     /// Accessor for the name of the fully qualified module identifier
-    pub fn get_name(&self) -> &ModuleName {
+    pub fn name(&self) -> &ModuleName {
         &self.name
     }
 
     /// Accessor for the address at which the module is published
-    pub fn get_address(&self) -> &AccountAddress {
+    pub fn address(&self) -> &AccountAddress {
         &self.address
     }
 }
 
 impl ModuleIdent {
-    pub fn get_name(&self) -> &ModuleName {
+    pub fn name(&self) -> &ModuleName {
         match self {
             ModuleIdent::Transaction(name) => &name,
             ModuleIdent::Qualified(id) => &id.name,
@@ -734,7 +729,7 @@ impl ImportDefinition {
     pub fn new(ident: ModuleIdent, alias_opt: Option<ModuleName>) -> Self {
         let alias = match alias_opt {
             Some(alias) => alias,
-            None => ident.get_name().clone(),
+            None => ident.name().clone(),
         };
         ImportDefinition { ident, alias }
     }
@@ -746,18 +741,13 @@ impl StructName {
         StructName(name)
     }
 
-    /// Returns the raw bytes of the struct name's string value
-    pub fn as_bytes(&self) -> Vec<u8> {
-        self.0.as_bytes().to_vec()
-    }
-
-    /// Returns a cloned copy of the struct name's string value
-    pub fn name(&self) -> String {
-        self.0.clone()
+    /// Converts self to a string.
+    pub fn into_inner(self) -> String {
+        self.0
     }
 
     /// Accessor for the name of the struct
-    pub fn name_ref(&self) -> &str {
+    pub fn as_inner(&self) -> &str {
         &self.0
     }
 }
@@ -805,13 +795,13 @@ impl FunctionName {
         FunctionName(name)
     }
 
-    /// Returns a cloned copy of the function name's string value
-    pub fn name(&self) -> String {
-        self.0.clone()
+    /// Converts self into a string.
+    pub fn into_inner(self) -> String {
+        self.0
     }
 
     /// Accessor for the name of the function
-    pub fn name_ref(&self) -> &str {
+    pub fn as_inner(&self) -> &str {
         &self.0
     }
 }
@@ -1082,12 +1072,6 @@ impl Iterator for Block {
     }
 }
 
-impl Into<Field> for CopyableVal {
-    fn into(self) -> Field {
-        Field::new(self.to_string().as_ref())
-    }
-}
-
 //**************************************************************************************************
 // Display
 //**************************************************************************************************
@@ -1135,7 +1119,7 @@ impl fmt::Display for QualifiedModuleIdent {
 
 impl fmt::Display for ModuleDefinition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Module({}, ", self.name.name())?;
+        writeln!(f, "Module({}, ", self.name)?;
         write!(f, "Structs(")?;
         for struct_def in &self.structs {
             write!(f, "{}, ", struct_def)?;
@@ -1227,7 +1211,7 @@ impl fmt::Display for FunctionSignature {
 
 impl fmt::Display for QualifiedStructIdent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}.{}", self.module, self.name.name())
+        write!(f, "{}.{}", self.module, self.name)
     }
 }
 

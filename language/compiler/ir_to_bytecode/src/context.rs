@@ -18,6 +18,7 @@ use vm::{
         StructDefinitionIndex, StructHandle, StructHandleIndex, TableIndex, TypeSignature,
         TypeSignatureIndex,
     },
+    vm_string::VMString,
 };
 
 type TypeFormalMap = HashMap<TypeVar, TableIndex>;
@@ -106,7 +107,7 @@ impl<'a> CompiledDependency<'a> {
         let module_handle = self.module_pool.get(handle.module.0 as usize)?;
         let address = *self.address_pool.get(module_handle.address.0 as usize)?;
         let module = ModuleName::new(self.string_pool.get(module_handle.name.0 as usize)?.clone());
-        assert!(module.name_ref() != ModuleName::SELF);
+        assert!(module.as_inner() != ModuleName::SELF);
         let ident = QualifiedModuleIdent {
             address,
             name: module,
@@ -117,13 +118,13 @@ impl<'a> CompiledDependency<'a> {
 
     fn struct_handle(&self, name: &QualifiedStructIdent) -> Option<&'a StructHandle> {
         self.structs
-            .get(&(name.module.name_ref(), name.name.name_ref()))
+            .get(&(name.module.as_inner(), name.name.as_inner()))
             .and_then(|idx| self.struct_pool.get(*idx as usize))
     }
 
     fn function_signature(&self, name: &FunctionName) -> Option<&'a FunctionSignature> {
         self.functions
-            .get(name.name_ref())
+            .get(name.as_inner())
             .and_then(|idx| self.function_signatuire_pool.get(*idx as usize))
     }
 }
@@ -145,6 +146,8 @@ pub struct MaterializedPools {
     pub locals_signatures: Vec<LocalsSignature>,
     /// String pool
     pub string_pool: Vec<String>,
+    /// User string pool
+    pub user_strings: Vec<VMString>,
     /// Byte array pool
     pub byte_array_pool: Vec<ByteArray>,
     /// Address pool
@@ -261,6 +264,8 @@ impl<'a> Context<'a> {
             type_signatures: Self::materialize_map(self.type_signatures),
             locals_signatures: Self::materialize_map(self.locals_signatures),
             string_pool: Self::materialize_map(self.string_pool),
+            // TODO: implement support for user strings (string literals)
+            user_strings: vec![],
             byte_array_pool: Self::materialize_map(self.byte_array_pool),
             address_pool: Self::materialize_map(self.address_pool),
         }
@@ -401,7 +406,7 @@ impl<'a> Context<'a> {
         // We don't care about duplicate aliases, if they exist
         self.aliases.insert(id.clone(), alias.clone());
         let address = self.address_index(id.address)?;
-        let name = self.string_index(id.name.name_ref())?;
+        let name = self.string_index(id.name.as_inner())?;
         self.modules
             .insert(alias.clone(), (id, ModuleHandle { address, name }));
         Ok(ModuleHandleIndex(get_or_add_item_ref(
@@ -419,7 +424,7 @@ impl<'a> Context<'a> {
         type_formals: Vec<Kind>,
     ) -> Result<StructHandleIndex> {
         let module = self.module_handle_index(&sname.module)?;
-        let name = self.string_index(sname.name.name_ref())?;
+        let name = self.string_index(sname.name.as_inner())?;
         self.structs.insert(
             sname.clone(),
             StructHandle {
@@ -461,7 +466,7 @@ impl<'a> Context<'a> {
     ) -> Result<()> {
         let m_f = (mname.clone(), fname.clone());
         let module = self.module_handle_index(&mname)?;
-        let name = self.string_index(fname.name_ref())?;
+        let name = self.string_index(fname.as_inner())?;
 
         let sidx = get_or_add_item_ref(&mut self.function_signature_pool, &signature)?;
         let signature_index = FunctionSignatureIndex(sidx as TableIndex);
@@ -520,7 +525,7 @@ impl<'a> Context<'a> {
     }
 
     fn dep_struct_handle(&mut self, s: &QualifiedStructIdent) -> Result<(bool, Vec<Kind>)> {
-        if s.module.name_ref() == ModuleName::SELF {
+        if s.module.as_inner() == ModuleName::SELF {
             bail!("Unbound struct {}", s)
         }
         let mident = self.module_ident(&s.module)?.clone();
@@ -613,7 +618,7 @@ impl<'a> Context<'a> {
         m: &ModuleName,
         f: &FunctionName,
     ) -> Result<FunctionSignature> {
-        if m.name_ref() == ModuleName::SELF {
+        if m.as_inner() == ModuleName::SELF {
             bail!("Unbound function {}.{}", m, f)
         }
         let mident = self.module_ident(m)?.clone();
