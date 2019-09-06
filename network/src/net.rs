@@ -14,11 +14,10 @@ use std::{io, sync::Arc};
 use types::account_address::AccountAddress;
 use tokio::runtime::TaskExecutor;
 use logger::prelude::*;
-use crate::message::Message;
-use crate::message::Message::{Ack, Payload};
+use crate::message::{Message, PayloadMsg};
+use crate::message::Message::{ACK, Payload};
 use futures::sync::oneshot::{Canceled, Sender};
 use std::collections::HashMap;
-
 
 #[derive(Clone, Debug)]
 pub struct NetworkMessage {
@@ -29,7 +28,7 @@ pub struct NetworkMessage {
 pub struct NetworkService {
     pub libp2p_service: Arc<Mutex<Libp2pService<Message>>>,
     pub close_tx: Option<oneshot::Sender<()>>,
-    acks: HashMap<u64, Sender<()>>,
+    acks: Arc<Mutex<HashMap<u64, Sender<()>>>>,
 }
 
 pub fn build_network_service(
@@ -67,6 +66,7 @@ fn build_libp2p_service(
 
 fn run_network(
     net_srv: Arc<Mutex<Libp2pService<Message>>>,
+    acks: Arc<Mutex<HashMap<u64, Sender<()>>>>,
 ) -> (
     mpsc::UnboundedSender<NetworkMessage>,
     mpsc::UnboundedReceiver<NetworkMessage>,
@@ -74,7 +74,6 @@ fn run_network(
 ) {
     let (mut _tx, net_rx) = mpsc::unbounded();
     let (net_tx, mut _rx) = mpsc::unbounded::<NetworkMessage>();
-    let net_srv_sender = net_srv.clone();
     let net_srv_1 = net_srv.clone();
     let connected_fut = future::poll_fn(move || {
         match try_ready!(net_srv_1.lock().poll()) {
@@ -86,24 +85,32 @@ fn run_network(
         }
     });
 
-    let network_fut = stream::poll_fn(move || net_srv.lock().poll()).for_each(
+
+    let net_srv_2 = net_srv.clone();
+    let net_srv_3 = net_srv.clone();
+    let network_fut = stream::poll_fn(move || net_srv_2.lock().poll()).for_each(
         move |event| {
             match event {
                 ServiceEvent::CustomMessage { peer_id, message } => {
                     debug!("Receive custom message");
-                    /*match message {
-                        CustomData(custom_data) => {
-                            //send ack msg.
+                    match message {
+                        Message::Payload(payload) => {
+                            //receive message
+                            let _ = _tx.unbounded_send(NetworkMessage {
+                                peer_id: convert_peer_id_to_account_address(&peer_id).unwrap(),
+                                msg: Message::Payload(payload.clone()),
+                            });
+                            net_srv_3.lock().send_custom_message(&peer_id, Message::ACK(payload.id));
+                        }
 
+                        Message::ACK(message_id) => {
+                            if let Some(tx) = acks.lock().remove(&message_id) {
+                                let _ = tx.send(());
+                            } else {
+                                error!("Receive a invalid ack, message id:{}, peer id:{}", message_id, peer_id);
+                            }
                         }
-                        Ack(ack) => {
-                            //poll back.
-                        }
-                    } */
-                    let _ = _tx.unbounded_send(NetworkMessage {
-                        peer_id: convert_peer_id_to_account_address(&peer_id).unwrap(),
-                        msg: message,
-                    });
+                    }
                 }
                 ServiceEvent::OpenedCustomProtocol { peer_id, version: _, debug_info: _ } => {
                     info!(
@@ -124,10 +131,10 @@ fn run_network(
     let protocol_fut = stream::poll_fn(move || _rx.poll()).for_each(
         move |message| {
             let peer_id = convert_account_address_to_peer_id(message.peer_id).unwrap();
-            net_srv_sender
+            net_srv
                 .lock()
                 .send_custom_message(&peer_id, message.msg);
-            if net_srv_sender.lock().is_open(&peer_id) == false {
+            if net_srv.lock().is_open(&peer_id) == false {
                 error!("Message send to peer :{} is not connected", convert_peer_id_to_account_address(&peer_id).unwrap());
             }
             debug!("Already send message");
@@ -161,13 +168,14 @@ fn run_network(
 
 fn spawn_network(
     libp2p_service: Arc<Mutex<Libp2pService<Message>>>,
+    acks: Arc<Mutex<HashMap<u64, Sender<()>>>>,
     executor: TaskExecutor,
     close_rx: oneshot::Receiver<()>,
 ) -> (
     mpsc::UnboundedSender<NetworkMessage>,
     mpsc::UnboundedReceiver<NetworkMessage>,
 ) {
-    let (network_sender, network_receiver, network_future) = run_network(libp2p_service);
+    let (network_sender, network_receiver, network_future) = run_network(libp2p_service, acks);
     let fut = network_future
         .select(close_rx.then(|_| {
             debug!("Shutdown network");
@@ -193,8 +201,9 @@ impl NetworkService {
     ) {
         let (close_tx, close_rx) = oneshot::channel::<()>();
         let libp2p_service = build_libp2p_service(cfg).unwrap();
+        let acks = Arc::new(Mutex::new(HashMap::new()));
         let (network_sender, network_receiver) =
-            spawn_network(libp2p_service.clone(), executor, close_rx);
+            spawn_network(libp2p_service.clone(), acks.clone(), executor, close_rx);
 
 
         info!("Network started, connected peers:");
@@ -206,7 +215,7 @@ impl NetworkService {
             Self {
                 libp2p_service,
                 close_tx: Some(close_tx),
-                acks: HashMap::new(),
+                acks,
             },
             network_sender,
             network_receiver,
@@ -221,10 +230,33 @@ impl NetworkService {
         convert_peer_id_to_account_address(self.libp2p_service.lock().peer_id()).unwrap()
     }
 
-    pub fn send_message(&mut self, peer_id: &PeerId, message: Message) -> impl Future<Item=(), Error=Canceled> {
-        let (tx, rx) = oneshot::channel::<()>();
-        self.libp2p_service.lock().send_custom_message(peer_id, message);
+    pub fn send_message(&mut self, account_address: AccountAddress, message: Vec<u8>) -> impl Future<Item=(), Error=Canceled> {
+        let (tx, mut rx) = oneshot::channel::<()>();
+        let (protocol_msg, message_id) = Message::new_payload(message);
+        let peer_id = convert_account_address_to_peer_id(account_address).expect("Invalid account address");
+
+        self.libp2p_service.lock().send_custom_message(&peer_id, protocol_msg);
+        debug!("Send message with ack");
+        self.acks.lock().insert(message_id, tx);
         rx
+    }
+
+    pub fn send_message_block(&mut self, account_address: AccountAddress, message: Vec<u8>, executor: TaskExecutor) {
+        let net_srv = self.libp2p_service.clone();
+        let send_fut = self.send_message(account_address, message).map_err(|e| ());
+
+        let connected_fut = future::poll_fn(move || {
+            match try_ready!(net_srv.lock().poll()) {
+                Some(ServiceEvent::OpenedCustomProtocol { peer_id, .. }) => {
+                    debug!("Connected peer: {}", convert_peer_id_to_account_address(&peer_id).unwrap());
+                    Ok(Async::Ready(()))
+                }
+                _ => { panic!("Not hannpen") }
+            }
+        });
+
+        let fut = connected_fut.map_err(|e: std::io::Error| ()).and_then(move |_| send_fut);
+        executor.spawn(fut);
     }
 }
 

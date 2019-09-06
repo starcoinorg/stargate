@@ -11,7 +11,7 @@ mod tests {
         stream::Stream,
         sync::mpsc::{UnboundedReceiver, UnboundedSender},
     };
-    
+
     use crate::{build_network_service, convert_account_address_to_peer_id, convert_peer_id_to_account_address, NetworkMessage, NetworkComponent, NetworkService, Message};
     use libp2p::multihash;
     use network_libp2p::{identity, NodeKeyConfig, PeerId, PublicKey, Secret, CustomMessage};
@@ -20,11 +20,11 @@ mod tests {
     use tokio::{prelude::Async, runtime::Runtime, runtime::TaskExecutor};
     use types::account_address::AccountAddress;
     use crate::helper::convert_boot_nodes;
-    use crate::message::Payload;
     use hex;
     use logger::prelude::*;
     use std::time::Instant;
     use tokio::timer::{Interval, Delay};
+    use crate::message::PayloadMsg;
 
 
     fn build_test_network_pair(executor: TaskExecutor) -> (NetworkComponent, NetworkComponent) {
@@ -97,7 +97,7 @@ mod tests {
             .take(3)
             .map_err(|e| ())
             .for_each(move |_| {
-                let message = Message::Payload(Payload { id: 10, data: vec![1, 0] });
+                let message = Message::Payload(PayloadMsg { id: 10, data: vec![1, 0] });
                 match tx2.unbounded_send(NetworkMessage { peer_id: msg_peer_id, msg: message }) {
                     Ok(()) => Ok(()),
                     Err(e) => Err(()),
@@ -117,6 +117,39 @@ mod tests {
             })
             .map_err(|e| panic!("delay errored; err={:?}", e));
         executor.spawn(task);
+        rt.shutdown_on_idle().wait().unwrap();
+    }
+
+    #[test]
+    fn test_send_receive_block() {
+        ::logger::init_for_e2e_testing();
+        let rt = Runtime::new().unwrap();
+        let executor = rt.executor();
+        let ((service1, tx1, rx1),
+            (mut service2, tx2, rx2)) = build_test_network_pair(executor.clone());
+        let msg_peer_id = service1.identify();
+        // Once sender has been droped, the select_all will return directly. clone it to prevent it.
+        let tx22 = tx2.clone();
+
+        let receive_fut = rx1.for_each(|msg| {
+            println!("{:?}", msg);
+            Ok(())
+        });
+        executor.clone().spawn(receive_fut);
+        service2.send_message_block(
+            msg_peer_id,
+            "starcoiniscoming".into(),
+            executor.clone());
+
+        let task = Delay::new(Instant::now() + Duration::from_millis(5000))
+            .and_then(move |_| {
+                drop(service1);
+                drop(service2);
+                Ok(())
+            })
+            .map_err(|e| panic!("delay errored; err={:?}", e));
+        executor.spawn(task);
+
         rt.shutdown_on_idle().wait().unwrap();
     }
 
