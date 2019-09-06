@@ -2,7 +2,12 @@ use crate::{convert_account_address_to_peer_id, convert_peer_id_to_account_addre
 use crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
+    hash::{
+        CryptoHash, CryptoHasher, TestOnlyHasher,
+    },
+    HashValue,
 };
+
 use futures::{future, stream::Stream, sync::mpsc, Async, Future, sync::oneshot, stream, try_ready};
 use network_libp2p::{
     identity, start_service, NetworkConfiguration, NodeKeyConfig, PeerId, Secret,
@@ -15,13 +20,23 @@ use types::account_address::AccountAddress;
 use tokio::runtime::TaskExecutor;
 use logger::prelude::*;
 
-
 #[derive(Clone, Debug)]
 pub struct NetworkMessage {
     pub peer_id: AccountAddress,
     pub msg: Vec<u8>,
 }
 
+impl CryptoHash for NetworkMessage {
+    type Hasher = TestOnlyHasher;
+
+    fn hash(&self) -> HashValue {
+        let mut state = Self::Hasher::default();
+        let mut bytes_vec=self.peer_id.to_vec();
+        bytes_vec.extend_from_slice(&self.msg);
+        state.write(&bytes_vec);
+        state.finish()
+    }
+}
 
 pub struct NetworkService {
     pub libp2p_service: Arc<Mutex<Libp2pService<Vec<u8>>>>,
