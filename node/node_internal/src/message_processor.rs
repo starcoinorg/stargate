@@ -11,19 +11,17 @@ use futures_01::{
 use crypto::HashValue;
 use logger::prelude::*;
 use failure::prelude::*;
-use types::transaction::{SignedTransaction};
 use crypto::hash::CryptoHash;
-use chain_client::{ChainClient, watch_stream::WatchResp};
-use types::account_address::AccountAddress;
 use network::NetworkMessage;
+use star_types::channel_transaction::ChannelTransaction;
 
 
 pub struct MessageFuture {
-    rx: Receiver<NetworkMessage>,
+    rx: Receiver<ChannelTransaction>,
 }
 
 impl MessageFuture {
-    pub fn new(rx: Receiver<NetworkMessage>) -> Self {
+    pub fn new(rx: Receiver<ChannelTransaction>) -> Self {
         Self {
             rx,
         }
@@ -31,10 +29,10 @@ impl MessageFuture {
 }
 
 impl Future for MessageFuture {
-    type Item = NetworkMessage;
+    type Item = ChannelTransaction;
     type Error = std::io::Error;
 
-    fn poll(&mut self) -> Poll<NetworkMessage, Self::Error> {
+    fn poll(&mut self) -> Poll<ChannelTransaction, Self::Error> {
         while let Async::Ready(v) = self.rx.poll().unwrap() {
             match v {
                 Some(v) => {
@@ -52,7 +50,7 @@ impl Future for MessageFuture {
 }
 
 pub struct MessageProcessor {
-    tx_map: HashMap<HashValue, Sender<NetworkMessage>>,
+    tx_map: HashMap<HashValue, Sender<ChannelTransaction>>,
 }
 
 impl MessageProcessor {
@@ -62,12 +60,13 @@ impl MessageProcessor {
         }
     }
 
-    pub fn add_future(&mut self, hash: HashValue, sender: Sender<NetworkMessage>) {
+    pub fn add_future(&mut self, hash: HashValue, sender: Sender<ChannelTransaction>) {
         self.tx_map.entry(hash).or_insert(sender);
     }
 
-    pub fn send_response(&self, mut msg: NetworkMessage) -> Result<()> {
-        let hash = msg.hash();
+    pub fn send_response(&self, mut msg: ChannelTransaction) -> Result<()> {
+        let hash = msg.txn.clone().into_raw_transaction().hash();
+
         match self.tx_map.get(&hash) {
             Some(tx) => {
                 match tx.clone().send(msg).wait() {
