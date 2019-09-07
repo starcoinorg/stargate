@@ -80,8 +80,3 @@ impl MessageProcessor {
         Ok(())
     }
 }
-
-pub fn start_processor<C>(processor: Arc<Mutex<MessageProcessor>>) -> Result<()>{
-
-    Ok(())
-}

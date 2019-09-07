@@ -26,7 +26,12 @@ use state_storage::AccountState;
 use types::account_config::AccountResource;
 use star_types::system_event::Event;
 use types::language_storage::StructTag;
-use futures_01::{future::Future, sync::oneshot};
+use futures_01::{future::Future, sync::oneshot,
+                 sync::mpsc::{channel},
+};
+use crate::message_processor::{MessageProcessor,MessageFuture};
+use crypto::hash::CryptoHash;
+
 
 pub struct Node <C: ChainClient+Send+Sync+'static>{
     executor: TaskExecutor,
@@ -43,7 +48,7 @@ struct NodeInner<C: ChainClient+Send+Sync+'static> {
     sender:UnboundedSender<NetworkMessage>,
     receiver:Option<UnboundedReceiver<NetworkMessage>>,
     event_receiver:Option<UnboundedReceiver<Event>>,
-
+    message_processor:MessageProcessor,
 }
 
 impl<C:ChainClient+Send+Sync+'static> Node<C>{
@@ -63,6 +68,7 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
             sender,
             receiver:Some(receiver),
             event_receiver:Some(event_receiver),
+            message_processor:MessageProcessor::new(),
         };
         Self{
             executor,
@@ -240,17 +246,18 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
         Ok(())
     }
 
-    fn channel_txn_onchain(&self,open_channel_message:ChannelTransactionMessage,msg_type:MessageType)->Result<()>{
-        let wallet = self.wallet.clone();
+    fn channel_txn_onchain(&mut self,open_channel_message:ChannelTransactionMessage,msg_type:MessageType)->Result<()>{
         let sender = self.sender.clone();
-        let f=async move {
-            let txn = &open_channel_message.transaction.clone();
-            wallet.apply_txn(&txn).await;
-            let addr = &open_channel_message.transaction.receiver();
-            let msg = add_message_type(open_channel_message.into_proto_bytes().unwrap(), msg_type);
-            Self::send_message(sender,addr,msg);
-        };
-        f.boxed().unit_error().compat().wait();
+
+        let hash_value = open_channel_message.transaction.clone().txn.into_raw_transaction().hash() ;
+        let addr = &open_channel_message.transaction.receiver();
+        let msg = add_message_type(open_channel_message.into_proto_bytes().unwrap(), msg_type);
+        Self::send_message(sender,addr,msg);
+
+        let (tx,rx) =channel(1);
+        let message_future = MessageFuture::new(rx);
+        self.message_processor.add_future(hash_value,tx);
+        message_future.wait();
 
         Ok(())
     }
