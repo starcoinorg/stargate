@@ -108,7 +108,9 @@ impl<C> Wallet<C>
     }
 
     fn execute_transaction(&self, transaction: SignedTransaction) -> Result<TransactionOutput> {
+        info!("execute txn:{:?}", transaction);
         let output = self.vm.execute_transaction(transaction);
+        info!("output: {:?}", output);
         match output.status() {
             TransactionStatus::Discard(vm_status) => bail!("transaction execute fail for: {:#?}", vm_status),
             _ => {
@@ -164,6 +166,7 @@ impl<C> Wallet<C>
 
     /// Open channel and deposit default asset.
     pub fn open(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<ChannelTransaction> {
+        info!("wallet.open receiver:{}, sender_amount:{}, receiver_amount:{}", receiver, sender_amount, receiver_amount);
         self.execute_script(self.script_registry.open_script(), receiver, vec![
             TransactionArgument::U64(sender_amount),
             TransactionArgument::U64(receiver_amount),
@@ -171,6 +174,7 @@ impl<C> Wallet<C>
     }
 
     pub fn deposit(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<ChannelTransaction> {
+        info!("wallet.deposit asset_tag:{:?}, receiver:{}, sender_amount:{}, receiver_amount:{}", &asset_tag, receiver, sender_amount, receiver_amount);
         self.execute_asset_op(&asset_tag, ChannelOp::Deposit, receiver, vec![
             TransactionArgument::U64(sender_amount),
             TransactionArgument::U64(receiver_amount),
@@ -182,6 +186,7 @@ impl<C> Wallet<C>
     }
 
     pub fn transfer(&self, asset_tag: StructTag, receiver: AccountAddress, amount: u64) -> Result<ChannelTransaction> {
+        info!("wallet.deposit asset_tag:{:?}, receiver:{}, amount:{}", &asset_tag, receiver, amount);
         self.execute_asset_op(&asset_tag, ChannelOp::Transfer, receiver, vec![
             TransactionArgument::U64(amount),
         ])
@@ -192,6 +197,7 @@ impl<C> Wallet<C>
     }
 
     pub fn withdraw(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<ChannelTransaction> {
+        info!("wallet.deposit asset_tag:{:?}, receiver:{}, sender_amount:{}, receiver_amount:{}", &asset_tag, receiver, sender_amount, receiver_amount);
         self.execute_asset_op(&asset_tag, ChannelOp::Withdraw, receiver, vec![
             TransactionArgument::U64(sender_amount),
             TransactionArgument::U64(receiver_amount),
