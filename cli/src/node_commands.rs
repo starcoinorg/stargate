@@ -91,7 +91,7 @@ impl Command for NodeCommandWithdrawChannel {
         "withdraw money from channel"
     }
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-        match client.off_chain_pay(params,true) {
+        match client.withdraw(params,true) {
             Ok(result) => println!(
                 "withdraw success"),
             Err(e) => report_error("Error pay account", e),

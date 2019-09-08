@@ -178,7 +178,7 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
             peer_id:*account_addr,
             msg:msg.to_vec(),
         };
-        info!("send message ");
+        info!("send message to {:?}",account_addr);
         sender.unbounded_send(message);
     }
 

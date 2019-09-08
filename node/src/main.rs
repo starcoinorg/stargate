@@ -102,7 +102,7 @@ fn main() {
         build_network_service(&swarm.config.net_config, keypair.clone(),executor.clone());
 
     let node = gen_node(executor, keypair, &swarm.config.wallet, network_service,tx,rx);
-    //node.start_server(swarm.config.node_net_work.addr.parse().unwrap());
+    node.start_server();
 
     let mut node_server = setup_node_service(&swarm.config, Arc::new(node));
     node_server.start();
