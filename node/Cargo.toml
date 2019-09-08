@@ -35,3 +35,4 @@ mock_chain_client = { path = "../chain/mock_chain_client" }
 proto_conv = { path = "../common/proto_conv", features = ["derive"] }
 failure = { path = "../common/failure_ext", package = "failure_ext" }
 node_internal = { path = "./node_internal" }
+env_logger = { version = "0.6" }

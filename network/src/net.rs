@@ -31,7 +31,7 @@ impl CryptoHash for NetworkMessage {
 
     fn hash(&self) -> HashValue {
         let mut state = Self::Hasher::default();
-        let mut bytes_vec=self.peer_id.to_vec();
+        let mut bytes_vec = self.peer_id.to_vec();
         bytes_vec.extend_from_slice(&self.msg);
         state.write(&bytes_vec);
         state.finish()
@@ -90,7 +90,7 @@ fn run_network(
     let connected_fut = future::poll_fn(move || {
         match try_ready!(net_srv_1.lock().poll()) {
             Some(ServiceEvent::OpenedCustomProtocol { peer_id, .. }) => {
-                debug!("Connected peer: {}", convert_peer_id_to_account_address(&peer_id).unwrap());
+                info!("Connected peer: {}", convert_peer_id_to_account_address(&peer_id).unwrap());
                 Ok(Async::Ready(()))
             }
             _ => { panic!("Not hannpen") }
@@ -101,7 +101,7 @@ fn run_network(
         move |event| {
             match event {
                 ServiceEvent::CustomMessage { peer_id, message } => {
-                    debug!("Receive custom message");
+                    info!("Receive custom message.");
                     let _ = _tx.unbounded_send(NetworkMessage {
                         peer_id: convert_peer_id_to_account_address(&peer_id).unwrap(),
                         msg: message,
@@ -125,14 +125,17 @@ fn run_network(
 
     let protocol_fut = stream::poll_fn(move || _rx.poll()).for_each(
         move |message| {
+            info!("account:{:?}", message.peer_id);
             let peer_id = convert_account_address_to_peer_id(message.peer_id).unwrap();
             net_srv_sender
                 .lock()
                 .send_custom_message(&peer_id, message.msg);
+            info!("peer id:{:?}", peer_id);
+
             if net_srv_sender.lock().is_open(&peer_id) == false {
                 error!("Message send to peer :{} is not connected", convert_peer_id_to_account_address(&peer_id).unwrap());
             }
-            debug!("Already send message");
+            info!("Already send message");
             Ok(())
         }
     ).then(|res| {

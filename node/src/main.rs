@@ -88,6 +88,7 @@ fn gen_node(
 
 fn main() {
     let _g = logger::set_default_global_logger(false /* async */, Some(25600));
+    env_logger::init();
 
     let args = Args::from_args();
     let swarm = launch_swarm(&args).unwrap();
