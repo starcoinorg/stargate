@@ -14,6 +14,7 @@ use structopt::StructOpt;
 use tokio::runtime::{Runtime, TaskExecutor};
 use types::account_address::AccountAddress;
 use futures_01::sync::mpsc::{UnboundedReceiver,UnboundedSender};
+use logger::prelude::*;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -84,9 +85,12 @@ fn gen_node(
 }
 
 fn main() {
+    let _g = logger::set_default_global_logger(false /* async */, Some(25600));
+
     let args = Args::from_args();
     let swarm = launch_swarm(&args).unwrap();
 
+    info!("swarm is {:?}",swarm.config);
     let rt = Runtime::new().unwrap();
     let executor = rt.executor();
 
