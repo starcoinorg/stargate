@@ -101,9 +101,10 @@ fn run_network(
         move |event| {
             match event {
                 ServiceEvent::CustomMessage { peer_id, message } => {
-                    info!("Receive custom message.");
+                    let address = convert_peer_id_to_account_address(&peer_id).unwrap();
+                    info!("Receive custom message: {:?}", address);
                     let _ = _tx.unbounded_send(NetworkMessage {
-                        peer_id: convert_peer_id_to_account_address(&peer_id).unwrap(),
+                        peer_id: address,
                         msg: message,
                     });
                 }
