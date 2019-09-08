@@ -82,7 +82,9 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
     }
 
     pub fn open_channel(&self,receiver: AccountAddress, sender_amount: u64, receiver_amount: u64)->Result<()>{
+        info!("start open channel ");
         let channel_txn = self.node_inner.clone().lock().unwrap().wallet.open(receiver,sender_amount,receiver_amount)?;
+        info!("get open channel txn");
         let open_channel_message = ChannelTransactionMessage::new(channel_txn);
         let f=self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message,MessageType::ChannelTransactionMessage);
         f.unwrap().wait().unwrap();

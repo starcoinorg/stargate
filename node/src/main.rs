@@ -78,9 +78,11 @@ fn gen_node(
         wallet_config.chain_port as u32,
     );
 
+    info!("account addr is {:?}",hex::encode(account_address));
     let wallet =
         Wallet::new_with_client(executor.clone(),account_address, keypair.clone(), Arc::new(client)).unwrap();
 
+    info!("account resource is {:?}",wallet.account_resource());
     Node::new(executor.clone(), wallet, keypair.clone(), network_service,sender,receiver)
 }
 

@@ -20,6 +20,7 @@ tokio = "0.1.22"
 bytes = "0.4.12"
 rand = "0.6.5"
 grpcio = "0.4.3"
+hex = "0.3.2"
 
 logger = { path = "../common/logger" }
 node_service = { path = "./node_service"}
