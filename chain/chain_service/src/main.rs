@@ -1,11 +1,15 @@
 use chain_service::chain_node::{ChainNode, ServiceConfig};
 use clap::{value_t, Arg, App};
+use logger::prelude::*;
 
 const IP_ARG: &str = "ip";
 const PORT_ARG: &str = "port";
 const SERVICE_NAME_ARG: &str = "service_name";
 
 fn main() {
+    let _g = logger::set_default_global_logger(false /* async */, Some(25600));
+    env_logger::init();
+
     let args = App::new("chain_node")
         .author("Star Labs")
         .about("Tool to manage and create chain config")
