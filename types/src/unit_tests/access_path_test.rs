@@ -7,7 +7,8 @@ use crate::{
 };
 use proptest::prelude::*;
 use proto_conv::{test_helper::assert_protobuf_encode_decode, FromProto, IntoProto};
-use crate::account_config::account_struct_tag;
+use crate::account_config::{account_struct_tag, coin_struct_tag};
+use crate::access_path::DataPath;
 
 #[test]
 fn access_path_ord() {
@@ -84,4 +85,14 @@ fn test_access_path_data_path() {
     let off_chain_access_path = AccessPath::channel_resource_access_path(account_address, other_address, account_struct_tag());
     let off_chain_data_path = off_chain_access_path.data_path().unwrap();
     assert_eq!(off_chain_data_path.is_channel_resource(), true);
+}
+
+#[test]
+fn test_access_path_for_a_special_address() {
+    let account_address = AccountAddress::random();
+    //this address contains b'/'
+    let account_address2 = AccountAddress::from_hex_literal("0x805d16dca68907bc45cb742fe466d153479ea27708b95608b22cb6bdcfff895d").unwrap();
+    let access_path = AccessPath::channel_resource_access_path(account_address, account_address2, coin_struct_tag());
+    println!("{:?}", access_path);
+    assert_eq!(access_path.data_path().unwrap(), DataPath::channel_resource_path(account_address2, coin_struct_tag()))
 }

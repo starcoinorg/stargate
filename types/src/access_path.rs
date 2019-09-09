@@ -35,15 +35,10 @@
 //! On the other hand, if you want to query only <Alice>/a/*, `address` will be set to Alice and
 //! `path` will be set to "/a" and use the `get_prefix()` method from statedb
 
-use crate::{
-    account_address::AccountAddress,
-    account_config::{
-        association_address, ACCOUNT_RECEIVED_EVENT_PATH,
-        ACCOUNT_SENT_EVENT_PATH,
-    },
-    language_storage::{ModuleId, ResourceKey, StructTag},
-    validator_set::validator_set_path,
-};
+use crate::{account_address::AccountAddress, account_config::{
+    association_address, ACCOUNT_RECEIVED_EVENT_PATH,
+    ACCOUNT_SENT_EVENT_PATH,
+}, language_storage::{ModuleId, ResourceKey, StructTag}, validator_set::validator_set_path};
 use canonical_serialization::{CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer, SimpleDeserializer, SimpleSerializer};
 use crypto::hash::{HashValue};
 use failure::prelude::*;
@@ -62,6 +57,7 @@ use std::{
 use crate::account_config::account_struct_tag;
 use std::convert::TryFrom;
 use std::ops::Index;
+use crate::account_address::ADDRESS_LENGTH;
 
 #[derive(Default, Serialize, Deserialize, Debug, PartialEq, Hash, Eq, Clone, Ord, PartialOrd)]
 pub struct Field(String);
@@ -301,12 +297,14 @@ impl DataPath {
                 Ok(DataPath::Resource {tag: SimpleDeserializer::deserialize(&path[1..])?})
             },
             DataPath::CHANNEL_RESOURCE_TAG => {
-                let parts = path[1..].split(|byte|*byte == b'/').collect::<Vec<&[u8]>>();
-                if parts.len() < 2 {
-                    bail!("invalid access path.");
-                }else {
-                    Ok(DataPath::ChannelResource { participant: AccountAddress::try_from(parts[0])?, tag: SimpleDeserializer::deserialize(parts[1])?})
-                }
+                ensure!(
+                    path.len() > ADDRESS_LENGTH +1,
+                    "The path {:?} is of invalid length",
+                    path
+                );
+                let address_bytes = &path[1..(1+ADDRESS_LENGTH)];
+                let tag_bytes = &path[(1+ADDRESS_LENGTH)..];
+                Ok(DataPath::ChannelResource { participant: AccountAddress::try_from(address_bytes)?, tag: SimpleDeserializer::deserialize(tag_bytes)?})
             }
             _ => bail!("invalid access path.")
         }
@@ -386,7 +384,6 @@ impl From<&DataPath> for Vec<u8> {
                 let mut key = vec![];
                 key.push(DataPath::CHANNEL_RESOURCE_TAG);
                 key.append(&mut participant.to_vec());
-                key.push(b'/');
                 key.append(&mut SimpleSerializer::serialize(tag).unwrap());
                 key
             }
