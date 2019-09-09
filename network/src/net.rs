@@ -215,8 +215,8 @@ impl NetworkService {
         )
     }
 
-    pub fn is_connected(&self, peer_id: &PeerId) -> bool {
-        self.libp2p_service.lock().is_open(peer_id)
+    pub fn is_connected(&self, address: AccountAddress) -> bool {
+        self.libp2p_service.lock().is_open(&convert_account_address_to_peer_id(address).unwrap())
     }
 
     pub fn identify(&self) -> AccountAddress {

@@ -136,15 +136,29 @@ mod tests {
         });
         executor.clone().spawn(receive_fut);
 
-        let _thread = thread::Builder::new().name("network".to_string()).spawn(move || {
-            rt.shutdown_on_idle().wait().unwrap();
-        });
         //wait the network started.
         thread::sleep(Duration::from_secs(1));
-        let _ = service2.send_message_block(
-            msg_peer_id,
-            "starcoiniscoming".into());
+        for x in 0..10 {
+            let _ = service2.send_message_block(
+                msg_peer_id,
+                "starcoiniscoming".into());
+        }
         thread::sleep(Duration::from_secs(1));
+    }
+
+    #[test]
+    fn test_spawn() {
+        let rt = Runtime::new().unwrap();
+        let executor = rt.executor();
+        let task = Delay::new(Instant::now() + Duration::from_millis(1000))
+            .and_then(move |_| {
+                println!("hello spawn");
+                Ok(())
+            })
+            .map_err(|e| panic!("delay errored; err={:?}", e));
+        executor.spawn(task);
+        thread::sleep(Duration::from_secs(2));
+        //rt.shutdown_on_idle().wait().unwrap();
     }
 
     #[test]
