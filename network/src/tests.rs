@@ -84,7 +84,7 @@ mod tests {
     }
 
     #[test]
-    fn test_send_receive() {
+    fn test_send_receive_1() {
         ::logger::init_for_e2e_testing();
         let rt = Runtime::new().unwrap();
         let executor = rt.executor();
@@ -121,7 +121,7 @@ mod tests {
     }
 
     #[test]
-    fn test_send_receive_block() {
+    fn test_send_receive_2() {
         ::logger::init_for_e2e_testing();
         let rt = Runtime::new().unwrap();
         let executor = rt.executor();
@@ -136,21 +136,15 @@ mod tests {
             Ok(())
         });
         executor.clone().spawn(receive_fut);
+
+
+        let thread = thread::Builder::new().name("network".to_string()).spawn(move || {
+            rt.shutdown_on_idle().wait().unwrap();
+        });
+        thread::sleep(Duration::from_secs(2));
         service2.send_message_block(
             msg_peer_id,
-            "starcoiniscoming".into(),
-            executor.clone());
-
-        let task = Delay::new(Instant::now() + Duration::from_millis(5000))
-            .and_then(move |_| {
-                drop(service1);
-                drop(service2);
-                Ok(())
-            })
-            .map_err(|e| panic!("delay errored; err={:?}", e));
-        executor.spawn(task);
-
-        rt.shutdown_on_idle().wait().unwrap();
+            "starcoiniscoming".into());
     }
 
     #[test]
@@ -207,7 +201,6 @@ mod tests {
         assert_eq!(node_public_key.clone().into_peer_id(), peer_id.clone());
         assert_eq!(convert_account_address_to_peer_id(account_address).unwrap(), peer_id);
     }
-
 
     fn generate_account_address() -> String {
         let (private_key, public_key) = compat::generate_keypair(Option::None);
