@@ -2,10 +2,6 @@ use crate::{convert_account_address_to_peer_id, convert_peer_id_to_account_addre
 use crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
-    hash::{
-        CryptoHash, CryptoHasher, TestOnlyHasher,
-    },
-    HashValue,
 };
 
 use futures::{future, stream::Stream, sync::mpsc, Async, Future, sync::oneshot, stream, try_ready};
@@ -19,28 +15,14 @@ use std::{io, sync::Arc};
 use types::account_address::AccountAddress;
 use tokio::runtime::TaskExecutor;
 use logger::prelude::*;
-
-#[derive(Clone, Debug)]
-pub struct NetworkMessage {
-    pub peer_id: AccountAddress,
-    pub msg: Vec<u8>,
-}
-
-impl CryptoHash for NetworkMessage {
-    type Hasher = TestOnlyHasher;
-
-    fn hash(&self) -> HashValue {
-        let mut state = Self::Hasher::default();
-        let mut bytes_vec = self.peer_id.to_vec();
-        bytes_vec.extend_from_slice(&self.msg);
-        state.write(&bytes_vec);
-        state.finish()
-    }
-}
+use crate::message::{Message, NetworkMessage};
+use futures::sync::oneshot::{Canceled, Sender};
+use std::collections::HashMap;
 
 pub struct NetworkService {
-    pub libp2p_service: Arc<Mutex<Libp2pService<Vec<u8>>>>,
+    pub libp2p_service: Arc<Mutex<Libp2pService<Message>>>,
     pub close_tx: Option<oneshot::Sender<()>>,
+    acks: Arc<Mutex<HashMap<u64, Sender<()>>>>,
 }
 
 pub fn build_network_service(
@@ -68,8 +50,8 @@ pub fn build_network_service(
 
 fn build_libp2p_service(
     cfg: NetworkConfiguration,
-) -> Result<Arc<Mutex<Libp2pService<Vec<u8>>>>, io::Error> {
-    let protocol = network_libp2p::RegisteredProtocol::<Vec<u8>>::new(&b"tst"[..], &[1]);
+) -> Result<Arc<Mutex<Libp2pService<Message>>>, io::Error> {
+    let protocol = network_libp2p::RegisteredProtocol::<Message>::new(&b"tst"[..], &[1]);
     match start_service(cfg, protocol) {
         Ok((srv, _)) => Ok(Arc::new(Mutex::new(srv))),
         Err(err) => Err(err.into()),
@@ -77,7 +59,8 @@ fn build_libp2p_service(
 }
 
 fn run_network(
-    net_srv: Arc<Mutex<Libp2pService<Vec<u8>>>>,
+    net_srv: Arc<Mutex<Libp2pService<Message>>>,
+    acks: Arc<Mutex<HashMap<u64, Sender<()>>>>,
 ) -> (
     mpsc::UnboundedSender<NetworkMessage>,
     mpsc::UnboundedReceiver<NetworkMessage>,
@@ -85,28 +68,44 @@ fn run_network(
 ) {
     let (mut _tx, net_rx) = mpsc::unbounded();
     let (net_tx, mut _rx) = mpsc::unbounded::<NetworkMessage>();
-    let net_srv_sender = net_srv.clone();
     let net_srv_1 = net_srv.clone();
     let connected_fut = future::poll_fn(move || {
         match try_ready!(net_srv_1.lock().poll()) {
             Some(ServiceEvent::OpenedCustomProtocol { peer_id, .. }) => {
-                info!("Connected peer: {}", convert_peer_id_to_account_address(&peer_id).unwrap());
-                Ok(Async::Ready(()))
+                debug!("Connected peer: {}", convert_peer_id_to_account_address(&peer_id).unwrap());
             }
-            _ => { panic!("Not hannpen") }
+            _ => { debug!("Connected checked"); }
         }
+        Ok(Async::Ready(()))
     });
 
-    let network_fut = stream::poll_fn(move || net_srv.lock().poll()).for_each(
+
+    let net_srv_2 = net_srv.clone();
+    let net_srv_3 = net_srv.clone();
+    let network_fut = stream::poll_fn(move || net_srv_2.lock().poll()).for_each(
         move |event| {
             match event {
                 ServiceEvent::CustomMessage { peer_id, message } => {
-                    let address = convert_peer_id_to_account_address(&peer_id).unwrap();
-                    info!("Receive custom message: {:?}", address);
-                    let _ = _tx.unbounded_send(NetworkMessage {
-                        peer_id: address,
-                        msg: message,
-                    });
+                    match message {
+                        Message::Payload(payload) => {
+                            //receive message
+                            debug!("Receive custom message");
+                            let _ = _tx.unbounded_send(NetworkMessage {
+                                peer_id: convert_peer_id_to_account_address(&peer_id).unwrap(),
+                                msg: Message::Payload(payload.clone()),
+                            });
+                            net_srv_3.lock().send_custom_message(&peer_id, Message::ACK(payload.id));
+                        }
+
+                        Message::ACK(message_id) => {
+                            debug!("Receive message ack");
+                            if let Some(tx) = acks.lock().remove(&message_id) {
+                                let _ = tx.send(());
+                            } else {
+                                error!("Receive a invalid ack, message id:{}, peer id:{}", message_id, peer_id);
+                            }
+                        }
+                    }
                 }
                 ServiceEvent::OpenedCustomProtocol { peer_id, version: _, debug_info: _ } => {
                     info!(
@@ -128,12 +127,10 @@ fn run_network(
         move |message| {
             info!("account:{:?}", message.peer_id);
             let peer_id = convert_account_address_to_peer_id(message.peer_id).unwrap();
-            net_srv_sender
+            net_srv
                 .lock()
                 .send_custom_message(&peer_id, message.msg);
-            info!("peer id:{:?}", peer_id);
-
-            if net_srv_sender.lock().is_open(&peer_id) == false {
+            if net_srv.lock().is_open(&peer_id) == false {
                 error!("Message send to peer :{} is not connected", convert_peer_id_to_account_address(&peer_id).unwrap());
             }
             info!("Already send message");
@@ -148,7 +145,7 @@ fn run_network(
         };
         Ok(())
     });
-    let futures: Vec<Box<Future<Item=(), Error=io::Error> + Send>> = vec![
+    let futures: Vec<Box<dyn Future<Item=(), Error=io::Error> + Send>> = vec![
         Box::new(network_fut) as Box<_>,
         Box::new(protocol_fut) as Box<_>,
     ];
@@ -166,25 +163,25 @@ fn run_network(
 }
 
 fn spawn_network(
-    libp2p_service: Arc<Mutex<Libp2pService<Vec<u8>>>>,
+    libp2p_service: Arc<Mutex<Libp2pService<Message>>>,
+    acks: Arc<Mutex<HashMap<u64, Sender<()>>>>,
     executor: TaskExecutor,
     close_rx: oneshot::Receiver<()>,
 ) -> (
     mpsc::UnboundedSender<NetworkMessage>,
     mpsc::UnboundedReceiver<NetworkMessage>,
 ) {
-    let (network_sender, network_receiver, network_future) = run_network(libp2p_service);
+    let (network_sender, network_receiver, network_future) = run_network(libp2p_service, acks);
     let fut = network_future
         .select(close_rx.then(|_| {
             debug!("Shutdown network");
             Ok(())
         }))
         .map(|(val, _)| val)
-        .map_err(|(err, _)| ());
+        .map_err(|(_err, _)| ());
 
 
     executor.spawn(fut);
-
     (network_sender, network_receiver)
 }
 
@@ -199,18 +196,19 @@ impl NetworkService {
     ) {
         let (close_tx, close_rx) = oneshot::channel::<()>();
         let libp2p_service = build_libp2p_service(cfg).unwrap();
+        let acks = Arc::new(Mutex::new(HashMap::new()));
         let (network_sender, network_receiver) =
-            spawn_network(libp2p_service.clone(), executor, close_rx);
-
-
+            spawn_network(libp2p_service.clone(), acks.clone(), executor, close_rx);
         info!("Network started, connected peers:");
         for p in libp2p_service.lock().connected_peers() {
             info!("peer_id:{}", p);
         }
+
         (
             Self {
                 libp2p_service,
                 close_tx: Some(close_tx),
+                acks,
             },
             network_sender,
             network_receiver,
@@ -223,6 +221,21 @@ impl NetworkService {
 
     pub fn identify(&self) -> AccountAddress {
         convert_peer_id_to_account_address(self.libp2p_service.lock().peer_id()).unwrap()
+    }
+
+    pub fn send_message(&mut self, account_address: AccountAddress, message: Vec<u8>) -> impl Future<Item=(), Error=Canceled> {
+        let (tx, rx) = oneshot::channel::<()>();
+        let (protocol_msg, message_id) = Message::new_payload(message);
+        let peer_id = convert_account_address_to_peer_id(account_address).expect("Invalid account address");
+
+        self.libp2p_service.lock().send_custom_message(&peer_id, protocol_msg);
+        debug!("Send message with ack");
+        self.acks.lock().insert(message_id, tx);
+        rx
+    }
+
+    pub fn send_message_block(&mut self, account_address: AccountAddress, message: Vec<u8>) -> Result<(), Canceled> {
+        self.send_message(account_address, message).wait()
     }
 }
 
