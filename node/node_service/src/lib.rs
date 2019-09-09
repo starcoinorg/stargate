@@ -73,7 +73,7 @@ impl<C: ChainClient+Clone +Send+Sync+'static> node_proto::proto::node_grpc::Node
 
     fn deposit(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::DepositRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::DepositResponse>){
         let request = DepositRequest::from_proto(req).unwrap();
-        //self.node.off_c(coin_struct_tag(), request.remote_addr, request.amount).unwrap();
+        self.node.deposit(coin_struct_tag(), request.remote_addr, request.local_amount,request.remote_amount).unwrap();
         let resp=DepositResponse{}.into_proto();
         provide_grpc_response(Ok(resp),ctx,sink);
     }
