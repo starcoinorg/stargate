@@ -66,13 +66,11 @@ fn node_test() -> Result<()> {
     assert!(node2.channel_balance(addr1,coin_struct_tag()).unwrap()==fund_amount);
     assert!(node1.channel_balance(addr2,coin_struct_tag()).unwrap()==fund_amount);
 
-    /**
     let deposit_amount = 10000;
     node2.deposit(coin_struct_tag(), addr1,deposit_amount,deposit_amount);
 
     assert!(node2.channel_balance(addr1,coin_struct_tag()).unwrap()==fund_amount+deposit_amount);
     assert!(node1.channel_balance(addr2,coin_struct_tag()).unwrap()==fund_amount+deposit_amount);
-    */
 
     let transfer_amount = 1_000;
     let offchain_txn = node2.off_chain_pay(coin_struct_tag(), addr1, transfer_amount).unwrap();
