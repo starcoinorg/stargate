@@ -6,10 +6,7 @@ use types::{
     account_address::AccountAddress,
 };
 use chain_client::{RpcChainClient, ChainClient};
-use node_proto::{
-    OpenChannelRequest,OpenChannelResponse,PayRequest,PayResponse,ConnectRequest,ConnectResponse,
-    WithdrawRequest,WithdrawResponse,ChannelBalanceRequest,ChannelBalanceResponse,
-};
+use node_proto::{OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, ConnectRequest, ConnectResponse, WithdrawRequest, WithdrawResponse, ChannelBalanceRequest, ChannelBalanceResponse, DepositRequest, DepositResponse};
 use std::{
     sync::Arc,
 };
@@ -58,6 +55,15 @@ impl ClientProxy {
 
     pub fn withdraw(&mut self,space_delim_strings: &[&str], is_blocking: bool) -> Result<WithdrawResponse>{
         let response=self.node_client.withdraw(WithdrawRequest{
+            remote_addr:AccountAddress::from_hex_literal(space_delim_strings[1])?,
+            local_amount:space_delim_strings[2].parse::<u64>()?,
+            remote_amount:space_delim_strings[3].parse::<u64>()?,
+        })?;
+        Ok(response)
+    }
+
+    pub fn deposit(&mut self,space_delim_strings: &[&str], is_blocking: bool) -> Result<DepositResponse>{
+        let response=self.node_client.deposit(DepositRequest{
             remote_addr:AccountAddress::from_hex_literal(space_delim_strings[1])?,
             local_amount:space_delim_strings[2].parse::<u64>()?,
             remote_amount:space_delim_strings[3].parse::<u64>()?,

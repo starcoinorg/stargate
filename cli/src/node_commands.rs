@@ -17,6 +17,7 @@ impl Command for NodeCommand {
             Box::new(NodeCommandPay {}),
             Box::new(NodeCommandWithdrawChannel{}),
             Box::new(NodeCommandChannelBalance{}),
+            Box::new(NodeCommandDepositChannel{}),
         ];
 
         subcommand_execute(&params[0], commands, client, &params[1..]);
@@ -60,6 +61,25 @@ impl Command for NodeCommandOpenChannel {
         }
     }
 }
+
+pub struct NodeCommandDepositChannel {}
+
+impl Command for NodeCommandDepositChannel {
+    fn get_aliases(&self) -> Vec<&'static str> {
+        vec!["deposit", "d"]
+    }
+    fn get_description(&self) -> &'static str {
+        "deposit money to channel"
+    }
+    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+        match client.deposit(params,true) {
+            Ok(result) => println!(
+                "deposit success"),
+            Err(e) => report_error("Error pay account", e),
+        }
+    }
+}
+
 
 pub struct NodeCommandPay {}
 
