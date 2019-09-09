@@ -108,7 +108,7 @@ impl ChainService {
             let mut output_vec = MoveVM::execute_block(vec![sign_tx.clone()], &VM_CONFIG, &*state_db);
             output_vec.pop().and_then(|output| {
                 match output.status() {
-                    TransactionStatus::Keep(vm) => {
+                    TransactionStatus::Keep(_) => {
                         let state_hash = state_db.apply_libra_output(&output).unwrap();
                         let mut event_storage_mut = self.event_storage.as_ref().borrow_mut();
                         let event_hash = event_storage_mut.insert_events(ver + 1, output.events()).expect("insert event err.");
@@ -153,9 +153,8 @@ impl ChainService {
         let id = address.hash();
         let tx_lock = self.tx_pub.lock().unwrap();
         tx_lock.subscribe(id, sender, Box::new(move |tx: WatchData| -> bool {
-//            let signed_tx = SignedTransaction::from_proto(tx.get_tx().get_signed_txn().clone()).unwrap();
-//            signed_tx.sender() == address
-            true
+            let signed_tx = SignedTransaction::from_proto(tx.get_tx().get_signed_txn().clone()).unwrap();
+            signed_tx.sender() == address
         }));
 
         receiver
