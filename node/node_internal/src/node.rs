@@ -113,7 +113,8 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         if (!is_receiver_connected) {
             bail!("could not connect to receiver")
         }
-        let channel_txn = self.node_inner.clone().lock().unwrap().wallet.withdraw(asset_tag, receiver, sender_amount, receiver_amount)?;
+        info!("start to withdraw with {:?} {} {}",receiver,sender_amount,receiver_amount);
+        let channel_txn = self.node_inner.clone().lock().unwrap().wallet.withdraw(asset_tag,receiver,sender_amount,receiver_amount)?;
         let open_channel_message = ChannelTransactionMessage::new(channel_txn);
         let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionMessage);
         f.unwrap().wait().unwrap();
