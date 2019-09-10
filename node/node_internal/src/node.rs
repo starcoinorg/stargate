@@ -119,7 +119,9 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         let channel_txn = self.node_inner.clone().lock().unwrap().wallet.withdraw(asset_tag,receiver,sender_amount,receiver_amount)?;
         let open_channel_message = ChannelTransactionMessage::new(channel_txn);
         let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionMessage);
+        info!("start wd future");
         f.unwrap().wait().unwrap();
+        info!("get wd future result");
         Ok(())
     }
 
@@ -317,7 +319,8 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
 
         let (tx, rx) = channel(1);
         let message_future = MessageFuture::new(rx);
-        self.message_processor.add_future(hash_value, tx);
+        self.message_processor.add_future(hash_value.clone(), tx);
+        self.future_timeout(hash_value,self.default_future_timeout);
 
         Ok(message_future)
     }
@@ -334,7 +337,8 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
 
         let (tx, rx) = channel(1);
         let message_future = MessageFuture::new(rx);
-        self.message_processor.add_future(hash_value, tx.clone());
+        self.message_processor.add_future(hash_value.clone(), tx.clone());
+        self.future_timeout(hash_value,self.default_future_timeout);
 
         Ok(message_future)
     }
@@ -343,9 +347,11 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         if(timeout==0){
             return
         }
+        let processor=self.message_processor.clone();
         let task = Delay::new(Instant::now() + Duration::from_millis(timeout))
             .and_then(move |_| {
                 info!("future time out,hash is {:?}",hash);
+                processor.remove_future(hash);
                 Ok(())
             })
             .map_err(|e| panic!("delay errored; err={:?}", e));

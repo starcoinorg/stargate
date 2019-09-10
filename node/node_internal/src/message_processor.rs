@@ -39,8 +39,8 @@ impl Future for MessageFuture {
                     return Ok(Async::Ready(v));
                 }
                 None => {
-                    warn!("no data");
-                    return Ok(Async::NotReady);
+                    warn!("no data,return timeout");
+                    return Err(Self::Error::new(std::io::ErrorKind::TimedOut,"future time out"));
                 }
             }
         };
@@ -48,30 +48,32 @@ impl Future for MessageFuture {
     }
 }
 
+#[derive(Clone)]
 pub struct MessageProcessor {
-    tx_map: HashMap<HashValue, Sender<ChannelTransaction>>,
+    tx_map: Arc<Mutex<HashMap<HashValue, Sender<ChannelTransaction>>>>,
 }
 
 impl MessageProcessor {
     pub fn new() -> Self {
         Self {
-            tx_map: HashMap::new(),
+            tx_map: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    pub fn add_future(&mut self, hash: HashValue, mut sender: Sender<ChannelTransaction>) {
-        self.tx_map.entry(hash).or_insert(sender.clone());
+    pub fn add_future(&self, hash: HashValue, mut sender: Sender<ChannelTransaction>) {
+        self.tx_map.lock().unwrap().entry(hash).or_insert(sender.clone());
     }
 
     pub fn send_response(&mut self, mut msg: ChannelTransaction) -> Result<()> {
         let hash = msg.txn.clone().into_raw_transaction().hash();
 
-        match self.tx_map.get(&hash) {
+        let mut tx_map= self.tx_map.lock().unwrap();
+        match tx_map.get(&hash) {
             Some(tx) => {
                 match tx.clone().send(msg).wait() {
                     Ok(_new_tx) => {
                         info!("send message succ");
-                        self.tx_map.remove(&hash);
+                        tx_map.remove(&hash);
                     },
                     Err(_) => warn!("send message error"),
                 };
@@ -79,5 +81,9 @@ impl MessageProcessor {
             _ => info!("tx hash {} not in map", hash),
         }
         Ok(())
+    }
+
+    pub fn remove_future(&self, hash: HashValue){
+        self.tx_map.lock().unwrap().remove(&hash);
     }
 }
