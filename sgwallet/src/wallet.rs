@@ -66,7 +66,7 @@ impl<C> Wallet<C>
         C: ChainClient + Send + Sync + 'static,
 {
     const TXN_EXPIRATION: i64 = 1000 * 60;
-    const MAX_GAS_AMOUNT: u64 = 1000000;
+    const MAX_GAS_AMOUNT: u64 = 200000;
     const GAS_UNIT_PRICE: u64 = 1;
 
     pub fn new(
