@@ -87,12 +87,6 @@ impl ChainClient for MockChainClient {
         Ok(())
     }
 
-    fn submit_channel_transaction(&self, channel_transaction: ChannelTransaction) -> Result<()> {
-        let mut chain_service = self.chain_service.as_ref().borrow();
-        chain_service.send_tx(channel_transaction.txn);
-        Ok(())
-    }
-
     fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchStream<Self::WatchResp>> {
         let chain_service = self.chain_service.as_ref().borrow();
         let rx = chain_service.watch_transaction_inner(*address, ver);

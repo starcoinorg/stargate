@@ -15,7 +15,6 @@ service Chain {
     rpc Faucet(FaucetRequest) returns (FaucetResponse);
     rpc GetAccountStateWithProof(GetAccountStateWithProofRequest) returns (GetAccountStateWithProofResponse);
     rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse);
-    rpc SubmitChannelTransaction(star_types.ChannelTransaction) returns (SubmitTransactionResponse);
     rpc WatchTransaction (WatchTransactionRequest) returns (stream WatchData);
     rpc StateByAccessPath(types.AccessPath) returns (StateByAccessPathResponse);
     rpc WatchEvent(WatchEventRequest) returns (stream WatchData);

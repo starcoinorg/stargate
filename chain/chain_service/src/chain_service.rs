@@ -312,21 +312,6 @@ impl Chain for ChainService {
         provide_grpc_response(resp, ctx, sink);
     }
 
-    fn submit_channel_transaction(&mut self, ctx: ::grpcio::RpcContext, req: ChannelTransactionProto,
-                                  sink: ::grpcio::UnarySink<SubmitTransactionResponse>) {
-        let resp = ChannelTransaction::from_proto(req.clone()).and_then(|channel_tx| {
-            self.send_tx(channel_tx.txn);
-
-            let mut submit_resp = SubmitTransactionResponse::new();
-            let mut state = MempoolAddTransactionStatus::new();
-            state.set_code(MempoolAddTransactionStatusCode::Valid);
-            submit_resp.set_mempool_status(state);
-            Ok(submit_resp)
-        });
-
-        provide_grpc_response(resp, ctx, sink);
-    }
-
     fn watch_transaction(&mut self, ctx: ::grpcio::RpcContext,
                          req: WatchTransactionRequest,
                          sink: ::grpcio::ServerStreamingSink<WatchData>) {
