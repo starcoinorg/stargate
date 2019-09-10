@@ -30,6 +30,7 @@ use futures_01::{future::Future, sync::oneshot,
 use crate::message_processor::{MessageProcessor,MessageFuture};
 use crypto::hash::CryptoHash;
 use star_types::channel_transaction::ChannelTransaction;
+use futures::compat::Future01CompatExt;
 
 
 pub struct Node <C: ChainClient+Send+Sync+'static>{
@@ -199,7 +200,13 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
 
     fn send_message(&mut self, account_addr:&AccountAddress, msg:bytes::Bytes){
         info!("send message to {:?}",account_addr);
-        self.network_service.send_message_block(*account_addr,msg.to_vec());
+        //self.network_service.send_message_block(*account_addr,msg.to_vec());
+        let (message, _) = Message::new_payload(msg.to_vec());
+
+        self.sender.unbounded_send(NetworkMessage {
+            peer_id: *account_addr,
+            msg: message,
+        });
     }
 
     fn handle_open_channel_negotiate(&self,data:Vec<u8>){
@@ -232,13 +239,18 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
             let sender = self.sender.clone();
             let msg = async move {
                 let receiver_open_txn = wallet.verify_txn(&txn).unwrap();
-                wallet.apply_txn(&txn).await.unwrap();
                 let channel_txn_msg=ChannelTransactionMessage::new(receiver_open_txn);
                 let msg = add_message_type(channel_txn_msg.into_proto_bytes().unwrap(), MessageType::ChannelTransactionMessage);
                 msg
             }.boxed().unit_error().compat().wait().unwrap();
             debug!("send msg to {:?}",sender_addr);
             self.send_message(&sender_addr, msg);
+            let wallet = self.wallet.clone();
+            let txn = open_channel_message.transaction.clone();
+            let f = async move {
+                wallet.apply_txn(&txn).await.unwrap();
+            };
+            f.boxed().unit_error().compat().wait().unwrap();
         }
         if (&open_channel_message.transaction.txn().sender() == &self.wallet.get_address()) {
             let wallet = self.wallet.clone();
