@@ -82,13 +82,16 @@ impl TransactionProcessor {
         }
     }
 
-    pub fn send_response(&self, watch_data: (SignedTransaction,TransactionOutput)) -> Result<()> {
+    pub fn send_response(& mut self, watch_data: (SignedTransaction,TransactionOutput)) -> Result<()> {
         let hash = watch_data.0.raw_txn().hash();
         self.tx_cache.borrow_mut().insert(hash.clone(), watch_data.clone());
         match self.tx_map.get(&hash) {
             Some(sender) => {
                 match sender.clone().send(watch_data).wait() {
-                    Ok(_new_tx) => info!("send message succ"),
+                    Ok(_new_tx) => {
+                        info!("send message succ");
+                        self.tx_map.remove(&hash);
+                    },
                     Err(_) => warn!("send message error"),
                 };
             }

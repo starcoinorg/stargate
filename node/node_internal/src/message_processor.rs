@@ -64,13 +64,16 @@ impl MessageProcessor {
         self.tx_map.entry(hash).or_insert(sender);
     }
 
-    pub fn send_response(&self, mut msg: ChannelTransaction) -> Result<()> {
+    pub fn send_response(&mut self, mut msg: ChannelTransaction) -> Result<()> {
         let hash = msg.txn.clone().into_raw_transaction().hash();
 
         match self.tx_map.get(&hash) {
             Some(tx) => {
                 match tx.clone().send(msg).wait() {
-                    Ok(_new_tx) => info!("send message succ"),
+                    Ok(_new_tx) => {
+                        info!("send message succ");
+                        self.tx_map.remove(&hash);
+                    },
                     Err(_) => warn!("send message error"),
                 };
             }
