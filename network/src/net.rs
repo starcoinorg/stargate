@@ -94,7 +94,9 @@ fn run_network(
                                 peer_id: convert_peer_id_to_account_address(&peer_id).unwrap(),
                                 msg: Message::Payload(payload.clone()),
                             });
-                            net_srv_3.lock().send_custom_message(&peer_id, Message::ACK(payload.id));
+                            if payload.id != 0 {
+                                net_srv_3.lock().send_custom_message(&peer_id, Message::ACK(payload.id));
+                            }
                         },
                         Message::ACK(message_id) => {
                             info!("Receive message ack");

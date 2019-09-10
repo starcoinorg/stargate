@@ -60,12 +60,14 @@ impl Message {
         let message_id = get_unix_ts();
         (Message::Payload(PayloadMsg { id: message_id, data }), message_id)
     }
+    pub fn new_message(data: Vec<u8>) -> Message {
+        Message::Payload(PayloadMsg { id: 0, data })
+    }
 }
 
 fn get_unix_ts() -> u128 {
     let start = SystemTime::now();
     let since_the_epoch = start.duration_since(UNIX_EPOCH).expect("Time went backwards");
     since_the_epoch.as_nanos()
-
 }
 
