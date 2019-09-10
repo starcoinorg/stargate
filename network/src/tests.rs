@@ -99,10 +99,7 @@ mod tests {
             .take(3)
             .map_err(|e| ())
             .for_each(move |_| {
-                let message = Message::Payload(PayloadMsg {
-                    id: 10,
-                    data: vec![1, 0],
-                });
+                let (message, _) = Message::new_payload(vec![1, 0]);
                 match tx2.unbounded_send(NetworkMessage {
                     peer_id: msg_peer_id,
                     msg: message,

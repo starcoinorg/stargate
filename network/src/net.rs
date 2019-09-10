@@ -95,8 +95,7 @@ fn run_network(
                                 msg: Message::Payload(payload.clone()),
                             });
                             net_srv_3.lock().send_custom_message(&peer_id, Message::ACK(payload.id));
-                        }
-
+                        },
                         Message::ACK(message_id) => {
                             info!("Receive message ack");
                             if let Some(tx) = acks.lock().remove(&message_id) {
