@@ -68,8 +68,9 @@ impl TransactionProcessor {
 
     pub fn add_future(&mut self, hash: HashValue, sender: Sender<(SignedTransaction,TransactionOutput)>){
         match self.tx_cache.borrow().get(&hash){
-            // if result exist, complete the feature
+            // if result exist, complete the future
             Some(result) => {
+                debug!("add_future tx_hash: {}, result exist, complete the future", hash);
                 match sender.send(result.clone()).wait() {
                     Ok(_) => info!("send message succ"),
                     //TODO raise error?
@@ -77,6 +78,7 @@ impl TransactionProcessor {
                 }
             }
             None => {
+                debug!("add_future tx_hash: {}", hash);
                 self.tx_map.entry(hash).or_insert(sender);
             }
         }
@@ -103,6 +105,7 @@ impl TransactionProcessor {
 
 pub fn start_processor<C>(client: Arc<C>, addr: AccountAddress, processor: Arc<Mutex<TransactionProcessor>>) -> Result<()>
     where C: ChainClient + Sync + Send + 'static {
+    info!("start_processor for addr:{}", addr);
     let read_stream_thread = move || {
         let tx_stream = client.watch_transaction(&addr, 0).unwrap();
 

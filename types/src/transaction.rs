@@ -50,6 +50,7 @@ pub use script::Script;
 use std::ops::Deref;
 pub use transaction_argument::{parse_as_transaction_argument, TransactionArgument};
 pub use channel_transaction_payload::{ChannelWriteSetPayload, ChannelScriptPayload};
+use crate::vm_error::ExecutionStatus;
 
 pub type Version = u64; // Height - also used for MVCC in StateDB
 
@@ -885,6 +886,10 @@ impl TransactionOutput {
         }
     }
 
+    pub fn new_with_write_set(write_set: WriteSet) -> Self{
+        Self::new(write_set, vec![], 0, TransactionStatus::Keep(VMStatus::Execution(ExecutionStatus::Executed)))
+    }
+
     pub fn write_set(&self) -> &WriteSet {
         &self.write_set
     }
@@ -909,7 +914,7 @@ impl TransactionOutput {
 impl fmt::Display for TransactionOutput {
 
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "TransactionOutput")?;
+        write!(f, "TransactionOutput\t")?;
         write!(f, "write_set: {}\t", self.write_set.len())?;
         write!(f, "events: {}\t", self.events.len())?;
         write!(f, "status: {:?}\t", self.status)?;

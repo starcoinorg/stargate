@@ -149,7 +149,8 @@ impl ChainService {
         }
 
         let (sender, receiver) = unbounded::<WatchData>();
-        let id = address.hash();
+        //TODO id generate.
+        let id = HashValue::random();
         let tx_lock = self.tx_pub.lock().unwrap();
         tx_lock.subscribe(id, sender, Box::new(move |tx: WatchData| -> bool {
             let signed_tx = SignedTransaction::from_proto(tx.get_tx().get_signed_txn().clone()).unwrap();
