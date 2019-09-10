@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use sgwallet::wallet::Wallet;
 use chain_client::ChainClient;
 use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
-use crypto::SigningKey;
+use crypto::{SigningKey, HashValue};
 use crypto::test_utils::KeyPair;
 use star_types::message::{*};
 use proto_conv::{IntoProtoBytes, FromProto, FromProtoBytes};
@@ -31,6 +31,8 @@ use crate::message_processor::{MessageProcessor, MessageFuture};
 use crypto::hash::CryptoHash;
 use star_types::channel_transaction::ChannelTransaction;
 use futures::compat::Future01CompatExt;
+use std::time::{Duration, Instant};
+use tokio::timer::Delay;
 
 
 pub struct Node<C: ChainClient + Send + Sync + 'static> {
@@ -68,8 +70,8 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             sender,
             receiver: Some(receiver),
             event_receiver: Some(event_receiver),
-            message_processor: MessageProcessor::new(executor.clone()),
-            default_future_timeout: 0,
+            message_processor: MessageProcessor::new(),
+            default_future_timeout: 20000,
         };
         Self {
             executor,
@@ -315,7 +317,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
 
         let (tx, rx) = channel(1);
         let message_future = MessageFuture::new(rx);
-        self.message_processor.add_future(hash_value, tx, self.default_future_timeout);
+        self.message_processor.add_future(hash_value, tx);
 
         Ok(message_future)
     }
@@ -332,9 +334,22 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
 
         let (tx, rx) = channel(1);
         let message_future = MessageFuture::new(rx);
-        self.message_processor.add_future(hash_value, tx.clone(), self.default_future_timeout);
+        self.message_processor.add_future(hash_value, tx.clone());
 
         Ok(message_future)
+    }
+
+    fn future_timeout(&self,hash:HashValue,timeout:u64){
+        if(timeout==0){
+            return
+        }
+        let task = Delay::new(Instant::now() + Duration::from_millis(timeout))
+            .and_then(move |_| {
+                info!("future time out,hash is {:?}",hash);
+                Ok(())
+            })
+            .map_err(|e| panic!("delay errored; err={:?}", e));
+        self.executor.spawn(task);
     }
 }
 

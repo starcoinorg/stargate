@@ -15,8 +15,6 @@ use crypto::hash::CryptoHash;
 use network::NetworkMessage;
 use star_types::channel_transaction::ChannelTransaction;
 use tokio::{runtime::TaskExecutor};
-use std::time::{Duration, Instant};
-use tokio::timer::Delay;
 
 pub struct MessageFuture {
     rx: Receiver<ChannelTransaction>,
@@ -38,11 +36,10 @@ impl Future for MessageFuture {
         while let Async::Ready(v) = self.rx.poll().unwrap() {
             match v {
                 Some(v) => {
-                    warn!("tx is {:?}", v);
                     return Ok(Async::Ready(v));
                 }
                 None => {
-                    debug!("no data");
+                    warn!("no data");
                     return Ok(Async::NotReady);
                 }
             }
@@ -53,30 +50,17 @@ impl Future for MessageFuture {
 
 pub struct MessageProcessor {
     tx_map: HashMap<HashValue, Sender<ChannelTransaction>>,
-    executor: TaskExecutor,
 }
 
 impl MessageProcessor {
-    pub fn new(executor: TaskExecutor,) -> Self {
+    pub fn new() -> Self {
         Self {
             tx_map: HashMap::new(),
-            executor,
         }
     }
 
-    pub fn add_future(&mut self, hash: HashValue, mut sender: Sender<ChannelTransaction>,timeout:u64) {
+    pub fn add_future(&mut self, hash: HashValue, mut sender: Sender<ChannelTransaction>) {
         self.tx_map.entry(hash).or_insert(sender.clone());
-
-        if(timeout==0){
-            return
-        }
-        let task = Delay::new(Instant::now() + Duration::from_millis(timeout))
-            .and_then(move |_| {
-                sender.close();
-                Ok(())
-            })
-            .map_err(|e| panic!("delay errored; err={:?}", e));
-        self.executor.spawn(task);
     }
 
     pub fn send_response(&mut self, mut msg: ChannelTransaction) -> Result<()> {
