@@ -29,6 +29,7 @@ use futures_01::{future::Future, sync::oneshot,
 };
 use crate::message_processor::{MessageProcessor,MessageFuture};
 use crypto::hash::CryptoHash;
+use star_types::channel_transaction::ChannelTransaction;
 
 
 pub struct Node <C: ChainClient+Send+Sync+'static>{
@@ -47,6 +48,7 @@ struct NodeInner<C: ChainClient+Send+Sync+'static> {
     receiver:Option<UnboundedReceiver<NetworkMessage>>,
     event_receiver:Option<UnboundedReceiver<Event>>,
     message_processor:MessageProcessor,
+    default_future_timeout:u64,
 }
 
 impl<C:ChainClient+Send+Sync+'static> Node<C>{
@@ -66,7 +68,8 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
             sender,
             receiver:Some(receiver),
             event_receiver:Some(event_receiver),
-            message_processor:MessageProcessor::new(),
+            message_processor:MessageProcessor::new(executor.clone()),
+            default_future_timeout:0,
         };
         Self{
             executor,
@@ -144,6 +147,10 @@ impl<C:ChainClient+Send+Sync+'static> Node<C>{
 
     pub fn channel_balance(&self,participant: AccountAddress, asset_tag: StructTag)->Result<u64>{
         self.node_inner.clone().lock().unwrap().wallet.channel_balance(participant,asset_tag)
+    }
+
+    pub fn set_default_timeout(&self,timeout:u64){
+        self.node_inner.clone().lock().unwrap().default_future_timeout= timeout;
     }
 
     pub fn shutdown(&self){
@@ -298,7 +305,7 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
 
         let (tx,rx) =channel(1);
         let message_future = MessageFuture::new(rx);
-        self.message_processor.add_future(hash_value,tx);
+        self.message_processor.add_future(hash_value,tx,self.default_future_timeout);
 
         Ok(message_future)
     }
@@ -315,7 +322,7 @@ impl<C: ChainClient+Send+Sync+'static> NodeInner<C>{
 
         let (tx,rx) =channel(1);
         let message_future = MessageFuture::new(rx);
-        self.message_processor.add_future(hash_value,tx);
+        self.message_processor.add_future(hash_value,tx.clone(),self.default_future_timeout);
 
         Ok(message_future)
     }
