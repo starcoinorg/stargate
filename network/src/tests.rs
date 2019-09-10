@@ -1,31 +1,33 @@
 #[cfg(test)]
 mod tests {
-    use crypto::{
-        ed25519::{compat, Ed25519PrivateKey, Ed25519PublicKey},
-        test_utils::KeyPair,
-        Uniform,
-    };
+    use std::{str::FromStr, thread, time::{Instant, Duration}};
     use futures::{
         future::Future,
         stream,
         stream::Stream,
         sync::mpsc::{UnboundedReceiver, UnboundedSender},
     };
-
-    use crate::{build_network_service, convert_account_address_to_peer_id, convert_peer_id_to_account_address, NetworkMessage, NetworkComponent, NetworkService, Message};
-    use libp2p::multihash;
-    use network_libp2p::{identity, NodeKeyConfig, PeerId, PublicKey, Secret, CustomMessage};
-    use rand::prelude::*;
-    use std::{thread, time::Duration, str::FromStr};
-    use tokio::{prelude::Async, runtime::Runtime, runtime::TaskExecutor};
-    use types::account_address::AccountAddress;
-    use crate::helper::convert_boot_nodes;
     use hex;
-    use logger::prelude::*;
-    use std::time::Instant;
-    use tokio::timer::{Interval, Delay};
-    use crate::message::PayloadMsg;
+    use libp2p::multihash;
+    use rand::prelude::*;
+    use tokio::{prelude::Async, runtime::{TaskExecutor, Runtime}, timer::{Delay, Interval}};
 
+    use crypto::{
+        ed25519::{compat, Ed25519PrivateKey, Ed25519PublicKey},
+        test_utils::KeyPair,
+        Uniform,
+    };
+    use logger::prelude::*;
+    use network_libp2p::{CustomMessage, identity, NodeKeyConfig, PeerId, PublicKey, Secret};
+    use types::account_address::AccountAddress;
+
+    use crate::{
+        build_network_service, convert_account_address_to_peer_id,
+        convert_peer_id_to_account_address, Message, NetworkComponent, NetworkMessage,
+        NetworkService,
+    };
+    use crate::helper::convert_boot_nodes;
+    use crate::message::PayloadMsg;
 
     fn build_test_network_pair(executor: TaskExecutor) -> (NetworkComponent, NetworkComponent) {
         let mut l = build_test_network_services(2, 50400, executor).into_iter();
@@ -57,10 +59,11 @@ mod tests {
             };
 
             if let Some(first_addr) = first_addr.as_ref() {
-                boot_nodes.push(
-                    format!("{}/p2p/{}",
-                            first_addr,
-                            hex::encode(result[0].0.identify())));
+                boot_nodes.push(format!(
+                    "{}/p2p/{}",
+                    first_addr,
+                    hex::encode(result[0].0.identify())
+                ));
             }
             let config = sg_config::config::NetworkConfig {
                 listen: format!("/ip4/127.0.0.1/tcp/{}", base_port + index as u16),
@@ -71,10 +74,7 @@ mod tests {
                 first_addr = Some(config.listen.clone().parse().unwrap());
             }
 
-            let server = build_network_service(
-                &config, key_pair,
-                executor.clone(),
-            );
+            let server = build_network_service(&config, key_pair, executor.clone());
             result.push({
                 let c: NetworkComponent = server;
                 c
@@ -90,8 +90,8 @@ mod tests {
 
         let rt = Runtime::new().unwrap();
         let executor = rt.executor();
-        let ((service1, tx1, rx1),
-            (service2, tx2, rx2)) = build_test_network_pair(executor.clone());
+        let ((service1, tx1, rx1), (service2, tx2, rx2)) =
+            build_test_network_pair(executor.clone());
         let msg_peer_id = service1.identify();
         // Once sender has been droped, the select_all will return directly. clone it to prevent it.
         let tx22 = tx2.clone();
@@ -99,8 +99,14 @@ mod tests {
             .take(3)
             .map_err(|e| ())
             .for_each(move |_| {
-                let message = Message::Payload(PayloadMsg { id: 10, data: vec![1, 0] });
-                match tx2.unbounded_send(NetworkMessage { peer_id: msg_peer_id, msg: message }) {
+                let message = Message::Payload(PayloadMsg {
+                    id: 10,
+                    data: vec![1, 0],
+                });
+                match tx2.unbounded_send(NetworkMessage {
+                    peer_id: msg_peer_id,
+                    msg: message,
+                }) {
                     Ok(()) => Ok(()),
                     Err(e) => Err(()),
                 }
@@ -127,8 +133,8 @@ mod tests {
         ::logger::init_for_e2e_testing();
         let rt = Runtime::new().unwrap();
         let executor = rt.executor();
-        let ((service1, tx1, rx1),
-            (mut service2, tx2, rx2)) = build_test_network_pair(executor.clone());
+        let ((service1, tx1, rx1), (mut service2, tx2, rx2)) =
+            build_test_network_pair(executor.clone());
         let msg_peer_id = service1.identify();
         let receive_fut = rx1.for_each(|msg| {
             println!("{:?}", msg);
@@ -139,11 +145,8 @@ mod tests {
         //wait the network started.
         thread::sleep(Duration::from_secs(1));
         for x in 0..10 {
-            let _ = service2.send_message_block(
-                msg_peer_id,
-                "starcoiniscoming".into());
+            let _ = service2.send_message_block(msg_peer_id, "starcoiniscoming".into());
         }
-        thread::sleep(Duration::from_secs(1));
     }
 
     #[test]
@@ -205,7 +208,10 @@ mod tests {
     fn test_convert_address_peer_id() {
         let (private_key, public_key) = compat::generate_keypair(Option::None);
         let seckey = identity::ed25519::SecretKey::from_bytes(&mut private_key.to_bytes()).unwrap();
-        let node_public_key = NodeKeyConfig::Ed25519(Secret::Input(seckey)).into_keypair().unwrap().public();
+        let node_public_key = NodeKeyConfig::Ed25519(Secret::Input(seckey))
+            .into_keypair()
+            .unwrap()
+            .public();
         let account_address = AccountAddress::from_public_key(&public_key);
         let peer_id = PeerId::from_public_key(node_public_key.clone());
 
@@ -213,7 +219,10 @@ mod tests {
             assert_eq!(key.encode(), public_key.to_bytes());
         };
         assert_eq!(node_public_key.clone().into_peer_id(), peer_id.clone());
-        assert_eq!(convert_account_address_to_peer_id(account_address).unwrap(), peer_id);
+        assert_eq!(
+            convert_account_address_to_peer_id(account_address).unwrap(),
+            peer_id
+        );
     }
 
     fn generate_account_address() -> String {
@@ -227,8 +236,11 @@ mod tests {
         let mut boot_nodes = Vec::new();
 
         boot_nodes.push(
-            format!("/ip4/127.0.0.1/tcp/5000/p2p/{:}",
-                    generate_account_address()).to_string()
+            format!(
+                "/ip4/127.0.0.1/tcp/5000/p2p/{:}",
+                generate_account_address()
+            )
+                .to_string(),
         );
         boot_nodes.iter().for_each(|x| println!("{}", x));
 

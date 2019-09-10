@@ -29,13 +29,13 @@ impl CryptoHash for NetworkMessage {
 
 #[derive(Debug, PartialEq, Eq, Clone, Encode, Decode)]
 pub enum Message {
-    ACK(u64),
+    ACK(u128),
     Payload(PayloadMsg),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Encode, Decode)]
 pub struct PayloadMsg {
-    pub id: u64,
+    pub id: u128,
     pub data: Vec<u8>,
 }
 
@@ -52,19 +52,20 @@ impl CustomMessage for Message
 }
 
 impl Message {
-    pub fn new_ack(message_id: u64) -> Message {
+    pub fn new_ack(message_id: u128) -> Message {
         Message::ACK(message_id)
     }
 
-    pub fn new_payload(data: Vec<u8>) -> (Message, u64) {
+    pub fn new_payload(data: Vec<u8>) -> (Message, u128) {
         let message_id = get_unix_ts();
         (Message::Payload(PayloadMsg { id: message_id, data }), message_id)
     }
 }
 
-fn get_unix_ts() -> u64 {
+fn get_unix_ts() -> u128 {
     let start = SystemTime::now();
     let since_the_epoch = start.duration_since(UNIX_EPOCH).expect("Time went backwards");
-    since_the_epoch.as_millis() as u64
+    since_the_epoch.as_nanos()
+
 }
 

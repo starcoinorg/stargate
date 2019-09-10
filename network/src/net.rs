@@ -22,7 +22,7 @@ use std::collections::HashMap;
 pub struct NetworkService {
     pub libp2p_service: Arc<Mutex<Libp2pService<Message>>>,
     pub close_tx: Option<oneshot::Sender<()>>,
-    acks: Arc<Mutex<HashMap<u64, Sender<()>>>>,
+    acks: Arc<Mutex<HashMap<u128, Sender<()>>>>,
 }
 
 pub fn build_network_service(
@@ -60,7 +60,7 @@ fn build_libp2p_service(
 
 fn run_network(
     net_srv: Arc<Mutex<Libp2pService<Message>>>,
-    acks: Arc<Mutex<HashMap<u64, Sender<()>>>>,
+    acks: Arc<Mutex<HashMap<u128, Sender<()>>>>,
 ) -> (
     mpsc::UnboundedSender<NetworkMessage>,
     mpsc::UnboundedReceiver<NetworkMessage>,
@@ -89,7 +89,7 @@ fn run_network(
                     match message {
                         Message::Payload(payload) => {
                             //receive message
-                            debug!("Receive custom message");
+                            info!("Receive custom message");
                             let _ = _tx.unbounded_send(NetworkMessage {
                                 peer_id: convert_peer_id_to_account_address(&peer_id).unwrap(),
                                 msg: Message::Payload(payload.clone()),
@@ -98,7 +98,7 @@ fn run_network(
                         }
 
                         Message::ACK(message_id) => {
-                            debug!("Receive message ack");
+                            info!("Receive message ack");
                             if let Some(tx) = acks.lock().remove(&message_id) {
                                 let _ = tx.send(());
                             } else {
@@ -164,7 +164,7 @@ fn run_network(
 
 fn spawn_network(
     libp2p_service: Arc<Mutex<Libp2pService<Message>>>,
-    acks: Arc<Mutex<HashMap<u64, Sender<()>>>>,
+    acks: Arc<Mutex<HashMap<u128, Sender<()>>>>,
     executor: TaskExecutor,
     close_rx: oneshot::Receiver<()>,
 ) -> (
