@@ -202,7 +202,8 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
 impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
     fn send_message(&mut self, account_addr: &AccountAddress, msg: bytes::Bytes) {
         info!("send message to {:?}", account_addr);
-        //self.network_service.send_message_block(*account_addr,msg.to_vec());
+        //self.network_service.send_message_block(*account_addr, msg.to_vec());
+
         let message = Message::new_message(msg.to_vec());
 
         self.sender.unbounded_send(NetworkMessage {

@@ -29,8 +29,8 @@ mod tests {
     use crate::helper::convert_boot_nodes;
     use crate::message::PayloadMsg;
 
-    fn build_test_network_pair(executor: TaskExecutor) -> (NetworkComponent, NetworkComponent) {
-        let mut l = build_test_network_services(2, 50400, executor).into_iter();
+    fn build_test_network_pair() -> (NetworkComponent, NetworkComponent) {
+        let mut l = build_test_network_services(2, 50400).into_iter();
         let a = l.next().unwrap();
         let b = l.next().unwrap();
         (a, b)
@@ -39,7 +39,6 @@ mod tests {
     fn build_test_network_services(
         num: usize,
         base_port: u16,
-        executor: TaskExecutor,
     ) -> Vec<(
         NetworkService,
         UnboundedSender<NetworkMessage>,
@@ -74,7 +73,7 @@ mod tests {
                 first_addr = Some(config.listen.clone().parse().unwrap());
             }
 
-            let server = build_network_service(&config, key_pair, executor.clone());
+            let server = build_network_service(&config, key_pair);
             result.push({
                 let c: NetworkComponent = server;
                 c
@@ -91,7 +90,7 @@ mod tests {
         let rt = Runtime::new().unwrap();
         let executor = rt.executor();
         let ((service1, tx1, rx1), (service2, tx2, rx2)) =
-            build_test_network_pair(executor.clone());
+            build_test_network_pair();
         let msg_peer_id = service1.identify();
         // Once sender has been droped, the select_all will return directly. clone it to prevent it.
         let tx22 = tx2.clone();
@@ -131,7 +130,7 @@ mod tests {
         let rt = Runtime::new().unwrap();
         let executor = rt.executor();
         let ((service1, tx1, rx1), (mut service2, tx2, rx2)) =
-            build_test_network_pair(executor.clone());
+            build_test_network_pair();
         let msg_peer_id = service1.identify();
         let receive_fut = rx1.for_each(|msg| {
             println!("{:?}", msg);
@@ -188,8 +187,7 @@ mod tests {
     #[test]
     fn test_connected_nodes() {
         let rt = Runtime::new().unwrap();
-        let executor = rt.executor();
-        let (service1, service2) = build_test_network_pair(executor);
+        let (service1, service2) = build_test_network_pair();
         thread::sleep(Duration::new(1, 0));
         for (peer_id, peer) in service1.0.libp2p_service.lock().state().connected_peers {
             println!("id: {:?}, peer: {:?}", peer_id, peer);

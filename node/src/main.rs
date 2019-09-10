@@ -99,7 +99,7 @@ fn main() {
 
     let keypair = load_from_file(&args.faucet_key_path);
     let (network_service, tx, rx) =
-        build_network_service(&swarm.config.net_config, keypair.clone(),executor.clone());
+        build_network_service(&swarm.config.net_config, keypair.clone());
 
     let node = gen_node(executor, keypair, &swarm.config.wallet, network_service,tx,rx);
     node.start_server();

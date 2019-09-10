@@ -11,9 +11,8 @@ use network_libp2p::{
 };
 use parking_lot::Mutex;
 use sg_config::config::NetworkConfig;
-use std::{io, sync::Arc};
+use std::{io, sync::Arc, thread};
 use types::account_address::AccountAddress;
-use tokio::runtime::TaskExecutor;
 use logger::prelude::*;
 use crate::message::{Message, NetworkMessage};
 use futures::sync::oneshot::{Canceled, Sender};
@@ -28,7 +27,6 @@ pub struct NetworkService {
 pub fn build_network_service(
     cfg: &NetworkConfig,
     key_pair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
-    executor: TaskExecutor,
 ) -> (
     NetworkService,
     mpsc::UnboundedSender<NetworkMessage>,
@@ -45,7 +43,7 @@ pub fn build_network_service(
         },
         ..NetworkConfiguration::default()
     };
-    NetworkService::new(config, executor)
+    NetworkService::new(config)
 }
 
 fn build_libp2p_service(
@@ -166,7 +164,6 @@ fn run_network(
 fn spawn_network(
     libp2p_service: Arc<Mutex<Libp2pService<Message>>>,
     acks: Arc<Mutex<HashMap<u128, Sender<()>>>>,
-    executor: TaskExecutor,
     close_rx: oneshot::Receiver<()>,
 ) -> (
     mpsc::UnboundedSender<NetworkMessage>,
@@ -180,16 +177,16 @@ fn spawn_network(
         }))
         .map(|(val, _)| val)
         .map_err(|(_err, _)| ());
-
-
-    executor.spawn(fut);
+    let mut runtime = tokio::runtime::Builder::new().name_prefix("libp2p-").build().unwrap();
+    let thread = thread::Builder::new().name("network".to_string()).spawn(move || {
+        runtime.block_on(fut);
+    });
     (network_sender, network_receiver)
 }
 
 impl NetworkService {
     fn new(
         cfg: NetworkConfiguration,
-        executor: TaskExecutor,
     ) -> (
         NetworkService,
         mpsc::UnboundedSender<NetworkMessage>,
@@ -199,7 +196,7 @@ impl NetworkService {
         let libp2p_service = build_libp2p_service(cfg).unwrap();
         let acks = Arc::new(Mutex::new(HashMap::new()));
         let (network_sender, network_receiver) =
-            spawn_network(libp2p_service.clone(), acks.clone(), executor, close_rx);
+            spawn_network(libp2p_service.clone(), acks.clone(), close_rx);
         info!("Network started, connected peers:");
         for p in libp2p_service.lock().connected_peers() {
             info!("peer_id:{}", p);
