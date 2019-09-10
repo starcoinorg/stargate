@@ -101,6 +101,10 @@ impl<C> Wallet<C>
         })
     }
 
+    pub fn watch_address(&self,account_address:AccountAddress)->Result<()>{
+        start_processor(self.client.clone(), account_address, self.txn_processor.clone())
+    }
+
     pub fn default_asset() -> StructTag {
         DEFAULT_ASSET.clone()
     }
