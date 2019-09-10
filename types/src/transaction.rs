@@ -906,6 +906,18 @@ impl TransactionOutput {
     }
 }
 
+impl fmt::Display for TransactionOutput {
+
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "TransactionOutput")?;
+        write!(f, "write_set: {}\t", self.write_set.len())?;
+        write!(f, "events: {}\t", self.events.len())?;
+        write!(f, "status: {:?}\t", self.status)?;
+        write!(f, "gas_used: {:?}\t", self.gas_used)?;
+        Ok(())
+    }
+}
+
 /// `TransactionInfo` is the object we store in the transaction accumulator. It consists of the
 /// transaction as well as the execution result of this transaction.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, FromProto, IntoProto)]

@@ -1,9 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use atomic_refcell::AtomicRefCell;
-use futures::{
-    sync::mpsc::channel,
-};
+use futures::{sync::mpsc::channel};
 use protobuf::Message;
 use tokio::{runtime::TaskExecutor};
 
@@ -90,7 +88,7 @@ impl<C> Wallet<C>
         let vm = LocalVM::new(storage.clone());
         let script_registry = AssetScriptRegistry::build()?;
         let transaction_processor = Arc::new(Mutex::new(TransactionProcessor::new()));
-        start_processor(client.clone(), account_address, transaction_processor.clone());
+        start_processor(client.clone(), account_address, transaction_processor.clone())?;
         Ok(Self {
             account_address,
             keypair,
@@ -108,9 +106,9 @@ impl<C> Wallet<C>
     }
 
     fn execute_transaction(&self, transaction: SignedTransaction) -> Result<TransactionOutput> {
-        info!("execute txn:{:?}", transaction);
+        let tx_hash = transaction.raw_txn().hash();
         let output = self.vm.execute_transaction(transaction);
-        info!("output: {:?}", output);
+        debug!("execute txn:{} output: {}", tx_hash, output);
         match output.status() {
             TransactionStatus::Discard(vm_status) => bail!("transaction execute fail for: {:#?}", vm_status),
             _ => {
@@ -239,20 +237,28 @@ impl<C> Wallet<C>
         };
         //TODO verify signature
         if txn.is_travel_txn() {
-            // sender submit transaction to channel.
-            if txn_sender == self.account_address {
-                self.submit_channel_transaction(txn.clone()).await?;
-            }else{
-                //TODO receiver should watch chain response.
-            }
 
+            let (_txn,output) = if txn_sender == self.account_address {
+                // sender submit transaction to channel.
+                self.submit_transaction(txn.txn.clone()).await?
+            }else{
+                self.watch_transaction(txn.txn()).await?
+            };
+            self.apply_output(output)?;
             self.clear_witness_data(participant);
-            //TODO use chain response output.
-            self.storage.borrow().apply_txn(txn)?;
         } else {
             self.set_witness_data(participant, txn.witness_payload.clone(), txn.witness_signature.clone());
             self.storage.borrow().apply_txn(txn)?;
         }
+        Ok(())
+    }
+
+    fn apply_output(&self, output:TransactionOutput) -> Result<()>{
+        info!("apply_output: {}", output);
+        if let TransactionStatus::Discard(vm_status) = output.status() {
+            bail!("transaction execute fail for: {:#?}", vm_status)
+        }
+        self.storage.borrow().apply_libra_output(&output)?;
         Ok(())
     }
 
@@ -315,7 +321,7 @@ impl<C> Wallet<C>
             None => WriteSet::default(),
         };
         let channel_script = ChannelScriptPayload::new(channel_sequence_number, write_set, receiver, script);
-        let mut txn = types::transaction_helpers::create_signed_payload_txn(
+        let txn = types::transaction_helpers::create_signed_payload_txn(
             self,
             TransactionPayload::ChannelScript(channel_script),
             self.account_address,
@@ -331,36 +337,29 @@ impl<C> Wallet<C>
         self.account_address
     }
 
-    pub async fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<SignedTransaction> {
-        let raw_tx = signed_transaction.clone().into_raw_transaction();
-        let tx_hash = raw_tx.hash();
-
+    pub async fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<(SignedTransaction,TransactionOutput)> {
+        debug!("submit_transaction {}", signed_transaction.raw_txn().hash());
+        let watch_future = self.do_watch_transaction(&signed_transaction);
         let _resp = self.client.submit_transaction(signed_transaction)?;
-
-        let (tx, rx) = channel(1);
-        let watch_future = SubmitTransactionFuture::new(rx);
-
-        self.txn_processor.lock().unwrap().add_future(tx_hash, tx);
-
         let tx_return = watch_future.compat().await;
-
-        Ok(tx_return.unwrap())
+        Ok(tx_return?)
     }
 
-    pub async fn submit_channel_transaction(&self, channel_transaction: ChannelTransaction) -> Result<SignedTransaction> {
-        let raw_tx = channel_transaction.txn().clone().into_raw_transaction();
-        let tx_hash = raw_tx.hash();
-
-        let _resp = self.client.submit_channel_transaction(channel_transaction)?;
-
+    fn do_watch_transaction(&self, signed_transaction: &SignedTransaction) -> SubmitTransactionFuture {
+        let tx_hash = signed_transaction.raw_txn().hash();
         let (tx, rx) = channel(1);
         let watch_future = SubmitTransactionFuture::new(rx);
-
         self.txn_processor.lock().unwrap().add_future(tx_hash, tx);
-
-        let tx_return = watch_future.compat().await;
-        Ok(tx_return.unwrap())
+        watch_future
     }
+
+    pub async fn watch_transaction(&self, signed_transaction: &SignedTransaction) -> Result<(SignedTransaction,TransactionOutput)> {
+        debug!("watch_transaction {}", signed_transaction.raw_txn().hash());
+        let watch_future = self.do_watch_transaction(&signed_transaction);
+        let tx_return = watch_future.compat().await;
+        Ok(tx_return?)
+    }
+
 }
 
 impl<C> TransactionSigner for Wallet<C>

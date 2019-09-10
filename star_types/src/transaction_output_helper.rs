@@ -29,7 +29,7 @@ pub fn from_pb(mut pb: TransactionOutputProto) -> Result<TransactionOutput> {
         events.push(ContractEvent::from_proto(e).unwrap());
     }
 
-    let mut output = TransactionOutput::new(ws, events, 0, status);
+    let mut output = TransactionOutput::new(ws, events, pb.get_gas_used(), status);
     Ok(output)
 }
 

@@ -11,18 +11,20 @@ use futures::{
 use crypto::HashValue;
 use logger::prelude::*;
 use failure::prelude::*;
-use types::transaction::{SignedTransaction};
+use types::transaction::{SignedTransaction, TransactionOutput};
 use crypto::hash::CryptoHash;
 use chain_client::{ChainClient, watch_stream::WatchResp};
 use types::account_address::AccountAddress;
+use star_types::watch_tx_data::WatchTxData;
+use atomic_refcell::AtomicRefCell;
 
 
 pub struct SubmitTransactionFuture {
-    rx: Receiver<SignedTransaction>,
+    rx: Receiver<(SignedTransaction,TransactionOutput)>,
 }
 
 impl SubmitTransactionFuture {
-    pub fn new(rx: Receiver<SignedTransaction>) -> SubmitTransactionFuture {
+    pub fn new(rx: Receiver<(SignedTransaction,TransactionOutput)>) -> SubmitTransactionFuture {
         Self {
             rx,
         }
@@ -30,14 +32,14 @@ impl SubmitTransactionFuture {
 }
 
 impl Future for SubmitTransactionFuture {
-    type Item = SignedTransaction;
+    type Item = (SignedTransaction,TransactionOutput);
     type Error = std::io::Error;
 
-    fn poll(&mut self) -> Poll<SignedTransaction, Self::Error> {
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         while let Async::Ready(v) = self.rx.poll().unwrap() {
             match v {
                 Some(v) => {
-                    warn!("tx is {:?}", v);
+                    info!("tx is {}, output: {}", v.0.raw_txn().hash(), &v.1);
                     return Ok(Async::Ready(v));
                 }
                 None => {
@@ -51,26 +53,41 @@ impl Future for SubmitTransactionFuture {
 }
 
 pub struct TransactionProcessor {
-    tx_map: HashMap<HashValue, Sender<SignedTransaction>>,
+    tx_map: HashMap<HashValue, Sender<(SignedTransaction,TransactionOutput)>>,
+    //TODO limit cache size.
+    tx_cache: Arc<AtomicRefCell<HashMap<HashValue, (SignedTransaction,TransactionOutput)>>>,
 }
 
 impl TransactionProcessor {
     pub fn new() -> Self {
         Self {
-            tx_map: HashMap::new()
+            tx_map: HashMap::new(),
+            tx_cache: Arc::new(AtomicRefCell::new(HashMap::new())),
         }
     }
 
-    pub fn add_future(&mut self, hash: HashValue, sender: Sender<SignedTransaction>) {
-        self.tx_map.entry(hash).or_insert(sender);
+    pub fn add_future(&mut self, hash: HashValue, sender: Sender<(SignedTransaction,TransactionOutput)>){
+        match self.tx_cache.borrow().get(&hash){
+            // if result exist, complete the feature
+            Some(result) => {
+                match sender.send(result.clone()).wait() {
+                    Ok(_) => info!("send message succ"),
+                    //TODO raise error?
+                    Err(_) => warn!("send message error"),
+                }
+            }
+            None => {
+                self.tx_map.entry(hash).or_insert(sender);
+            }
+        }
     }
 
-    pub fn send_response(&self, mut txn: SignedTransaction) -> Result<()> {
-        let hash = txn.clone().into_raw_transaction().hash();
-
+    pub fn send_response(&self, watch_data: (SignedTransaction,TransactionOutput)) -> Result<()> {
+        let hash = watch_data.0.raw_txn().hash();
+        self.tx_cache.borrow_mut().insert(hash.clone(), watch_data.clone());
         match self.tx_map.get(&hash) {
-            Some(tx) => {
-                match tx.clone().send(txn).wait() {
+            Some(sender) => {
+                match sender.clone().send(watch_data).wait() {
                     Ok(_new_tx) => info!("send message succ"),
                     Err(_) => warn!("send message error"),
                 };
@@ -89,8 +106,9 @@ pub fn start_processor<C>(client: Arc<C>, addr: AccountAddress, processor: Arc<M
         let f = tx_stream.for_each(|item| {
             match item {
                 WatchResp::TX(data) => {
-                    let tx = data.get_signed_tx().clone();
-                    processor.lock().unwrap().send_response(tx).unwrap();
+                    let WatchTxData{signed_tx, output } = data;
+                    debug!("process tx:{}, output:{}", signed_tx.raw_txn().hash(), output);
+                    processor.lock().unwrap().send_response((signed_tx,output)).unwrap();
                 }
                 _ => { format_err!("err type"); }
             };

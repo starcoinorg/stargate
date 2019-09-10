@@ -47,6 +47,7 @@ use super::event_storage::EventStorage;
 use atomic_refcell::AtomicRefCell;
 use futures::sync::mpsc::UnboundedSender;
 use futures::future::FutureResult;
+use logger::prelude::*;
 
 lazy_static! {
     static ref VM_CONFIG:VMConfig = VMConfig::onchain();
@@ -97,42 +98,40 @@ impl ChainService {
         chain_service
     }
 
-    fn apply_on_chain_transaction(&self, sign_tx: SignedTransaction) {
-        let signed_tx_hash = sign_tx.borrow().hash();
+    fn apply_on_chain_transaction(&self, signed_tx: SignedTransaction) {
+        let signed_tx_hash = signed_tx.hash();
         let mut tx_db = self.tx_db.lock().unwrap();
         let ver = tx_db.least_version();
         let exist_flag = tx_db.exist_signed_transaction(signed_tx_hash);
         let mut watch_tx = WatchTxData::new();
         if !exist_flag {
             let state_db = self.state_db.lock().unwrap();
-            let mut output_vec = MoveVM::execute_block(vec![sign_tx.clone()], &VM_CONFIG, &*state_db);
-            output_vec.pop().and_then(|output| {
-                match output.status() {
-                    TransactionStatus::Keep(_) => {
-                        let state_hash = state_db.apply_libra_output(&output).unwrap();
-                        let mut event_storage_mut = self.event_storage.as_ref().borrow_mut();
-                        let event_hash = event_storage_mut.insert_events(ver + 1, output.events()).expect("insert event err.");
-                        tx_db.insert_tx(state_hash, event_hash, sign_tx.clone());
-                    }
-                    _ => {
-                        println!("{:?}", output);
-                    }
+            let mut output_vec = MoveVM::execute_block(vec![signed_tx.clone()], &VM_CONFIG, &*state_db);
+            let output = output_vec.pop().expect("execute txn at least has one output");
+            info!("apply_on_chain_transaction tx:{}, output: {}", signed_tx.raw_txn().hash(), output);
+            match output.status() {
+                TransactionStatus::Keep(_) => {
+                    let state_hash = state_db.apply_libra_output(&output).unwrap();
+                    let mut event_storage_mut = self.event_storage.as_ref().borrow_mut();
+                    let event_hash = event_storage_mut.insert_events(ver + 1, output.events()).expect("insert event err.");
+                    tx_db.insert_tx(state_hash, event_hash, signed_tx.clone());
                 }
-                let event_lock = self.event_pub.lock().unwrap();
-                output.events().iter().for_each(|e| {
-                    let event = e.clone().into_proto();
-                    let mut event_resp = WatchData::new();
-                    event_resp.set_event(event);
-                    event_lock.send(event_resp).unwrap();
-                });
-
-                watch_tx.set_output(transaction_output_helper::into_pb(output).unwrap());
-
-                Some(())
+                _ => {
+                }
+            }
+            let event_lock = self.event_pub.lock().unwrap();
+            output.events().iter().for_each(|e| {
+                let event = e.clone().into_proto();
+                let mut event_resp = WatchData::new();
+                event_resp.set_event(event);
+                event_lock.send(event_resp).unwrap();
             });
 
+            watch_tx.set_output(transaction_output_helper::into_pb(output).unwrap());
+
+
             let mut wt_resp = WatchData::new();
-            watch_tx.set_signed_txn(sign_tx.into_proto());
+            watch_tx.set_signed_txn(signed_tx.into_proto());
 
             wt_resp.set_tx(watch_tx);
 

@@ -6,8 +6,8 @@ use core::borrow::Borrow;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WatchTxData {
-    signed_tx: SignedTransaction,
-    output: Option<TransactionOutput>,
+    pub signed_tx: SignedTransaction,
+    pub output: TransactionOutput,
 }
 
 impl WatchTxData {
@@ -15,7 +15,7 @@ impl WatchTxData {
         return self.signed_tx.borrow()
     }
 
-    pub fn get_output(&self) -> &Option<TransactionOutput> {
+    pub fn get_output(&self) -> &TransactionOutput {
         return self.output.borrow()
     }
 }
@@ -23,14 +23,9 @@ impl WatchTxData {
 impl FromProto for WatchTxData {
     type ProtoType = super::proto::chain::WatchTxData;
 
-    fn from_proto(object: Self::ProtoType) -> Result<Self> {
-        let signed_tx = SignedTransaction::from_proto(object.get_signed_txn().clone())?;
-
-        let output = if object.has_output() {
-            Some(transaction_output_helper::from_pb(object.get_output().clone())?)
-        } else {
-            None
-        };
+    fn from_proto(mut object: Self::ProtoType) -> Result<Self> {
+        let signed_tx = SignedTransaction::from_proto(object.take_signed_txn())?;
+        let output = transaction_output_helper::from_pb(object.take_output())?;
         Ok(WatchTxData { signed_tx, output })
     }
 }

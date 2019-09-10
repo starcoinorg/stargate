@@ -111,10 +111,10 @@ pub trait StateStore : StateViewPlus {
     }
 
     fn check_asset_balance_by_write_set(&self, write_set: &WriteSet, gas_used:u64) -> Result<()>{
+        debug!("check_asset_balance write_set: {} gas_used: {}", write_set.len(), gas_used);
         let mut old_resources = vec![];
         let mut new_resources = vec![];
         for (access_path, op) in write_set {
-            debug!("check_asset_balance path:{:?} op:{:?}", access_path, op);
             match op {
                 WriteOp::Deletion => {
                     if !access_path.is_code() {
@@ -134,8 +134,6 @@ pub trait StateStore : StateViewPlus {
                 }
             }
         }
-        debug!("old resources {:?}", old_resources);
-        debug!("new resources {:?}", new_resources);
         let old_assets = AssetCollector::new();
         let new_assets = AssetCollector::new();
         for resource in old_resources {
@@ -149,9 +147,7 @@ pub trait StateStore : StateViewPlus {
             })
         }
         new_assets.incr(&coin_struct_tag(), gas_used);
-        debug!("old assets {:?}", old_assets);
-        debug!("new assets {:?}", new_assets);
-        ensure!(old_assets == new_assets, "old assets {:?} and new assets {:?} is not equals.");
+        ensure!(old_assets == new_assets, "old assets {:?} and new assets {:?} is not equals.", old_assets, new_assets);
         Ok(())
     }
 
