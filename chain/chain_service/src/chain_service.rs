@@ -43,14 +43,16 @@ use proto_conv::{FromProto, IntoProto};
 use types::contract_event::ContractEvent;
 use types::event::EventKey;
 use types::transaction::{TransactionOutput, TransactionStatus, Version};
-use types::vm_error::{VMStatus};
-use super::event_storage::EventStorage;
+use types::vm_error::VMStatus;
+use super::event_storage::{gene_event_hash, EventStorage};
 use atomic_refcell::AtomicRefCell;
 use futures::sync::mpsc::UnboundedSender;
 use futures::future::FutureResult;
 use logger::prelude::*;
 use libradb::LibraDB;
 use std::collections::HashMap;
+use std::path::Path;
+use std::fs::create_dir_all;
 
 lazy_static! {
     static ref VM_CONFIG:VMConfig = VMConfig::onchain();
@@ -67,13 +69,28 @@ pub struct ChainService {
 }
 
 impl ChainService {
-    pub fn new(exe: &TaskExecutor) -> Self {
+    pub fn new(exe: &TaskExecutor, path: &str) -> Self {
         let gauge = IntGauge::new("receive_transaction_channel_counter", "receive transaction channel").unwrap();
         let (tx_sender, mut tx_receiver) = channel::new(1_024, &gauge);
         let state_db = Arc::new(AtomicRefCell::new(StateStorage::new()));
         let tx_pub = Arc::new(Mutex::new(pub_sub::Pub::new()));
         let event_pub = Arc::new(Mutex::new(pub_sub::Pub::new()));
-        let libra_db = Arc::new(AtomicRefCell::new(LibraDB::new("./")));
+
+        let data_path = Path::new(path);
+        if !data_path.exists() {
+            create_dir_all(data_path);
+        }
+
+        let end_flag = data_path.ends_with("/");
+        let file_path = if end_flag {
+            format!("{}{}", path, "libradb")
+        } else {
+            format!("{}{}", path, "/libradb")
+        };
+
+        let file_exist = Path::new(&file_path).exists();
+        let libra_db = Arc::new(AtomicRefCell::new(LibraDB::new(data_path)));
+
         let chain_service = ChainService { sender: tx_sender, state_db, tx_pub, event_pub, task_exe: exe.clone(), libra_db };
         let chain_service_clone = chain_service.clone();
 
@@ -85,32 +102,40 @@ impl ChainService {
 
         exe.spawn(receiver_future.boxed().unit_error().compat());
 
-        let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
-        let genesis_txn = genesis_checked_txn.into_inner();
+        if !file_exist {
+            let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
+            let genesis_txn = genesis_checked_txn.into_inner();
 
-        match genesis_txn.payload() {
-            TransactionPayload::WriteSet(ws) => {
-                let tmp_state_db = chain_service.state_db.as_ref().borrow();
-                let (state_hash, accounts) = tmp_state_db.apply_write_set(&ws).unwrap();
+//            let mut output =  MoveVM::execute_block(vec![genesis_txn.clone()], &VM_CONFIG, &*(chain_service.state_db.as_ref().borrow()));
+//            println!("output.....{}", output.pop().unwrap().events().len());
 
-                let signed_tx_hash = genesis_txn.hash();
-                let tx_info = TransactionInfo::new(signed_tx_hash, state_hash, HashValue::zero(), 0);
-                let ledger_info = LedgerInfo::new(
-                    0,
-                    tx_info.hash(),
-                    HashValue::random(),
-                    *GENESIS_BLOCK_ID,
-                    0,
-                    0,
-                    None,
-                );
-                let ledger_info_with_sigs =
-                    LedgerInfoWithSignatures::new(ledger_info, HashMap::new());
+            match genesis_txn.payload() {
+                TransactionPayload::WriteSet(ws) => {
+                    let tmp_state_db = chain_service.state_db.as_ref().borrow();
+                    let (state_hash, accounts) = tmp_state_db.apply_write_set(&ws).unwrap();
 
-                chain_service.insert_into_libra(Some(ledger_info_with_sigs), genesis_txn, accounts, vec![], 0, true);
-            }
-            _ => {}
-        };
+                    let signed_tx_hash = genesis_txn.hash();
+                    let events:Vec<ContractEvent> = vec![];
+                    let event_hash = gene_event_hash(&events).expect("genesis event hash err");
+                    let tx_info = TransactionInfo::new(signed_tx_hash, state_hash, event_hash, 0);
+                    println!("111->{}   {}  {}", signed_tx_hash, state_hash, event_hash);
+                    let ledger_info = LedgerInfo::new(
+                        0,
+                        tx_info.hash(),
+                        HashValue::random(),
+                        *GENESIS_BLOCK_ID,
+                        0,
+                        0,
+                        None,
+                    );
+                    let ledger_info_with_sigs =
+                        LedgerInfoWithSignatures::new(ledger_info, HashMap::new());
+
+                    chain_service.insert_into_libra(Some(ledger_info_with_sigs), genesis_txn, accounts, events, 0, true);
+                }
+                _ => {}
+            };
+        }
         chain_service
     }
 
@@ -467,6 +492,7 @@ mod tests {
     use types::{account_address::AccountAddress, transaction::{Program, RawTransaction}, account_config::{core_code_address, association_address}};
     use std::{time::Duration};
     use crypto::hash::{CryptoHash, TransactionInfoHasher};
+    const TMP_DATA:&str = "/tmp/data";
 
     #[test]
     fn test_genesis() {
@@ -479,7 +505,7 @@ mod tests {
     fn test_chain_service() {
         let mut rt = Runtime::new().unwrap();
         let exe = rt.executor();
-        let chain_service = ChainService::new(&exe);
+        let chain_service = ChainService::new(&exe, TMP_DATA);
 //        let print_future = async move {
 //            let ten_millis = time::Duration::from_millis(100);
 //            thread::sleep(ten_millis);
@@ -510,7 +536,7 @@ mod tests {
 
         let mut rt = Runtime::new().unwrap();
         let exe = rt.executor();
-        let mut chain_service = ChainService::new(&exe);
+        let mut chain_service = ChainService::new(&exe, TMP_DATA);
 
         let state_db = chain_service.state_db.as_ref().borrow();
         let s_n = state_db.sequence_number(&account_address).unwrap();
@@ -533,7 +559,7 @@ mod tests {
     fn test_faucet() {
         let mut rt = Runtime::new().unwrap();
         let exe = rt.executor();
-        let mut chain_service = ChainService::new(&exe);
+        let mut chain_service = ChainService::new(&exe, TMP_DATA);
         let receiver = AccountAddress::random();
         chain_service.faucet_inner(receiver, 100);
         let state_db = chain_service.state_db.as_ref().borrow();
@@ -547,7 +573,7 @@ mod tests {
     fn test_account_state_proof() {
         let mut rt = Runtime::new().unwrap();
         let exe = rt.executor();
-        let mut chain_service = ChainService::new(&exe);
+        let mut chain_service = ChainService::new(&exe, TMP_DATA);
         let mut query_addr: AccountAddress = AccountAddress::random();
         for i in 1..10 {
             let receiver = AccountAddress::random();

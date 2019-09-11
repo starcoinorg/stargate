@@ -244,7 +244,7 @@ mod tests {
     use state_view::StateView;
     use types::access_path::AccessPath;
     use crate::StructCache;
-    use types::{language_storage::StructTag, account_address::AccountAddress};
+    use types::{identifier::{IdentStr, Identifier}, language_storage::StructTag, account_address::AccountAddress};
     use vm_runtime_types::loaded_data::struct_def::StructDef;
     use vm::access::ModuleAccess;
     use std::collections::HashMap;
@@ -331,7 +331,7 @@ mod tests {
         let mut struct_cache = StructCache::new();
         let state_view = MockStateView::new();
         let address = AccountAddress::default();
-        let struct_tag = StructTag { address, module: "B".to_string(), name: "T".to_string(), type_params: vec![] };
+        let struct_tag = StructTag { address, module: Identifier::from(IdentStr::new("B").unwrap()), name: Identifier::from(IdentStr::new("T").unwrap()), type_params: vec![] };
         let struct_def = struct_cache.find_struct(&struct_tag, &state_view).unwrap();
         println!("{:?}", struct_def)
     }

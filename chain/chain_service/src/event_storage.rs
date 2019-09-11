@@ -71,3 +71,9 @@ impl EventStorage {
         unimplemented!()
     }
 }
+
+pub fn gene_event_hash(events: &Vec<ContractEvent>) -> Result<HashValue> {
+    let event_hashes: Vec<HashValue> = events.iter().map(ContractEvent::hash).collect();
+    let (root_hash, _) = EmptyAccumulator::append(&EmptyReader, 0, &event_hashes)?;
+    Ok(root_hash)
+}

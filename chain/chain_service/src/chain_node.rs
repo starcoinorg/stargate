@@ -11,6 +11,7 @@ pub struct ServiceConfig {
     pub service_name: String,
     pub address: String,
     pub port: u16,
+    pub path: String,
 }
 
 pub struct ChainNode {
@@ -26,7 +27,7 @@ impl ChainNode {
         println!("{}", "Starting chain Service");
         let mut rt = Runtime::new().unwrap();
         let exe = rt.executor();
-        let service = star_types::proto::chain_grpc::create_chain(ChainService::new(&exe));
+        let service = star_types::proto::chain_grpc::create_chain(ChainService::new(&exe, &self.config.path));
         let _chain_handle = spawn_service_thread(
             service,
             self.config.address.clone(),

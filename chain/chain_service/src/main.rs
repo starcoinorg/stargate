@@ -5,6 +5,7 @@ use logger::prelude::*;
 const IP_ARG: &str = "ip";
 const PORT_ARG: &str = "port";
 const SERVICE_NAME_ARG: &str = "service_name";
+const PATH_ARG: &str = "path";
 
 fn main() {
     let _g = logger::set_default_global_logger(false /* async */, Some(25600));
@@ -27,19 +28,27 @@ fn main() {
             .takes_value(true)
             .default_value("3000")
             .help("port")
-    ).arg(
-        Arg::with_name(SERVICE_NAME_ARG)
-            .short("s")
-            .long(SERVICE_NAME_ARG)
+        ).arg(
+            Arg::with_name(SERVICE_NAME_ARG)
+                .short("s")
+                .long(SERVICE_NAME_ARG)
+                .takes_value(true)
+                .default_value("chain_service")
+                .help("service name")
+        ).arg(
+        Arg::with_name(PATH_ARG)
+            .short("t")
+            .long(PATH_ARG)
             .takes_value(true)
-            .default_value("chain_service")
-            .help("service name")
+            .default_value("/tmp/data")
+            .help("storage path")
     ).get_matches();
 
     let address = value_t!(args, IP_ARG, String).expect("Missing ip.");
     let port = value_t!(args, PORT_ARG, u16).expect("Missing port.");
     let service_name = value_t!(args, SERVICE_NAME_ARG, String).expect("Missing service name.");
-    let conf = ServiceConfig { service_name, address, port };
+    let path = value_t!(args, PATH_ARG, String).expect("Missing storage path.");
+    let conf = ServiceConfig { service_name, address, port, path };
     let node = ChainNode::new(conf);
     node.run();
 }
