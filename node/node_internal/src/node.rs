@@ -39,6 +39,7 @@ pub struct Node<C: ChainClient + Send + Sync + 'static> {
     executor: TaskExecutor,
     node_inner: Arc<Mutex<NodeInner<C>>>,
     event_sender: UnboundedSender<Event>,
+    default_max_deposit:u64,
 }
 
 struct NodeInner<C: ChainClient + Send + Sync + 'static> {
@@ -77,6 +78,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             executor,
             node_inner: Arc::new(Mutex::new(node_inner)),
             event_sender,
+            default_max_deposit:10000000,
         }
     }
 
@@ -85,6 +87,12 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
     }
 
     pub fn open_channel(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<()> {
+        if(receiver_amount>self.default_max_deposit){
+            bail!("deposit coin amount too big")
+        }
+        if(receiver_amount>sender_amount) {
+            bail!("sender amount should bigger than receiver amount.")
+        }
         let is_receiver_connected = self.node_inner.clone().lock().unwrap().network_service.is_connected(receiver);
         if (!is_receiver_connected) {
             bail!("could not connect to receiver")
@@ -99,6 +107,12 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
     }
 
     pub fn deposit(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<()> {
+        if(receiver_amount>self.default_max_deposit){
+            bail!("deposit coin amount too big")
+        }
+        if(receiver_amount>sender_amount) {
+            bail!("sender amount should bigger than receiver amount.")
+        }
         let is_receiver_connected = self.node_inner.clone().lock().unwrap().network_service.is_connected(receiver);
         if (!is_receiver_connected) {
             bail!("could not connect to receiver")
@@ -111,6 +125,9 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
     }
 
     pub fn withdraw(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<()> {
+        if(receiver_amount<sender_amount) {
+            bail!("sender amount should smaller than receiver amount.")
+        }
         let is_receiver_connected = self.node_inner.clone().lock().unwrap().network_service.is_connected(receiver);
         if (!is_receiver_connected) {
             bail!("could not connect to receiver")
