@@ -1,6 +1,0 @@
-// check: VerificationError
-// check: NegativeStackSizeInsideBlock
-
-main() {
-    abort;
-}
