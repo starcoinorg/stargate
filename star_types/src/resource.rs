@@ -8,7 +8,7 @@ use failure::prelude::*;
 use logger::prelude::*;
 use types::access_path::{Access, Accesses};
 use types::account_address::AccountAddress;
-use types::account_config::{account_struct_tag, AccountResource, COIN_MODULE_NAME, COIN_STRUCT_NAME, coin_struct_tag, core_code_address};
+use types::account_config::{account_struct_tag, AccountResource, coin_struct_tag, core_code_address, coin_module_name};
 use types::byte_array::ByteArray;
 use types::language_storage::StructTag;
 
@@ -17,6 +17,7 @@ use crate::{
     resource_type::{resource_def::ResourceDef, resource_types::ResourceType},
     resource_value::{MutResourceVal, ResourceValue},
 };
+use types::identifier::Identifier;
 
 #[derive(Clone, Debug)]
 pub struct Resource(StructTag, Vec<MutResourceVal>);
@@ -353,8 +354,8 @@ pub fn get_coin_struct_def() -> ResourceDef {
 
 pub fn get_market_cap_struct_tag() -> StructTag {
     StructTag {
-        module: COIN_MODULE_NAME.to_string(),
-        name: "MarketCap".to_string(),
+        module: coin_module_name().to_owned(),
+        name: Identifier::new("MarketCap").unwrap(),
         address: core_code_address(),
         type_params: vec![],
     }
@@ -367,8 +368,8 @@ pub fn get_market_cap_struct_def() -> ResourceDef {
 
 pub fn get_mint_capability_struct_tag() -> StructTag {
     StructTag {
-        module: COIN_MODULE_NAME.to_string(),
-        name: "MintCapability".to_string(),
+        module: coin_module_name().to_owned(),
+        name: Identifier::new("MintCapability").unwrap(),
         address: core_code_address(),
         type_params: vec![],
     }
@@ -380,8 +381,8 @@ pub fn get_mint_capability_struct_def() -> ResourceDef {
 
 pub fn get_event_handle_struct_tag() -> StructTag {
     StructTag {
-        module: "Event".to_string(),
-        name: "Handle".to_string(),
+        module: Identifier::new("Event").unwrap(),
+        name: Identifier::new("Handle").unwrap(),
         address: core_code_address(),
         type_params: vec![],
     }
@@ -396,8 +397,8 @@ pub fn get_event_handle_struct_def() -> ResourceDef {
 
 pub fn get_event_handle_id_generator_tag() -> StructTag {
     StructTag {
-        module: "Event".to_string(),
-        name: "HandleIdGenerator".to_string(),
+        module: Identifier::new("Event").unwrap(),
+        name: Identifier::new("HandleIdGenerator").unwrap(),
         address: core_code_address(),
         type_params: vec![],
     }
@@ -411,8 +412,8 @@ pub fn get_event_handle_id_generator_def() -> ResourceDef {
 
 pub fn get_block_module_tag() -> StructTag {
     StructTag {
-        module: "Block".to_string(),
-        name: "T".to_string(),
+        module: Identifier::new("Block").unwrap(),
+        name: Identifier::new("T").unwrap(),
         address: core_code_address(),
         type_params: vec![],
     }

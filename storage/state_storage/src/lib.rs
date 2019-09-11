@@ -345,14 +345,20 @@ impl StructDefResolve for StateStorage {
 
 impl TreeReader for StateStorage {
     fn get_node(&self, node_key: &NodeKey) -> Result<Node> {
+        match self.get_node_option(node_key)? {
+            Some(node) => Ok(node),
+            None => Ok(Node::Null),
+        }
+    }
+
+    fn get_node_option(&self, node_key: &NodeKey) -> Result<Option<Node>> {
         if !self.is_genesis() {
-            let node = match self.merkle_nodes.borrow().get(node_key) {
-                Some(data) => { data.clone() }
-                None => { Node::Null }
-            };
-            Ok(node)
+            match self.merkle_nodes.borrow().get(node_key) {
+                Some(data) => Ok(Some(data.clone())),
+                None => Ok(None)
+            }
         } else {
-            Ok(Node::Null)
+            Ok(None)
         }
     }
 }

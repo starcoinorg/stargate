@@ -42,7 +42,7 @@ use proto_conv::{FromProto, IntoProto};
 use types::contract_event::ContractEvent;
 use types::event::EventKey;
 use types::transaction::{TransactionOutput, TransactionStatus};
-use types::vm_error::{VMStatus, ExecutionStatus};
+use types::vm_error::{VMStatus};
 use super::event_storage::EventStorage;
 use atomic_refcell::AtomicRefCell;
 use futures::sync::mpsc::UnboundedSender;

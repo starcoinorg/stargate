@@ -5,7 +5,7 @@ use types::{language_storage::StructTag};
 use state_view::StateView;
 use types::language_storage::ModuleId;
 use vm::{file_format::{SignatureToken, StructFieldInformation, StructHandleIndex, StructDefinitionIndex},
-         errors::{VMRuntimeError, VMErrorKind, VerificationStatus, Location},
+         errors::{Location},
          views::{StructHandleView}};
 use core::borrow::{BorrowMut};
 use vm::access::ModuleAccess;
@@ -64,7 +64,7 @@ impl StructCache {
         for struct_def in struct_defs {
             let struct_handle_index = struct_def.struct_handle;
             let struct_handle = module.struct_handle_at(struct_handle_index);
-            let struct_name = module.string_at(struct_handle.name);
+            let struct_name = module.identifier_at(struct_handle.name);
             let struct_def_idx = module
                 .struct_defs_table
                 .get(struct_name)
@@ -81,7 +81,7 @@ impl StructCache {
         fetcher: &dyn ModuleFetcher,
     ) -> Result<Option<(StructTag, ResourceDef)>> {
         let struct_handle = module.struct_handle_at(idx);
-        let struct_name = module.string_at(struct_handle.name);
+        let struct_name = module.identifier_at(struct_handle.name);
         let struct_def_module_id = StructHandleView::new(module, struct_handle).module_id();
         match Self::get_loaded_module_with_fetcher(&struct_def_module_id, fetcher) {
             Ok(Some(module)) => {
@@ -133,7 +133,7 @@ impl StructCache {
             let struct_def = module.struct_def_at(idx);
             let struct_handle = module.struct_handle_at(struct_def.struct_handle);
             let struct_tag = StructTag {
-                name: module.string_at(struct_handle.name).to_owned(),
+                name: module.identifier_at(struct_handle.name).to_owned(),
                 address: *module.address(),
                 module: module.name().to_owned(),
                 type_params: vec![],
@@ -186,19 +186,8 @@ impl StructCache {
             Ok(module) => {
                 module
             }
-            Err((_, errors)) => {
-                let vm_err = VMRuntimeError {
-                    loc: Location::new(),
-                    err: VMErrorKind::Verification(
-                        errors
-                            .into_iter()
-                            .map(|error| {
-                                VerificationStatus::Dependency(id.clone(), error)
-                            })
-                            .collect(),
-                    ),
-                };
-                return Err(format_err!("vm_err: {:?}", vm_err));
+            Err((_, status)) => {
+                return Err(format_err!("vm_status_err: {:?}", status));
             }
         };
 

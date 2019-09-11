@@ -366,7 +366,7 @@ impl FromProto for FieldChanges {
         use crate::proto::change_set::{ChangeOpType_oneof_change_type, ChangeSet as ChangeSetProto};
 
         Ok(FieldChanges::new(object.take_field_changes().iter_mut().map(|field_change|{
-            let accesses = Accesses::from(field_change.take_accesses());
+            let accesses = Accesses::from_separated_string(String::from_utf8(field_change.take_accesses()).unwrap().as_str()).unwrap();
             let change_type = field_change.take_change_type().change_type;
             let change_op = match change_type {
                 None => ChangeOp::None,
