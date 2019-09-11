@@ -29,7 +29,7 @@ impl<'a, R> TransactionStateCache<'a, R>
     where
         R: 'a + StructDefResolve + AccountReader + TreeReader
 {
-    pub fn apply_write_set_in_cache(genesis_flag: bool, ver: Version, ws: &WriteSet, reader: &'a R) -> Result<(HashValue, TreeUpdateBatch)> {
+    pub fn apply_write_set_in_cache(genesis_flag: bool, ver: Version, ws: &WriteSet, reader: &'a R) -> Result<(HashValue, Vec<(AccountAddress, AccountStateBlob)>, TreeUpdateBatch)> {
         let mut account_set = HashSet::new();
         let mut account_vec = vec![];
         ws.iter().for_each(|(a, _op)| {
@@ -42,10 +42,13 @@ impl<'a, R> TransactionStateCache<'a, R>
         let cache = Self::new_cache(ver, account_vec, reader);
         cache.apply_write_set(ws, 0)?;
 
-        Self::apply_by_merkle_tree(genesis_flag, ver, cache.get_blobs(), reader)
+        let data = cache.get_blobs_with_address();
+
+        let (hash, update_batch) = Self::apply_by_merkle_tree(genesis_flag, ver, cache.get_blobs(), reader)?;
+        Ok((hash, data, update_batch))
     }
 
-    pub fn apply_libra_output_in_cache(genesis_flag: bool, ver: Version, output: &LibraTransactionOutput, reader: &'a R) -> Result<(HashValue, TreeUpdateBatch)> {
+    pub fn apply_libra_output_in_cache(genesis_flag: bool, ver: Version, output: &LibraTransactionOutput, reader: &'a R) -> Result<(HashValue, Vec<(AccountAddress, AccountStateBlob)>, TreeUpdateBatch)> {
         let mut account_set = HashSet::new();
         let mut account_vec = vec![];
         output.write_set().iter().for_each(|(a, _op)| {
@@ -58,7 +61,9 @@ impl<'a, R> TransactionStateCache<'a, R>
 
         cache.apply_libra_output(output)?;
 
-        Self::apply_by_merkle_tree(genesis_flag, ver, cache.get_blobs(), reader)
+        let data = cache.get_blobs_with_address();
+        let (hash, update_batch) = Self::apply_by_merkle_tree(genesis_flag, ver, cache.get_blobs(), reader)?;
+        Ok((hash, data, update_batch))
     }
 
     fn new_cache(ver: Version, account_vec: Vec<&AccountAddress>, reader: &'a R) -> Self {
@@ -74,6 +79,14 @@ impl<'a, R> TransactionStateCache<'a, R>
         let mut blob_vec = vec![];
         self.account_states_cache.borrow().iter().for_each(|(account_address, account_state)| {
             blob_vec.push((account_address.hash(), account_state.to_blob()))
+        });
+        blob_vec
+    }
+
+    fn get_blobs_with_address(&self) -> Vec<(AccountAddress, AccountStateBlob)> {
+        let mut blob_vec = vec![];
+        self.account_states_cache.borrow().iter().for_each(|(account_address, account_state)| {
+            blob_vec.push((account_address.clone(), account_state.to_blob()))
         });
         blob_vec
     }

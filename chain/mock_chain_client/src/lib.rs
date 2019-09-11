@@ -5,17 +5,14 @@ use crypto::HashValue;
 use tokio::runtime::TaskExecutor;
 use logger::prelude::*;
 use types::{event::EventKey, account_address::AccountAddress, access_path::AccessPath, transaction::{SignedTransaction, Version}};
-use futures03::{
-    executor::block_on,
-};
 use futures::{
     sync::mpsc::UnboundedReceiver,
     Stream, Poll,
 };
-use star_types::{proto::{chain::{WatchData, WatchTransactionResponse}}, channel_transaction::ChannelTransaction};
-use atomic_refcell::{AtomicRefCell, AtomicRef};
+use star_types::{proto::{chain::{WatchData}}, channel_transaction::ChannelTransaction};
+use atomic_refcell::{AtomicRefCell};
 use std::sync::Arc;
-use core::borrow::{Borrow, BorrowMut};
+use core::borrow::{BorrowMut};
 
 #[derive(Clone)]
 pub struct MockChainClient {
@@ -27,7 +24,7 @@ impl MockChainClient {
     pub fn new(exe: TaskExecutor) -> Self {
         let mut client = Self {
             //exe,
-            chain_service:  Arc::new(AtomicRefCell::new(ChainService::new(&exe))),
+            chain_service: Arc::new(AtomicRefCell::new(ChainService::new(&exe))),
         };
         client.init();
         client
@@ -76,12 +73,12 @@ impl ChainClient for MockChainClient {
     }
 
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()> {
-        let mut chain_service = self.chain_service.as_ref().borrow();
+        let chain_service = self.chain_service.as_ref().borrow();
         chain_service.faucet_inner(address, amount).map(|_| ())
     }
 
     fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<()> {
-        let mut chain_service = self.chain_service.as_ref().borrow();
+        let chain_service = self.chain_service.as_ref().borrow();
         chain_service.send_tx(signed_transaction);
 
         Ok(())
@@ -94,13 +91,18 @@ impl ChainClient for MockChainClient {
         Ok(WatchStream::new(stream))
     }
 
-    fn watch_event(&self, address: &AccountAddress, event_keys: Vec<EventKey>) -> Result<WatchStream<Self::WatchResp>> {
+    fn watch_event(&self, _address: &AccountAddress, _event_keys: Vec<EventKey>) -> Result<WatchStream<Self::WatchResp>> {
         unimplemented!()
     }
 
-    fn get_transaction_by_hash(&self, hash: HashValue) -> Result<SignedTransaction> {
+    fn get_transaction_by_ver(&self, ver: Version) -> Result<SignedTransaction> {
         let chain_service = self.chain_service.as_ref().borrow();
-        chain_service.get_transaction_by_hash(hash)
+        chain_service.get_transaction_by_ver(ver)
+    }
+
+    fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<SignedTransaction> {
+        let chain_service = self.chain_service.as_ref().borrow();
+        chain_service.get_transaction_by_seq_num_inner(address.clone(), seq_num)
     }
 }
 

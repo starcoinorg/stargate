@@ -4,9 +4,9 @@ use types::proto::{transaction::SignedTransaction as SignedTransactionProto, acc
 use core::borrow::Borrow;
 use std::str::FromStr;
 use crypto::HashValue;
-use star_types::{watch_tx_data::WatchTxData, proto::{chain::WatchData, channel_transaction::ChannelTransaction as ChannelTransactionProto, star_account::AccountState, chain::{GetTransactionByHashRequest, WatchEventRequest, EventKey as EventKeyProto}}, channel_transaction::ChannelTransaction, channel::SgChannelStream};
+use star_types::{watch_tx_data::WatchTxData, proto::{chain::WatchData, channel_transaction::ChannelTransaction as ChannelTransactionProto, star_account::AccountState, chain::{GetTransactionByVersionRequest, GetTransactionBySeqNumRequest, WatchEventRequest, EventKey as EventKeyProto}}, channel_transaction::ChannelTransaction, channel::SgChannelStream};
 use types::transaction::Version;
-use star_types::{proto::{chain_grpc, chain::{FaucetRequest, LeastRootRequest, GetAccountStateWithProofRequest, SubmitTransactionRequest, WatchTransactionRequest, WatchTransactionResponse}}, resource::Resource};
+use star_types::{proto::{chain_grpc, chain::{FaucetRequest, LeastRootRequest, GetAccountStateWithProofRequest, SubmitTransactionRequest, WatchTransactionRequest}}, resource::Resource};
 use grpcio::{EnvBuilder, ChannelBuilder};
 use std::{sync::Arc, thread};
 use proto_conv::IntoProto;
@@ -29,7 +29,8 @@ pub trait ChainClient {
     fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<()>;
     fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchStream<Self::WatchResp>>;
     fn watch_event(&self, address: &AccountAddress, event_keys: Vec<EventKey>) -> Result<WatchStream<Self::WatchResp>>;
-    fn get_transaction_by_hash(&self, hash: HashValue) -> Result<SignedTransaction>;
+    fn get_transaction_by_ver(&self, ver: Version) -> Result<SignedTransaction>;
+    fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<SignedTransaction>;
 }
 
 #[derive(Clone)]
@@ -140,10 +141,21 @@ impl ChainClient for RpcChainClient {
         Ok(WatchStream::new(event_stream))
     }
 
-    fn get_transaction_by_hash(&self, hash: HashValue) -> Result<SignedTransaction> {
-        let mut req = GetTransactionByHashRequest::new();
-        req.set_state_root_hash(hash.to_vec());
-        let resp = self.client.get_transaction_by_hash(&req);
+    fn get_transaction_by_ver(&self, ver: Version) -> Result<SignedTransaction> {
+        let mut req = GetTransactionByVersionRequest::new();
+        req.set_ver(ver);
+        let resp = self.client.get_transaction_by_version(&req);
+        match resp {
+            Ok(tx) => { Ok(SignedTransaction::from_proto(tx.get_signed_tx().clone()).unwrap()) }
+            Err(err) => { bail_err!(err) }
+        }
+    }
+
+    fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<SignedTransaction> {
+        let mut req = GetTransactionBySeqNumRequest::new();
+        req.set_address(address.to_vec());
+        req.set_seq_num(seq_num);
+        let resp = self.client.get_transaction_by_seq_num(&req);
         match resp {
             Ok(tx) => { Ok(SignedTransaction::from_proto(tx.get_signed_tx().clone()).unwrap()) }
             Err(err) => { bail_err!(err) }

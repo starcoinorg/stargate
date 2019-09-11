@@ -18,14 +18,20 @@ service Chain {
     rpc WatchTransaction (WatchTransactionRequest) returns (stream WatchData);
     rpc StateByAccessPath(types.AccessPath) returns (StateByAccessPathResponse);
     rpc WatchEvent(WatchEventRequest) returns (stream WatchData);
-    rpc GetTransactionByHash(GetTransactionByHashRequest) returns (GetTransactionByHashResponse);
+    rpc GetTransactionByVersion(GetTransactionByVersionRequest) returns (GetTransactionResponse);
+    rpc GetTransactionBySeqNum(GetTransactionBySeqNumRequest) returns (GetTransactionResponse);
 }
 
-message GetTransactionByHashRequest {
-    bytes state_root_hash = 1;
+message GetTransactionByVersionRequest {
+    uint64 ver = 1;
 }
 
-message GetTransactionByHashResponse {
+message GetTransactionBySeqNumRequest {
+    bytes address = 1;
+    uint64 seq_num = 2;
+}
+
+message GetTransactionResponse {
     types.SignedTransaction signed_tx = 1;
 }
 
@@ -39,10 +45,6 @@ message WatchEventRequest {
 
 message EventKey {
     bytes key = 1;
-}
-
-message WatchEventResponse {
-    types.Event event = 1;
 }
 
 message LeastRootRequest {
@@ -87,11 +89,6 @@ message WatchTransactionRequest {
     }
 }
 
-message WatchTransactionResponse {
-    types.SignedTransaction signed_txn = 1;
-    star_types.TransactionOutput output = 2;
-}
-
 message SubmitTransactionRequest {
   types.SignedTransaction signed_txn = 1;
 }
@@ -127,8 +124,9 @@ message WatchTxData {
 }
 
 message WatchData {
+    uint64 version = 1;
     oneof data {
-        WatchTxData tx = 1;
-        types.Event event = 2;
+        WatchTxData tx = 2;
+        types.Event event = 3;
     }
 }

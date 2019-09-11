@@ -158,7 +158,7 @@ impl StateStorage {
         }
     }
 
-    fn get_least_version(&self) -> Version {
+    pub fn get_least_version(&self) -> Version {
         let tmp = self.next_version.load(Ordering::SeqCst);
         if tmp > 0 {
             tmp - 1
@@ -222,27 +222,30 @@ impl StateStorage {
         self.account_state(self.get_least_version(), &access_path.address).and_then(|state| state.get(&access_path.path))
     }
 
-    pub fn apply_txn(&self, txn: &ChannelTransaction) -> Result<HashValue> {
-        TransactionStateCache::apply_write_set_in_cache(self.is_genesis(), self.get_least_version(), txn.witness_payload_write_set(), self).and_then(|(root_hash, tree_update_batch)| -> Result<HashValue> {
+    pub fn apply_txn(&self, txn: &ChannelTransaction) -> Result<(HashValue, Vec<(AccountAddress, AccountStateBlob)>)> {
+        TransactionStateCache::apply_write_set_in_cache(self.is_genesis(), self.get_least_version(), txn.witness_payload_write_set(), self)
+            .and_then(|(root_hash, accounts, tree_update_batch)| {
             self.store_merkle_node(tree_update_batch);
             self.next_version.fetch_add(1, Ordering::SeqCst);
-            Ok(root_hash)
+            Ok((root_hash, accounts))
         })
     }
 
-    pub fn apply_write_set(&self, write_set: &WriteSet) -> Result<HashValue> {
-        TransactionStateCache::apply_write_set_in_cache(self.is_genesis(), self.get_least_version(), write_set, self).and_then(|(root_hash, tree_update_batch)| -> Result<HashValue> {
+    pub fn apply_write_set(&self, write_set: &WriteSet) -> Result<(HashValue, Vec<(AccountAddress, AccountStateBlob)>)> {
+        TransactionStateCache::apply_write_set_in_cache(self.is_genesis(), self.get_least_version(), write_set, self)
+            .and_then(|(root_hash, accounts, tree_update_batch)| {
             self.store_merkle_node(tree_update_batch);
             self.next_version.fetch_add(1, Ordering::SeqCst);
-            Ok(root_hash)
+            Ok((root_hash, accounts))
         })
     }
 
-    pub fn apply_libra_output(&self, txn_output: &types::transaction::TransactionOutput) -> Result<HashValue> {
-        TransactionStateCache::apply_libra_output_in_cache(self.is_genesis(), self.get_least_version(), txn_output, self).and_then(|(root_hash, tree_update_batch)| -> Result<HashValue> {
+    pub fn apply_libra_output(&self, txn_output: &types::transaction::TransactionOutput) -> Result<(HashValue, Vec<(AccountAddress, AccountStateBlob)>)> {
+        TransactionStateCache::apply_libra_output_in_cache(self.is_genesis(), self.get_least_version(), txn_output, self)
+            .and_then(|(root_hash, accounts, tree_update_batch)| {
             self.store_merkle_node(tree_update_batch);
             self.next_version.fetch_add(1, Ordering::SeqCst);
-            Ok(root_hash)
+            Ok((root_hash, accounts))
         })
     }
 

@@ -43,7 +43,8 @@ atomic_refcell = "0.1.3"
 signal-hook = "0.1.10"
 logger = { path = "../../libra/common/logger" }
 env_logger = { version = "0.6" }
-
+storage_proto = { path = "../../storage/storage_proto" }
+libradb = { path = "../../storage/libradb" }
 
 [dependencies.ed25519-dalek]
 version = "1.0.0-pre.1"
