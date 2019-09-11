@@ -87,10 +87,16 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
     }
 
     pub fn open_channel(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<()> {
-        if(receiver_amount>self.default_max_deposit){
+        let f = self.open_channel_async(receiver, sender_amount, receiver_amount);
+        f.unwrap().wait().unwrap();
+        Ok(())
+    }
+
+    pub fn open_channel_async(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<MessageFuture> {
+        if (receiver_amount > self.default_max_deposit) {
             bail!("deposit coin amount too big")
         }
-        if(receiver_amount>sender_amount) {
+        if (receiver_amount > sender_amount) {
             bail!("sender amount should bigger than receiver amount.")
         }
         let is_receiver_connected = self.node_inner.clone().lock().unwrap().network_service.is_connected(receiver);
@@ -102,15 +108,20 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         info!("get open channel txn");
         let open_channel_message = ChannelTransactionMessage::new(channel_txn);
         let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionMessage);
+        f
+    }
+
+    pub fn deposit(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<()> {
+        let f = self.deposit_async(asset_tag, receiver, sender_amount, receiver_amount);
         f.unwrap().wait().unwrap();
         Ok(())
     }
 
-    pub fn deposit(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<()> {
-        if(receiver_amount>self.default_max_deposit){
+    pub fn deposit_async(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<MessageFuture> {
+        if (receiver_amount > self.default_max_deposit) {
             bail!("deposit coin amount too big")
         }
-        if(receiver_amount>sender_amount) {
+        if (receiver_amount > sender_amount) {
             bail!("sender amount should bigger than receiver amount.")
         }
         let is_receiver_connected = self.node_inner.clone().lock().unwrap().network_service.is_connected(receiver);
@@ -120,36 +131,45 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         let channel_txn = self.node_inner.clone().lock().unwrap().wallet.deposit(asset_tag, receiver, sender_amount, receiver_amount)?;
         let open_channel_message = ChannelTransactionMessage::new(channel_txn);
         let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionMessage);
-        f.unwrap().wait().unwrap();
-        Ok(())
+        f
     }
 
     pub fn withdraw(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<()> {
-        if(receiver_amount<sender_amount) {
-            bail!("sender amount should smaller than receiver amount.")
-        }
-        let is_receiver_connected = self.node_inner.clone().lock().unwrap().network_service.is_connected(receiver);
-        if (!is_receiver_connected) {
-            bail!("could not connect to receiver")
-        }
-        info!("start to withdraw with {:?} {} {}",receiver,sender_amount,receiver_amount);
-        let channel_txn = self.node_inner.clone().lock().unwrap().wallet.withdraw(asset_tag,receiver,sender_amount,receiver_amount)?;
-        let open_channel_message = ChannelTransactionMessage::new(channel_txn);
-        let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionMessage);
+        let f = self.withdraw_async(asset_tag, receiver, sender_amount, receiver_amount);
         info!("start wd future");
         f.unwrap().wait().unwrap();
         info!("get wd future result");
         Ok(())
     }
 
+    pub fn withdraw_async(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<MessageFuture> {
+        if (receiver_amount < sender_amount) {
+            bail!("sender amount should smaller than receiver amount.")
+        }
+        let is_receiver_connected = self.node_inner.clone().lock().unwrap().network_service.is_connected(receiver);
+        if (!is_receiver_connected) {
+            bail!("could not connect to receiver")
+        }
+        info!("start to withdraw with {:?} {} {}", receiver, sender_amount, receiver_amount);
+        let channel_txn = self.node_inner.clone().lock().unwrap().wallet.withdraw(asset_tag, receiver, sender_amount, receiver_amount)?;
+        let open_channel_message = ChannelTransactionMessage::new(channel_txn);
+        let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionMessage);
+        f
+    }
+
     pub fn off_chain_pay(&self, coin_resource_tag: types::language_storage::StructTag, receiver_address: AccountAddress, amount: u64) -> Result<()> {
+        let f = self.off_chain_pay_async(coin_resource_tag, receiver_address, amount);
+        f.unwrap().wait().unwrap();
+        Ok(())
+    }
+
+    pub fn off_chain_pay_async(&self, coin_resource_tag: StructTag, receiver_address: AccountAddress, amount: u64) -> Result<MessageFuture> {
         let is_receiver_connected = self.node_inner.clone().lock().unwrap().network_service.is_connected(receiver_address);
         if (!is_receiver_connected) {
             bail!("could not connect to receiver")
         }
         let f = self.node_inner.clone().lock().unwrap().off_chain_pay(coin_resource_tag, receiver_address, amount);
-        f.unwrap().wait().unwrap();
-        Ok(())
+        f
     }
 
     pub fn start_server(&self) {
