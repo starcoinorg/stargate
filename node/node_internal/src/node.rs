@@ -57,9 +57,9 @@ struct NodeInner<C: ChainClient + Send + Sync + 'static> {
 
 impl<C: ChainClient + Send + Sync + 'static> Node<C> {
     pub fn new(executor: TaskExecutor, wallet: Wallet<C>, keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
-               mut network_service: NetworkService, sender: UnboundedSender<NetworkMessage>, receiver: UnboundedReceiver<NetworkMessage>) -> Self {
+               mut network_service: NetworkService, sender: UnboundedSender<NetworkMessage>, receiver: UnboundedReceiver<NetworkMessage>,net_close_tx: oneshot::Sender<()>,
+    ) -> Self {
         let executor_clone = executor.clone();
-        let net_close_tx = network_service.close_tx.take();
         let (event_sender, event_receiver) = futures_01::sync::mpsc::unbounded();
 
         let node_inner = NodeInner {
@@ -67,7 +67,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             keypair,
             wallet: Arc::new(wallet),
             network_service,
-            network_service_close_tx: net_close_tx,
+            network_service_close_tx: Some(net_close_tx),
             sender,
             receiver: Some(receiver),
             event_receiver: Some(event_receiver),

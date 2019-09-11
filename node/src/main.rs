@@ -16,6 +16,7 @@ use types::account_address::AccountAddress;
 use futures_01::sync::mpsc::{UnboundedReceiver,UnboundedSender};
 use logger::prelude::*;
 
+
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "stargate",
@@ -70,7 +71,8 @@ fn gen_node(
     executor: TaskExecutor,
     keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
     wallet_config: &WalletConfig,
-    network_service: NetworkService, sender:UnboundedSender<NetworkMessage>, receiver:UnboundedReceiver<NetworkMessage>
+    network_service: NetworkService, sender:UnboundedSender<NetworkMessage>, receiver:UnboundedReceiver<NetworkMessage>,
+    close_tx: futures_01::sync::oneshot::Sender<()>,
 ) -> (Node<RpcChainClient>) {
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     let client = RpcChainClient::new(
@@ -83,7 +85,7 @@ fn gen_node(
         Wallet::new_with_client(executor.clone(),account_address, keypair.clone(), Arc::new(client)).unwrap();
 
     info!("account resource is {:?}",wallet.account_resource());
-    Node::new(executor.clone(), wallet, keypair.clone(), network_service,sender,receiver)
+    Node::new(executor.clone(), wallet, keypair.clone(), network_service,sender,receiver,close_tx)
 }
 
 fn main() {
@@ -98,10 +100,10 @@ fn main() {
     let executor = rt.executor();
 
     let keypair = load_from_file(&args.faucet_key_path);
-    let (network_service, tx, rx) =
+    let (network_service, tx, rx,close_tx) =
         build_network_service(&swarm.config.net_config, keypair.clone());
 
-    let node = gen_node(executor, keypair, &swarm.config.wallet, network_service,tx,rx);
+    let node = gen_node(executor, keypair, &swarm.config.wallet, network_service,tx,rx, close_tx);
     node.start_server();
 
     let mut node_server = setup_node_service(&swarm.config, Arc::new(node));

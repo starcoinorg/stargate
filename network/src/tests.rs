@@ -28,6 +28,7 @@ mod tests {
     };
     use crate::helper::convert_boot_nodes;
     use crate::message::PayloadMsg;
+    use futures::sync::oneshot;
 
     fn build_test_network_pair() -> (NetworkComponent, NetworkComponent) {
         let mut l = build_test_network_services(2, 50400).into_iter();
@@ -43,11 +44,13 @@ mod tests {
         NetworkService,
         UnboundedSender<NetworkMessage>,
         UnboundedReceiver<NetworkMessage>,
+        oneshot::Sender<()>,
     )> {
         let mut result: Vec<(
             NetworkService,
             UnboundedSender<NetworkMessage>,
             UnboundedReceiver<NetworkMessage>,
+            oneshot::Sender<()>,
         )> = Vec::with_capacity(num);
         let mut first_addr = None::<String>;
         for index in 0..num {
@@ -89,7 +92,7 @@ mod tests {
 
         let rt = Runtime::new().unwrap();
         let executor = rt.executor();
-        let ((service1, tx1, rx1), (service2, tx2, rx2)) =
+        let ((service1, tx1, rx1, close_tx1), (service2, tx2, rx2, close_tx2)) =
             build_test_network_pair();
         let msg_peer_id = service1.identify();
         // Once sender has been droped, the select_all will return directly. clone it to prevent it.
@@ -115,8 +118,8 @@ mod tests {
         executor.clone().spawn(sender_fut);
         let task = Delay::new(Instant::now() + Duration::from_millis(1000))
             .and_then(move |_| {
-                drop(service1);
-                drop(service2);
+                close_tx1.send(());
+                close_tx2.send(());
                 Ok(())
             })
             .map_err(|e| panic!("delay errored; err={:?}", e));
@@ -129,7 +132,7 @@ mod tests {
         ::logger::init_for_e2e_testing();
         let rt = Runtime::new().unwrap();
         let executor = rt.executor();
-        let ((service1, tx1, rx1), (mut service2, tx2, rx2)) =
+        let ((service1, tx1, rx1, close_tx1), (mut service2, tx2, rx2, close_tx2)) =
             build_test_network_pair();
         let msg_peer_id = service1.identify();
         let receive_fut = rx1.for_each(|msg| {

@@ -18,9 +18,9 @@ use crate::message::{Message, NetworkMessage};
 use futures::sync::oneshot::{Canceled, Sender};
 use std::collections::HashMap;
 
+#[derive(Clone)]
 pub struct NetworkService {
     pub libp2p_service: Arc<Mutex<Libp2pService<Message>>>,
-    pub close_tx: Option<oneshot::Sender<()>>,
     acks: Arc<Mutex<HashMap<u128, Sender<()>>>>,
 }
 
@@ -31,6 +31,7 @@ pub fn build_network_service(
     NetworkService,
     mpsc::UnboundedSender<NetworkMessage>,
     mpsc::UnboundedReceiver<NetworkMessage>,
+    oneshot::Sender<()>,
 ) {
     let config = NetworkConfiguration {
         listen_addresses: vec![cfg.listen.parse().unwrap()],
@@ -95,7 +96,7 @@ fn run_network(
                             if payload.id != 0 {
                                 net_srv_3.lock().send_custom_message(&peer_id, Message::ACK(payload.id));
                             }
-                        },
+                        }
                         Message::ACK(message_id) => {
                             info!("Receive message ack");
                             if let Some(tx) = acks.lock().remove(&message_id) {
@@ -191,6 +192,7 @@ impl NetworkService {
         NetworkService,
         mpsc::UnboundedSender<NetworkMessage>,
         mpsc::UnboundedReceiver<NetworkMessage>,
+        oneshot::Sender<()>,
     ) {
         let (close_tx, close_rx) = oneshot::channel::<()>();
         let libp2p_service = build_libp2p_service(cfg).unwrap();
@@ -205,11 +207,12 @@ impl NetworkService {
         (
             Self {
                 libp2p_service,
-                close_tx: Some(close_tx),
+                //close_tx: Some(close_tx),
                 acks,
             },
             network_sender,
             network_receiver,
+            close_tx,
         )
     }
 
@@ -237,16 +240,17 @@ impl NetworkService {
     }
 }
 
-impl Drop for NetworkService {
+/*impl Drop for NetworkService {
     fn drop(&mut self) {
         if let Some(sender) = self.close_tx.take() {
             let _ = sender.send(());
         }
     }
-}
+}*/
 
 pub type NetworkComponent = (
     NetworkService,
     mpsc::UnboundedSender<NetworkMessage>,
     mpsc::UnboundedReceiver<NetworkMessage>,
+    oneshot::Sender<()>,
 );
