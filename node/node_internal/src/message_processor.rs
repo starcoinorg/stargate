@@ -84,6 +84,13 @@ impl MessageProcessor {
     }
 
     pub fn remove_future(&self, hash: HashValue){
-        self.tx_map.lock().unwrap().remove(&hash);
+        let mut tx_map= self.tx_map.lock().unwrap();
+        match tx_map.get(&hash) {
+            Some(tx) => {
+                info!("future time out,hash is {:?}",hash);
+                tx_map.remove(&hash);
+            }
+            _ => info!("tx hash {} not in map", hash),
+        }
     }
 }

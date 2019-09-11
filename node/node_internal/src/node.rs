@@ -351,7 +351,6 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         let processor=self.message_processor.clone();
         let task = Delay::new(Instant::now() + Duration::from_millis(timeout))
             .and_then(move |_| {
-                info!("future time out,hash is {:?}",hash);
                 processor.remove_future(hash);
                 Ok(())
             })
