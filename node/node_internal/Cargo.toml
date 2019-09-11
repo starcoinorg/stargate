@@ -33,6 +33,7 @@ mock_chain_client = { path = "../../chain/mock_chain_client" }
 proto_conv = { path = "../../libra/common/proto_conv", features = ["derive"] }
 failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
 hex = { version = "0.3.2", default-features = false }
+node_proto = { path = "../node_proto" }
 
 
 [dev-dependencies]

@@ -33,6 +33,7 @@ use star_types::channel_transaction::ChannelTransaction;
 use futures::compat::Future01CompatExt;
 use std::time::{Duration, Instant};
 use tokio::timer::Delay;
+use node_proto::{OpenChannelResponse, PayResponse, ConnectResponse, DepositResponse, WithdrawResponse, ChannelBalanceResponse};
 
 
 pub struct Node<C: ChainClient + Send + Sync + 'static> {
@@ -92,6 +93,23 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         Ok(())
     }
 
+    pub fn open_channel_oneshot(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> futures::channel::oneshot::Receiver<Result<OpenChannelResponse>> {
+        let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
+        let f = self.open_channel_async(receiver, sender_amount, receiver_amount).unwrap();
+        let f_to_channel = async {
+            match f.compat().await{
+                Ok(sender) => resp_sender
+                    .send(Ok(OpenChannelResponse{}))
+                    .expect("Did open channel processor thread panic?"),
+                Err(e) => resp_sender
+                    .send(Err(failure::Error::from(e)))
+                    .expect("Failed to send error message."),
+            }
+        };
+        self.executor.spawn(f_to_channel.boxed().unit_error().compat());
+        resp_receiver
+    }
+
     pub fn open_channel_async(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<MessageFuture> {
         if (receiver_amount > self.default_max_deposit) {
             bail!("deposit coin amount too big")
@@ -115,6 +133,23 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         let f = self.deposit_async(asset_tag, receiver, sender_amount, receiver_amount);
         f.unwrap().wait().unwrap();
         Ok(())
+    }
+
+    pub fn deposit_oneshot(&self,asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> futures::channel::oneshot::Receiver<Result<DepositResponse>> {
+        let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
+        let f = self.deposit_async(asset_tag,receiver, sender_amount, receiver_amount).unwrap();
+        let f_to_channel = async {
+            match f.compat().await{
+                Ok(sender) => resp_sender
+                    .send(Ok(DepositResponse{}))
+                    .expect("Did open channel processor thread panic?"),
+                Err(e) => resp_sender
+                    .send(Err(failure::Error::from(e)))
+                    .expect("Failed to send error message."),
+            }
+        };
+        self.executor.spawn(f_to_channel.boxed().unit_error().compat());
+        resp_receiver
     }
 
     pub fn deposit_async(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<MessageFuture> {
@@ -142,6 +177,23 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         Ok(())
     }
 
+    pub fn withdraw_oneshot(&self,asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> futures::channel::oneshot::Receiver<Result<WithdrawResponse>> {
+        let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
+        let f = self.withdraw_async(asset_tag,receiver, sender_amount, receiver_amount).unwrap();
+        let f_to_channel = async {
+            match f.compat().await{
+                Ok(sender) => resp_sender
+                    .send(Ok(WithdrawResponse{}))
+                    .expect("Did open channel processor thread panic?"),
+                Err(e) => resp_sender
+                    .send(Err(failure::Error::from(e)))
+                    .expect("Failed to send error message."),
+            }
+        };
+        self.executor.spawn(f_to_channel.boxed().unit_error().compat());
+        resp_receiver
+    }
+
     pub fn withdraw_async(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<MessageFuture> {
         if (receiver_amount < sender_amount) {
             bail!("sender amount should smaller than receiver amount.")
@@ -161,6 +213,23 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         let f = self.off_chain_pay_async(coin_resource_tag, receiver_address, amount);
         f.unwrap().wait().unwrap();
         Ok(())
+    }
+
+    pub fn off_chain_pay_oneshot(&self,asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64) -> futures::channel::oneshot::Receiver<Result<PayResponse>> {
+        let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
+        let f = self.off_chain_pay_async(asset_tag,receiver, sender_amount).unwrap();
+        let f_to_channel = async {
+            match f.compat().await{
+                Ok(sender) => resp_sender
+                    .send(Ok(PayResponse{}))
+                    .expect("Did open channel processor thread panic?"),
+                Err(e) => resp_sender
+                    .send(Err(failure::Error::from(e)))
+                    .expect("Failed to send error message."),
+            }
+        };
+        self.executor.spawn(f_to_channel.boxed().unit_error().compat());
+        resp_receiver
     }
 
     pub fn off_chain_pay_async(&self, coin_resource_tag: StructTag, receiver_address: AccountAddress, amount: u64) -> Result<MessageFuture> {

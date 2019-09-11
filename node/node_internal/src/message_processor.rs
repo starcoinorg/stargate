@@ -90,7 +90,7 @@ impl MessageProcessor {
                 info!("future time out,hash is {:?}",hash);
                 tx_map.remove(&hash);
             }
-            _ => info!("tx hash {} not in map", hash),
+            _ => info!("tx hash {} not in map,timeout is not necessary", hash),
         }
     }
 }
