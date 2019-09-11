@@ -270,17 +270,18 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             let f = async move {
                 wallet.apply_txn(&txn).await.unwrap();
             };
-            f.boxed().unit_error().compat().wait().unwrap();
+            self.executor.spawn(f.boxed().unit_error().compat());
         }
         if (&open_channel_message.transaction.txn().sender() == &self.wallet.get_address()) {
             let wallet = self.wallet.clone();
             let txn = open_channel_message.transaction;
             let txn_clone = txn.clone();
+            let mut message_processor = self.message_processor.clone();
             let f = async move {
                 wallet.apply_txn(&txn).await.unwrap();
+                message_processor.send_response(txn_clone);
             };
-            f.boxed().unit_error().compat().wait().unwrap();
-            self.message_processor.send_response(txn_clone);
+            self.executor.spawn(f.boxed().unit_error().compat());
         }
     }
 
@@ -310,11 +311,12 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             debug!("receive feed back pay");
             let wallet = self.wallet.clone();
             let txn = txn_clone.clone();
+            let mut message_processor = self.message_processor.clone();
             let f = async move {
                 wallet.apply_txn(&txn).await;
+                message_processor.send_response(txn_clone);
             };
-            f.boxed().unit_error().compat().wait().unwrap();
-            self.message_processor.send_response(txn_clone);
+            self.executor.spawn(f.boxed().unit_error().compat());
             info!("tx succ");
         }
     }
