@@ -16,6 +16,7 @@ members = [
     "libra/storage/accumulator",
     "libra/storage/state_view",
     "libra/storage/scratchpad",
+    "libra/storage/libradb",
     "storage/state_storage",
     "storage/struct_cache",
     "storage/state_store",

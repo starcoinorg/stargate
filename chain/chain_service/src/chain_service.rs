@@ -43,7 +43,7 @@ use proto_conv::{FromProto, IntoProto};
 use types::contract_event::ContractEvent;
 use types::event::EventKey;
 use types::transaction::{TransactionOutput, TransactionStatus, Version};
-use types::vm_error::{VMStatus, ExecutionStatus};
+use types::vm_error::{VMStatus};
 use super::event_storage::EventStorage;
 use atomic_refcell::AtomicRefCell;
 use futures::sync::mpsc::UnboundedSender;
@@ -102,9 +102,10 @@ impl ChainService {
                     *GENESIS_BLOCK_ID,
                     0,
                     0,
+                    None,
                 );
                 let ledger_info_with_sigs =
-                    LedgerInfoWithSignatures::new(ledger_info, HashMap::new() /* signatures */);
+                    LedgerInfoWithSignatures::new(ledger_info, HashMap::new());
 
                 chain_service.insert_into_libra(Some(ledger_info_with_sigs), genesis_txn, accounts, vec![], 0, true);
             }
