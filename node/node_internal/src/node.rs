@@ -257,17 +257,13 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             let wallet = self.wallet.clone();
             let txn = open_channel_message.transaction.clone();
             let sender = self.sender.clone();
-            let msg = async move {
+            let mut network_service=self.network_service.clone();
+            let f = async move {
                 let receiver_open_txn = wallet.verify_txn(&txn).unwrap();
                 let channel_txn_msg = ChannelTransactionMessage::new(receiver_open_txn);
                 let msg = add_message_type(channel_txn_msg.into_proto_bytes().unwrap(), MessageType::ChannelTransactionMessage);
-                msg
-            }.boxed().unit_error().compat().wait().unwrap();
-            debug!("send msg to {:?}", sender_addr);
-            self.send_message(&sender_addr, msg);
-            let wallet = self.wallet.clone();
-            let txn = open_channel_message.transaction.clone();
-            let f = async move {
+                debug!("send msg to {:?}", sender_addr);
+                network_service.send_message_block(sender_addr, msg.to_vec());
                 wallet.apply_txn(&txn).await.unwrap();
             };
             self.executor.spawn(f.boxed().unit_error().compat());
@@ -297,15 +293,17 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             debug!("off chain txn as receiver");
             let wallet = self.wallet.clone();
             let sender = self.sender.clone();
-            let msg = async move {
+            let mut network_service=self.network_service.clone();
+            let mut network_service=self.network_service.clone();
+            let f = async move {
                 let receiver_open_txn = wallet.verify_txn(&txn).unwrap();
                 wallet.apply_txn(&txn).await.unwrap();
                 let channel_txn_msg = OffChainPayMessage::new(receiver_open_txn);
                 let msg = add_message_type(channel_txn_msg.into_proto_bytes().unwrap(), MessageType::OffChainPayMessage);
-                msg
-            }.boxed().unit_error().compat().wait().unwrap();
-            debug!("send msg to {:?}", sender_addr);
-            self.send_message(&sender_addr, msg);
+                debug!("send msg to {:?}", sender_addr);
+                network_service.send_message_block(sender_addr, msg.to_vec());
+            };
+            self.executor.spawn(f.boxed().unit_error().compat());
         }
         if (&txn_clone.txn().sender() == &local_addr) {
             debug!("receive feed back pay");
