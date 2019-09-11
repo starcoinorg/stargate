@@ -240,14 +240,6 @@ impl NetworkService {
     }
 }
 
-/*impl Drop for NetworkService {
-    fn drop(&mut self) {
-        if let Some(sender) = self.close_tx.take() {
-            let _ = sender.send(());
-        }
-    }
-}*/
-
 pub type NetworkComponent = (
     NetworkService,
     mpsc::UnboundedSender<NetworkMessage>,
