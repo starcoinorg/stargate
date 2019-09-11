@@ -6,7 +6,7 @@ use crypto::{
 
 use futures::{future, stream::Stream, sync::mpsc, Async, Future, sync::oneshot, stream, try_ready};
 use network_libp2p::{
-    identity, start_service, NetworkConfiguration, NodeKeyConfig, PeerId, Secret,
+    identity, start_service, NetworkConfiguration, NodeKeyConfig, Secret,
     Service as Libp2pService, ServiceEvent,
 };
 use parking_lot::Mutex;
@@ -173,14 +173,14 @@ fn spawn_network(
     let (network_sender, network_receiver, network_future) = run_network(libp2p_service, acks);
     let fut = network_future
         .select(close_rx.then(|_| {
-            debug!("Shutdown network");
+            debug!("Shutdown the network");
             Ok(())
         }))
         .map(|(val, _)| val)
         .map_err(|(_err, _)| ());
     let mut runtime = tokio::runtime::Builder::new().name_prefix("libp2p-").build().unwrap();
-    let thread = thread::Builder::new().name("network".to_string()).spawn(move || {
-        runtime.block_on(fut);
+    let _thread = thread::Builder::new().name("network".to_string()).spawn(move || {
+        let _ = runtime.block_on(fut);
     });
     (network_sender, network_receiver)
 }

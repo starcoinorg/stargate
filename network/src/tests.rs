@@ -3,7 +3,6 @@ mod tests {
     use std::{str::FromStr, thread, time::{Instant, Duration}};
     use futures::{
         future::Future,
-        stream,
         stream::Stream,
         sync::mpsc::{UnboundedReceiver, UnboundedSender},
     };
@@ -17,17 +16,16 @@ mod tests {
         test_utils::KeyPair,
         Uniform,
     };
-    use logger::prelude::*;
+    
     use network_libp2p::{CustomMessage, identity, NodeKeyConfig, PeerId, PublicKey, Secret};
     use types::account_address::AccountAddress;
 
     use crate::{
-        build_network_service, convert_account_address_to_peer_id,
-        convert_peer_id_to_account_address, Message, NetworkComponent, NetworkMessage,
+        build_network_service, convert_account_address_to_peer_id, Message, NetworkComponent, NetworkMessage,
         NetworkService,
     };
     use crate::helper::convert_boot_nodes;
-    use crate::message::PayloadMsg;
+    
     use futures::sync::oneshot;
 
     fn build_test_network_pair() -> (NetworkComponent, NetworkComponent) {
@@ -92,14 +90,14 @@ mod tests {
 
         let rt = Runtime::new().unwrap();
         let executor = rt.executor();
-        let ((service1, tx1, rx1, close_tx1), (service2, tx2, rx2, close_tx2)) =
+        let ((service1, _tx1, rx1, close_tx1), (_service2, tx2, _rx2, close_tx2)) =
             build_test_network_pair();
         let msg_peer_id = service1.identify();
         // Once sender has been droped, the select_all will return directly. clone it to prevent it.
-        let tx22 = tx2.clone();
+        let _tx22 = tx2.clone();
         let sender_fut = Interval::new(Instant::now(), Duration::from_millis(50))
             .take(3)
-            .map_err(|e| ())
+            .map_err(|_e| ())
             .for_each(move |_| {
                 let message = Message::new_message(vec![1, 0]);
                 match tx2.unbounded_send(NetworkMessage {
@@ -107,7 +105,7 @@ mod tests {
                     msg: message,
                 }) {
                     Ok(()) => Ok(()),
-                    Err(e) => Err(()),
+                    Err(_e) => Err(()),
                 }
             });
         let receive_fut = rx1.for_each(|msg| {
@@ -132,7 +130,7 @@ mod tests {
         ::logger::init_for_e2e_testing();
         let rt = Runtime::new().unwrap();
         let executor = rt.executor();
-        let ((service1, tx1, rx1, close_tx1), (mut service2, tx2, rx2, close_tx2)) =
+        let ((service1, _tx1, rx1, _close_tx1), (mut service2, _tx2, _rx2, _close_tx2)) =
             build_test_network_pair();
         let msg_peer_id = service1.identify();
         let receive_fut = rx1.for_each(|msg| {
@@ -143,7 +141,7 @@ mod tests {
 
         //wait the network started.
         thread::sleep(Duration::from_secs(1));
-        for x in 0..10 {
+        for _x in 0..10 {
             let _ = service2.send_message_block(msg_peer_id, "starcoiniscoming".into());
         }
     }
@@ -189,8 +187,8 @@ mod tests {
 
     #[test]
     fn test_connected_nodes() {
-        let rt = Runtime::new().unwrap();
-        let (service1, service2) = build_test_network_pair();
+        let _rt = Runtime::new().unwrap();
+        let (service1, _service2) = build_test_network_pair();
         thread::sleep(Duration::new(1, 0));
         for (peer_id, peer) in service1.0.libp2p_service.lock().state().connected_peers {
             println!("id: {:?}, peer: {:?}", peer_id, peer);
@@ -224,7 +222,7 @@ mod tests {
     }
 
     fn generate_account_address() -> String {
-        let (private_key, public_key) = compat::generate_keypair(Option::None);
+        let (_private_key, public_key) = compat::generate_keypair(Option::None);
         let account_address = AccountAddress::from_public_key(&public_key);
         hex::encode(account_address)
     }
