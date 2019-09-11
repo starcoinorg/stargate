@@ -16,15 +16,15 @@ serde = { version = "1.0.96", features = ["derive"] }
 tempfile = "3.1.0"
 toml = "0.4"
 
-crypto = { path = "../crypto/crypto" }
-proto_conv = { path = "../common/proto_conv" }
-logger = { path = "../common/logger" }
-failure = { path = "../common/failure_ext", package = "failure_ext" }
-types = { path = "../types" }
+crypto = { path = "../libra/crypto/crypto" }
+proto_conv = { path = "../libra/common/proto_conv" }
+logger = { path = "../libra/common/logger" }
+failure = { path = "../libra/common/failure_ext", package = "failure_ext" }
+types = { path = "../libra/types" }
 
 [dev-dependencies]
-types = { path = "../types", features = ["testing"] }
-crypto = { path = "../crypto/crypto", features = ["testing"] }
+types = { path = "../libra/types", features = ["testing"] }
+crypto = { path = "../libra/crypto/crypto", features = ["testing"] }
 
 [features]
 default = []

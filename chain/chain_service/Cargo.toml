@@ -8,40 +8,40 @@ edition = "2018"
 
 [dependencies]
 grpcio = "0.4.4"
-proto_conv = { path = "../../common/proto_conv", features = ["derive"] }
+proto_conv = { path = "../../libra/common/proto_conv", features = ["derive"] }
 protobuf = "2.7"
-grpc_helpers = { path = "../../common/grpc_helpers" }
-types = { path = "../../types" }
+grpc_helpers = { path = "../../libra/common/grpc_helpers" }
+types = { path = "../../libra/types" }
 futures = "0.1.28"
 star_types = { path = "../../star_types" }
-crypto = { path = "../../crypto/crypto" }
-scratchpad = { path = "../../storage/scratchpad" }
+crypto = { path = "../../libra/crypto/crypto" }
+scratchpad = { path = "../../libra/storage/scratchpad" }
 state_storage = { path = "../../storage/state_storage" }
 hex = "0.3.2"
-vm_genesis = { path = "../../language/vm/vm_genesis" }
-channel = { path = "../../common/channel" }
-metrics = { path = "../../common/metrics" }
+vm_genesis = { path = "../../libra/language/vm/vm_genesis" }
+channel = { path = "../../libra/common/channel" }
+metrics = { path = "../../libra/common/metrics" }
 futures03 = { package = "futures-preview", version = "=0.3.0-alpha.17", features = ["async-await", "nightly", "io-compat", "compat"] }
 tokio = "0.1.22"
-failure = { path = "../../common/failure_ext", package = "failure_ext" }
-vm_runtime = { path = "../../language/vm/vm_runtime" }
+failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
+vm_runtime = { path = "../../libra/language/vm/vm_runtime" }
 lazy_static = "1.3.0"
-config = { path = "../../config"}
-vm_cache_map = { path = "../../language/vm/vm_runtime/vm_cache_map" }
+config = { path = "../../libra/config"}
+vm_cache_map = { path = "../../libra/language/vm/vm_runtime/vm_cache_map" }
 rental = "0.5.4"
-compiler = { path = "../../language/compiler" }
-vm_runtime_types = { path = "../../language/vm/vm_runtime/vm_runtime_types" }
-vm = { path = "../../language/vm" }
-state_view = { path = "../../storage/state_view" }
+compiler = { path = "../../libra/language/compiler" }
+vm_runtime_types = { path = "../../libra/language/vm/vm_runtime/vm_runtime_types" }
+vm = { path = "../../libra/language/vm" }
+state_view = { path = "../../libra/storage/state_view" }
 state_store = { path = "../../storage/state_store" }
-bytecode_verifier = { path = "../../language/bytecode_verifier" }
+bytecode_verifier = { path = "../../libra/language/bytecode_verifier" }
 struct_cache = { path = "../../storage/struct_cache" }
 clap = "2.32"
-stdlib = { path = "../../language/stdlib" }
-accumulator = {path = "../../storage/accumulator" }
+stdlib = { path = "../../libra/language/stdlib" }
+accumulator = {path = "../../libra/storage/accumulator" }
 atomic_refcell = "0.1.3"
 signal-hook = "0.1.10"
-logger = { path = "../../common/logger" }
+logger = { path = "../../libra/common/logger" }
 env_logger = { version = "0.6" }
 
 
@@ -49,4 +49,4 @@ env_logger = { version = "0.6" }
 version = "1.0.0-pre.1"
 
 [dev-dependencies]
-crypto = { path = "../../crypto/crypto", features = ["testing"] }
+crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }

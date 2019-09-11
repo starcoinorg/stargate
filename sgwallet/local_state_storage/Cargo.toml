@@ -7,21 +7,21 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-failure = { path = "../../common/failure_ext", package = "failure_ext" }
+failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
 itertools = "0.8.0"
-crypto = { path = "../../crypto/crypto" }
-types = { path = "../../types"}
+crypto = { path = "../../libra/crypto/crypto" }
+types = { path = "../../libra/types"}
 star_types = { path = "../../star_types" }
 state_storage = {path = "../../storage/state_storage"}
 chain_client = {path = "../../chain/chain_client"}
-state_view = {path = "../../storage/state_view"}
+state_view = {path = "../../libra/storage/state_view"}
 state_store = {path = "../../storage/state_store"}
 struct_cache = {path = "../../storage/struct_cache" }
-logger = { path = "../../common/logger"}
+logger = { path = "../../libra/common/logger"}
 atomic_refcell = "0.1.3"
-vm_runtime_types = { path = "../../language/vm/vm_runtime/vm_runtime_types"}
+vm_runtime_types = { path = "../../libra/language/vm/vm_runtime/vm_runtime_types"}
 tokio = "0.1.22"
 
 [dev-dependencies]
-crypto = { path = "../../crypto/crypto", features = ["testing"] }
+crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }
 mock_chain_client = { path = "../../chain/mock_chain_client" }

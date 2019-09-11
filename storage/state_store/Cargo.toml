@@ -7,12 +7,12 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-failure = { path = "../../common/failure_ext", package = "failure_ext" }
-types = { path = "../../types" }
+failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
+types = { path = "../../libra/types" }
 star_types = { path = "../../star_types"}
-state_view = { path = "../state_view"}
-crypto = { path = "../../crypto/crypto" }
-logger = { path = "../../common/logger"}
+state_view = { path = "../../libra/storage/state_view"}
+crypto = { path = "../../libra/crypto/crypto" }
+logger = { path = "../../libra/common/logger"}
 
 [dev-dependencies]
-types = { path = "../../types", features = ["testing"]}
+types = { path = "../../libra/types", features = ["testing"]}

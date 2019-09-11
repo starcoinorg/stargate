@@ -10,6 +10,6 @@ edition = "2018"
 grpcio = "0.4.4"
 
 node_proto = { path = "../node_proto" }
-failure = { path = "../../common/failure_ext", package = "failure_ext" }
+failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
 star_types = { path = "../../star_types" }
-proto_conv = { path = "../../common/proto_conv" }
+proto_conv = { path = "../../libra/common/proto_conv" }

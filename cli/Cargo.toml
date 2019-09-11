@@ -24,15 +24,15 @@ serde_json = "1.0.40"
 structopt = "0.2.15"
 tempfile = "3.1.0"
 
-config = { path = "../config" }
-crypto = { path = "../crypto/crypto" }
-failure = { package = "failure_ext", path = "../common/failure_ext" }
+config = { path = "../libra/config" }
+crypto = { path = "../libra/crypto/crypto" }
+failure = { package = "failure_ext", path = "../libra/common/failure_ext" }
 libc = "0.2.60"
-logger =  { path = "../common/logger" }
-metrics = { path = "../common/metrics" }
-proto_conv = { path = "../common/proto_conv" }
-types = { path = "../types" }
-vm_genesis = { path = "../language/vm/vm_genesis" }
+logger =  { path = "../libra/common/logger" }
+metrics = { path = "../libra/common/metrics" }
+proto_conv = { path = "../libra/common/proto_conv" }
+types = { path = "../libra/types" }
+vm_genesis = { path = "../libra/language/vm/vm_genesis" }
 node_client = { path = "../node/node_client"}
 cli_wallet = { path = "./cli_wallet" }
 chain_client = { path = "../chain/chain_client" }
@@ -40,5 +40,5 @@ node_proto = { path = "../node/node_proto" }
 state_storage = { path = "../storage/state_storage" }
 
 [dev-dependencies]
-crypto = { path = "../crypto/crypto", features = ["testing"] }
-types = { path = "../types" }
+crypto = { path = "../libra/crypto/crypto", features = ["testing"] }
+types = { path = "../libra/types" }

@@ -22,17 +22,17 @@ rand = "0.6.5"
 grpcio = "0.4.3"
 hex = "0.3.2"
 
-logger = { path = "../common/logger" }
+logger = { path = "../libra/common/logger" }
 node_service = { path = "./node_service"}
 sg_config = { path = "../sgconfig"}
 sgwallet = { path="../sgwallet"}
 chain_client = { path = "../chain/chain_client"}
-types = { path = "../types" }
+types = { path = "../libra/types" }
 star_types = { path = "../star_types" }
 
-crypto = { path = "../crypto/crypto", features = ["testing"] }
+crypto = { path = "../libra/crypto/crypto", features = ["testing"] }
 mock_chain_client = { path = "../chain/mock_chain_client" }
-proto_conv = { path = "../common/proto_conv", features = ["derive"] }
-failure = { path = "../common/failure_ext", package = "failure_ext" }
+proto_conv = { path = "../libra/common/proto_conv", features = ["derive"] }
+failure = { path = "../libra/common/failure_ext", package = "failure_ext" }
 node_internal = { path = "./node_internal" }
 env_logger = { version = "0.6" }

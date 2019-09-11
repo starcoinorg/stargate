@@ -12,14 +12,14 @@ grpcio = "0.4.4"
 proptest = "0.9.2"
 proptest-derive = "0.1.0"
 protobuf = "2.7"
-proto_conv = { path = "../../common/proto_conv", features = ["derive"] }
-grpc_helpers = { path = "../../common/grpc_helpers" }
-failure = { path = "../../common/failure_ext", package = "failure_ext" }
-proptest_helpers = { path = "../../common/proptest_helpers" }
-types = { package = "types", path = "../../types"}
+proto_conv = { path = "../../libra/common/proto_conv", features = ["derive"] }
+grpc_helpers = { path = "../../libra/common/grpc_helpers" }
+failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
+proptest_helpers = { path = "../../libra/common/proptest_helpers" }
+types = { package = "types", path = "../../libra/types"}
 
 [build-dependencies]
-build_helpers = { path = "../../common/build_helpers" }
+build_helpers = { path = "../../libra/common/build_helpers" }
 
 [dev-dependencies]
-crypto = { path = "../../crypto/crypto", features = ["testing"] }
+crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }

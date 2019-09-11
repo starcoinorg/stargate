@@ -13,24 +13,24 @@ atomic_refcell = "0.1.3"
 load_file = "1.0.0"
 lazy_static = "1.3.0"
 include_dir = "0.2.1"
-failure = { path = "../common/failure_ext", package = "failure_ext" }
-types = { path = "../types" }
+failure = { path = "../libra/common/failure_ext", package = "failure_ext" }
+types = { path = "../libra/types" }
 star_types = { path = "../star_types" }
 local_vm = { path = "../language/local_vm"}
-crypto = { path = "../crypto/crypto" }
+crypto = { path = "../libra/crypto/crypto" }
 
 local_state_storage = { path = "./local_state_storage"}
 chain_client = { path = "../chain/chain_client"}
-vm_genesis = { path = "../language/vm/vm_genesis" }
-logger = { path = "../common/logger"}
+vm_genesis = { path = "../libra/language/vm/vm_genesis" }
+logger = { path = "../libra/common/logger"}
 state_store = { path = "../storage/state_store"}
 tokio = "0.1.22"
 futures = { package = "futures", version = "0.1.28" }
-proto_conv = { path = "../common/proto_conv", features = ["derive"] }
-stdlib = { path = "../language/stdlib" }
-ir_to_bytecode = { path = "../language/compiler/ir_to_bytecode" }
+proto_conv = { path = "../libra/common/proto_conv", features = ["derive"] }
+stdlib = { path = "../libra/language/stdlib" }
+ir_to_bytecode = { path = "../libra/language/compiler/ir_to_bytecode" }
 futures_03 = { version = "0.3.0-alpha.16", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }
 
 [dev-dependencies]
-crypto = { path = "../crypto/crypto", features = ["testing"] }
+crypto = { path = "../libra/crypto/crypto", features = ["testing"] }
 mock_chain_client = { path = "../chain/mock_chain_client" }

@@ -23,18 +23,18 @@ bincode = "1.1.1"
 version = "1.0.0-pre.1"
 
 [dependencies.types]
-path = "../../types"
+path = "../../libra/types"
 
 [dependencies.libra_crypto]
-path = "../../crypto/crypto"
+path = "../../libra/crypto/crypto"
 package = "crypto"
 features = ["testing"]
 
 [dependencies.proto_conv]
-path = "../../common/proto_conv"
+path = "../../libra/common/proto_conv"
 
 [dependencies.failure]
-path = "../../common/failure_ext"
+path = "../../libra/common/failure_ext"
 package = "failure_ext"
 
 [dev-dependencies]

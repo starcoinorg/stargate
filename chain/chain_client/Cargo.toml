@@ -8,14 +8,14 @@ edition = "2018"
 
 [dependencies]
 grpcio = "0.4.4"
-proto_conv = { path = "../../common/proto_conv", features = ["derive"] }
+proto_conv = { path = "../../libra/common/proto_conv", features = ["derive"] }
 protobuf = "2.7"
-grpc_helpers = { path = "../../common/grpc_helpers" }
-types = { path = "../../types" }
+grpc_helpers = { path = "../../libra/common/grpc_helpers" }
+types = { path = "../../libra/types" }
 futures = "0.1.28"
 star_types = { path = "../../star_types" }
-crypto = { path = "../../crypto/crypto" }
-failure = { path = "../../common/failure_ext", package = "failure_ext" }
+crypto = { path = "../../libra/crypto/crypto" }
+failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
 
 [dev-dependencies]
-crypto = { path = "../../crypto/crypto", features = ["testing"] }
+crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }

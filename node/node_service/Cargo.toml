@@ -16,13 +16,13 @@ tokio = "0.1.22"
 
 node_proto = { path = "../node_proto" }
 node_internal = { path = "../node_internal" }
-failure = { path = "../../common/failure_ext", package = "failure_ext" }
+failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
 star_types = { path = "../../star_types" }
-proto_conv = { path = "../../common/proto_conv" }
-grpc_helpers = { path = "../../common/grpc_helpers" }
+proto_conv = { path = "../../libra/common/proto_conv" }
+grpc_helpers = { path = "../../libra/common/grpc_helpers" }
 node_client = { path = "../node_client" }
-crypto = { path = "../../crypto/crypto" }
-types = { package = "types", path = "../../types"}
+crypto = { path = "../../libra/crypto/crypto" }
+types = { package = "types", path = "../../libra/types"}
 sg_config = {path="../../sgconfig"}
 chain_client = { path = "../../chain/chain_client"}
 mock_chain_client = { path = "../../chain/mock_chain_client" }

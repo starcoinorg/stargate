@@ -9,22 +9,22 @@ edition = "2018"
 [dependencies]
 itertools = "0.8.0"
 lazy_static = "1.3.0"
-failure = { path = "../../common/failure_ext", package = "failure_ext" }
-crypto = { path = "../../crypto/crypto" }
-types = { path = "../../types"}
+failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
+crypto = { path = "../../libra/crypto/crypto" }
+types = { path = "../../libra/types"}
 star_types = { path = "../../star_types" }
-canonical_serialization = { path = "../../common/canonical_serialization"}
+canonical_serialization = { path = "../../libra/common/canonical_serialization"}
 atomic_refcell = "0.1.3"
-state_view = { path = "../state_view" }
+state_view = { path = "../../libra/storage/state_view" }
 struct_cache = { path = "../struct_cache" }
 state_store = { path = "../state_store"}
-logger = { path = "../../common/logger"}
-jellyfish_merkle = { path = "../jellyfish_merkle" }
-vm_runtime_types = { path = "../../language/vm/vm_runtime/vm_runtime_types"}
+logger = { path = "../../libra/common/logger"}
+jellyfish_merkle = { path = "../../libra/storage/jellyfish_merkle" }
+vm_runtime_types = { path = "../../libra/language/vm/vm_runtime/vm_runtime_types"}
 
 [dev-dependencies]
-crypto = { path = "../../crypto/crypto", features = ["testing"] }
-vm_runtime = { path = "../../language/vm/vm_runtime" }
-config = { path = "../../config"}
-vm_genesis = { path = "../../language/vm/vm_genesis" }
+crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }
+vm_runtime = { path = "../../libra/language/vm/vm_runtime" }
+config = { path = "../../libra/config"}
+vm_genesis = { path = "../../libra/language/vm/vm_genesis" }
 

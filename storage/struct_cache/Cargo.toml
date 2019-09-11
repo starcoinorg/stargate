@@ -10,19 +10,19 @@ edition = "2018"
 atomic_refcell = "0.1.3"
 lazy_static = "1.3.0"
 itertools = "0.8.0"
-crypto = { path = "../../crypto/crypto" }
-vm_runtime_types = { path = "../../language/vm/vm_runtime/vm_runtime_types" }
-vm_runtime = { path = "../../language/vm/vm_runtime" }
-types = { path = "../../types" }
+crypto = { path = "../../libra/crypto/crypto" }
+vm_runtime_types = { path = "../../libra/language/vm/vm_runtime/vm_runtime_types" }
+vm_runtime = { path = "../../libra/language/vm/vm_runtime" }
+types = { path = "../../libra/types" }
 star_types = { path = "../../star_types"}
-state_view = { path = "../state_view" }
-vm = { path = "../../language/vm" }
-bytecode_verifier = { path = "../../language/bytecode_verifier" }
-compiler = { path = "../../language/compiler" }
-failure = { path = "../../common/failure_ext", package = "failure_ext" }
-logger = { path = "../../common/logger"}
-stdlib = { path = "../../language/stdlib" }
+state_view = { path = "../../libra/storage/state_view" }
+vm = { path = "../../libra/language/vm" }
+bytecode_verifier = { path = "../../libra/language/bytecode_verifier" }
+compiler = { path = "../../libra/language/compiler" }
+failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
+logger = { path = "../../libra/common/logger"}
+stdlib = { path = "../../libra/language/stdlib" }
 
 [dev-dependencies]
-crypto = { path = "../../crypto/crypto", features = ["testing"] }
+crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }
 
