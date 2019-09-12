@@ -60,6 +60,7 @@ pub struct Wallet<C>
     witness_data: Arc<AtomicRefCell<HashMap<AccountAddress,(ChannelWriteSetPayload, Ed25519Signature)>>>,
     //TODO save channels with channel state.
     channels: Arc<AtomicRefCell<HashSet<AccountAddress>>>,
+    lock:futures_locks::Mutex<u64>,
 }
 
 impl<C> Wallet<C>
@@ -102,6 +103,7 @@ impl<C> Wallet<C>
             txn_processor: transaction_processor,
             witness_data: Arc::new(AtomicRefCell::new(HashMap::new())),
             channels: Arc::new(AtomicRefCell::new(HashSet::new())),
+            lock:futures_locks::Mutex::new(1),
         })
     }
 
@@ -258,6 +260,7 @@ impl<C> Wallet<C>
         };
         //TODO verify signature
         let output = if txn.is_travel_txn() {
+            let mut data=self.lock.lock().compat().await.unwrap();
             let (_,output) = if txn_sender == self.account_address {
                 // sender submit transaction to channel.
                 self.submit_transaction(txn.txn.clone()).await?
@@ -265,6 +268,7 @@ impl<C> Wallet<C>
                 self.watch_transaction(txn.txn()).await?
             };
             self.clear_witness_data(participant);
+            *data+=1;
             output
         } else {
             self.set_witness_data(participant, txn.witness_payload.clone(), txn.witness_signature.clone());
