@@ -377,7 +377,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
                 wallet.apply_txn(&txn).await.unwrap();
                 let channel_txn_msg = OffChainPayMessage::new(receiver_open_txn);
                 let msg = add_message_type(channel_txn_msg.into_proto_bytes().unwrap(), MessageType::OffChainPayMessage);
-                debug!("send msg to {:?}", sender_addr);
+                info!("send msg to {:?}", sender_addr);
                 network_service.send_message(sender_addr, msg.to_vec()).compat().await.unwrap();
             };
             self.executor.spawn(f.boxed().unit_error().compat());
