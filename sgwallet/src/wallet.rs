@@ -39,6 +39,7 @@ use crate::scripts::*;
 use crate::transaction_processor::{start_processor, SubmitTransactionFuture, TransactionProcessor};
 use types::write_set::WriteSet;
 use std::collections::{HashMap, HashSet};
+use types::channel_account::{ChannelAccountResource, channel_account_struct_tag, channel_account_resource_path};
 
 lazy_static! {
     pub static ref DEFAULT_ASSET:StructTag = coin_struct_tag();
@@ -190,7 +191,7 @@ impl<C> Wallet<C>
         ])
     }
 
-    pub fn deposit(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<ChannelTransaction> {
+    pub fn deposit_by_tag(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<ChannelTransaction> {
         info!("wallet.deposit asset_tag:{:?}, receiver:{}, sender_amount:{}, receiver_amount:{}", &asset_tag, receiver, sender_amount, receiver_amount);
         self.execute_asset_op(&asset_tag, ChannelOp::Deposit, receiver, vec![
             TransactionArgument::U64(sender_amount),
@@ -198,22 +199,22 @@ impl<C> Wallet<C>
         ])
     }
 
-    pub fn deposit_default(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<ChannelTransaction> {
-        self.deposit(Self::default_asset(), receiver, sender_amount, receiver_amount)
+    pub fn deposit(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<ChannelTransaction> {
+        self.deposit_by_tag(Self::default_asset(), receiver, sender_amount, receiver_amount)
     }
 
-    pub fn transfer(&self, asset_tag: StructTag, receiver: AccountAddress, amount: u64) -> Result<ChannelTransaction> {
+    pub fn transfer_by_tag(&self, asset_tag: StructTag, receiver: AccountAddress, amount: u64) -> Result<ChannelTransaction> {
         info!("wallet.deposit asset_tag:{:?}, receiver:{}, amount:{}", &asset_tag, receiver, amount);
         self.execute_asset_op(&asset_tag, ChannelOp::Transfer, receiver, vec![
             TransactionArgument::U64(amount),
         ])
     }
 
-    pub fn transfer_default(&self, receiver: AccountAddress, amount: u64) -> Result<ChannelTransaction> {
-        self.transfer(Self::default_asset(), receiver, amount)
+    pub fn transfer(&self, receiver: AccountAddress, amount: u64) -> Result<ChannelTransaction> {
+        self.transfer_by_tag(Self::default_asset(), receiver, amount)
     }
 
-    pub fn withdraw(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<ChannelTransaction> {
+    pub fn withdraw_by_tag(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<ChannelTransaction> {
         info!("wallet.withdraw asset_tag:{:?}, receiver:{}, sender_amount:{}, receiver_amount:{}", &asset_tag, receiver, sender_amount, receiver_amount);
         self.execute_asset_op(&asset_tag, ChannelOp::Withdraw, receiver, vec![
             TransactionArgument::U64(sender_amount),
@@ -221,8 +222,8 @@ impl<C> Wallet<C>
         ])
     }
 
-    pub fn withdraw_default(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<ChannelTransaction> {
-        self.withdraw(Self::default_asset(), receiver, sender_amount, receiver_amount)
+    pub fn withdraw(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<ChannelTransaction> {
+        self.withdraw_by_tag(Self::default_asset(), receiver, sender_amount, receiver_amount)
     }
 
     pub fn close(&self, receiver: AccountAddress) -> Result<ChannelTransaction> {
@@ -282,8 +283,8 @@ impl<C> Wallet<C>
         Ok(())
     }
 
-    pub fn get(&self, path: &Vec<u8>) -> Option<Vec<u8>> {
-        self.storage.borrow().get_by_path(path)
+    pub fn get(&self, path: &Vec<u8>) -> Result<Option<Vec<u8>>> {
+        Ok(self.storage.borrow().get_by_path(path))
     }
 
     pub fn get_account_state(&self) -> Vec<u8> {
@@ -292,9 +293,17 @@ impl<C> Wallet<C>
 
     pub fn account_resource(&self) -> AccountResource {
         // account_resource must exist.
-        self.get(&account_resource_path())
+        //TODO handle unwrap
+        self.get(&account_resource_path()).unwrap()
             .and_then(|value| account_resource_ext::from_bytes(&value).ok())
             .unwrap()
+    }
+
+    pub fn channel_account_resource(&self, participant: AccountAddress) -> Result<Option<ChannelAccountResource>> {
+        self.get(&channel_account_resource_path(participant)).and_then(|value|match value{
+            Some(value) => Ok(Some(ChannelAccountResource::make_from(value)?)),
+            None => Ok(None),
+        })
     }
 
     pub fn sequence_number(&self) -> u64 {
@@ -315,18 +324,22 @@ impl<C> Wallet<C>
         self.get_resource(&access_path)
     }
 
-    pub fn channel_balance_default(&self, participant: AccountAddress) -> Result<u64> {
-        self.channel_balance(participant, Self::default_asset())
+    pub fn channel_balance(&self, participant: AccountAddress) -> Result<u64> {
+        Ok(self.channel_account_resource(participant)?.map(|account|account.balance()).unwrap_or(0))
     }
 
-    pub fn channel_balance(&self, participant: AccountAddress, asset_tag: StructTag) -> Result<u64> {
-        let access_path = AccessPath::channel_resource_access_path(self.account_address, participant, asset_tag.clone());
-        self.get_channel_resource(participant, asset_tag.clone())
-            .and_then(|resource| match resource {
-                Some(resource) => resource.assert_balance().ok_or(format_err!("resource {:?} not asset.", asset_tag)),
-                //if channel or resource not exist, take default value 0
-                None => Ok(0)
-            })
+    pub fn channel_balance_by_tag(&self, participant: AccountAddress, asset_tag: StructTag) -> Result<u64> {
+        if asset_tag == Self::default_asset() {
+            self.channel_balance(participant)
+        }else {
+            let access_path = AccessPath::channel_resource_access_path(self.account_address, participant, asset_tag.clone());
+            self.get_channel_resource(participant, asset_tag.clone())
+                .and_then(|resource| match resource {
+                    Some(resource) => resource.assert_balance().ok_or(format_err!("resource {:?} not asset.", asset_tag)),
+                    //if channel or resource not exist, take default value 0
+                    None => Ok(0)
+                })
+        }
     }
 
     /// Craft a transaction request.

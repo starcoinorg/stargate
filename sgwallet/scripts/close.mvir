@@ -1,4 +1,5 @@
+import 0x0.ChannelAccount;
 main() {
-    //TODO
+    ChannelAccount.close();
     return;
 }
