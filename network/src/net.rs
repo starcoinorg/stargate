@@ -80,7 +80,7 @@ fn run_network(
 
 
     let net_srv_2 = net_srv.clone();
-    let net_srv_3 = net_srv.clone();
+    let net_ack_tx = net_tx.clone();
     let network_fut = stream::poll_fn(move || net_srv_2.lock().poll()).for_each(
         move |event| {
             match event {
@@ -89,12 +89,13 @@ fn run_network(
                         Message::Payload(payload) => {
                             //receive message
                             info!("Receive custom message");
+                            let address = convert_peer_id_to_account_address(&peer_id).unwrap();
                             let _ = _tx.unbounded_send(NetworkMessage {
-                                peer_id: convert_peer_id_to_account_address(&peer_id).unwrap(),
+                                peer_id: address.clone(),
                                 msg: Message::Payload(payload.clone()),
                             });
                             if payload.id != 0 {
-                                net_srv_3.lock().send_custom_message(&peer_id, Message::ACK(payload.id));
+                                net_ack_tx.unbounded_send(NetworkMessage { peer_id: address, msg: Message::ACK(payload.id) });
                             }
                         }
                         Message::ACK(message_id) => {
@@ -125,7 +126,6 @@ fn run_network(
 
     let protocol_fut = stream::poll_fn(move || _rx.poll()).for_each(
         move |message| {
-            info!("account:{:?}", message.peer_id);
             let peer_id = convert_account_address_to_peer_id(message.peer_id).unwrap();
             net_srv
                 .lock()
@@ -207,7 +207,6 @@ impl NetworkService {
         (
             Self {
                 libp2p_service,
-                //close_tx: Some(close_tx),
                 acks,
             },
             network_sender,
@@ -233,10 +232,6 @@ impl NetworkService {
         debug!("Send message with ack");
         self.acks.lock().insert(message_id, tx);
         rx
-    }
-
-    pub fn send_message_block(&mut self, account_address: AccountAddress, message: Vec<u8>) -> Result<(), Canceled> {
-        self.send_message(account_address, message).wait()
     }
 }
 
