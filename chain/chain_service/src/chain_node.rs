@@ -11,7 +11,7 @@ pub struct ServiceConfig {
     pub service_name: String,
     pub address: String,
     pub port: u16,
-    pub path: String,
+    pub path: Option<String>,
 }
 
 pub struct ChainNode {
