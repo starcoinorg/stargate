@@ -99,7 +99,8 @@ mod tests {
             .take(10000)
             .map_err(|_e| ())
             .for_each(move |_| {
-                let message = Message::new_message(vec![1, 0]);
+                let random_bytes: Vec<u8> = (0..10240).map(|_| { rand::random::<u8>() }).collect();
+                let message = Message::new_message(random_bytes);
                 match tx2.unbounded_send(NetworkMessage {
                     peer_id: msg_peer_id,
                     msg: message,
@@ -114,7 +115,7 @@ mod tests {
         });
         executor.clone().spawn(receive_fut);
         executor.clone().spawn(sender_fut);
-        let task = Delay::new(Instant::now() + Duration::from_millis(1000))
+        let task = Delay::new(Instant::now() + Duration::from_millis(10000))
             .and_then(move |_| {
                 close_tx1.send(());
                 close_tx2.send(());
@@ -140,14 +141,16 @@ mod tests {
 
         //wait the network started.
         thread::sleep(Duration::from_secs(1));
+
         for _x in 0..1000 {
             service2.is_connected(msg_peer_id);
+            let random_bytes: Vec<u8> = (0..10240).map(|_| { rand::random::<u8>() }).collect();
             let fut = service2
-                .send_message(msg_peer_id, "starcoiniscoming".into())
+                .send_message(msg_peer_id, random_bytes)
                 .map_err(|e| ());
             executor.spawn(fut);
         }
-        thread::sleep(Duration::from_secs(2));
+        thread::sleep(Duration::from_secs(3));
     }
 
     #[test]
