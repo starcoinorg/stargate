@@ -306,17 +306,6 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
 }
 
 impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
-    fn send_message(&mut self, account_addr: &AccountAddress, msg: bytes::Bytes) {
-        info!("send message to {:?}", account_addr);
-        //self.network_service.send_message_block(*account_addr, msg.to_vec());
-
-        let message = Message::new_message(msg.to_vec());
-
-        self.sender.unbounded_send(NetworkMessage {
-            peer_id: *account_addr,
-            msg: message,
-        });
-    }
 
     fn handle_open_channel_negotiate(&self, data: Vec<u8>) {
         debug!("handle_open_channel_negotiate");
@@ -352,7 +341,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
                 let channel_txn_msg = ChannelTransactionMessage::new(receiver_open_txn);
                 let msg = add_message_type(channel_txn_msg.into_proto_bytes().unwrap(), MessageType::ChannelTransactionMessage);
                 debug!("send msg to {:?}", sender_addr);
-                network_service.send_message_block(sender_addr, msg.to_vec());
+                network_service.send_message(sender_addr, msg.to_vec()).compat().await.unwrap();
                 wallet.apply_txn(&txn).await.unwrap();
             };
             self.executor.spawn(f.boxed().unit_error().compat());
@@ -383,14 +372,13 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             let wallet = self.wallet.clone();
             let sender = self.sender.clone();
             let mut network_service=self.network_service.clone();
-            let mut network_service=self.network_service.clone();
             let f = async move {
                 let receiver_open_txn = wallet.verify_txn(&txn).unwrap();
                 wallet.apply_txn(&txn).await.unwrap();
                 let channel_txn_msg = OffChainPayMessage::new(receiver_open_txn);
                 let msg = add_message_type(channel_txn_msg.into_proto_bytes().unwrap(), MessageType::OffChainPayMessage);
                 debug!("send msg to {:?}", sender_addr);
-                network_service.send_message_block(sender_addr, msg.to_vec());
+                network_service.send_message(sender_addr, msg.to_vec()).compat().await.unwrap();
             };
             self.executor.spawn(f.boxed().unit_error().compat());
         }
@@ -412,7 +400,12 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         let addr = negotiate_message.raw_negotiate_message.receiver_addr;
         let msg = negotiate_message.into_proto_bytes()?;
         let msg = add_message_type(msg, MessageType::OpenChannelNodeNegotiateMessage);
-        self.send_message(&addr, msg);
+        let mut network_service=self.network_service.clone();
+
+        let f = async move{
+            network_service.send_message(addr,msg.to_vec()).compat().await.unwrap();
+        };
+        self.executor.spawn(f.boxed().unit_error().compat());
         Ok(())
     }
 
@@ -420,9 +413,14 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         let sender = self.sender.clone();
 
         let hash_value = open_channel_message.transaction.clone().txn.into_raw_transaction().hash();
-        let addr = &open_channel_message.transaction.receiver();
+        let addr = open_channel_message.transaction.receiver().clone();
         let msg = add_message_type(open_channel_message.into_proto_bytes().unwrap(), msg_type);
-        self.send_message(addr, msg);
+
+        let mut network_service=self.network_service.clone();
+        let f = async move{
+            network_service.send_message(addr,msg.to_vec()).compat().await.unwrap();
+        };
+        self.executor.spawn(f.boxed().unit_error().compat());
 
         let (tx, rx) = channel(1);
         let message_future = MessageFuture::new(rx);
@@ -440,7 +438,12 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             transaction: off_chain_pay_tx,
         };
         let msg = add_message_type(off_chain_pay_msg.into_proto_bytes().unwrap(), MessageType::OffChainPayMessage);
-        self.send_message(&receiver_address, msg);
+
+        let mut network_service=self.network_service.clone();
+        let f = async move{
+            network_service.send_message(receiver_address,msg.to_vec()).compat().await.unwrap();
+        };
+        self.executor.spawn(f.boxed().unit_error().compat());
 
         let (tx, rx) = channel(1);
         let message_future = MessageFuture::new(rx);
