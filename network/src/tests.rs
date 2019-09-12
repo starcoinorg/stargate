@@ -16,7 +16,7 @@ mod tests {
         test_utils::KeyPair,
         Uniform,
     };
-    
+
     use network_libp2p::{CustomMessage, identity, NodeKeyConfig, PeerId, PublicKey, Secret};
     use types::account_address::AccountAddress;
 
@@ -25,7 +25,7 @@ mod tests {
         NetworkService,
     };
     use crate::helper::convert_boot_nodes;
-    
+
     use futures::sync::oneshot;
 
     fn build_test_network_pair() -> (NetworkComponent, NetworkComponent) {
@@ -95,8 +95,8 @@ mod tests {
         let msg_peer_id = service1.identify();
         // Once sender has been droped, the select_all will return directly. clone it to prevent it.
         let _tx22 = tx2.clone();
-        let sender_fut = Interval::new(Instant::now(), Duration::from_millis(50))
-            .take(3)
+        let sender_fut = Interval::new(Instant::now(), Duration::from_millis(1))
+            .take(10000)
             .map_err(|_e| ())
             .for_each(move |_| {
                 let message = Message::new_message(vec![1, 0]);
@@ -109,7 +109,7 @@ mod tests {
                 }
             });
         let receive_fut = rx1.for_each(|msg| {
-            println!("{:?}", msg);
+            //println!("{:?}", msg);
             Ok(())
         });
         executor.clone().spawn(receive_fut);
@@ -134,16 +134,20 @@ mod tests {
             build_test_network_pair();
         let msg_peer_id = service1.identify();
         let receive_fut = rx1.for_each(|msg| {
-            println!("{:?}", msg);
             Ok(())
         });
         executor.clone().spawn(receive_fut);
 
         //wait the network started.
         thread::sleep(Duration::from_secs(1));
-        for _x in 0..10 {
-            let _ = service2.send_message_block(msg_peer_id, "starcoiniscoming".into());
+        for _x in 0..1000 {
+            service2.is_connected(msg_peer_id);
+            let fut = service2
+                .send_message(msg_peer_id, "starcoiniscoming".into())
+                .map_err(|e| ());
+            executor.spawn(fut);
         }
+        thread::sleep(Duration::from_secs(2));
     }
 
     #[test]
