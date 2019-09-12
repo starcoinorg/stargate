@@ -44,6 +44,7 @@ signal-hook = "0.1.10"
 logger = { path = "../../libra/common/logger" }
 env_logger = { version = "0.6" }
 libradb = { path = "../../libra/storage/libradb" }
+tools = { path = "../../libra/common/tools" }
 
 [dependencies.ed25519-dalek]
 version = "1.0.0-pre.1"

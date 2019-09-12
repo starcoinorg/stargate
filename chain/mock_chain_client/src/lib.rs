@@ -24,7 +24,7 @@ impl MockChainClient {
     pub fn new(exe: TaskExecutor) -> Self {
         let mut client = Self {
             //exe,
-            chain_service: Arc::new(AtomicRefCell::new(ChainService::new(&exe, "/tmp/data"))),
+            chain_service: Arc::new(AtomicRefCell::new(ChainService::new(&exe, &None))),
         };
         client.init();
         client

@@ -163,7 +163,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         if (!is_receiver_connected) {
             bail!("could not connect to receiver")
         }
-        let channel_txn = self.node_inner.clone().lock().unwrap().wallet.deposit(asset_tag, receiver, sender_amount, receiver_amount)?;
+        let channel_txn = self.node_inner.clone().lock().unwrap().wallet.deposit_by_tag(asset_tag, receiver, sender_amount, receiver_amount)?;
         let open_channel_message = ChannelTransactionMessage::new(channel_txn);
         let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionMessage);
         f
@@ -203,7 +203,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             bail!("could not connect to receiver")
         }
         info!("start to withdraw with {:?} {} {}", receiver, sender_amount, receiver_amount);
-        let channel_txn = self.node_inner.clone().lock().unwrap().wallet.withdraw(asset_tag, receiver, sender_amount, receiver_amount)?;
+        let channel_txn = self.node_inner.clone().lock().unwrap().wallet.withdraw_by_tag(asset_tag, receiver, sender_amount, receiver_amount)?;
         let open_channel_message = ChannelTransactionMessage::new(channel_txn);
         let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionMessage);
         f
@@ -257,7 +257,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
     }
 
     pub fn channel_balance(&self, participant: AccountAddress, asset_tag: StructTag) -> Result<u64> {
-        self.node_inner.clone().lock().unwrap().wallet.channel_balance(participant, asset_tag)
+        self.node_inner.clone().lock().unwrap().wallet.channel_balance_by_tag(participant, asset_tag)
     }
 
     pub fn set_default_timeout(&self, timeout: u64) {
@@ -431,7 +431,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
     }
 
     fn off_chain_pay(&mut self, coin_resource_tag: types::language_storage::StructTag, receiver_address: AccountAddress, amount: u64) -> Result<MessageFuture> {
-        let off_chain_pay_tx = self.wallet.transfer(coin_resource_tag, receiver_address, amount)?;
+        let off_chain_pay_tx = self.wallet.transfer_by_tag(coin_resource_tag, receiver_address, amount)?;
         let sender = self.sender.clone();
         let hash_value = off_chain_pay_tx.clone().txn.into_raw_transaction().hash();
         let off_chain_pay_msg = OffChainPayMessage {
