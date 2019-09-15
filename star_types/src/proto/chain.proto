@@ -11,7 +11,7 @@ import "account_state_blob.proto";
 import "proof.proto";
 
 service Chain {
-    rpc LeastStateRoot(LeastRootRequest) returns (LeastRootResponse);
+    rpc LatestStateRoot(LatestRootRequest) returns (LatestRootResponse);
     rpc Faucet(FaucetRequest) returns (FaucetResponse);
     rpc GetAccountStateWithProof(GetAccountStateWithProofRequest) returns (GetAccountStateWithProofResponse);
     rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse);
@@ -47,10 +47,10 @@ message EventKey {
     bytes key = 1;
 }
 
-message LeastRootRequest {
+message LatestRootRequest {
 }
 
-message LeastRootResponse {
+message LatestRootResponse {
     bytes state_root_hash = 1;
 }
 

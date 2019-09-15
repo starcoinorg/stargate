@@ -13,6 +13,7 @@ use star_types::{proto::{chain::{WatchData}}, channel_transaction::ChannelTransa
 use atomic_refcell::{AtomicRefCell};
 use std::sync::Arc;
 use core::borrow::{BorrowMut};
+use std::sync::mpsc;
 
 #[derive(Clone)]
 pub struct MockChainClient {
@@ -21,13 +22,14 @@ pub struct MockChainClient {
 }
 
 impl MockChainClient {
-    pub fn new(exe: TaskExecutor) -> Self {
+    pub fn new(exe: TaskExecutor) -> (Self, mpsc::Receiver<()>) {
+        let (chain_service, receiver) = ChainService::new(&exe, &Some("/tmp/data".to_string()));
         let mut client = Self {
             //exe,
-            chain_service: Arc::new(AtomicRefCell::new(ChainService::new(&exe, &None))),
+            chain_service: Arc::new(AtomicRefCell::new(chain_service)),
         };
         client.init();
-        client
+        (client, receiver)
     }
 
     fn init(&mut self) {
@@ -51,9 +53,9 @@ impl<T> Stream for MockStreamReceiver<T> {
 impl ChainClient for MockChainClient {
     type WatchResp = MockStreamReceiver<WatchData>;
 
-    fn least_state_root(&self) -> Result<HashValue> {
+    fn latest_state_root(&self) -> Result<HashValue> {
         let chain_service = self.chain_service.as_ref().borrow();
-        Ok(chain_service.least_state_root_inner())
+        Ok(chain_service.latest_state_root_inner())
     }
 
     fn get_account_state(&self, address: &AccountAddress) -> Result<Option<Vec<u8>>> {
@@ -115,8 +117,35 @@ mod tests {
     #[test]
     fn test_mock_client() {
         let rt = Runtime::new().unwrap();
-        let client = MockChainClient::new(rt.executor());
+        let (client,_) = MockChainClient::new(rt.executor());
         let state = client.get_account_state(&AccountAddress::default()).unwrap().unwrap();
         println!("state: {:#?}", state)
+    }
+
+    #[test]
+    fn test_mock_faucet() {
+        let rt = Runtime::new().unwrap();
+        let (client,_) = MockChainClient::new(rt.executor());
+        let mut state = client.get_account_state(&AccountAddress::default()).unwrap().unwrap();
+        println!("state: {:#?}", state);
+        let receiver = AccountAddress::random();
+        client.faucet(receiver, 100);
+        client.faucet(receiver, 100);
+        state = client.get_account_state(&AccountAddress::default()).unwrap().unwrap();
+        println!("state: {:#?}", state);
+    }
+
+    #[test]
+    fn test_test() {
+        let mut rt1 = Runtime::new().unwrap();
+        let (mock_chain_service, db_shutdown_receiver) = MockChainClient::new(rt1.executor());
+        let client=Arc::new(mock_chain_service);
+        let mut state = client.get_account_state(&AccountAddress::default()).unwrap().unwrap();
+        println!("state: {:#?}", state);
+        let receiver = AccountAddress::random();
+        client.faucet(receiver, 100);
+        client.faucet(receiver, 100);
+        state = client.get_account_state(&AccountAddress::default()).unwrap().unwrap();
+        println!("state: {:#?}", state);
     }
 }

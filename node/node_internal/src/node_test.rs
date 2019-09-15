@@ -45,7 +45,8 @@ fn node_test() -> Result<()> {
     let mut rt = Runtime::new().unwrap();
     let executor = rt.executor();
 
-    let client=Arc::new(MockChainClient::new(rt1.executor()));
+    let (mock_chain_service, db_shutdown_receiver) = MockChainClient::new(executor.clone());
+    let client= Arc::new(mock_chain_service);
     let network_config1 = create_node_network_config("/ip4/127.0.0.1/tcp/5000".to_string(),vec![]);
     let (mut node1,addr1,keypair1) = gen_node(executor.clone(),&network_config1,client.clone());
     node1.start_server();
@@ -86,6 +87,8 @@ fn node_test() -> Result<()> {
     assert_eq!(node2.channel_balance(addr1,coin_struct_tag()).unwrap(),fund_amount-transfer_amount-wd_amount+deposit_amount);
     assert_eq!(node1.channel_balance(addr2,coin_struct_tag()).unwrap(),fund_amount+transfer_amount-wd_amount+deposit_amount);
 
+    drop(client);
+    db_shutdown_receiver.recv().expect("db shutdown msg err.");
     node1.shutdown();
     node2.shutdown();
     debug!("here");

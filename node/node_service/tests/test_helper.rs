@@ -16,7 +16,8 @@ use mock_chain_client::MockChainClient;
 
 pub fn create_and_start_server(config: &NodeConfig,executor:TaskExecutor) -> (grpcio::Server) {
     let _client_env = Arc::new(EnvBuilder::new().build());
-    let client=Arc::new(MockChainClient::new(executor.clone()));
+    let (mock_chain_service, db_shutdown_receiver) = MockChainClient::new(executor.clone());
+    let client= Arc::new(mock_chain_service);
 
     let (node,_addr,_keypair) = gen_node(executor,&config.net_config,client);
     let node_service = create_node(NodeService::new(Arc::new(node)));

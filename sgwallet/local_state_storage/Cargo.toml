@@ -12,7 +12,7 @@ itertools = "0.8.0"
 crypto = { path = "../../libra/crypto/crypto" }
 types = { path = "../../libra/types"}
 star_types = { path = "../../star_types" }
-state_storage = {path = "../../storage/state_storage"}
+state_cache = {path = "../../storage/state_cache"}
 chain_client = {path = "../../chain/chain_client"}
 state_view = {path = "../../libra/storage/state_view"}
 state_store = {path = "../../storage/state_store"}

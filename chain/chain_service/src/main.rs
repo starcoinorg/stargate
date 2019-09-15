@@ -39,23 +39,25 @@ fn main() {
         Arg::with_name(PATH_ARG)
             .short("t")
             .long(PATH_ARG)
-            .takes_value(false)
+            .takes_value(true)
+            .default_value("/tmp/data")
             .help("storage path")
     ).get_matches();
 
     let address = value_t!(args, IP_ARG, String).expect("Missing ip.");
     let port = value_t!(args, PORT_ARG, u16).expect("Missing port.");
     let service_name = value_t!(args, SERVICE_NAME_ARG, String).expect("Missing service name.");
-    let path_option = value_t!(args, PATH_ARG, String);
-    let path:Option<String> = match path_option {
-        Ok(p) => {
-            Some(p)
-        }
-        Err(e) => {
-            None
-        }
-    };
-    let conf = ServiceConfig { service_name, address, port, path };
+    let path = value_t!(args, PATH_ARG, String).expect("Missing storage path.");
+//    let path_option = value_t!(args, PATH_ARG, String);
+//    let path:Option<String> = match path_option {
+//        Ok(p) => {
+//            Some(p)
+//        }
+//        Err(e) => {
+//            None
+//        }
+//    };
+    let conf = ServiceConfig { service_name, address, port, path: Some(path) };
     let node = ChainNode::new(conf);
     node.run();
 }

@@ -27,7 +27,8 @@ impl ChainNode {
         println!("{}", "Starting chain Service");
         let mut rt = Runtime::new().unwrap();
         let exe = rt.executor();
-        let service = star_types::proto::chain_grpc::create_chain(ChainService::new(&exe, &self.config.path));
+        let (chain_service, receiver) = ChainService::new(&exe, &self.config.path);
+        let service = star_types::proto::chain_grpc::create_chain(chain_service);
         let _chain_handle = spawn_service_thread(
             service,
             self.config.address.clone(),
@@ -38,6 +39,7 @@ impl ChainNode {
         println!("{}", "Started chain Service");
         do_exit();
         rt.shutdown_now();
+        receiver.recv().expect("db shutdown err.");
     }
 }
 
@@ -62,5 +64,20 @@ fn do_exit() {
 
     while !term.load(Ordering::Acquire) {
         std::thread::park();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::chain_node::{ChainNode, ServiceConfig};
+    fn test_chain_node() {
+        let conf = ServiceConfig{service_name: "test chain node".to_string(),
+            address: "127.0.0.1".to_string(),
+            port: 1000,
+            path: Some("/tmp/data".to_string())};
+        let node = ChainNode::new(conf);
+        println!("{}", "11111");
+        node.run();
+        println!("{}", "22222");
     }
 }

@@ -6,7 +6,7 @@ use std::str::FromStr;
 use crypto::HashValue;
 use star_types::{watch_tx_data::WatchTxData, proto::{chain::WatchData, channel_transaction::ChannelTransaction as ChannelTransactionProto, star_account::AccountState, chain::{GetTransactionByVersionRequest, GetTransactionBySeqNumRequest, WatchEventRequest, EventKey as EventKeyProto}}, channel_transaction::ChannelTransaction, channel::SgChannelStream};
 use types::transaction::Version;
-use star_types::{proto::{chain_grpc, chain::{FaucetRequest, LeastRootRequest, GetAccountStateWithProofRequest, SubmitTransactionRequest, WatchTransactionRequest}}, resource::Resource};
+use star_types::{proto::{chain_grpc, chain::{FaucetRequest, LatestRootRequest, GetAccountStateWithProofRequest, SubmitTransactionRequest, WatchTransactionRequest}}, resource::Resource};
 use grpcio::{EnvBuilder, ChannelBuilder};
 use std::{sync::Arc, thread};
 use proto_conv::IntoProto;
@@ -22,7 +22,7 @@ pub mod watch_stream;
 pub trait ChainClient {
     type WatchResp: Stream<Item=WatchData, Error=grpcio::Error>;
 
-    fn least_state_root(&self) -> Result<HashValue>;
+    fn latest_state_root(&self) -> Result<HashValue>;
     fn get_account_state(&self, address: &AccountAddress) -> Result<Option<Vec<u8>>>;
     fn get_state_by_access_path(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>>;
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()>;
@@ -60,9 +60,9 @@ impl RpcChainClient {
 impl ChainClient for RpcChainClient {
     type WatchResp = grpcio::ClientSStreamReceiver<WatchData>;
 
-    fn least_state_root(&self) -> Result<HashValue> {
-        let req = LeastRootRequest::new();
-        let resp = self.client.least_state_root(&req)?;
+    fn latest_state_root(&self) -> Result<HashValue> {
+        let req = LatestRootRequest::new();
+        let resp = self.client.latest_state_root(&req)?;
         HashValue::from_slice(resp.state_root_hash.as_slice())
     }
 

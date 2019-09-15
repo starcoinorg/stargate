@@ -48,7 +48,8 @@ fn test_wallet() -> Result<()> {
     let mut rt = Runtime::new()?;
     let executor = rt.executor();
 
-    let client = Arc::new(MockChainClient::new(executor.clone()));
+    let (mock_chain_service, db_shutdown_receiver) = MockChainClient::new(executor.clone());
+    let client = Arc::new(mock_chain_service);
     let sender = AccountAddress::from_public_key(&sender_keypair.public_key);
     let receiver = AccountAddress::from_public_key(&receiver_keypair.public_key);
 
@@ -150,10 +151,12 @@ fn test_wallet() -> Result<()> {
         assert_eq!(sender_balance, sender_amount - sender_gas_used - sender_fund_amount - sender_deposit_amount + sender_withdraw_amount);
         assert_eq!(receiver_balance, receiver_amount - receiver_fund_amount - receiver_deposit_amount + receiver_withdraw_amount);
 
+        drop(sender_wallet);
+        drop(receiver_wallet);
         debug!("finish");
-
     };
 
     rt.block_on(f.boxed().unit_error().compat()).unwrap();
+    //db_shutdown_receiver.recv().expect("db_shutdown_receiver err.");
     Ok(())
 }

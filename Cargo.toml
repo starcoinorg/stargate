@@ -20,6 +20,7 @@ members = [
     "storage/state_storage",
     "storage/struct_cache",
     "storage/state_store",
+    "storage/state_cache",
     "libra/storage/jellyfish_merkle",
     "libra/language/vm",
     "libra/language/vm/serializer_tests",

@@ -15,8 +15,6 @@ types = { path = "../../libra/types" }
 futures = "0.1.28"
 star_types = { path = "../../star_types" }
 crypto = { path = "../../libra/crypto/crypto" }
-scratchpad = { path = "../../libra/storage/scratchpad" }
-state_storage = { path = "../../storage/state_storage" }
 hex = "0.3.2"
 vm_genesis = { path = "../../libra/language/vm/vm_genesis" }
 channel = { path = "../../libra/common/channel" }
@@ -45,6 +43,8 @@ logger = { path = "../../libra/common/logger" }
 env_logger = { version = "0.6" }
 libradb = { path = "../../libra/storage/libradb" }
 tools = { path = "../../libra/common/tools" }
+jellyfish_merkle = { path = "../../libra/storage/jellyfish_merkle" }
+state_cache = { path = "../../storage/state_cache" }
 
 [dependencies.ed25519-dalek]
 version = "1.0.0-pre.1"

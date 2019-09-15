@@ -20,7 +20,7 @@ use std::{thread, time};
 use logger::prelude::*;
 use network::{{NetworkService, NetworkMessage}, Message};
 use futures_01::sync::mpsc::{UnboundedSender, UnboundedReceiver};
-use state_storage::AccountState;
+use state_cache::state_cache::AccountState;
 use types::account_config::AccountResource;
 use star_types::system_event::Event;
 use types::language_storage::StructTag;

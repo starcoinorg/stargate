@@ -1,10 +1,10 @@
 use failure::prelude::*;
 use types::proto::{access_path::AccessPath as ProtoAccessPath, account_state_blob::{AccountStateBlob as AccountStateBlobProto, AccountStateWithProof}};
-use types::{ledger_info::{LedgerInfo, LedgerInfoWithSignatures}, get_with_proof::RequestItem, proof::SparseMerkleProof, account_state_blob::AccountStateBlob, account_config::association_address, transaction::{TransactionToCommit, TransactionInfo, SignedTransaction, TransactionPayload, RawTransaction}, access_path::AccessPath, account_address::AccountAddress};
+use types::{ledger_info::{LedgerInfo, LedgerInfoWithSignatures}, get_with_proof::RequestItem, proof::SparseMerkleProof, account_state_blob::AccountStateBlob, account_config::{association_address, core_code_address}, transaction::{TransactionToCommit, TransactionInfo, SignedTransaction, TransactionPayload, RawTransaction}, access_path::AccessPath, account_address::AccountAddress};
 use futures::{sync::mpsc::{unbounded, UnboundedReceiver}, future::Future, sink::Sink, stream::Stream};
 use super::pub_sub;
 use grpcio::WriteFlags;
-use state_storage::{StateStorage, AccountState};
+use state_cache::state_cache::{StateCache, AccountState};
 use super::transaction_storage::TransactionStorage;
 use std::{sync::{Arc, Mutex}, time::Duration, convert::TryFrom};
 use crypto::{hash::{CryptoHash, GENESIS_BLOCK_ID}, HashValue, ed25519::Ed25519Signature};
@@ -20,7 +20,7 @@ use futures03::{
 use tokio::runtime::{TaskExecutor, Runtime};
 use star_types::{channel_transaction::ChannelTransaction,
                  proto::{chain_grpc::Chain,
-                         chain::{LeastRootRequest, LeastRootResponse,
+                         chain::{LatestRootRequest, LatestRootResponse,
                                  FaucetRequest, FaucetResponse,
                                  GetAccountStateWithProofRequest, GetAccountStateWithProofResponse, Blob,
                                  WatchTransactionRequest,
@@ -54,6 +54,10 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::fs::create_dir_all;
 use tools::tempdir::TempPath;
+use libradb::data_storage::{DataStorage, ReadDataStorage, WriteData, ReadData};
+use state_cache::data_view::{StateDataView, AccountReader};
+use struct_cache::StructCache;
+use std::sync::mpsc;
 
 lazy_static! {
     static ref VM_CONFIG:VMConfig = VMConfig::onchain();
@@ -62,25 +66,34 @@ lazy_static! {
 #[derive(Clone)]
 pub struct ChainService {
     sender: channel::Sender<SignedTransaction>,
-    state_db: Arc<AtomicRefCell<StateStorage>>,
     tx_pub: Arc<Mutex<pub_sub::Pub<WatchData>>>,
     event_pub: Arc<Mutex<pub_sub::Pub<WatchData>>>,
     task_exe: TaskExecutor,
-    libra_db: Arc<AtomicRefCell<LibraDB>>,
+    libra_db: Arc<AtomicRefCell<DataStorage>>,
+    read_db: Arc<AtomicRefCell<ReadDataStorage>>,
+    state_view: Arc<StateDataView>,
+}
+
+impl Drop for ChainService {
+    fn drop(&mut self) {
+        println!("{}", "drop chain service.");
+        drop(self);
+    }
 }
 
 impl ChainService {
-    pub fn new(exe: &TaskExecutor, path_option: &Option<String>) -> Self {
-        let gauge = IntGauge::new("receive_transaction_channel_counter", "receive transaction channel").unwrap();
+    pub fn new(exe: &TaskExecutor, path_option: &Option<String>) -> (Self, mpsc::Receiver<()>) {
+        let gauge = IntGauge::new("receive_transaction_channel_counter", "receive transaction channel").expect("create IntGauge err.");
         let (tx_sender, mut tx_receiver) = channel::new(1_024, &gauge);
-        let state_db = Arc::new(AtomicRefCell::new(StateStorage::new()));
         let tx_pub = Arc::new(Mutex::new(pub_sub::Pub::new()));
         let event_pub = Arc::new(Mutex::new(pub_sub::Pub::new()));
 
-        let (genesis_flag, db) = ChainService::init_db(path_option);
+        let (genesis_flag, (db, receive)) = ChainService::init_db(path_option);
+        let read_db = Arc::new(AtomicRefCell::new(db.read_db()));
+        let state_view = Arc::new(StateDataView::new(Arc::new(db.read_db()), StructCache::new()));
         let libra_db = Arc::new(AtomicRefCell::new(db));
 
-        let chain_service = ChainService { sender: tx_sender, state_db, tx_pub, event_pub, task_exe: exe.clone(), libra_db };
+        let chain_service = ChainService { sender: tx_sender, tx_pub, event_pub, task_exe: exe.clone(), libra_db, read_db, state_view };
         let chain_service_clone = chain_service.clone();
 
         let receiver_future = async move {
@@ -97,8 +110,7 @@ impl ChainService {
 
             match genesis_txn.payload() {
                 TransactionPayload::WriteSet(ws) => {
-                    let tmp_state_db = chain_service.state_db.as_ref().borrow();
-                    let (state_hash, accounts) = tmp_state_db.apply_write_set(&ws).unwrap();
+                    let (state_hash, accounts) = StateCache::apply_genesis_write_set(&chain_service.state_view, &ws).expect("apply genesis tx err.");
 
                     let signed_tx_hash = genesis_txn.hash();
                     let events: Vec<ContractEvent> = vec![];
@@ -112,10 +124,10 @@ impl ChainService {
                 _ => {}
             };
         }
-        chain_service
+    (chain_service, receive)
     }
 
-    fn init_db(path_option: &Option<String>) -> (bool, LibraDB) {
+    fn init_db(path_option: &Option<String>) -> (bool, (DataStorage, mpsc::Receiver<()>)) {
         let (has_path, path) = match path_option {
             Some(p) => (true, p.as_str()),
             None => (false, "")
@@ -134,32 +146,31 @@ impl ChainService {
             };
 
             let db_exist = Path::new(&db_path).exists();
-            (db_exist, LibraDB::new(data_path))
+            (db_exist, DataStorage::new(LibraDB::new(data_path)))
         } else {
             let tmp_dir = TempPath::new();
             tmp_dir.create_as_dir();
             let path = tmp_dir.path().display();
+            println!("db path:{}", path);
 
-            (false, LibraDB::new(format!("{}{}", path, "/libradb")))
+            (false, DataStorage::new(LibraDB::new(format!("{}{}", path, "/libradb"))))
         }
     }
 
     fn apply_on_chain_transaction(&self, sign_tx: SignedTransaction) {
         let signed_tx_hash = sign_tx.borrow().hash();
-        let ver = self.get_least_version();
+        let ver = self.get_latest_version();
         let mut watch_tx = WatchTxData::new();
-
-        let state_db = self.state_db.as_ref().borrow();
-        let mut output_vec = MoveVM::execute_block(vec![sign_tx.clone()], &VM_CONFIG, &*state_db);
+        let mut output_vec = MoveVM::execute_block(vec![sign_tx.clone()], &VM_CONFIG, &*self.state_view);
         output_vec.pop().and_then(|output| {
             info!("apply_on_chain_transaction tx:{}, output: {}", sign_tx.raw_txn().hash(), output);
             let ver = match output.status() {
                 TransactionStatus::Keep(_) => {
-                    let (state_hash, accounts) = state_db.apply_libra_output(&output).unwrap();
+                    let (state_hash, accounts) = StateCache::apply_libra_output(&self.state_view, &output).expect("apply output err.");
                     self.insert_into_libra(None, sign_tx.clone(), accounts, output.events().to_vec(), output.gas_used(), false)
                 }
                 _ => {
-                    println!("{:?}", output);
+                    println!("----->{:?}", output);
                     0
                 }
             };
@@ -172,7 +183,7 @@ impl ChainService {
                 event_lock.send(event_resp).unwrap();
             });
 
-            watch_tx.set_output(transaction_output_helper::into_pb(output).unwrap());
+            watch_tx.set_output(transaction_output_helper::into_pb(output).expect("output to proto err."));
             Some(())
         });
 
@@ -190,16 +201,22 @@ impl ChainService {
             map.insert(*addr, account.clone());
         });
         let commit_tx = TransactionToCommit::new(sign_tx, map, events, gas);
-        let ver = if is_genesis { 0 } else { self.get_least_version() + 1 };
+
         let libradb = self.libra_db.as_ref().borrow();
-        libradb.save_transactions(vec![commit_tx].as_slice(), ver, &sign);
-        ver
+        if is_genesis {
+            libradb.save_genesis_transactions(vec![commit_tx], &sign);
+            0
+        } else {
+            let ver = self.get_latest_version() + 1;
+            libradb.save_transactions(vec![commit_tx], ver);
+            ver
+        }
     }
 
     pub fn watch_transaction_inner(&self, address: AccountAddress, index: u64) -> UnboundedReceiver<WatchData> {
         if index != std::u64::MAX {
             //TODO
-            //1. get least tx index
+            //1. get latest tx index
             //2. compare index
             //3. get tx and send to client
         }
@@ -209,7 +226,7 @@ impl ChainService {
         let id = HashValue::random();
         let tx_lock = self.tx_pub.lock().unwrap();
         tx_lock.subscribe(id, sender, Box::new(move |tx: WatchData| -> bool {
-            let signed_tx = SignedTransaction::from_proto(tx.get_tx().get_signed_txn().clone()).unwrap();
+            let signed_tx = SignedTransaction::from_proto(tx.get_tx().get_signed_txn().clone()).expect("proto to signed tx err.");
             signed_tx.sender() == address
         }));
 
@@ -233,41 +250,41 @@ impl ChainService {
         receiver
     }
 
-    pub fn least_state_root_inner(&self) -> HashValue {
-        let libradb = self.libra_db.as_ref().borrow();
-        let info = libradb.get_startup_info().expect("get startup info err.");
-        info.expect("startup info is none.").ledger_info.transaction_accumulator_hash()
+    pub fn latest_state_root_inner(&self) -> HashValue {
+        let read_db = self.read_db.as_ref().borrow();
+        read_db.latest_state_root().expect("latest_state_root is none.")
     }
 
-    pub fn get_least_version(&self) -> Version {
-        let libradb = self.libra_db.as_ref().borrow();
-        let info = libradb.get_startup_info().expect("get startup info err.");
-        info.expect("startup info is none.").latest_version
+    pub fn get_latest_version(&self) -> Version {
+        let read_db = self.read_db.as_ref().borrow();
+        read_db.latest_version().expect("latest_version is none.")
     }
 
     pub fn get_account_state_inner(&self, account_address: &AccountAddress, ver: Option<u64>) -> Option<Vec<u8>> {
-        let state_db = self.state_db.as_ref().borrow();
-        match ver {
-            Some(version) => { state_db.get_account_state_by_version(version, account_address) }
+        let version = match ver {
+            Some(v) => { v }
             None => {
-                state_db.get_account_state(account_address)
+                self.get_latest_version()
             }
-        }
+        };
+        StateCache::get_account_state_by_version(&self.state_view, version, account_address)
     }
 
     pub fn get_account_state_with_proof_inner(&self, account_address: &AccountAddress, ver: Option<u64>) -> Option<(u64, Option<AccountStateBlob>, SparseMerkleProof)> {
-        let state_db = self.state_db.as_ref().borrow();
-        state_db.account_state_with_proof(ver, account_address)
+        let version = match ver {
+            Some(v) => v,
+            None => { self.state_view.latest_version().expect("latest version is none.") }
+        };
+
+        StateCache::account_state_with_proof(&self.state_view, version, account_address)
     }
 
     pub fn state_by_access_path_inner(&self, account_address: AccountAddress, path: Vec<u8>) -> Result<Option<Vec<u8>>> {
-        let state_db = self.state_db.as_ref().borrow();
-        state_db.get(&AccessPath::new(account_address, path))
+        Ok(StateCache::get_by_access_path_by_version(&self.state_view, self.state_view.latest_version().expect("latest_version is none."), &AccessPath::new(account_address, path)))
     }
 
     pub fn faucet_inner(&self, receiver: AccountAddress, amount: u64) -> Result<()> {
-        let state_db = self.state_db.as_ref().borrow();
-        let exist_flag = state_db.exist_account(&receiver);
+        let exist_flag = StateCache::exist_account(&self.state_view, self.state_view.latest_version().expect("latest_version is none."), &receiver);
         let program = if !exist_flag {
             encode_create_account_program(&receiver, amount)
         } else {
@@ -275,11 +292,10 @@ impl ChainService {
         };
 
         let sender = association_address();//AccountAddress::from_public_key(&GENESIS_KEYPAIR.1);
-        let s_n = match state_db.sequence_number(&sender) {
+        let s_n = match StateCache::sequence_number_by_version(&self.state_view, self.state_view.latest_version().expect("latest version is none."), &sender) {
             Some(num) => num,
             _ => 0
         };
-        drop(state_db);
         let signed_tx = RawTransaction::new(
             sender,
             s_n,
@@ -305,25 +321,25 @@ impl ChainService {
     }
 
     pub fn get_transaction_by_ver(&self, ver: Version) -> Result<SignedTransaction> {
-        let libradb = self.libra_db.as_ref().borrow();
-        let mut proof = libradb.get_transactions(ver, 1, ver, false)?;
+        let read_db = self.read_db.as_ref().borrow();
+        let mut proof = read_db.get_transactions(ver, 1, ver, false)?;
         Ok(proof.transaction_and_infos.pop().expect("tx is none.").0)
     }
 
     pub fn get_transaction_by_seq_num_inner(&self, account_address: AccountAddress, seq_num: u64) -> Result<SignedTransaction> {
-        let libradb = self.libra_db.as_ref().borrow();
+        let read_db = self.read_db.as_ref().borrow();
         let req = RequestItem::GetAccountTransactionBySequenceNumber { account: account_address, sequence_number: seq_num, fetch_events: false };
-        let mut resp = libradb.update_to_latest_ledger(0, vec![req])?.0;
+        let mut resp = read_db.update_to_latest_ledger(0, vec![req])?;
         let proof = resp.get(0).expect("res is none.").clone().into_get_account_txn_by_seq_num_response()?.0.expect("tx is none.");
         Ok(proof.signed_transaction)
     }
 }
 
 impl Chain for ChainService {
-    fn least_state_root(&mut self, ctx: ::grpcio::RpcContext, _req: LeastRootRequest, sink: ::grpcio::UnarySink<LeastRootResponse>) {
-        let least_hash_root = self.least_state_root_inner();
-        let mut resp = LeastRootResponse::new();
-        resp.set_state_root_hash(least_hash_root.to_vec());
+    fn latest_state_root(&mut self, ctx: ::grpcio::RpcContext, _req: LatestRootRequest, sink: ::grpcio::UnarySink<LatestRootResponse>) {
+        let latest_hash_root = self.latest_state_root_inner();
+        let mut resp = LatestRootResponse::new();
+        resp.set_state_root_hash(latest_hash_root.to_vec());
         provide_grpc_response(Ok(resp), ctx, sink);
     }
 
@@ -498,6 +514,7 @@ mod tests {
     use types::{account_address::AccountAddress, transaction::{Program, RawTransaction}, account_config::{core_code_address, association_address}};
     use std::{time::Duration};
     use crypto::hash::{CryptoHash, TransactionInfoHasher};
+    use state_cache::state_cache::StateCache;
 
     #[test]
     fn test_genesis() {
@@ -510,12 +527,12 @@ mod tests {
     fn test_chain_service() {
         let mut rt = Runtime::new().unwrap();
         let exe = rt.executor();
-        let chain_service = ChainService::new(&exe, &None);
+        let (chain_service,_) = ChainService::new(&exe, &Some("/tmp/data".to_string()));
 //        let print_future = async move {
 //            let ten_millis = time::Duration::from_millis(100);
 //            thread::sleep(ten_millis);
-        let root = chain_service.least_state_root_inner();
-//        let ver = chain_service.get_least_version();
+        let root = chain_service.latest_state_root_inner();
+//        let ver = chain_service.get_latest_version();
         println!("{:?}", root);
 //        };
 //        rt.block_on(print_future.boxed().unit_error().compat()).unwrap();
@@ -541,11 +558,9 @@ mod tests {
 
         let mut rt = Runtime::new().unwrap();
         let exe = rt.executor();
-        let mut chain_service = ChainService::new(&exe, &None);
+        let (mut chain_service,_) = ChainService::new(&exe, &Some("/tmp/data".to_string()));
 
-        let state_db = chain_service.state_db.as_ref().borrow();
-        let s_n = state_db.sequence_number(&account_address).unwrap();
-        drop(state_db);
+        let s_n = StateCache::sequence_number_by_version(&chain_service.state_view, chain_service.state_view.latest_version().expect("latest version is none."), &account_address).unwrap();
         let signed_tx = RawTransaction::new(
             account_address,
             s_n as u64,
@@ -564,13 +579,13 @@ mod tests {
     fn test_faucet() {
         let mut rt = Runtime::new().unwrap();
         let exe = rt.executor();
-        let mut chain_service = ChainService::new(&exe, &None);
+        let (mut chain_service,_) = ChainService::new(&exe, &Some("/tmp/data".to_string()));
         let receiver = AccountAddress::random();
         chain_service.faucet_inner(receiver, 100);
-        let state_db = chain_service.state_db.as_ref().borrow();
-        let exist_flag = state_db.exist_account(&receiver);
+        chain_service.faucet_inner(receiver, 100);
+        let exist_flag = StateCache::exist_account(&chain_service.state_view, chain_service.state_view.latest_version().unwrap(), &receiver);
         assert_eq!(exist_flag, true);
-        let ver = chain_service.get_least_version();
+        let ver = chain_service.get_latest_version();
         println!("{:?}", ver);
     }
 
@@ -578,7 +593,7 @@ mod tests {
     fn test_account_state_proof() {
         let mut rt = Runtime::new().unwrap();
         let exe = rt.executor();
-        let mut chain_service = ChainService::new(&exe, &None);
+        let (mut chain_service,_) = ChainService::new(&exe, &Some("/tmp/data".to_string()));
         let mut query_addr: AccountAddress = AccountAddress::random();
         for i in 1..10 {
             let receiver = AccountAddress::random();
