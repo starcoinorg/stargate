@@ -7,7 +7,7 @@ publish = false
 edition = "2018"
 
 [dependencies]
-network = { package = "network", path = "../network"}
+network = { package = "sgnetwork", path = "../sgnetwork"}
 
 switch = { package = "switch",path="../switch"}
 futures = { version = "0.3.0-alpha.16", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }

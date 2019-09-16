@@ -43,7 +43,7 @@ members = [
     "chain/chain_client",
     "chain/chain_service",
     "chain/mock_chain_client",
-    "network",
+    "sgnetwork",
     "network-libp2p",
     "network-libp2p/peerset",
     "sgwallet",
