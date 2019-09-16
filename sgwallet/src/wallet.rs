@@ -2,7 +2,6 @@ use std::sync::{Arc, Mutex};
 
 use atomic_refcell::AtomicRefCell;
 use futures::{sync::mpsc::channel};
-use protobuf::Message;
 use tokio::{runtime::TaskExecutor};
 
 use {
@@ -21,7 +20,7 @@ use local_state_storage::LocalStateStorage;
 use local_vm::LocalVM;
 use logger::prelude::*;
 use star_types::{account_resource_ext, transaction_output_helper};
-use star_types::change_set::ChangeSet;
+use star_types::change_set::{ChangeSet, StructDefResolve};
 use star_types::channel_transaction::{
     ChannelTransaction,
 };
@@ -37,7 +36,7 @@ use types::vm_error::*;
 
 use crate::scripts::*;
 use crate::transaction_processor::{start_processor, SubmitTransactionFuture, TransactionProcessor};
-use types::write_set::WriteSet;
+use types::write_set::{WriteSet, WriteOp};
 use std::collections::{HashMap, HashSet};
 use types::channel_account::{ChannelAccountResource, channel_account_struct_tag, channel_account_resource_path};
 
@@ -121,9 +120,14 @@ impl<C> Wallet<C>
         debug!("execute txn:{} output: {}", tx_hash, output);
         match output.status() {
             TransactionStatus::Discard(vm_status) => bail!("transaction execute fail for: {:#?}", vm_status),
-            _ => {
-                //continue
-            }
+            TransactionStatus::Keep(vm_status) => match vm_status.major_status{
+                StatusCode::EXECUTED => {
+                    //continue
+                }
+                _ => {
+                    bail!("transaction execute fail for: {:#?}", vm_status)
+                }
+            },
         };
         Ok(output)
     }
@@ -144,8 +148,7 @@ impl<C> Wallet<C>
 
     fn execute_script(&self, script: &ScriptCode, receiver: AccountAddress, args: Vec<TransactionArgument>) -> Result<ChannelTransaction> {
         let program = script.encode_script(args);
-        //TODO read sequence number from channel state.
-        let channel_sequence_number = 0;
+        let channel_sequence_number = self.channel_sequence_number(receiver)?;
         let txn = self.create_signed_script_txn(channel_sequence_number, receiver, program)?;
         let output = self.execute_transaction(txn.clone())?;
         //TODO handle travel txn
@@ -280,10 +283,19 @@ impl<C> Wallet<C>
 
     fn apply_output(&self, output:&TransactionOutput) -> Result<()>{
         info!("apply_output: {}", output);
-        if let TransactionStatus::Discard(vm_status) = output.status() {
-            bail!("transaction execute fail for: {:#?}", vm_status)
+        match output.status() {
+            TransactionStatus::Discard(vm_status) => {
+                bail!("transaction execute fail for: {:#?}", vm_status)
+            }
+            TransactionStatus::Keep(vm_status) => {
+                self.storage.borrow().apply_libra_output(output)?;
+                match &vm_status.major_status {
+                    StatusCode::EXECUTED => {}
+                    _ => bail!("transaction executed but status code : {:#?}", vm_status)
+                }
+            }
         }
-        self.storage.borrow().apply_libra_output(output)?;
+
         Ok(())
     }
 
@@ -308,6 +320,10 @@ impl<C> Wallet<C>
             Some(value) => Ok(Some(ChannelAccountResource::make_from(value)?)),
             None => Ok(None),
         })
+    }
+
+    pub fn channel_sequence_number(&self, participant: AccountAddress) -> Result<u64>{
+        Ok(self.channel_account_resource(participant)?.map(|account|account.channel_sequence_number()).unwrap_or(0))
     }
 
     pub fn sequence_number(&self) -> u64 {
@@ -336,7 +352,6 @@ impl<C> Wallet<C>
         if asset_tag == Self::default_asset() {
             self.channel_balance(participant)
         }else {
-            let access_path = AccessPath::channel_resource_access_path(self.account_address, participant, asset_tag.clone());
             self.get_channel_resource(participant, asset_tag.clone())
                 .and_then(|resource| match resource {
                     Some(resource) => resource.assert_balance().ok_or(format_err!("resource {:?} not asset.", asset_tag)),
@@ -358,7 +373,7 @@ impl<C> Wallet<C>
             None => WriteSet::default(),
         };
         let channel_script = ChannelScriptPayload::new(channel_sequence_number, write_set, receiver, script);
-        let txn = types::transaction_helpers::create_signed_payload_txn(
+        let mut txn = types::transaction_helpers::create_signed_payload_txn(
             self,
             TransactionPayload::ChannelScript(channel_script),
             self.account_address,
@@ -367,11 +382,30 @@ impl<C> Wallet<C>
             Self::GAS_UNIT_PRICE,
             Self::TXN_EXPIRATION,
         )?;
+        //TODO mock signature.
+        txn.sign_by_receiver(&self.keypair.private_key, self.keypair.public_key.clone())?;
         Ok(txn)
     }
 
     pub fn get_address(&self) -> AccountAddress {
         self.account_address
+    }
+
+    // a help method to print txn detail.
+    #[allow(dead_code)]
+    fn debug_txn(&self, signed_transaction: &SignedTransaction) -> Result<()>{
+        if let TransactionPayload::ChannelScript(ChannelScriptPayload{channel_sequence_number:_,write_set,receiver:_,script:_}) = signed_transaction.payload(){
+            for (ap, op) in write_set{
+                if let Some(struct_tag) = ap.resource_tag(){
+                    let struct_def = self.storage.borrow().resolve(&struct_tag)?;
+                    if let WriteOp::Value(value) = op {
+                        let resource = Resource::decode(struct_tag, struct_def, value)?;
+                        debug!("txn write_set {} value:{} resource: {:?}", ap, hex::encode(value), resource);
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     pub async fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<(SignedTransaction,TransactionOutput)> {

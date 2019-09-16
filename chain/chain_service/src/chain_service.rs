@@ -152,6 +152,7 @@ impl ChainService {
         let state_db = self.state_db.as_ref().borrow();
         let mut output_vec = MoveVM::execute_block(vec![sign_tx.clone()], &VM_CONFIG, &*state_db);
         output_vec.pop().and_then(|output| {
+            info!("apply_on_chain_transaction tx:{}, output: {}", sign_tx.raw_txn().hash(), output);
             let ver = match output.status() {
                 TransactionStatus::Keep(_) => {
                     let (state_hash, accounts) = state_db.apply_libra_output(&output).unwrap();

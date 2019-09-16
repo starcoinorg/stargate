@@ -19,7 +19,6 @@ use failure::prelude::*;
 use logger::prelude::*;
 use mock_chain_client::MockChainClient;
 use types::account_address::AccountAddress;
-use types::account_config::coin_struct_tag;
 
 use super::wallet::*;
 use tokio::runtime::current_thread::block_on_all;
@@ -36,6 +35,9 @@ fn test_wallet() -> Result<()> {
     let receiver_deposit_amount: u64 = 4_000_000;
 
     let transfer_amount = 1_000_000;
+
+    let sender_withdraw_amount: u64 = 4_000_000;
+    let receiver_withdraw_amount: u64 = 5_000_000;
 
     let mut rng0: StdRng = SeedableRng::from_seed([0; 32]);
     let mut rng1: StdRng = SeedableRng::from_seed([1; 32]);
@@ -83,6 +85,7 @@ fn test_wallet() -> Result<()> {
 
         let receiver_channel_balance = receiver_wallet.channel_balance(sender).unwrap();
         assert_eq!(receiver_channel_balance, receiver_fund_amount);
+        debug!("after open: sender_channel_balance:{}, receiver_channel_balance:{}",sender_channel_balance,receiver_channel_balance);
 
         let deposit_txn = sender_wallet.deposit(receiver, sender_deposit_amount, receiver_deposit_amount).unwrap();
         debug_assert!(deposit_txn.is_travel_txn(), "open_txn must travel txn");
@@ -101,6 +104,7 @@ fn test_wallet() -> Result<()> {
         let receiver_channel_balance = receiver_wallet.channel_balance(sender).unwrap();
         assert_eq!(receiver_channel_balance, receiver_fund_amount + receiver_deposit_amount);
 
+        debug!("after deposit: sender_channel_balance:{}, receiver_channel_balance:{}",sender_channel_balance,receiver_channel_balance);
         let transfer_txn = sender_wallet.transfer(receiver, transfer_amount).unwrap();
         debug_assert!(!transfer_txn.is_travel_txn(), "transfer_txn must not travel txn");
         //debug!("txn:{:#?}", transfer_txn);
@@ -119,7 +123,8 @@ fn test_wallet() -> Result<()> {
         let receiver_channel_balance = receiver_wallet.channel_balance(sender).unwrap();
         assert_eq!(receiver_channel_balance, receiver_fund_amount + receiver_deposit_amount + transfer_amount);
 
-        let withdraw_txn = sender_wallet.withdraw(receiver, sender_channel_balance, receiver_channel_balance).unwrap();
+        debug!("after transfer: sender_channel_balance:{}, receiver_channel_balance:{}",sender_channel_balance,receiver_channel_balance);
+        let withdraw_txn = sender_wallet.withdraw(receiver, sender_withdraw_amount, receiver_withdraw_amount).unwrap();
         debug_assert!(withdraw_txn.is_travel_txn(), "withdraw_txn must travel txn");
         //debug!("txn:{:#?}", withdraw_txn);
 
@@ -132,16 +137,18 @@ fn test_wallet() -> Result<()> {
         receiver_future.await.unwrap();
 
         let sender_channel_balance = sender_wallet.channel_balance(receiver).unwrap();
-        assert_eq!(sender_channel_balance, 0);
+        assert_eq!(sender_channel_balance, sender_fund_amount + sender_deposit_amount - transfer_amount - sender_withdraw_amount);
 
         let receiver_channel_balance = receiver_wallet.channel_balance(sender).unwrap();
-        assert_eq!(receiver_channel_balance, 0);
+        assert_eq!(receiver_channel_balance, receiver_fund_amount + receiver_deposit_amount + transfer_amount - receiver_withdraw_amount);
+
+        debug!("after withdraw: sender_channel_balance:{}, receiver_channel_balance:{}",sender_channel_balance,receiver_channel_balance);
 
         let sender_balance = sender_wallet.balance();
         let receiver_balance = receiver_wallet.balance();
 
-        assert_eq!(sender_balance, sender_amount - sender_gas_used - transfer_amount);
-        assert_eq!(receiver_balance, receiver_amount + transfer_amount);
+        assert_eq!(sender_balance, sender_amount - sender_gas_used - sender_fund_amount - sender_deposit_amount + sender_withdraw_amount);
+        assert_eq!(receiver_balance, receiver_amount - receiver_fund_amount - receiver_deposit_amount + receiver_withdraw_amount);
 
         debug!("finish");
 
