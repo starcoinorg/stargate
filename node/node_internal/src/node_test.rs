@@ -36,6 +36,7 @@ use logger::prelude::*;
 use sg_config::config::NetworkConfig;
 use crate::test_helper::{*};
 use crate::node::Node;
+use futures::compat::Future01CompatExt;
 
 #[test]
 fn node_test() -> Result<()> {
@@ -58,39 +59,45 @@ fn node_test() -> Result<()> {
     let (mut node2,addr2,keypair2) = gen_node(executor.clone(),&network_config2,client.clone());
     node2.start_server();
 
-    let neg_msg = create_negotiate_message(addr2,addr1 ,keypair2.private_key);
-    node2.open_channel_negotiate(neg_msg);
+    let f = async move {
+        let neg_msg = create_negotiate_message(addr2, addr1, keypair2.private_key);
+        node2.open_channel_negotiate(neg_msg);
 
-    let fund_amount = 1000000;
-    node2.open_channel_async(addr1,fund_amount,fund_amount).unwrap().wait().unwrap();
+        let fund_amount = 1000000;
+        node2.open_channel_async(addr1, fund_amount, fund_amount).unwrap().compat().await.unwrap();
 
-    assert_eq!(node2.channel_balance(addr1,coin_struct_tag()).unwrap(),fund_amount);
-    assert_eq!(node1.channel_balance(addr2,coin_struct_tag()).unwrap(),fund_amount);
+        assert_eq!(node2.channel_balance(addr1, coin_struct_tag()).unwrap(), fund_amount);
+        assert_eq!(node1.channel_balance(addr2, coin_struct_tag()).unwrap(), fund_amount);
 
-    let deposit_amount = 10000;
-    node2.deposit_async(coin_struct_tag(), addr1,deposit_amount,deposit_amount).unwrap().wait().unwrap();
+        let deposit_amount = 10000;
+        node2.deposit_async(coin_struct_tag(), addr1, deposit_amount, deposit_amount).unwrap().compat().await.unwrap();
 
-    assert_eq!(node2.channel_balance(addr1,coin_struct_tag()).unwrap(),fund_amount+deposit_amount);
-    assert_eq!(node1.channel_balance(addr2,coin_struct_tag()).unwrap(),fund_amount+deposit_amount);
+        assert_eq!(node2.channel_balance(addr1, coin_struct_tag()).unwrap(), fund_amount + deposit_amount);
+        assert_eq!(node1.channel_balance(addr2, coin_struct_tag()).unwrap(), fund_amount + deposit_amount);
 
 
-    let transfer_amount = 1_000;
-    let offchain_txn = node2.off_chain_pay_async(coin_struct_tag(), addr1, transfer_amount).unwrap().wait().unwrap();
-    debug!("txn:{:#?}", offchain_txn);
+        let transfer_amount = 1_000;
+        let offchain_txn = node2.off_chain_pay_async(coin_struct_tag(), addr1, transfer_amount).unwrap().compat().await.unwrap();
+        debug!("txn:{:#?}", offchain_txn);
 
-    assert_eq!(node2.channel_balance(addr1,coin_struct_tag()).unwrap(),fund_amount-transfer_amount+deposit_amount);
-    assert_eq!(node1.channel_balance(addr2,coin_struct_tag()).unwrap(),fund_amount+transfer_amount+deposit_amount);
+        assert_eq!(node2.channel_balance(addr1, coin_struct_tag()).unwrap(), fund_amount - transfer_amount + deposit_amount);
+        assert_eq!(node1.channel_balance(addr2, coin_struct_tag()).unwrap(), fund_amount + transfer_amount + deposit_amount);
 
-    let wd_amount = 10000;
-    node2.withdraw_async(coin_struct_tag(), addr1,wd_amount,wd_amount).unwrap().wait().unwrap();
+        let wd_amount = 10000;
+        node2.withdraw_async(coin_struct_tag(), addr1, wd_amount, wd_amount).unwrap().compat().await.unwrap();
 
-    assert_eq!(node2.channel_balance(addr1,coin_struct_tag()).unwrap(),fund_amount-transfer_amount-wd_amount+deposit_amount);
-    assert_eq!(node1.channel_balance(addr2,coin_struct_tag()).unwrap(),fund_amount+transfer_amount-wd_amount+deposit_amount);
+        assert_eq!(node2.channel_balance(addr1, coin_struct_tag()).unwrap(), fund_amount - transfer_amount - wd_amount + deposit_amount);
+        assert_eq!(node1.channel_balance(addr2, coin_struct_tag()).unwrap(), fund_amount + transfer_amount - wd_amount + deposit_amount);
+
+        node1.shutdown();
+        node2.shutdown();
+
+    };
+    rt.block_on(f.boxed().unit_error().compat());
 
     drop(client);
     db_shutdown_receiver.recv().expect("db shutdown msg err.");
-    node1.shutdown();
-    node2.shutdown();
+
     debug!("here");
     //rt.shutdown_on_idle().wait().unwrap();
     Ok(())
