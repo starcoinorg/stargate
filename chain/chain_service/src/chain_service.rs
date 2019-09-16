@@ -71,13 +71,12 @@ pub struct ChainService {
     task_exe: TaskExecutor,
     libra_db: Arc<AtomicRefCell<DataStorage>>,
     read_db: Arc<AtomicRefCell<ReadDataStorage>>,
-    state_view: Arc<StateDataView>,
+    pub state_view: Arc<StateDataView>,
 }
 
 impl Drop for ChainService {
     fn drop(&mut self) {
-        println!("{}", "drop chain service.");
-        drop(self);
+        println!("{}", "shutdown chain service.");
     }
 }
 

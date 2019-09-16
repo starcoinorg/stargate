@@ -5,7 +5,7 @@ use types::access_path::AccessPath;
 use std::collections::hash_map::Entry;
 use failure::prelude::*;
 use state_view::StateView;
-use state_storage::sparse_merkle::{SparseMerkleTree, AccountState};
+use scratchpad::{AccountState};
 use crate::state_cache::AccountState as StarAccountState;
 use libradb::data_storage::ReadData;
 use struct_cache::StructCache;

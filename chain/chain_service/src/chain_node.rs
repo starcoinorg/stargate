@@ -36,10 +36,10 @@ impl ChainNode {
             self.config.service_name.clone(),
         );
 
-        println!("{}", "Started chain Service");
+        println!("{}", "Started chain service");
         do_exit();
         rt.shutdown_now();
-        receiver.recv().expect("db shutdown err.");
+        println!("{}", "Server exit.");
     }
 }
 
@@ -54,7 +54,7 @@ fn do_exit() {
         let thread = std::thread::current();
         unsafe {
             signal_hook::register(*signal, move || {
-                println!("{}", "server exit.");
+                println!("{}", "Shutdown chain service.");
                 term_clone.store(true, Ordering::Release);
                 thread.unpark();
             })
@@ -76,8 +76,6 @@ mod tests {
             port: 1000,
             path: Some("/tmp/data".to_string())};
         let node = ChainNode::new(conf);
-        println!("{}", "11111");
         node.run();
-        println!("{}", "22222");
     }
 }

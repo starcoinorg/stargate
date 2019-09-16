@@ -11,7 +11,7 @@ use types::proof::SparseMerkleProof;
 use types::access_path::{AccessPath, DataPath};
 use std::convert::TryFrom;
 use std::sync::Arc;
-use state_storage::sparse_merkle::ProofRead;
+use scratchpad::ProofRead;
 use atomic_refcell::AtomicRefCell;
 use star_types::channel_transaction::ChannelTransaction;
 use types::account_config::{AccountResource, account_resource_path};

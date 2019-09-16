@@ -9,7 +9,6 @@ edition = "2018"
 [dependencies]
 crypto = { path = "../../libra/crypto/crypto" }
 failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
-state_storage = { path = "../state_storage" }
 types = { path = "../../libra/types" }
 state_view = { path = "../../libra/storage/state_view" }
 libradb = { path = "../../libra/storage/libradb" }
@@ -19,3 +18,4 @@ star_types = { path = "../../star_types" }
 state_store = { path = "../../storage/state_store" }
 jellyfish_merkle = { path = "../../libra/storage/jellyfish_merkle" }
 struct_cache = { path = "../../storage/struct_cache" }
+scratchpad = { path = "../../libra/storage/scratchpad" }
