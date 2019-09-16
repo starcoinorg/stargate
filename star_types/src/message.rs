@@ -184,16 +184,30 @@ impl IntoProto for AddressMessage {
 #[ProtoType(crate::proto::message::ErrorMessage)]
 pub struct ErrorMessage {
     pub raw_transaction_hash: HashValue,
+    pub error:SgError,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq,Fail)]
+#[fail(display = "error code is  {}, error message is {}", error_code,error_message)]
+pub struct SgError {
     pub error_code:i32,
     pub error_message:String,
 }
 
+impl SgError {
+    pub fn new(error_code:i32,error_message:String)->Self{
+        Self{
+            error_code,
+            error_message,
+        }
+    }
+}
+
 impl ErrorMessage {
-    pub fn new(raw_transaction_hash:HashValue,error_code:i32,error_message:String)->Self{
+    pub fn new(raw_transaction_hash:HashValue,error:SgError)->Self{
         Self{
             raw_transaction_hash,
-            error_code,
-            error_message
+            error
         }
     }
 }
@@ -207,10 +221,13 @@ impl FromProto for ErrorMessage {
         let raw_transaction_hash=HashValue::from_slice(error_message.get_raw_transaction_hash())?;
         let error_code=error_message.get_error_code().value();
         let error_message = error_message.take_error_message();
+        let error = SgError{
+            error_code,
+            error_message,
+        };
         Ok(Self{
             raw_transaction_hash,
-            error_code,
-            error_message
+            error
         })
     }
 }
@@ -223,19 +240,11 @@ impl IntoProto for ErrorMessage {
 
         let mut error_message = Self::ProtoType::new();
         error_message.set_raw_transaction_hash(self.raw_transaction_hash.into_proto());
-        error_message.set_error_code(ErrorCode::from_i32(self.error_code).take().expect("error code is not right"));
-        error_message.set_error_message(self.error_message);
+        error_message.set_error_code(ErrorCode::from_i32(self.error.error_code).take().expect("error code is not right"));
+        error_message.set_error_message(self.error.error_message);
         error_message
     }
 }
-
-impl fmt::Display for ErrorMessage {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.error_message)
-    }
-}
-
-impl std::error::Error for ErrorMessage {}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MessageType {

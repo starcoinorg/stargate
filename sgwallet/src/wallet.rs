@@ -39,6 +39,7 @@ use crate::transaction_processor::{start_processor, SubmitTransactionFuture, Tra
 use types::write_set::{WriteSet, WriteOp};
 use std::collections::{HashMap, HashSet};
 use types::channel_account::{ChannelAccountResource, channel_account_struct_tag, channel_account_resource_path};
+use star_types::message::{ErrorMessage, SgError};
 
 lazy_static! {
     pub static ref DEFAULT_ASSET:StructTag = coin_struct_tag();
@@ -166,7 +167,9 @@ impl<C> Wallet<C>
         if !self.channels.borrow().contains(&sender){
             self.channels.borrow_mut().insert(sender);
             self.watch_address(sender)?;
+            //return Err(SgError{error_code:0,error_message:"111".to_string()}.into())
         }
+
         let mut txn = channel_txn.txn().clone();
         let txn_signature = self.sign_script_payload(channel_txn.channel_script_payload().ok_or(format_err!("txn must be channel script txn."))?)?;
         txn.set_receiver_public_key_and_signature(self.keypair.public_key.clone(), txn_signature);
