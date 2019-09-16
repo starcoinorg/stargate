@@ -5,7 +5,7 @@ use proptest_derive::Arbitrary;
 use proto_conv::{FromProto, IntoProto,FromProtoBytes};
 use crate::channel_transaction::ChannelTransaction;
 use crypto::ed25519::Ed25519Signature;
-use std::convert::{TryFrom};
+use std::{convert::TryFrom, fmt};
 use crate::proto::message::{ReceiveSignMessage, ErrorCode};
 use parity_multiaddr::Multiaddr;
 use crypto::HashValue;
@@ -228,6 +228,14 @@ impl IntoProto for ErrorMessage {
         error_message
     }
 }
+
+impl fmt::Display for ErrorMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.error_message)
+    }
+}
+
+impl std::error::Error for ErrorMessage {}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MessageType {
