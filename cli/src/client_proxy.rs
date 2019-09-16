@@ -95,14 +95,7 @@ impl ClientProxy {
     }
 
     pub fn account_state(&mut self,) -> Result<Option<Vec<u8>>>{
-        match self.chain_client.latest_state_root() {
-            Ok(hash_value)=>{
-                self.chain_client.get_account_state_with_proof(&self.wallet.get_address(),hash_value)
-            },
-            Err(e)=>{
-                bail_err!(e)
-            }
-        }
+        Ok(self.chain_client.get_account_state_with_proof(&self.wallet.get_address(),None)?.1)
     }
 
 }

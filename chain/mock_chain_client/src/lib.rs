@@ -14,6 +14,7 @@ use atomic_refcell::{AtomicRefCell};
 use std::sync::Arc;
 use core::borrow::{BorrowMut};
 use std::sync::mpsc;
+use types::proof::SparseMerkleProof;
 
 #[derive(Clone)]
 pub struct MockChainClient {
@@ -23,7 +24,7 @@ pub struct MockChainClient {
 
 impl MockChainClient {
     pub fn new(exe: TaskExecutor) -> (Self, mpsc::Receiver<()>) {
-        let (chain_service, receiver) = ChainService::new(&exe, &Some("/tmp/data".to_string()));
+        let (chain_service, receiver) = ChainService::new(&exe, &None);
         let client = Self {
             //exe,
             chain_service: Arc::new(AtomicRefCell::new(chain_service)),
@@ -49,9 +50,9 @@ impl<T> Stream for MockStreamReceiver<T> {
 impl ChainClient for MockChainClient {
     type WatchResp = MockStreamReceiver<WatchData>;
 
-    fn latest_state_root(&self) -> Result<HashValue> {
+    fn latest_state_root(&self) -> Result<(HashValue,Version)> {
         let chain_service = self.chain_service.as_ref().borrow();
-        Ok(chain_service.latest_state_root_inner())
+        Ok((chain_service.latest_state_root_inner(),chain_service.get_latest_version()))
     }
 
     fn get_account_state(&self, address: &AccountAddress) -> Result<Option<Vec<u8>>> {
@@ -62,6 +63,12 @@ impl ChainClient for MockChainClient {
             None => { None }
         };
         Ok(blob)
+    }
+
+    fn get_account_state_with_proof(&self, address: &AccountAddress, version: Option<Version>) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)> {
+        let chain_service = self.chain_service.as_ref().borrow();
+        let (version, state,proof) = chain_service.get_account_state_with_proof_inner(address, version).ok_or(format_err!("Can not find account state by address: {}", address))?;
+        Ok((version,state.map(|state|state.as_ref().to_vec()),proof))
     }
 
     fn get_state_by_access_path(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {

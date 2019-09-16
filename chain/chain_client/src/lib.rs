@@ -16,14 +16,18 @@ use protobuf::RepeatedField;
 use types::event::EventKey;
 use proto_conv::FromProto;
 use types::contract_event::ContractEvent;
+use types::proof::SparseMerkleProof;
 
 pub mod watch_stream;
 
 pub trait ChainClient {
     type WatchResp: Stream<Item=WatchData, Error=grpcio::Error>;
 
-    fn latest_state_root(&self) -> Result<HashValue>;
+    fn latest_state_root(&self) -> Result<(HashValue,Version)>;
+    #[deprecated]
+    /// please use get_account_state_with_proof
     fn get_account_state(&self, address: &AccountAddress) -> Result<Option<Vec<u8>>>;
+    fn get_account_state_with_proof(&self, address: &AccountAddress, version: Option<Version>) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)>;
     fn get_state_by_access_path(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>>;
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()>;
     fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<()>;
@@ -52,18 +56,15 @@ impl RpcChainClient {
         }
     }
 
-    pub fn get_account_state_with_proof(&self, address: &AccountAddress, state_root_hash: HashValue) -> Result<Option<Vec<u8>>> {
-        self.get_account_state(address)
-    }
 }
 
 impl ChainClient for RpcChainClient {
     type WatchResp = grpcio::ClientSStreamReceiver<WatchData>;
 
-    fn latest_state_root(&self) -> Result<HashValue> {
+    fn latest_state_root(&self) -> Result<(HashValue,Version)> {
         let req = LatestRootRequest::new();
         let resp = self.client.latest_state_root(&req)?;
-        HashValue::from_slice(resp.state_root_hash.as_slice())
+        Ok((HashValue::from_slice(resp.state_root_hash.as_slice())?, 0u64))
     }
 
     fn get_account_state(&self, address: &AccountAddress) -> Result<Option<Vec<u8>>> {
@@ -79,6 +80,23 @@ impl ChainClient for RpcChainClient {
             };
             Ok(tmp)
         })
+    }
+
+    fn get_account_state_with_proof(&self, address: &AccountAddress, version: Option<Version>) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)>{
+        let mut req = GetAccountStateWithProofRequest::new();
+        req.set_address(address.to_vec());
+        if version.is_some() {
+            req.set_ver(version.unwrap());
+        }
+        let mut resp = self.client.get_account_state_with_proof(&req)?;
+        let version = resp.get_version();
+        let proof = SparseMerkleProof::from_proto(resp.take_sparse_merkle_proof())?;
+        let account_state = if resp.has_account_state_blob() {
+            Some(resp.get_account_state_blob().get_blob().to_vec())
+        } else {
+            None
+        };
+        Ok((version, account_state, proof))
     }
 
     fn get_state_by_access_path(&self, path: &AccessPath) -> Result<Option<Vec<u8>>> {

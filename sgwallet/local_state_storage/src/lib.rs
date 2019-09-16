@@ -34,7 +34,7 @@ where
     C: ChainClient,
 {
     pub fn new(account: AccountAddress, client: Arc<C>) -> Result<Self> {
-        let state_blob = client.get_account_state(&account).and_then(|state| {
+        let state_blob = client.get_account_state_with_proof(&account, None).and_then(|(version, state, proof)| {
             state.ok_or(format_err!("can not find account by address:{}", account))
         })?;
         let state = AtomicRefCell::new(AccountState::from_account_state_blob(state_blob)?);
