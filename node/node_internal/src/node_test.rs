@@ -8,7 +8,9 @@ use futures::{
     prelude::*,
 };
 use network::{build_network_service,NetworkService};
-use std::io::Result;
+//use std::io::Result;
+use failure::prelude::*;
+
 use tokio::runtime::{Runtime,TaskExecutor};
 
 use switch::{switch::Switch};
@@ -101,6 +103,31 @@ fn node_test() -> Result<()> {
     debug!("here");
     //rt.shutdown_on_idle().wait().unwrap();
     Ok(())
+}
+
+#[test]
+fn error_test()->Result<()>{
+    ::logger::init_for_e2e_testing();
+    env_logger::init();
+
+    match new_error() {
+        Err(e) => {
+            if let Some(err) = e.downcast_ref::<SgError>() {
+                info!("this is a sg error");
+                assert_eq!(1,1)
+            } else {
+                // fallback case
+                info!("this is a common error");
+                assert_eq!(1,2)
+            }
+        }
+        Ok(_) => {info!("ok")}
+    };
+    Ok(())
+}
+
+fn new_error()->Result<()>{
+    Err(SgError::new(0,"111".to_string()).into())
 }
 
 fn create_negotiate_message(sender_addr:AccountAddress,receiver_addr:AccountAddress,private_key:Ed25519PrivateKey)->OpenChannelNodeNegotiateMessage{
