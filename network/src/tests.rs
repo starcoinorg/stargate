@@ -90,21 +90,31 @@ mod tests {
 
         let rt = Runtime::new().unwrap();
         let executor = rt.executor();
-        let ((service1, _tx1, rx1, close_tx1), (_service2, tx2, _rx2, close_tx2)) =
+        let ((service1, tx1, rx1, close_tx1), (service2, tx2, _rx2, close_tx2)) =
             build_test_network_pair();
-        let msg_peer_id = service1.identify();
+        let msg_peer_id_1 = service1.identify();
+        let msg_peer_id_2 = service2.identify();
         // Once sender has been droped, the select_all will return directly. clone it to prevent it.
         let _tx22 = tx2.clone();
+        let mut count = 0;
         let sender_fut = Interval::new(Instant::now(), Duration::from_millis(1))
             .take(10000)
             .map_err(|_e| ())
             .for_each(move |_| {
+                count += 1;
                 let random_bytes: Vec<u8> = (0..10240).map(|_| { rand::random::<u8>() }).collect();
                 let message = Message::new_message(random_bytes);
-                match tx2.unbounded_send(NetworkMessage {
-                    peer_id: msg_peer_id,
-                    msg: message,
-                }) {
+                match if count % 2 == 0 {
+                    tx2.unbounded_send(NetworkMessage {
+                        peer_id: msg_peer_id_1,
+                        msg: message,
+                    })
+                } else {
+                    tx1.unbounded_send(NetworkMessage {
+                        peer_id: msg_peer_id_2,
+                        msg: message,
+                    })
+                } {
                     Ok(()) => Ok(()),
                     Err(_e) => Err(()),
                 }
