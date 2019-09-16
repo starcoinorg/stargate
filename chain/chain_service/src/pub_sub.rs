@@ -3,28 +3,28 @@ use std::collections::HashMap;
 use futures::sync::mpsc::{UnboundedSender, SendError};
 use crypto::HashValue;
 
-struct WatchInner<T> where T: Clone {
+struct WatchInner<D, T> where T: Clone, D: Clone {
     sender: UnboundedSender<T>,
-    filter_func: Box<dyn Fn(T) -> bool + Send>,
+    filter_func: Box<dyn Fn(D, T) -> bool + Send>,
 }
 
 #[derive(Clone)]
-pub struct Pub<T> where T: Clone {
-    senders: Arc<Mutex<HashMap<HashValue, WatchInner<T>>>>,
+pub struct Pub<D, T> where T: Clone, D: Clone {
+    senders: Arc<Mutex<HashMap<HashValue, WatchInner<D, T>>>>,
 }
 
-impl<T> Pub<T> where T: Clone {
+impl<D, T> Pub<D, T> where T: Clone, D: Clone {
     pub fn new() -> Self {
         Pub {
-            senders: Arc::new(Mutex::new(HashMap::<HashValue, WatchInner<T>>::new())),
+            senders: Arc::new(Mutex::new(HashMap::<HashValue, WatchInner<D, T>>::new())),
         }
     }
 
-    pub fn send(&self, tx: T) -> Result<(), SendError<T>> {
+    pub fn send(&self, d: D, tx: T) -> Result<(), SendError<T>> {
         let senders = self.senders.lock().unwrap();
         for (id, inner) in senders.iter() {
             let func = &inner.filter_func;
-            let send_flag = (func)(tx.clone());
+            let send_flag = (func)(d.clone(), tx.clone());
             if send_flag {
                 match inner.sender.unbounded_send(tx.clone()) {
                     Ok(_) => {}
@@ -39,7 +39,7 @@ impl<T> Pub<T> where T: Clone {
         Ok(())
     }
 
-    pub fn subscribe(&self, id: HashValue, sender: UnboundedSender<T>, filter: Box<dyn Fn(T) -> bool + Send>) {
+    pub fn subscribe(&self, id: HashValue, sender: UnboundedSender<T>, filter: Box<dyn Fn(D, T) -> bool + Send>) {
         let mut senders = self.senders.lock().unwrap();
         senders.insert(id, WatchInner { sender, filter_func: filter });
     }
@@ -56,7 +56,7 @@ mod tests {
 
     #[test]
     fn test_pub_new() {
-        let pub_new = Pub::<u64>::new();
+        let pub_new = Pub::<u64, u64>::new();
         println!("{}", "?????");
     }
 }

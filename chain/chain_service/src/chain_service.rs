@@ -66,8 +66,8 @@ lazy_static! {
 #[derive(Clone)]
 pub struct ChainService {
     sender: channel::Sender<SignedTransaction>,
-    tx_pub: Arc<Mutex<pub_sub::Pub<WatchData>>>,
-    event_pub: Arc<Mutex<pub_sub::Pub<WatchData>>>,
+    tx_pub: Arc<pub_sub::Pub<Vec<AccountAddress>, WatchData>>,
+    event_pub: Arc<pub_sub::Pub<Vec<AccountAddress>, WatchData>>,
     task_exe: TaskExecutor,
     libra_db: Arc<AtomicRefCell<DataStorage>>,
     read_db: Arc<AtomicRefCell<ReadDataStorage>>,
@@ -76,7 +76,7 @@ pub struct ChainService {
 
 impl Drop for ChainService {
     fn drop(&mut self) {
-        println!("{}", "shutdown chain service.");
+        info!("{}", "shutdown chain service.");
     }
 }
 
@@ -84,8 +84,8 @@ impl ChainService {
     pub fn new(exe: &TaskExecutor, path_option: &Option<String>) -> (Self, mpsc::Receiver<()>) {
         let gauge = IntGauge::new("receive_transaction_channel_counter", "receive transaction channel").expect("create IntGauge err.");
         let (tx_sender, mut tx_receiver) = channel::new(1_024, &gauge);
-        let tx_pub = Arc::new(Mutex::new(pub_sub::Pub::new()));
-        let event_pub = Arc::new(Mutex::new(pub_sub::Pub::new()));
+        let tx_pub = Arc::new(pub_sub::Pub::new());
+        let event_pub = Arc::new(pub_sub::Pub::new());
 
         let (genesis_flag, (db, receive)) = ChainService::init_db(path_option);
         let read_db = Arc::new(AtomicRefCell::new(db.read_db()));
@@ -118,12 +118,12 @@ impl ChainService {
                     let ledger_info = LedgerInfo::new(0, tx_info.hash(), HashValue::random(), *GENESIS_BLOCK_ID, 0, 0, None);
                     let ledger_info_with_sigs = LedgerInfoWithSignatures::new(ledger_info, HashMap::new());
 
-                    chain_service.insert_into_libra(Some(ledger_info_with_sigs), genesis_txn, accounts, events, 0, true);
+                    chain_service.insert_into_libra(&Some(ledger_info_with_sigs), genesis_txn, &accounts, events, 0, true);
                 }
                 _ => {}
             };
         }
-    (chain_service, receive)
+        (chain_service, receive)
     }
 
     fn init_db(path_option: &Option<String>) -> (bool, (DataStorage, mpsc::Receiver<()>)) {
@@ -150,7 +150,7 @@ impl ChainService {
             let tmp_dir = TempPath::new();
             tmp_dir.create_as_dir();
             let path = tmp_dir.path().display();
-            println!("db path:{}", path);
+            info!("db path:{}", path);
 
             (false, DataStorage::new(LibraDB::new(format!("{}{}", path, "/libradb"))))
         }
@@ -161,40 +161,37 @@ impl ChainService {
         let ver = self.get_latest_version();
         let mut watch_tx = WatchTxData::new();
         let mut output_vec = MoveVM::execute_block(vec![sign_tx.clone()], &VM_CONFIG, &*self.state_view);
-        output_vec.pop().and_then(|output| {
-            info!("apply_on_chain_transaction tx:{}, output: {}", sign_tx.raw_txn().hash(), output);
-            let ver = match output.status() {
-                TransactionStatus::Keep(_) => {
-                    let (state_hash, accounts) = StateCache::apply_libra_output(&self.state_view, &output).expect("apply output err.");
-                    self.insert_into_libra(None, sign_tx.clone(), accounts, output.events().to_vec(), output.gas_used(), false)
-                }
-                _ => {
-                    println!("----->{:?}", output);
-                    0
-                }
-            };
-            let event_lock = self.event_pub.lock().unwrap();
-            output.events().iter().for_each(|e| {
-                let event = e.clone().into_proto();
-                let mut event_resp = WatchData::new();
-                event_resp.set_event(event);
-                event_resp.set_version(ver);
-                event_lock.send(event_resp).unwrap();
-            });
-
-            watch_tx.set_output(transaction_output_helper::into_pb(output).expect("output to proto err."));
-            Some(())
+        let output = output_vec.pop().expect("output vec is empty.");
+        info!("apply_on_chain_transaction tx:{}, output: {}", sign_tx.raw_txn().hash(), output);
+        let (ver, account_vec) = match output.status() {
+            TransactionStatus::Keep(_) => {
+                let (state_hash, accounts) = StateCache::apply_libra_output(&self.state_view, &output).expect("apply output err.");
+                let v = self.insert_into_libra(&None, sign_tx.clone(), &accounts, output.events().to_vec(), output.gas_used(), false);
+                let addrs = accounts.iter().map(|(addr, blob)| -> AccountAddress { addr.clone() }).collect();
+                (v, addrs)
+            }
+            _ => {
+                (0, vec![])
+            }
+        };
+        output.events().iter().for_each(|e| {
+            let event = e.clone().into_proto();
+            let mut event_resp = WatchData::new();
+            event_resp.set_event(event);
+            event_resp.set_version(ver);
+            self.event_pub.send(account_vec.clone(), event_resp).unwrap();
         });
+
+        watch_tx.set_output(transaction_output_helper::into_pb(output).expect("output to proto err."));
 
         let mut wt_resp = WatchData::new();
         watch_tx.set_signed_txn(sign_tx.into_proto());
         wt_resp.set_tx(watch_tx);
         wt_resp.set_version(ver);
-        let tx_lock = self.tx_pub.lock().unwrap();
-        tx_lock.send(wt_resp).unwrap();
+        self.tx_pub.send(account_vec, wt_resp).unwrap();
     }
 
-    fn insert_into_libra(&self, sign: Option<LedgerInfoWithSignatures<Ed25519Signature>>, sign_tx: SignedTransaction, accounts: Vec<(AccountAddress, AccountStateBlob)>, events: Vec<ContractEvent>, gas: u64, is_genesis: bool) -> Version {
+    fn insert_into_libra(&self, sign: &Option<LedgerInfoWithSignatures<Ed25519Signature>>, sign_tx: SignedTransaction, accounts: &Vec<(AccountAddress, AccountStateBlob)>, events: Vec<ContractEvent>, gas: u64, is_genesis: bool) -> Version {
         let mut map = HashMap::new();
         accounts.iter().for_each(|(addr, account)| {
             map.insert(*addr, account.clone());
@@ -203,11 +200,11 @@ impl ChainService {
 
         let libradb = self.libra_db.as_ref().borrow();
         if is_genesis {
-            libradb.save_genesis_transactions(vec![commit_tx], &sign);
+            libradb.save_genesis_transactions(vec![commit_tx], sign).expect("save genesis transactions err.");
             0
         } else {
             let ver = self.get_latest_version() + 1;
-            libradb.save_transactions(vec![commit_tx], ver);
+            libradb.save_transactions(vec![commit_tx], ver).expect("save transactions err.");
             ver
         }
     }
@@ -223,10 +220,15 @@ impl ChainService {
         let (sender, receiver) = unbounded::<WatchData>();
         //TODO id generate.
         let id = HashValue::random();
-        let tx_lock = self.tx_pub.lock().unwrap();
-        tx_lock.subscribe(id, sender, Box::new(move |tx: WatchData| -> bool {
-            let signed_tx = SignedTransaction::from_proto(tx.get_tx().get_signed_txn().clone()).expect("proto to signed tx err.");
-            signed_tx.sender() == address
+        self.tx_pub.subscribe(id, sender, Box::new(move |accounts: Vec<AccountAddress>, _tx: WatchData| -> bool {
+            let mut addr_flag = false;
+            accounts.iter().for_each(|addr| {
+                if !addr_flag {
+                    addr_flag = addr == &address
+                }
+            });
+
+            addr_flag
         }));
 
         receiver
@@ -235,15 +237,16 @@ impl ChainService {
     pub fn watch_event_inner(&self, address: AccountAddress, keys: Vec<EventKey>, _index: u64) -> UnboundedReceiver<WatchData> {
         let (sender, receiver) = unbounded::<WatchData>();
         let id = address.hash();
-        let event_lock = self.event_pub.lock().unwrap();
-        event_lock.subscribe(id, sender, Box::new(move |data: WatchData| -> bool {
-            let mut flag = false;
+        self.event_pub.subscribe(id, sender, Box::new(move |_accounts: Vec<AccountAddress>, data: WatchData| -> bool {
+            let mut key_flag = false;
             let event: ContractEvent = ContractEvent::from_proto(data.get_event().clone()).unwrap();
             keys.iter().for_each(|key| {
-                flag = key == event.key()
+                if !key_flag {
+                    key_flag = key == event.key()
+                }
             });
 
-            flag
+            key_flag
         }));
 
         receiver
@@ -412,8 +415,8 @@ impl Chain for ChainService {
         ctx.spawn(
             sink
                 .send_all(stream)
-                .map(|_| println!("completed"))
-                .map_err(|e| println!("failed to reply: {:?}", e)),
+                .map(|_| info!("completed"))
+                .map_err(|e| warn!("failed to reply: {:?}", e)),
         );
     }
 
@@ -455,8 +458,8 @@ impl Chain for ChainService {
         ctx.spawn(
             sink
                 .send_all(stream)
-                .map(|_| println!("completed"))
-                .map_err(|e| println!("failed to reply: {:?}", e)),
+                .map(|_| info!("completed"))
+                .map_err(|e| warn!("failed to reply: {:?}", e)),
         );
     }
 
@@ -470,7 +473,7 @@ impl Chain for ChainService {
                 resp.set_signed_tx(tx.into_proto())
             }
             Err(err) => {
-                println!("{:?}", err);
+                warn!("{:?}", err);
             }
         }
         provide_grpc_response(Ok(resp), ctx, sink);
@@ -526,7 +529,7 @@ mod tests {
     fn test_chain_service() {
         let mut rt = Runtime::new().unwrap();
         let exe = rt.executor();
-        let (chain_service,_) = ChainService::new(&exe, &Some("/tmp/data".to_string()));
+        let (chain_service, _) = ChainService::new(&exe, &Some("/tmp/data".to_string()));
 //        let print_future = async move {
 //            let ten_millis = time::Duration::from_millis(100);
 //            thread::sleep(ten_millis);
@@ -557,7 +560,7 @@ mod tests {
 
         let mut rt = Runtime::new().unwrap();
         let exe = rt.executor();
-        let (mut chain_service,_) = ChainService::new(&exe, &Some("/tmp/data".to_string()));
+        let (mut chain_service, _) = ChainService::new(&exe, &Some("/tmp/data".to_string()));
 
         let s_n = StateCache::sequence_number_by_version(&chain_service.state_view, chain_service.state_view.latest_version().expect("latest version is none."), &account_address).unwrap();
         let signed_tx = RawTransaction::new(
@@ -578,7 +581,7 @@ mod tests {
     fn test_faucet() {
         let mut rt = Runtime::new().unwrap();
         let exe = rt.executor();
-        let (mut chain_service,_) = ChainService::new(&exe, &Some("/tmp/data".to_string()));
+        let (mut chain_service, _) = ChainService::new(&exe, &Some("/tmp/data".to_string()));
         let receiver = AccountAddress::random();
         chain_service.faucet_inner(receiver, 100);
         chain_service.faucet_inner(receiver, 100);
@@ -592,7 +595,7 @@ mod tests {
     fn test_account_state_proof() {
         let mut rt = Runtime::new().unwrap();
         let exe = rt.executor();
-        let (mut chain_service,_) = ChainService::new(&exe, &Some("/tmp/data".to_string()));
+        let (mut chain_service, _) = ChainService::new(&exe, &Some("/tmp/data".to_string()));
         let mut query_addr: AccountAddress = AccountAddress::random();
         for i in 1..10 {
             let receiver = AccountAddress::random();
