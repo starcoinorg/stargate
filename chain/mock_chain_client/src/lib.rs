@@ -24,17 +24,13 @@ pub struct MockChainClient {
 impl MockChainClient {
     pub fn new(exe: TaskExecutor) -> (Self, mpsc::Receiver<()>) {
         let (chain_service, receiver) = ChainService::new(&exe, &Some("/tmp/data".to_string()));
-        let mut client = Self {
+        let client = Self {
             //exe,
             chain_service: Arc::new(AtomicRefCell::new(chain_service)),
         };
-        client.init();
         (client, receiver)
     }
 
-    fn init(&mut self) {
-//        self.chain_service = ;
-    }
 }
 
 pub struct MockStreamReceiver<T> {
