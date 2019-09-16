@@ -8,6 +8,7 @@ use crypto::ed25519::Ed25519Signature;
 use std::convert::{TryFrom};
 use crate::proto::message::ReceiveSignMessage;
 use parity_multiaddr::Multiaddr;
+use crypto::HashValue;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 //#[ProtoType(crate::proto::message::OpenChannelNodeNegotiateMessage)]
@@ -174,6 +175,24 @@ impl IntoProto for AddressMessage {
         out.set_addr(self.addr.into_proto());
         out.set_ip_addr(self.ip_addr.to_vec());
         out
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq,FromProto,IntoProto)]
+#[ProtoType(crate::proto::message::ErrorMessage)]
+pub struct ErrorMessage {
+    pub raw_transaction_hash: HashValue,
+    pub error_code:i64,
+    pub error_message:String,
+}
+
+impl ErrorMessage {
+    pub fn new(raw_transaction_hash:HashValue,error_code:i64,error_message:String)->Self{
+        Self{
+            raw_transaction_hash,
+            error_code,
+            error_message
+        }
     }
 }
 
