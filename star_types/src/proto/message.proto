@@ -43,8 +43,13 @@ message StructTag {
     repeated StructTag type_params = 4;
 }
 
+enum ErrorCode {
+    UNKNOWN = 0;
+    SEQUENCE_NUMBER_WRONG = 1;
+}
+
 message ErrorMessage{
     bytes raw_transaction_hash = 1;
-    int64 error_code=2;
+    ErrorCode error_code=2;
     string error_message =3 ;
 }

@@ -2,13 +2,14 @@ use types::account_address::AccountAddress;
 use failure::prelude::*;
 #[cfg(any(test, feature = "testing"))]
 use proptest_derive::Arbitrary;
-use proto_conv::{FromProto, IntoProto};
+use proto_conv::{FromProto, IntoProto,FromProtoBytes};
 use crate::channel_transaction::ChannelTransaction;
 use crypto::ed25519::Ed25519Signature;
 use std::convert::{TryFrom};
-use crate::proto::message::ReceiveSignMessage;
+use crate::proto::message::{ReceiveSignMessage, ErrorCode};
 use parity_multiaddr::Multiaddr;
 use crypto::HashValue;
+use protobuf::ProtobufEnum;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 //#[ProtoType(crate::proto::message::OpenChannelNodeNegotiateMessage)]
@@ -178,21 +179,53 @@ impl IntoProto for AddressMessage {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq,FromProto,IntoProto)]
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 #[ProtoType(crate::proto::message::ErrorMessage)]
 pub struct ErrorMessage {
     pub raw_transaction_hash: HashValue,
-    pub error_code:i64,
+    pub error_code:i32,
     pub error_message:String,
 }
 
 impl ErrorMessage {
-    pub fn new(raw_transaction_hash:HashValue,error_code:i64,error_message:String)->Self{
+    pub fn new(raw_transaction_hash:HashValue,error_code:i32,error_message:String)->Self{
         Self{
             raw_transaction_hash,
             error_code,
             error_message
         }
+    }
+}
+
+impl FromProto for ErrorMessage {
+    type ProtoType = crate::proto::message::ErrorMessage;
+
+    fn from_proto(mut error_message: Self::ProtoType) -> Result<Self> {
+        use crate::proto::message::ErrorCode;
+
+        let raw_transaction_hash=HashValue::from_slice(error_message.get_raw_transaction_hash())?;
+        let error_code=error_message.get_error_code().value();
+        let error_message = error_message.take_error_message();
+        Ok(Self{
+            raw_transaction_hash,
+            error_code,
+            error_message
+        })
+    }
+}
+
+impl IntoProto for ErrorMessage {
+    type ProtoType = crate::proto::message::ErrorMessage;
+
+    fn into_proto(self) -> Self::ProtoType {
+        use crate::proto::message::ErrorCode;
+
+        let mut error_message = Self::ProtoType::new();
+        error_message.set_raw_transaction_hash(self.raw_transaction_hash.into_proto());
+        error_message.set_error_code(ErrorCode::from_i32(self.error_code).take().expect("error code is not right"));
+        error_message.set_error_message(self.error_message);
+        error_message
     }
 }
 
