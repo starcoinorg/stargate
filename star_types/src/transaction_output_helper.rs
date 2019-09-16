@@ -7,7 +7,6 @@ use super::proto::transaction_output::{TransactionOutput as TransactionOutputPro
 use failure::Result;
 use proto_conv::{FromProto, IntoProto};
 use ::protobuf::RepeatedField;
-use crate::change_set::{ChangeSet, ChangeSetMut};
 use types::transaction::TransactionOutput;
 use canonical_serialization::{SimpleDeserializer, SimpleSerializer};
 

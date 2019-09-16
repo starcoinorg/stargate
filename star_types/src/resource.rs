@@ -13,7 +13,6 @@ use types::byte_array::ByteArray;
 use types::language_storage::StructTag;
 
 use crate::{
-    change_set::{Changeable, ChangeOp, ChangeSet, FieldChanges},
     resource_type::{resource_def::ResourceDef, resource_types::ResourceType},
     resource_value::{MutResourceVal, ResourceValue},
 };
@@ -53,12 +52,6 @@ impl Resource {
             }
             _ => panic!("Unsupported field type: {:?}", field_type)
         }
-    }
-
-    pub fn from_changes(changes: &FieldChanges, tag: StructTag, def: &ResourceDef) -> Self {
-        let mut empty_resource = Self::empty(tag, def);
-        empty_resource.apply_changes(changes);
-        empty_resource
     }
 
     /// Normal code should always know what type this value has. This is made available only for
@@ -144,97 +137,6 @@ impl Resource {
         Into::<ResourceValue>::into(self).simple_serialize().expect("serialize should not fail.")
     }
 
-
-    pub fn diff(&self, other: &Resource) -> Result<FieldChanges> {
-        //ensure!(self.tag == other.tag, "diff only support same type resource.");
-        ensure!(self.len() == other.len(), "two resource's fields len should be same.");
-        let mut changes = FieldChanges::empty();
-        let self_fields = self.fields();
-        let other_fields = other.fields();
-        let it = self_fields.iter().zip(other_fields.iter());
-        for (idx, (first_value, second_value)) in it.enumerate() {
-            changes.append(&mut Self::diff_field(idx, first_value, second_value)?)
-        }
-        changes.filter_none();
-        debug!("diff resource {:#?} with {:#?}", self, other);
-        debug!("diff result: {:#?}", changes);
-        Ok(changes)
-    }
-
-    fn diff_field(idx: usize, first: &MutResourceVal, second: &MutResourceVal) -> Result<FieldChanges> {
-        let mut changes = FieldChanges::empty();
-        let mut accesses = Accesses::empty();
-        accesses.add_index_to_back(idx as u64);
-        match &*first.peek() {
-            ResourceValue::U64(first_value) => if let ResourceValue::U64(second_value) = &*second.peek() {
-                let change_op = if first_value == second_value {
-                    ChangeOp::None
-                } else if first_value > second_value {
-                    ChangeOp::Minus(first_value - second_value)
-                } else {
-                    ChangeOp::Plus(second_value - first_value)
-                };
-                changes.push((accesses, change_op));
-            } else {
-                bail!("expect type {:?} but get {:?}", first, second);
-            },
-            ResourceValue::Resource(first_res) => if let ResourceValue::Resource(second_res) = &*second.peek() {
-                for (field_idx, (first_value, second_value)) in first_res.iter().zip(second_res.iter()).enumerate() {
-                    let mut field_changes = Self::diff_field(field_idx, first_value, second_value)?;
-                    for (mut field_accesses, field_change_op) in field_changes {
-                        let mut new_accesses = accesses.clone();
-                        new_accesses.append(&mut field_accesses);
-                        changes.push((new_accesses, field_change_op));
-                    }
-                }
-            } else {
-                bail!("expect type {:?} but get {:?}", first, second);
-            },
-            ResourceValue::ByteArray(first_value) => if let ResourceValue::ByteArray(second_value) = &*second.peek() {
-                let change_op = if first_value == second_value {
-                    ChangeOp::None
-                } else {
-                    ChangeOp::Update(second_value.as_bytes().to_vec())
-                };
-                changes.push((accesses, change_op));
-            } else {
-                bail!("expect type {:?} but get {:?}", first, second);
-            },
-            ResourceValue::Address(first_value) => if let ResourceValue::Address(second_value) = &*second.peek() {
-                let change_op = if first_value == second_value {
-                    ChangeOp::None
-                } else {
-                    ChangeOp::Update(second_value.to_vec())
-                };
-                changes.push((accesses, change_op));
-            } else {
-                bail!("expect type {:?} but get {:?}", first, second);
-            },
-            ResourceValue::Bool(first_value) => if let ResourceValue::Bool(second_value) = &*second.peek() {
-                let change_op = if first_value == second_value {
-                    ChangeOp::None
-                } else {
-                    let byte: u8 = if *second_value { 1 } else { 0 };
-                    ChangeOp::Update(vec![byte])
-                };
-                changes.push((accesses, change_op));
-            } else {
-                bail!("expect type {:?} but get {:?}", first, second);
-            },
-            ResourceValue::String(first_value) => if let ResourceValue::String(second_value) = &*second.peek() {
-                let change_op = if first_value == second_value {
-                    ChangeOp::None
-                } else {
-                    ChangeOp::Update(second_value.clone().into_bytes())
-                };
-                changes.push((accesses, change_op));
-            } else {
-                bail!("expect type {:?} but get {:?}", first, second);
-            },
-        }
-        Ok(changes)
-    }
-
     fn borrow_field(&self, accesses: &Accesses) -> Result<MutResourceVal> {
         //TODO optimize, not use clone.
         let mut value = self.field(accesses.first().index().unwrap() as usize).map(MutResourceVal::shallow_clone).ok_or(format_err!("Can not find field by access {:?}", accesses))?;
@@ -247,56 +149,6 @@ impl Resource {
         }
         Ok(value)
     }
-
-    pub fn apply_changes(&mut self, field_changes: &FieldChanges) -> Result<()> {
-        for (accesses, change_op) in field_changes {
-            let mut val = self.borrow_field(accesses)?;
-            val.apply_change(change_op.clone());
-        }
-        Ok(())
-    }
-
-    pub fn to_changes(&self) -> FieldChanges {
-        let mut changes = FieldChanges::empty();
-        for (idx, field) in self.fields().iter().enumerate() {
-            changes.append(&mut Self::field_to_changes(idx, field));
-        }
-        changes
-    }
-
-    fn field_to_changes(idx: usize, field: &MutResourceVal) -> FieldChanges {
-        let mut accesses = Accesses::new_with_index(idx as u64);
-        let mut changes = FieldChanges::empty();
-        match &*field.peek() {
-            ResourceValue::U64(value) => {
-                changes.push((accesses, ChangeOp::Plus(*value)))
-            }
-            ResourceValue::Resource(res) => {
-                for (idx, sub_field) in res.iter().enumerate() {
-                    let sub_changes = Self::field_to_changes(idx, sub_field);
-                    for (mut field_accesses, field_change_op) in sub_changes {
-                        let mut new_accesses = accesses.clone();
-                        new_accesses.append(&mut field_accesses);
-                        changes.push((new_accesses, field_change_op));
-                    }
-                }
-            }
-            ResourceValue::Address(value) => {
-                changes.push((accesses, ChangeOp::Update(value.to_vec())));
-            }
-            ResourceValue::String(value) => {
-                changes.push((accesses, ChangeOp::Update(value.clone().into_bytes())));
-            }
-            ResourceValue::Bool(value) => {
-                let byte: u8 = if *value { 1 } else { 0 };
-                changes.push((accesses, ChangeOp::Update(vec![byte])));
-            }
-            ResourceValue::ByteArray(value) => {
-                changes.push((accesses, ChangeOp::Update(value.as_bytes().to_vec())))
-            }
-        }
-        changes
-    }
 }
 
 impl Into<ResourceValue> for Resource {
@@ -308,12 +160,6 @@ impl Into<ResourceValue> for Resource {
 impl Into<ResourceValue> for &Resource {
     fn into(self) -> ResourceValue {
         self.clone().into()
-    }
-}
-
-impl Into<FieldChanges> for &Resource {
-    fn into(self) -> FieldChanges {
-        self.to_changes()
     }
 }
 

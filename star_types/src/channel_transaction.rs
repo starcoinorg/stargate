@@ -8,7 +8,6 @@ use types::vm_error::VMStatus;
 use proto_conv::{FromProto, IntoProto};
 use core::convert::TryFrom;
 use protobuf::RepeatedField;
-use crate::change_set::ChangeSet;
 use canonical_serialization::{CanonicalSerialize, CanonicalSerializer, CanonicalDeserializer, CanonicalDeserialize, SimpleDeserializer, SimpleSerializer};
 use serde::{Deserialize, Serialize};
 

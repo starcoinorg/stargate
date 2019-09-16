@@ -13,8 +13,7 @@ use bytecode_verifier::VerifiedModule;
 use atomic_refcell::AtomicRefCell;
 use types::account_config::{account_struct_tag, coin_struct_tag};
 use star_types::resource::*;
-use star_types::change_set::StructDefResolve;
-use star_types::resource_type::{resource_def::ResourceDef, resource_types::ResourceType};
+use star_types::resource_type::{resource_def::{StructDefResolve,ResourceDef}, resource_types::ResourceType};
 use lazy_static::lazy_static;
 use logger::prelude::*;
 

@@ -20,7 +20,7 @@ use local_state_storage::LocalStateStorage;
 use local_vm::LocalVM;
 use logger::prelude::*;
 use star_types::{account_resource_ext, transaction_output_helper};
-use star_types::change_set::{ChangeSet, StructDefResolve};
+use star_types::resource_type::resource_def::{StructDefResolve};
 use star_types::channel_transaction::{
     ChannelTransaction,
 };

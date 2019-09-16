@@ -6,6 +6,13 @@ use crate::resource_type::resource_types::ResourceType;
 use canonical_serialization::*;
 use failure::prelude::*;
 use std::sync::Arc;
+use types::language_storage::StructTag;
+
+/// resolve ResourceDef by StructTag.
+pub trait StructDefResolve{
+
+    fn resolve(&self, tag: &StructTag) -> Result<ResourceDef>;
+}
 
 // Note that this data structure can represent recursive types but will end up creating reference
 // cycles, which is bad. Other parts of the system disallow recursive types for now, but this may

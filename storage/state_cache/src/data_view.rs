@@ -9,9 +9,8 @@ use scratchpad::{AccountState};
 use crate::state_cache::AccountState as StarAccountState;
 use libradb::data_storage::ReadData;
 use struct_cache::StructCache;
-use star_types::change_set::StructDefResolve;
 use types::language_storage::StructTag;
-use star_types::resource_type::resource_def::ResourceDef;
+use star_types::resource_type::resource_def::{StructDefResolve,ResourceDef};
 use jellyfish_merkle::{node_type::{NodeKey, Node}, JellyfishMerkleTree, TreeReader};
 use core::borrow::Borrow;
 

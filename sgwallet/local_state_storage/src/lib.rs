@@ -9,14 +9,13 @@ use std::sync::Arc;
 use types::access_path::{Access, AccessPath};
 use types::account_address::AccountAddress;
 use types::write_set::{WriteOp, WriteSet};
-use star_types::change_set::{ChangeSet, Changes, ChangeSetMut, StructDefResolve};
 use star_types::resource::Resource;
 use atomic_refcell::AtomicRefCell;
 use struct_cache::StructCache;
 use types::language_storage::{StructTag};
 use vm_runtime_types::loaded_data::struct_def::StructDef;
 use state_store::{StateViewPlus, StateStore};
-use star_types::resource_type::resource_def::ResourceDef;
+use star_types::resource_type::resource_def::{StructDefResolve,ResourceDef};
 
 pub struct LocalStateStorage<C>
 where
