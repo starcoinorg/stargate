@@ -33,7 +33,6 @@ members = [
     "libra/language/compiler",
     "libra/language/compiler/ir_to_bytecode",
     "libra/language/compiler/ir_to_bytecode/syntax",
-    "language/local_vm",
     "libra/language/functional_tests",
     "libra/language/e2e_tests",
     "libra/language/transaction_builder",

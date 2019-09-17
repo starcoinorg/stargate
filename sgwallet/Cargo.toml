@@ -17,7 +17,6 @@ include_dir = "0.2.1"
 failure = { path = "../libra/common/failure_ext", package = "failure_ext" }
 types = { path = "../libra/types" }
 star_types = { path = "../star_types" }
-local_vm = { path = "../language/local_vm"}
 crypto = { path = "../libra/crypto/crypto" }
 
 local_state_storage = { path = "./local_state_storage"}

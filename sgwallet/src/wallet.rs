@@ -17,7 +17,6 @@ use crypto::test_utils::KeyPair;
 use failure::prelude::*;
 use lazy_static::lazy_static;
 use local_state_storage::{LocalStateStorage, WitnessData};
-use local_vm::LocalVM;
 use logger::prelude::*;
 use star_types::{account_resource_ext, transaction_output_helper};
 use star_types::resource_type::resource_def::{StructDefResolve};
