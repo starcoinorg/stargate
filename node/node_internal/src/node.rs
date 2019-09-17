@@ -264,12 +264,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
     }
 
     pub fn local_balance(&self) -> Result<AccountResource> {
-        let account_state_data = self.node_inner.clone().lock().unwrap().wallet.get_account_state();
-        let account_state = AccountState::from_account_state_blob(account_state_data).unwrap().get_account_resource();
-        match account_state {
-            Some(state) => Ok(state),
-            None => bail!("data is not ok")
-        }
+        self.node_inner.clone().lock().unwrap().wallet.account_resource()
     }
 
     pub fn channel_balance(&self, participant: AccountAddress, asset_tag: StructTag) -> Result<u64> {

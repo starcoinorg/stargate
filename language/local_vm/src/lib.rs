@@ -14,32 +14,28 @@ lazy_static! {
     static ref VM_CONFIG:VMConfig = VMConfig::offchain();
 }
 
-pub struct LocalVM<S> where S:StateView {
+pub struct LocalVM{
     inner: MoveVM,
-    state_view: Arc<AtomicRefCell<S>>,
 }
 
-impl <S> LocalVM<S> where S:StateView {
+impl LocalVM{
 
-    pub fn new(state_view: Arc<AtomicRefCell<S>>) -> Self {
+    pub fn new() -> Self {
             Self {
             inner: MoveVM::new(&VM_CONFIG),
-            state_view,
         }
     }
 
     pub fn validate_transaction(
         &self,
         transaction: SignedTransaction,
+        state_view: &dyn StateView
     ) -> Option<VMStatus> {
         // TODO: This should be implemented as an async function.
-        self.inner.validate_transaction(transaction, &*self.state_view.borrow())
+        self.inner.validate_transaction(transaction, state_view)
     }
 
-    pub fn execute_transaction(&self, transaction: SignedTransaction) -> TransactionOutput {
-        MoveVM::execute_block(vec![transaction], &VM_CONFIG, &*self.state_view.borrow()).pop().unwrap()
+    pub fn execute_transaction(&self, transaction: SignedTransaction, state_view: &dyn StateView) -> TransactionOutput {
+        MoveVM::execute_block(vec![transaction], &VM_CONFIG, state_view).pop().unwrap()
     }
 }
-
-#[cfg(test)]
-mod local_vm_test;

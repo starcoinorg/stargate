@@ -62,8 +62,8 @@ fn test_wallet() -> Result<()> {
     let sender_wallet = Arc::new(Wallet::new_with_client(executor.clone(), sender, sender_keypair, client.clone()).unwrap());
     let receiver_wallet = Arc::new(Wallet::new_with_client(executor.clone(), receiver, receiver_keypair, client).unwrap());
 
-    assert_eq!(sender_amount, sender_wallet.balance());
-    assert_eq!(receiver_amount, receiver_wallet.balance());
+    assert_eq!(sender_amount, sender_wallet.balance().unwrap());
+    assert_eq!(receiver_amount, receiver_wallet.balance().unwrap());
 
     let mut sender_gas_used = 0;
 
@@ -145,8 +145,8 @@ fn test_wallet() -> Result<()> {
 
         debug!("after withdraw: sender_channel_balance:{}, receiver_channel_balance:{}",sender_channel_balance,receiver_channel_balance);
 
-        let sender_balance = sender_wallet.balance();
-        let receiver_balance = receiver_wallet.balance();
+        let sender_balance = sender_wallet.balance().unwrap();
+        let receiver_balance = receiver_wallet.balance().unwrap();
 
         assert_eq!(sender_balance, sender_amount - sender_gas_used - sender_fund_amount - sender_deposit_amount + sender_withdraw_amount);
         assert_eq!(receiver_balance, receiver_amount - receiver_fund_amount - receiver_deposit_amount + receiver_withdraw_amount);

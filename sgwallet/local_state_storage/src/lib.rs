@@ -1,135 +1,116 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use atomic_refcell::AtomicRefCell;
+
 use chain_client::{ChainClient, RpcChainClient};
+use crypto::ed25519::Ed25519Signature;
 use failure::prelude::*;
 use logger::prelude::*;
 use star_types::channel_transaction::ChannelTransaction;
-use state_cache::state_cache::{AccountState};
+use star_types::resource::Resource;
+use star_types::resource_type::resource_def::{ResourceDef, StructDefResolve};
+use state_store::{StateStore, StateViewPlus};
 use state_view::StateView;
-use std::collections::HashMap;
-use std::sync::Arc;
+use struct_cache::StructCache;
 use types::access_path::{Access, AccessPath};
 use types::account_address::AccountAddress;
+use types::language_storage::StructTag;
 use types::write_set::{WriteOp, WriteSet};
-use star_types::resource::Resource;
-use atomic_refcell::AtomicRefCell;
-use struct_cache::StructCache;
-use types::language_storage::{StructTag};
 use vm_runtime_types::loaded_data::struct_def::StructDef;
-use state_store::{StateViewPlus, StateStore};
-use star_types::resource_type::resource_def::{StructDefResolve,ResourceDef};
+
+pub use crate::account_state::AccountState;
+pub use crate::channel_state::{ChannelState, WitnessData};
 
 pub struct LocalStateStorage<C>
-where
-    C: ChainClient,
+    where
+        C: ChainClient,
 {
     account: AccountAddress,
-    state: AtomicRefCell<AccountState>,
     client: Arc<C>,
-    channels: AtomicRefCell<HashMap<AccountAddress, AccountState>>,
+    channels: AtomicRefCell<HashMap<AccountAddress, ChannelState>>,
     struct_cache: Arc<StructCache>,
 }
 
 impl<C> LocalStateStorage<C>
-where
-    C: ChainClient,
+    where
+        C: ChainClient,
 {
     pub fn new(account: AccountAddress, client: Arc<C>) -> Result<Self> {
-        let state_blob = client.get_account_state_with_proof(&account, None).and_then(|(version, state, proof)| {
-            state.ok_or(format_err!("can not find account by address:{}", account))
-        })?;
-        let state = AtomicRefCell::new(AccountState::from_account_state_blob(state_blob)?);
+        //just check account exist, TODO keep local state cache.
+        let _state = Self::get_account_state_by_client(account, client.clone())?;
         Ok(Self {
             account,
-            state,
             client,
             channels: AtomicRefCell::new(HashMap::new()),
             struct_cache: Arc::new(StructCache::new()),
         })
     }
 
-    pub fn get_by_path(&self, path: &Vec<u8>) -> Option<Vec<u8>> {
-        self.state.borrow().get(path)
+    fn get_account_state_by_client(account: AccountAddress, client: Arc<C>) -> Result<AccountState> {
+        let (version, state_blob, proof) = client.get_account_state_with_proof(&account, None).and_then(|(version, state, proof)| {
+            Ok((version, state.ok_or(format_err!("can not find account by address:{}", account))?, proof))
+        })?;
+        AccountState::from_account_state_blob(version, state_blob, proof)
     }
 
-    pub fn get_account_state(&self) -> Vec<u8> {
-        (&*self.state.borrow()).into()
-    }
-
-}
-
-impl<C> StateStore for LocalStateStorage<C>
-    where
-        C: ChainClient,
-{
-    fn update(&self, access_path: &AccessPath, value: Vec<u8>) -> Result<()> {
-        if self.account == access_path.address {
-            self.state.borrow().update(access_path.path.clone(), value.clone());
-        } else {
-            //TODO check channel
-            let mut channels = self.channels.borrow_mut();
-            match channels.get_mut(&access_path.address) {
-                Some(channel_state) => {
-                    channel_state.update(access_path.path.clone(), value.clone());
-                }
-                None => {
-                    let mut channel_state = AccountState::new();
-                    channel_state.update(access_path.path.clone(), value.clone());
-                    channels.insert(access_path.address, channel_state);
-                }
-            }
-        }
+    pub fn update_witness_data(&self, participant: AccountAddress, channel_sequence_number: u64, write_set: WriteSet, signature: Ed25519Signature) -> Result<()> {
+        //TODO check balance.
+        self.channels.borrow_mut().entry(participant).and_modify(|state|{
+            state.update_witness_data(channel_sequence_number, write_set.clone(), signature.clone());
+        }).or_insert(ChannelState::new(participant, WitnessData::new(channel_sequence_number, write_set, signature)));
         Ok(())
     }
 
-    fn delete(&self, access_path: &AccessPath) -> Result<()> {
-        if self.account == access_path.address {
-            self.state.borrow().delete(&access_path.path);
-        } else {
-            //TODO check channel
-            match self.channels.borrow_mut().get_mut(&access_path.address) {
-                Some(channel_state) => {
-                    channel_state.delete(&access_path.path);
-                }
-                None => {
-                    //no nothing
-                }
-            }
-        }
+    pub fn reset_witness_data(&self, participant: AccountAddress, channel_sequence_number: u64) -> Result<()> {
+        self.channels.borrow_mut().get_mut(&participant).and_then(|state|{
+            state.reset_witness_data(channel_sequence_number);
+            Some(())
+        });
         Ok(())
     }
+
+    pub fn get_witness_data(&self, participant: AccountAddress) -> Result<WitnessData> {
+        Ok(self.channels.borrow().get(&participant).map(|state|state.witness_data().clone()).unwrap_or(WitnessData::default()))
+    }
+
+    pub fn exist_channel(&self, participant: &AccountAddress) -> bool {
+        self.channels.borrow().contains_key(participant)
+    }
+
 }
 
 impl<C> StateViewPlus for LocalStateStorage<C>
     where
         C: ChainClient,
-{
-
-}
+{}
 
 impl<C> StateView for LocalStateStorage<C>
-where
-    C: ChainClient,
+    where
+        C: ChainClient,
 {
+    //TODO add local cache.
     fn get(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
-        let AccessPath { address, path } = access_path;
-        if address == &self.account {
-            Ok(self.state.borrow().get(path))
-        } else {
-            let mut channels = self.channels.borrow_mut();
-            match channels.get(address) {
-                Some(channel_state) => Ok(channel_state.get(path)),
-                None => {
-                    let result = self.client.get_account_state(&access_path.address)?;//get_state_by_access_path(access_path)?;
-                    if let Some(state) = &result {
-                        debug!("Sync {} channel_state from chain.", access_path.address);
-                        let mut channel_state = AccountState::from_account_state_blob(state.clone())?;
-                        let resource_state = channel_state.get(path);
-                        channels.insert(access_path.address, channel_state);
-                        Ok(resource_state)
-                    }else{
-                        Ok(None)
+        if access_path.is_channel_resource() {
+            let AccessPath { address, path } = access_path;
+            let participant = access_path.data_path().expect("data path must exist").participant().expect("participant must exist");
+            let channel_key = if address == &self.account { &participant } else { address };
+            match self.channels.borrow().get(channel_key) {
+                Some(channel_state) => {
+                    match channel_state.get(access_path) {
+                        Some(op) => match op {
+                            WriteOp::Value(value) => Ok(Some(value.clone())),
+                            WriteOp::Deletion => Ok(None)
+                        }
+                        None => self.client.get_state_by_access_path(access_path)
                     }
                 }
+                None => self.client.get_state_by_access_path(access_path)
             }
+        } else {
+            // code and onchain resource directly get remote.
+
+            self.client.get_state_by_access_path(access_path)
         }
     }
 
@@ -146,15 +127,16 @@ where
     }
 }
 
-impl<C>  StructDefResolve for LocalStateStorage<C>
+impl<C> StructDefResolve for LocalStateStorage<C>
     where
         C: ChainClient,
 {
-
     fn resolve(&self, tag: &StructTag) -> Result<ResourceDef> {
         self.struct_cache.find_struct(tag, self)
     }
 }
 
+mod account_state;
+mod channel_state;
 #[cfg(test)]
 mod local_state_storage_test;
