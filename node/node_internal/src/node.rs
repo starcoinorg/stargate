@@ -88,12 +88,6 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         self.node_inner.clone().lock().unwrap().open_channel_negotiate(negotiate_message)
     }
 
-    pub fn open_channel(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<()> {
-        let f = self.open_channel_async(receiver, sender_amount, receiver_amount);
-        f.unwrap().wait().unwrap();
-        Ok(())
-    }
-
     pub fn open_channel_oneshot(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> futures::channel::oneshot::Receiver<Result<OpenChannelResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
         let f = self.open_channel_async(receiver, sender_amount, receiver_amount).unwrap();
@@ -130,12 +124,6 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         f
     }
 
-    pub fn deposit(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<()> {
-        let f = self.deposit_async(asset_tag, receiver, sender_amount, receiver_amount);
-        f.unwrap().wait().unwrap();
-        Ok(())
-    }
-
     pub fn deposit_oneshot(&self,asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> futures::channel::oneshot::Receiver<Result<DepositResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
         let f = self.deposit_async(asset_tag,receiver, sender_amount, receiver_amount).unwrap();
@@ -169,15 +157,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionMessage);
         f
     }
-
-    pub fn withdraw(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<()> {
-        let f = self.withdraw_async(asset_tag, receiver, sender_amount, receiver_amount);
-        info!("start wd future");
-        f.unwrap().wait().unwrap();
-        info!("get wd future result");
-        Ok(())
-    }
-
+    
     pub fn withdraw_oneshot(&self,asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> futures::channel::oneshot::Receiver<Result<WithdrawResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
         let f = self.withdraw_async(asset_tag,receiver, sender_amount, receiver_amount).unwrap();
