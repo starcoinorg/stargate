@@ -52,7 +52,7 @@ impl ChainClient for MockChainClient {
 
     fn latest_state_root(&self) -> Result<(HashValue,Version)> {
         let chain_service = self.chain_service.as_ref().borrow();
-        Ok((chain_service.latest_state_root_inner(),chain_service.get_latest_version()))
+        Ok((chain_service.latest_version_state_root_inner()))
     }
 
     fn get_account_state(&self, address: &AccountAddress) -> Result<Option<Vec<u8>>> {

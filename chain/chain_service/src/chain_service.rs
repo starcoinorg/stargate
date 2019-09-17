@@ -252,9 +252,9 @@ impl ChainService {
         receiver
     }
 
-    pub fn latest_state_root_inner(&self) -> HashValue {
+    pub fn latest_version_state_root_inner(&self) -> (HashValue, Version) {
         let read_db = self.read_db.as_ref().borrow();
-        read_db.latest_state_root().expect("latest_state_root is none.")
+        read_db.get_latest_version_state().expect("get latest version and state root err.").expect("get_latest_version_state is none.")
     }
 
     pub fn get_latest_version(&self) -> Version {
@@ -339,9 +339,10 @@ impl ChainService {
 
 impl Chain for ChainService {
     fn latest_state_root(&mut self, ctx: ::grpcio::RpcContext, _req: LatestRootRequest, sink: ::grpcio::UnarySink<LatestRootResponse>) {
-        let latest_hash_root = self.latest_state_root_inner();
+        let (latest_hash_root, ver) = self.latest_version_state_root_inner();
         let mut resp = LatestRootResponse::new();
         resp.set_state_root_hash(latest_hash_root.to_vec());
+        resp.set_version(ver);
         provide_grpc_response(Ok(resp), ctx, sink);
     }
 
@@ -533,9 +534,8 @@ mod tests {
 //        let print_future = async move {
 //            let ten_millis = time::Duration::from_millis(100);
 //            thread::sleep(ten_millis);
-        let root = chain_service.latest_state_root_inner();
-//        let ver = chain_service.get_latest_version();
-        println!("{:?}", root);
+        let (ver, root) = chain_service.latest_version_state_root_inner();
+        println!("{}:{:?}", ver, root);
 //        };
 //        rt.block_on(print_future.boxed().unit_error().compat()).unwrap();
     }

@@ -51,7 +51,8 @@ message LatestRootRequest {
 }
 
 message LatestRootResponse {
-    bytes state_root_hash = 1;
+    uint64 version = 1;
+    bytes state_root_hash = 2;
 }
 
 message FaucetRequest {
