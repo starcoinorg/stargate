@@ -20,9 +20,7 @@ impl CryptoHash for NetworkMessage {
 
     fn hash(&self) -> HashValue {
         let mut state = Self::Hasher::default();
-        let mut bytes_vec = self.peer_id.to_vec();
-        bytes_vec.extend_from_slice(&self.msg.clone().into_bytes());
-        state.write(&bytes_vec);
+        state.write(&self.msg.clone().into_bytes());
         state.finish()
     }
 }

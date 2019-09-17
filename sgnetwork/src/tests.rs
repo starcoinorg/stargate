@@ -97,11 +97,11 @@ mod tests {
         // Once sender has been droped, the select_all will return directly. clone it to prevent it.
         let _tx22 = tx2.clone();
         let mut count = 0;
-        let sender_fut = Interval::new(Instant::now(), Duration::from_millis(1))
-            .take(1000000)
+        let sender_fut = Interval::new(Instant::now(), Duration::from_secs(5))
+            .take(100)
             .map_err(|_e| ())
             .for_each(move |_| {
-                count += 1;
+                //count += 1;
                 let random_bytes: Vec<u8> = (0..10240).map(|_| { rand::random::<u8>() }).collect();
                 let message = Message::new_message(random_bytes);
                 match if count % 2 == 0 {
@@ -125,7 +125,7 @@ mod tests {
         });
         executor.spawn(receive_fut);
         rt.executor().spawn(sender_fut);
-        let task = Delay::new(Instant::now() + Duration::from_millis(10000))
+        let task = Delay::new(Instant::now() + Duration::from_secs(600))
             .and_then(move |_| {
                 close_tx1.send(());
                 close_tx2.send(());
