@@ -1,6 +1,5 @@
 use network_libp2p::CustomMessage;
 use parity_codec::{Encode, Decode};
-use std::time::{SystemTime, UNIX_EPOCH};
 use crypto::{
     hash::{
         CryptoHash, CryptoHasher, TestOnlyHasher,
@@ -8,6 +7,7 @@ use crypto::{
     HashValue,
 };
 use types::account_address::AccountAddress;
+use crate::helper::get_unix_ts;
 
 #[derive(Clone, Debug)]
 pub struct NetworkMessage {
@@ -64,10 +64,3 @@ impl Message {
         Message::Payload(PayloadMsg { id: 0, data })
     }
 }
-
-fn get_unix_ts() -> u128 {
-    let start = SystemTime::now();
-    let since_the_epoch = start.duration_since(UNIX_EPOCH).expect("Time went backwards");
-    since_the_epoch.as_nanos()
-}
-

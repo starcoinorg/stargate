@@ -2,7 +2,7 @@ use failure::prelude::*;
 use std::convert::TryFrom;
 use types::account_address::AccountAddress;
 use network_libp2p::PeerId;
-use std::str::FromStr;
+use std::{time::{SystemTime, UNIX_EPOCH}, str::FromStr};
 
 pub fn convert_peer_id_to_account_address(peer_id: &PeerId) -> Result<AccountAddress> {
     let peer_id_bytes = &peer_id.as_bytes()[2..];
@@ -27,7 +27,15 @@ pub fn convert_boot_nodes(boot_nodes: Vec<String>) -> Vec<String> {
         let addr = &x[..dx];
         let peer_id = convert_account_address_to_peer_id(
             AccountAddress::from_str(account_address).unwrap()
-        ).unwrap();                               
+        ).unwrap();
         format!("{:}/{:}", addr, peer_id).to_string()
     }).clone().collect()
 }
+
+
+pub fn get_unix_ts() -> u128 {
+    let start = SystemTime::now();
+    let since_the_epoch = start.duration_since(UNIX_EPOCH).expect("Time went backwards");
+    since_the_epoch.as_nanos()
+}
+

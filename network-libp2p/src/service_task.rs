@@ -410,6 +410,7 @@ where
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        info!("hello,{:?}", self.peer_id());
         if !self.injected_events.is_empty() {
             return Ok(Async::Ready(Some(self.injected_events.remove(0))));
         }

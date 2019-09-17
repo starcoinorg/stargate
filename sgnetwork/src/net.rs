@@ -17,6 +17,7 @@ use logger::prelude::*;
 use crate::message::{Message, NetworkMessage};
 use futures::sync::oneshot::{Canceled, Sender};
 use std::collections::HashMap;
+use crate::helper::get_unix_ts;
 
 #[derive(Clone)]
 pub struct NetworkService {
@@ -81,7 +82,10 @@ fn run_network(
 
     let net_srv_2 = net_srv.clone();
     let net_ack_tx = net_tx.clone();
-    let network_fut = stream::poll_fn(move || net_srv_2.lock().poll()).for_each(
+    let network_fut = stream::poll_fn(move || {
+        debug!("the poll happend");
+        net_srv_2.lock().poll()
+    }).for_each(
         move |event| {
             match event {
                 ServiceEvent::CustomMessage { peer_id, message } => {
