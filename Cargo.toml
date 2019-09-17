@@ -38,6 +38,8 @@ members = [
     "libra/language/e2e_tests",
     "libra/language/transaction_builder",
     "libra/types",
+    "libra/execution/executor",
+    "libra/mempool",
     "star_types",
     "routing",
     "chain/chain_client",
