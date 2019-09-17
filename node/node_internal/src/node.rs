@@ -90,7 +90,17 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
 
     pub fn open_channel_oneshot(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> futures::channel::oneshot::Receiver<Result<OpenChannelResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
-        let f = self.open_channel_async(receiver, sender_amount, receiver_amount).unwrap();
+        let f:MessageFuture;
+        match self.open_channel_async(receiver, sender_amount, receiver_amount){
+            Ok(msg_future)=>{f=msg_future;},
+            Err(e)=> {
+                resp_sender
+                    .send(Err(failure::Error::from(e)))
+                    .expect("Failed to send error message.");
+                return resp_receiver;
+            },
+        };
+
         let f_to_channel = async {
             match f.compat().await{
                 Ok(sender) => resp_sender
@@ -126,7 +136,16 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
 
     pub fn deposit_oneshot(&self,asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> futures::channel::oneshot::Receiver<Result<DepositResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
-        let f = self.deposit_async(asset_tag,receiver, sender_amount, receiver_amount).unwrap();
+        let f:MessageFuture;
+        match self.deposit_async(asset_tag,receiver, sender_amount, receiver_amount){
+            Ok(msg_future)=>{f=msg_future;},
+            Err(e)=> {
+                resp_sender
+                .send(Err(failure::Error::from(e)))
+                .expect("Failed to send error message.");
+                return resp_receiver;
+            },
+        };
         let f_to_channel = async {
             match f.compat().await{
                 Ok(sender) => resp_sender
@@ -160,7 +179,17 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
 
     pub fn withdraw_oneshot(&self,asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> futures::channel::oneshot::Receiver<Result<WithdrawResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
-        let f = self.withdraw_async(asset_tag,receiver, sender_amount, receiver_amount).unwrap();
+        let f:MessageFuture;
+        match self.withdraw_async(asset_tag,receiver, sender_amount, receiver_amount){
+            Ok(msg_future)=>{f=msg_future;},
+            Err(e)=> {
+                resp_sender
+                    .send(Err(failure::Error::from(e)))
+                    .expect("Failed to send error message.");
+                return resp_receiver;
+            },
+        };
+
         let f_to_channel = async {
             match f.compat().await{
                 Ok(sender) => resp_sender
@@ -191,15 +220,20 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         f
     }
 
-    pub fn off_chain_pay(&self, coin_resource_tag: types::language_storage::StructTag, receiver_address: AccountAddress, amount: u64) -> Result<()> {
-        let f = self.off_chain_pay_async(coin_resource_tag, receiver_address, amount);
-        f.unwrap().wait().unwrap();
-        Ok(())
-    }
-
     pub fn off_chain_pay_oneshot(&self,asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64) -> futures::channel::oneshot::Receiver<Result<PayResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
-        let f = self.off_chain_pay_async(asset_tag,receiver, sender_amount).unwrap();
+
+        let f:MessageFuture;
+        match self.off_chain_pay_async(asset_tag,receiver, sender_amount){
+            Ok(msg_future)=>{f=msg_future;},
+            Err(e)=> {
+                resp_sender
+                    .send(Err(failure::Error::from(e)))
+                    .expect("Failed to send error message.");
+                return resp_receiver;
+            },
+        };
+
         let f_to_channel = async {
             match f.compat().await{
                 Ok(sender) => resp_sender
