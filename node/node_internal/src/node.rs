@@ -471,8 +471,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
 
         match ErrorMessage::from_proto_bytes(&data){
             Ok(msg)  => {
-                self.message_processor.remove_future(msg.raw_transaction_hash);
-                err_message=msg;
+                self.message_processor.future_error(msg);
             },
             Err(e) => {
                 warn!("get wrong message");

@@ -46,6 +46,7 @@ message StructTag {
 enum ErrorCode {
     UNKNOWN = 0;
     SEQUENCE_NUMBER_WRONG = 1;
+    TIMEOUT=2;
 }
 
 message ErrorMessage{
