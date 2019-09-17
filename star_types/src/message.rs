@@ -251,6 +251,7 @@ pub enum MessageType {
     OpenChannelNodeNegotiateMessage,
     ChannelTransactionMessage,
     OffChainPayMessage,
+    ErrorMessage,
 }
 
 impl MessageType {
@@ -260,6 +261,7 @@ impl MessageType {
             MessageType::OpenChannelNodeNegotiateMessage => 1,
             MessageType::ChannelTransactionMessage => 2,
             MessageType::OffChainPayMessage => 3,
+            MessageType::ErrorMessage => 4,
         }
     }
 
@@ -268,6 +270,7 @@ impl MessageType {
             1 => Ok(MessageType::OpenChannelNodeNegotiateMessage),
             2 => Ok(MessageType::ChannelTransactionMessage),
             3 => Ok(MessageType::OffChainPayMessage),
+            4 => Ok(MessageType::ErrorMessage),
             _ => bail!("no such type"),
         }
     }

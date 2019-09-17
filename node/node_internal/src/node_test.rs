@@ -95,10 +95,10 @@ fn node_test() -> Result<()> {
         node2.shutdown();
 
     };
-    rt.block_on(f.boxed().unit_error().compat());
+    rt.block_on(f.boxed().unit_error().compat()).unwrap();
 
     drop(client);
-    db_shutdown_receiver.recv().expect("db shutdown msg err.");
+    //db_shutdown_receiver.recv().expect("db shutdown msg err.");
 
     debug!("here");
     //rt.shutdown_on_idle().wait().unwrap();
