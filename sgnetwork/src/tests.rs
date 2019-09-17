@@ -98,7 +98,7 @@ mod tests {
         let _tx22 = tx2.clone();
         let mut count = 0;
         let sender_fut = Interval::new(Instant::now(), Duration::from_millis(1))
-            .take(10000)
+            .take(1000000)
             .map_err(|_e| ())
             .for_each(move |_| {
                 count += 1;
@@ -123,8 +123,8 @@ mod tests {
             //println!("{:?}", msg);
             Ok(())
         });
-        executor.clone().spawn(receive_fut);
-        executor.clone().spawn(sender_fut);
+        executor.spawn(receive_fut);
+        rt.executor().spawn(sender_fut);
         let task = Delay::new(Instant::now() + Duration::from_millis(10000))
             .and_then(move |_| {
                 close_tx1.send(());
@@ -132,7 +132,7 @@ mod tests {
                 Ok(())
             })
             .map_err(|e| panic!("delay errored; err={:?}", e));
-        executor.spawn(task);
+        rt.executor().spawn(task);
         rt.shutdown_on_idle().wait().unwrap();
     }
 

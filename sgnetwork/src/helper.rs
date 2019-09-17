@@ -21,13 +21,13 @@ pub fn convert_account_address_to_peer_id(
 
 pub fn convert_boot_nodes(boot_nodes: Vec<String>) -> Vec<String> {
     boot_nodes.iter().map(|x| {
-        let dx = x.rfind("/").unwrap();
+        let dx = x.rfind("/").expect("Failed to parse boot nodes");
 
         let account_address = &x[dx + 1..];
         let addr = &x[..dx];
         let peer_id = convert_account_address_to_peer_id(
-            AccountAddress::from_str(account_address).unwrap()
-        ).unwrap();
+            AccountAddress::from_str(account_address).expect("Failed to parse account address")
+        ).expect("Failed to parse account address");
         format!("{:}/{:}", addr, peer_id).to_string()
     }).clone().collect()
 }

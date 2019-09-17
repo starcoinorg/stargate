@@ -35,7 +35,7 @@ pub fn build_network_service(
     oneshot::Sender<()>,
 ) {
     let config = NetworkConfiguration {
-        listen_addresses: vec![cfg.listen.parse().unwrap()],
+        listen_addresses: vec![cfg.listen.parse().expect("Failed to parse network config")],
         boot_nodes: convert_boot_nodes(cfg.seeds.clone()),
         node_key: {
             let secret =
@@ -83,7 +83,7 @@ fn run_network(
     let net_srv_2 = net_srv.clone();
     let net_ack_tx = net_tx.clone();
     let network_fut = stream::poll_fn(move || {
-        debug!("the poll happend");
+        info!("the poll happend");
         net_srv_2.lock().poll()
     }).for_each(
         move |event| {
