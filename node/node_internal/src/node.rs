@@ -157,7 +157,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionMessage);
         f
     }
-    
+
     pub fn withdraw_oneshot(&self,asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> futures::channel::oneshot::Receiver<Result<WithdrawResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
         let f = self.withdraw_async(asset_tag,receiver, sender_amount, receiver_amount).unwrap();
