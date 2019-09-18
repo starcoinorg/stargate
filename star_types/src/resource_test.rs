@@ -23,19 +23,3 @@ fn test_resource() {
     let out2: Vec<u8> = resource.encode();
     assert_eq!(out, out2)
 }
-
-#[test]
-fn test_resource_diff_and_apply() {
-    ::logger::init_for_e2e_testing();
-    let account_address = AccountAddress::random();
-    let mut account_resource = Resource::new_from_account_resource(new_account_for_test(account_address,100));
-    let account_resource2 = Resource::new_from_account_resource(new_account_for_test(account_address,200));
-
-    let mut changes = account_resource.diff(&account_resource2).unwrap();
-    println!("changes:{:#?}", changes);
-    changes.filter_none();
-    assert_eq!(changes.len(), 1);
-
-    account_resource.apply_changes(&changes).unwrap();
-    assert_eq!(account_resource, account_resource2);
-}
