@@ -45,8 +45,8 @@ fn main() {
         });
         executor.spawn(receive_fut);
     } else {
-        let sender_fut = Interval::new(Instant::now(), Duration::from_millis(100))
-            .take(10)
+        let sender_fut = Interval::new(Instant::now(), Duration::from_millis(10))
+            .take(1000)
             .map_err(|_e| ())
             .for_each(move |_| {
                 let random_bytes: Vec<u8> = (0..10240).map(|_| { rand::random::<u8>() }).collect();
