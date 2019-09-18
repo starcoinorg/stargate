@@ -530,7 +530,7 @@ mod tests {
     fn test_chain_service() {
         let mut rt = Runtime::new().unwrap();
         let exe = rt.executor();
-        let (chain_service, _) = ChainService::new(&exe, &Some("/tmp/data".to_string()));
+        let (chain_service, _) = ChainService::new(&exe, &None);
 //        let print_future = async move {
 //            let ten_millis = time::Duration::from_millis(100);
 //            thread::sleep(ten_millis);
@@ -560,7 +560,7 @@ mod tests {
 
         let mut rt = Runtime::new().unwrap();
         let exe = rt.executor();
-        let (mut chain_service, _) = ChainService::new(&exe, &Some("/tmp/data".to_string()));
+        let (mut chain_service, _) = ChainService::new(&exe, &None);
 
         let s_n = StateCache::sequence_number_by_version(&chain_service.state_view, chain_service.state_view.latest_version().expect("latest version is none."), &account_address).unwrap();
         let signed_tx = RawTransaction::new(
@@ -581,7 +581,7 @@ mod tests {
     fn test_faucet() {
         let mut rt = Runtime::new().unwrap();
         let exe = rt.executor();
-        let (mut chain_service, _) = ChainService::new(&exe, &Some("/tmp/data".to_string()));
+        let (mut chain_service, _) = ChainService::new(&exe, &None);
         let receiver = AccountAddress::random();
         chain_service.faucet_inner(receiver, 100);
         chain_service.faucet_inner(receiver, 100);
@@ -595,7 +595,7 @@ mod tests {
     fn test_account_state_proof() {
         let mut rt = Runtime::new().unwrap();
         let exe = rt.executor();
-        let (mut chain_service, _) = ChainService::new(&exe, &Some("/tmp/data".to_string()));
+        let (mut chain_service, _) = ChainService::new(&exe, &None);
         let mut query_addr: AccountAddress = AccountAddress::random();
         for i in 1..10 {
             let receiver = AccountAddress::random();
