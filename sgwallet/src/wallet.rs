@@ -56,7 +56,7 @@ pub struct Wallet<C>
     account_address: AccountAddress,
     keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
     client: Arc<C>,
-    storage: Arc<AtomicRefCell<LocalStateStorage<C>>>,
+    storage: Arc<LocalStateStorage<C>>,
     script_registry: AssetScriptRegistry,
     txn_processor: Arc<Mutex<TransactionProcessor>>,
     lock:futures_locks::Mutex<u64>,
@@ -87,7 +87,7 @@ impl<C> Wallet<C>
         keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
         client: Arc<C>,
     ) -> Result<Self> {
-        let storage = Arc::new(AtomicRefCell::new(LocalStateStorage::new(account_address, client.clone())?));
+        let storage = Arc::new(LocalStateStorage::new(account_address, client.clone())?);
         let script_registry = AssetScriptRegistry::build()?;
         let transaction_processor = Arc::new(Mutex::new(TransactionProcessor::new()));
         start_processor(client.clone(), account_address, transaction_processor.clone())?;
@@ -110,9 +110,9 @@ impl<C> Wallet<C>
         DEFAULT_ASSET.clone()
     }
 
-    fn execute_transaction(&self, transaction: SignedTransaction) -> Result<TransactionOutput> {
+    fn execute_transaction(&self,state_view: &dyn StateView, transaction: SignedTransaction) -> Result<TransactionOutput> {
         let tx_hash = transaction.raw_txn().hash();
-        let output = MoveVM::execute_block(vec![transaction], &VM_CONFIG, &*self.storage.borrow()).pop().unwrap();
+        let output = MoveVM::execute_block(vec![transaction], &VM_CONFIG, state_view).pop().unwrap();
         debug!("execute txn:{} output: {}", tx_hash, output);
         match output.status() {
             TransactionStatus::Discard(vm_status) => bail!("transaction execute fail for: {:#?}", vm_status),
@@ -142,7 +142,8 @@ impl<C> Wallet<C>
         let program = script.encode_script(args);
         let channel_sequence_number = self.channel_sequence_number(receiver)?;
         let txn = self.create_signed_script_txn(channel_sequence_number, receiver, program)?;
-        let output = self.execute_transaction(txn.clone())?;
+        let state_view = self.storage.new_state_view(None)?;
+        let output = self.execute_transaction(&state_view,txn.clone())?;
         //TODO handle travel txn
         let write_set = output.write_set();
         let witness_payload = ChannelWriteSetPayload::new(channel_sequence_number, write_set.clone(), receiver);
@@ -155,7 +156,7 @@ impl<C> Wallet<C>
         debug!("verify_txn {}", channel_txn.txn().raw_txn().hash());
         ensure!(channel_txn.receiver() == self.account_address, "check receiver fail.");
         let sender = channel_txn.txn.sender();
-        if !self.storage.borrow().exist_channel(&sender){
+        if !self.storage.exist_channel(&sender){
             self.watch_address(sender)?;
             //return Err(SgError{error_code:0,error_message:"111".to_string()}.into())
         }
@@ -163,8 +164,9 @@ impl<C> Wallet<C>
         let mut txn = channel_txn.txn().clone();
         let txn_signature = self.sign_script_payload(channel_txn.channel_script_payload().ok_or(format_err!("txn must be channel script txn."))?)?;
         txn.set_receiver_public_key_and_signature(self.keypair.public_key.clone(), txn_signature);
-
-        let output = self.execute_transaction(txn.clone())?;
+        //TODO pass version by channel_txn
+        let state_view = self.storage.new_state_view(None)?;
+        let output = self.execute_transaction(&state_view,txn.clone())?;
         let write_set = output.write_set();
         let sender_payload = channel_txn.witness_payload();
         ensure!(write_set == &sender_payload.write_set, "check write_set fail.");
@@ -177,7 +179,7 @@ impl<C> Wallet<C>
     /// Open channel and deposit default asset.
     pub fn open(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<ChannelTransaction> {
         info!("wallet.open receiver:{}, sender_amount:{}, receiver_amount:{}", receiver, sender_amount, receiver_amount);
-        if self.storage.borrow().exist_channel(&receiver){
+        if self.storage.exist_channel(&receiver){
             bail!("Channel with address {} exist.", receiver);
         }
         //TODO watch when channel is establish and track watch thead.
@@ -228,21 +230,6 @@ impl<C> Wallet<C>
         self.execute_script(self.script_registry.close_script(), receiver, vec![])
     }
 
-    fn clear_witness_data(&self, participant: AccountAddress) -> Result<()> {
-        self.storage.borrow().reset_witness_data(participant, self.channel_sequence_number(participant)?)?;
-        Ok(())
-    }
-
-    fn get_witness_data(&self, participant: AccountAddress) -> Result<WitnessData> {
-        self.storage.borrow().get_witness_data(participant)
-    }
-
-    fn set_witness_data(&self, participant: AccountAddress, witness_payload: ChannelWriteSetPayload, witness_signature: Ed25519Signature) -> Result<()>{
-        let ChannelWriteSetPayload{channel_sequence_number,write_set,receiver} = witness_payload;
-        self.storage.borrow().update_witness_data(participant, channel_sequence_number, write_set, witness_signature)?;
-        Ok(())
-    }
-
     pub async fn apply_txn(&self, txn: &ChannelTransaction) -> Result<TransactionOutput> {
         info!("apply_txn: {}", txn.txn().raw_txn().hash());
         let txn_sender = txn.txn().sender();
@@ -254,7 +241,7 @@ impl<C> Wallet<C>
             txn.sender()
         };
         //TODO verify signature
-        let output = if txn.is_travel_txn() {
+        let (execute_onchain,output) = if txn.is_travel_txn() {
             let mut data=self.lock.lock().compat().await.unwrap();
             let (_,output) = if txn_sender == self.account_address {
                 // sender submit transaction to chain.
@@ -262,25 +249,23 @@ impl<C> Wallet<C>
             }else{
                 self.watch_transaction(txn.txn()).await?
             };
-            self.clear_witness_data(participant)?;
             *data+=1;
-            output
+            (true, output)
         } else {
-            self.set_witness_data(participant, txn.witness_payload.clone(), txn.witness_signature.clone())?;
-            TransactionOutput::new_with_write_set(txn.witness_payload.write_set.clone())
+            (false, TransactionOutput::new_with_write_set(txn.witness_payload.write_set.clone()))
         };
-        self.apply_output(&output)?;
+        self.check_output(&output)?;
+        self.storage.apply_witness(participant, execute_onchain, txn.witness_payload.clone(), txn.witness_signature.clone())?;
         Ok(output)
     }
 
-    fn apply_output(&self, output:&TransactionOutput) -> Result<()>{
-        info!("apply_output: {}", output);
+    fn check_output(&self, output:&TransactionOutput) -> Result<()>{
+        info!("check_output: {}", output);
         match output.status() {
             TransactionStatus::Discard(vm_status) => {
                 bail!("transaction execute fail for: {:#?}", vm_status)
             }
             TransactionStatus::Keep(vm_status) => {
-                //self.storage.borrow().apply_libra_output(output)?;
                 match &vm_status.major_status {
                     StatusCode::EXECUTED => {}
                     _ => bail!("transaction executed but status code : {:#?}", vm_status)
@@ -292,7 +277,8 @@ impl<C> Wallet<C>
     }
 
     pub fn get(&self, path: &Vec<u8>) -> Result<Option<Vec<u8>>> {
-        self.storage.borrow().get(&AccessPath::new(self.account_address, path.clone()))
+        let state_view = self.storage.new_state_view(None)?;
+        state_view.get(&AccessPath::new(self.account_address, path.clone()))
     }
 
     pub fn account_resource(&self) -> Result<AccountResource> {
@@ -322,8 +308,9 @@ impl<C> Wallet<C>
         self.account_resource().map(|r|r.balance())
     }
 
-    pub fn get_resource(&self, access_path: &AccessPath) -> Result<Option<Resource>> {
-        self.storage.borrow().get_resource(&access_path)
+    fn get_resource(&self, access_path: &AccessPath) -> Result<Option<Resource>> {
+        let state_view = self.storage.new_state_view(None)?;
+        state_view.get_resource(access_path)
     }
 
     pub fn get_channel_resource(&self, participant: AccountAddress, resource_tag: StructTag) -> Result<Option<Resource>> {
@@ -355,7 +342,7 @@ impl<C> Wallet<C>
         receiver: AccountAddress,
         script: Script,
     ) -> Result<SignedTransaction> {
-        let WitnessData{channel_sequence_number:_,write_set,signature} = self.get_witness_data(receiver)?;
+        let WitnessData{channel_sequence_number:_,write_set,signature} = self.storage.get_witness_data(receiver)?;
         let channel_script = ChannelScriptPayload::new(channel_sequence_number, write_set, receiver, script);
         let mut txn = types::transaction_helpers::create_signed_payload_txn(
             self,
@@ -373,23 +360,6 @@ impl<C> Wallet<C>
 
     pub fn get_address(&self) -> AccountAddress {
         self.account_address
-    }
-
-    // a help method to print txn detail.
-    #[allow(dead_code)]
-    fn debug_txn(&self, signed_transaction: &SignedTransaction) -> Result<()>{
-        if let TransactionPayload::ChannelScript(ChannelScriptPayload{channel_sequence_number:_,write_set,receiver:_,script:_}) = signed_transaction.payload(){
-            for (ap, op) in write_set{
-                if let Some(struct_tag) = ap.resource_tag(){
-                    let struct_def = self.storage.borrow().resolve(&struct_tag)?;
-                    if let WriteOp::Value(value) = op {
-                        let resource = Resource::decode(struct_tag, struct_def, value)?;
-                        debug!("txn write_set {} value:{} resource: {:?}", ap, hex::encode(value), resource);
-                    }
-                }
-            }
-        }
-        Ok(())
     }
 
     pub async fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<(SignedTransaction,TransactionOutput)> {
