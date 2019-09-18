@@ -9,7 +9,7 @@ mod tests {
     use hex;
     use libp2p::multihash;
     use rand::prelude::*;
-    use tokio::{prelude::Async, runtime::{TaskExecutor, Runtime}, timer::{Delay, Interval}};
+    use tokio::{prelude::Async, runtime::{TaskExecutor, Runtime}, runtime::Builder, timer::{Delay, Interval}};
 
     use crypto::{
         ed25519::{compat, Ed25519PrivateKey, Ed25519PublicKey},
@@ -88,7 +88,7 @@ mod tests {
         ::logger::init_for_e2e_testing();
         env_logger::init();
 
-        let rt = Runtime::new().unwrap();
+        let rt = Builder::new().core_threads(1).build().unwrap();
         let executor = rt.executor();
         let ((service1, tx1, rx1, close_tx1), (service2, tx2, _rx2, close_tx2)) =
             build_test_network_pair();
@@ -97,7 +97,7 @@ mod tests {
         // Once sender has been droped, the select_all will return directly. clone it to prevent it.
         let _tx22 = tx2.clone();
         let mut count = 0;
-        let sender_fut = Interval::new(Instant::now(), Duration::from_secs(5))
+        let sender_fut = Interval::new(Instant::now(), Duration::from_secs(10))
             .take(100)
             .map_err(|_e| ())
             .for_each(move |_| {
@@ -107,7 +107,7 @@ mod tests {
                 match if count % 2 == 0 {
                     tx2.unbounded_send(NetworkMessage {
                         peer_id: msg_peer_id_1,
-                        msg: message,
+                        msg: message.clone(),
                     })
                 } else {
                     tx1.unbounded_send(NetworkMessage {

@@ -80,8 +80,8 @@ fn run_network(
 
     let net_srv_2 = net_srv.clone();
     let net_ack_tx = net_tx.clone();
+    let identify = net_srv.lock().peer_id().clone();
     let network_fut = stream::poll_fn(move || {
-        info!("the poll happend");
         net_srv_2.lock().poll()
     }).for_each(
         move |event| {
@@ -95,7 +95,7 @@ fn run_network(
                                 peer_id: address.clone(),
                                 msg: Message::Payload(payload.clone()),
                             };
-                            info!("Receive custom message:{:?}", netMsg.hash());
+                            info!("Receive custom message:{:?},{:?}", netMsg.hash(), &peer_id);
                             let _ = _tx.unbounded_send(netMsg);
                             if payload.id != 0 {
                                 net_ack_tx.unbounded_send(NetworkMessage { peer_id: address, msg: Message::ACK(payload.id) });
@@ -136,7 +136,7 @@ fn run_network(
             if net_srv.lock().is_open(&peer_id) == false {
                 error!("Message send to peer :{} is not connected", convert_peer_id_to_account_address(&peer_id).unwrap());
             }
-            info!("Already send message:{:?}", message.hash());
+            info!("Already send message:{:?},{:?}", message.hash(), &peer_id);
             Ok(())
         }
     ).then(|res| {
