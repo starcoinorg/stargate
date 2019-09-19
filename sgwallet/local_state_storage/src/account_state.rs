@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
 use std::sync::Arc;
 
@@ -13,6 +13,8 @@ use types::account_config::{account_resource_path, AccountResource};
 use types::account_state_blob::AccountStateBlob;
 use types::proof::SparseMerkleProof;
 use types::transaction::Version;
+
+use crate::channel::ChannelState;
 
 #[derive(Clone, Debug)]
 pub struct AccountState {
@@ -43,11 +45,11 @@ impl AccountState {
         })
     }
 
-    pub fn version(&self) -> Version{
+    pub fn version(&self) -> Version {
         self.version
     }
 
-    pub fn proof(&self) -> &SparseMerkleProof{
+    pub fn proof(&self) -> &SparseMerkleProof {
         &self.proof
     }
 
@@ -76,7 +78,7 @@ impl AccountState {
         self.state
     }
 
-    pub fn filter_channel_state(&self) -> BTreeMap<AccountAddress, BTreeMap<Vec<u8>, Vec<u8>>> {
+    pub fn filter_channel_state(&self) -> HashMap<AccountAddress, ChannelState> {
         self.state.iter().map(|(k, v)| {
             (DataPath::from(k).expect("Parse DataPath should success"), v)
         }).filter(|(k, v)| k.is_channel_resource()).group_by(|(k, v)| -> AccountAddress{
@@ -87,7 +89,7 @@ impl AccountState {
             for (k, v) in group {
                 state.insert(k.to_vec(), v.clone());
             }
-            (participant, state)
+            (participant, ChannelState::new(participant, state))
         }).collect()
     }
 }
@@ -132,11 +134,11 @@ impl Into<AccountStateBlob> for &AccountState {
 #[cfg(test)]
 mod tests {
     use types::account_config::AccountResource;
+    use types::channel_account::ChannelAccountResource;
 
     use crate::AccountState;
 
     use super::*;
-    use types::channel_account::ChannelAccountResource;
 
     #[test]
     fn test_from_account_state_blob() -> Result<()> {
@@ -158,10 +160,10 @@ mod tests {
         let participant1 = AccountAddress::random();
         account_state.insert(DataPath::channel_account_path(participant0), ChannelAccountResource::default().to_bytes());
         account_state.insert(DataPath::channel_account_path(participant1), ChannelAccountResource::default().to_bytes());
-        let channel_states = account_state.filter_channel_state();
+        let mut channel_states = account_state.filter_channel_state();
         assert_eq!(channel_states.len(), 2);
-        assert_eq!(channel_states.get(&participant0).unwrap().len(),1);
-        assert_eq!(channel_states.get(&participant1).unwrap().len(),1);
+        assert_eq!(channel_states.get(&participant0).unwrap().len(), 1);
+        assert_eq!(channel_states.get(&participant1).unwrap().len(), 1);
         Ok(())
     }
 }

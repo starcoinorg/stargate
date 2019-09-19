@@ -8,6 +8,46 @@ use types::transaction::{Version, TransactionOutput, ChannelWriteSetPayload};
 use types::write_set::{WriteOp, WriteSet};
 use types::channel_account::ChannelAccountResource;
 
+#[derive(Clone, Debug)]
+pub struct ChannelState{
+    address: AccountAddress,
+    state:BTreeMap<Vec<u8>, Vec<u8>>,
+}
+
+impl ChannelState{
+
+    pub fn empty(address: AccountAddress) -> Self{
+        Self{
+            address,
+            state: BTreeMap::new(),
+        }
+    }
+
+    pub fn new(address: AccountAddress, state: BTreeMap<Vec<u8>,Vec<u8>>) -> Self{
+        Self{
+            address,
+            state
+        }
+    }
+
+    pub fn get(&self, path: &Vec<u8>) -> Option<&Vec<u8>>{
+        self.state.get(path)
+    }
+
+    pub fn len(&self) -> usize {
+        self.state.len()
+    }
+
+    pub fn remove(&mut self, path: &Vec<u8>) -> Option<Vec<u8>>{
+        self.state.remove(path)
+    }
+
+    pub fn insert(&mut self, path: Vec<u8>, value: Vec<u8>) -> Option<Vec<u8>>{
+        self.state.insert(path, value)
+    }
+
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct WitnessData {
     pub channel_sequence_number: u64,
@@ -34,41 +74,39 @@ impl WitnessData {
 }
 
 #[derive(Clone, Debug)]
-pub struct ChannelState {
+pub struct Channel {
     /// The version of chain when this ChannelState init.
     //TODO need version?
     //version: Version,
-    account: AccountAddress,
-    participant: AccountAddress,
     /// Current account state in this channel
-    account_state: BTreeMap<Vec<u8>, Vec<u8>>,
+    account: ChannelState,
     /// Participant state in this channel
-    participant_state: BTreeMap<Vec<u8>, Vec<u8>>,
+    participant: ChannelState,
     witness_data: Option<WitnessData>,
 }
 
-impl ChannelState {
-    pub fn new(account: AccountAddress, participant: AccountAddress, my_state: BTreeMap<Vec<u8>, Vec<u8>>,
-               participant_state: BTreeMap<Vec<u8>, Vec<u8>>) -> Self {
+impl Channel {
+    pub fn new(account: ChannelState,
+               participant: ChannelState) -> Self {
         Self {
             account,
             participant,
-            account_state: my_state,
-            participant_state,
             witness_data: None,
         }
     }
 
     pub fn get(&self, access_path: &AccessPath) -> Option<Vec<u8>> {
-        match self.witness_data().and_then(|witness_data|witness_data.write_set.get(access_path)){
+        match self.witness_data.as_ref().and_then(|witness_data|witness_data.write_set.get(access_path)){
             Some(op) => match op {
                 WriteOp::Value(value) => Some(value.clone()),
                 WriteOp::Deletion => None
             }
-            None => if access_path.address == self.participant{
-                self.participant_state.get(&access_path.path).cloned()
+            None => if access_path.address == self.participant.address{
+                self.participant.get(&access_path.path).cloned()
+            }else if access_path.address == self.account.address {
+                self.account.get(&access_path.path).cloned()
             }else{
-                self.account_state.get(&access_path.path).cloned()
+                panic!("Unexpect access_path: {} for this channel: {:?}", access_path, self)
             }
         }
     }
@@ -90,12 +128,12 @@ impl ChannelState {
         if executed_onchain{
             for (ap,op) in witness_payload.write_set{
                 if ap.is_channel_resource(){
-                    let mut state = if ap.address == self.account{
-                        &mut self.account_state
-                    }else if ap.address == self.participant {
-                        &mut self.participant_state
+                    let mut state = if ap.address == self.account.address{
+                        &mut self.account
+                    }else if ap.address == self.participant.address {
+                        &mut self.participant
                     }else{
-                        bail!("Unexpect witness_payload access_path {:?} apply to channel state {}", ap, self.participant);
+                        bail!("Unexpect witness_payload access_path {:?} apply to channel state {:?}", ap, self.participant);
                     };
                     match op{
                         WriteOp::Value(value) => state.insert(ap.path.clone(), value),
@@ -110,17 +148,22 @@ impl ChannelState {
         Ok(())
     }
 
-    pub fn witness_data(&self) -> Option<&WitnessData> {
-        self.witness_data.as_ref()
+    pub fn witness_data(&self) -> WitnessData {
+        self.witness_data.as_ref().cloned().unwrap_or(WitnessData::new_with_sequence_number(self.account_resource().channel_sequence_number()))
+    }
+
+    fn get_channel_account_resource(&self, access_path:&AccessPath) -> ChannelAccountResource{
+        self.get(access_path)
+            .and_then(|value|ChannelAccountResource::make_from(value).ok()).expect("channel must contains ChannelAccountResource")
     }
 
     pub fn account_resource(&self) -> ChannelAccountResource{
-        self.get(&AccessPath::new_for_data_path(self.account,DataPath::channel_account_path(self.participant)))
-            .and_then(|value|ChannelAccountResource::make_from(value).ok()).expect("channel must contains ChannelAccountResource")
+        let access_path = AccessPath::new_for_data_path(self.account.address,DataPath::channel_account_path(self.participant.address));
+        self.get_channel_account_resource(&access_path)
     }
 
     pub fn participant_account_resource(&self) -> ChannelAccountResource{
-        self.get(&AccessPath::new_for_data_path(self.participant,DataPath::channel_account_path(self.account)))
-            .and_then(|value|ChannelAccountResource::make_from(value).ok()).expect("channel must contains ChannelAccountResource")
+        let access_path = AccessPath::new_for_data_path(self.participant.address,DataPath::channel_account_path(self.account.address));
+        self.get_channel_account_resource(&access_path)
     }
 }

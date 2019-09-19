@@ -14,7 +14,7 @@ use types::account_address::AccountAddress;
 use types::language_storage::StructTag;
 use types::transaction::Version;
 
-use crate::{AccountState, ChannelState, LocalStateStorage};
+use crate::{AccountState, Channel, LocalStateStorage};
 
 pub struct LocalStateView<'txn, C> where C: ChainClient {
     version: Version,

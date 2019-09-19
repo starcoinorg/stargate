@@ -20,10 +20,11 @@ use types::write_set::{WriteOp, WriteSet};
 use vm_runtime_types::loaded_data::struct_def::StructDef;
 
 pub use crate::account_state::AccountState;
-pub use crate::channel_state::{ChannelState, WitnessData};
+pub use crate::channel::{Channel, WitnessData};
 pub use crate::local_state_view::LocalStateView;
 
 use types::transaction::{Version, TransactionOutput, ChannelWriteSetPayload};
+use crate::channel::ChannelState;
 
 pub struct LocalStateStorage<C>
     where
@@ -31,7 +32,7 @@ pub struct LocalStateStorage<C>
 {
     account: AccountAddress,
     client: Arc<C>,
-    channels: AtomicRefCell<HashMap<AccountAddress, ChannelState>>,
+    channels: AtomicRefCell<HashMap<AccountAddress, Channel>>,
     struct_cache: Arc<StructCache>,
 }
 
@@ -60,7 +61,7 @@ impl<C> LocalStateStorage<C>
                 let participant_account_state = Self::get_account_state_by_client(self.client.clone(), participant, Some(version))?;
                 let mut participant_channel_states = participant_account_state.filter_channel_state();
                 let participant_channel_state = participant_channel_states.remove(&self.account).ok_or(format_err!("Can not find channel {} in {}", self.account, participant))?;
-                let channel = ChannelState::new(self.account, participant, my_channel_state, participant_channel_state);
+                let channel = Channel::new(my_channel_state, participant_channel_state);
                 info!("Init new channel with: {}", participant);
                 channels.insert(participant, channel);
             }
@@ -76,7 +77,7 @@ impl<C> LocalStateStorage<C>
     }
 
     pub fn get_witness_data(&self, participant: AccountAddress) -> Result<WitnessData> {
-        Ok(self.channels.borrow().get(&participant).and_then(|state|state.witness_data().cloned()).unwrap_or(WitnessData::default()))
+        Ok(self.channels.borrow().get(&participant).map(|state|state.witness_data()).unwrap_or(WitnessData::default()))
     }
 
     pub fn exist_channel(&self, participant: &AccountAddress) -> bool {
@@ -85,8 +86,8 @@ impl<C> LocalStateStorage<C>
 
     pub fn apply_witness(&self, participant: AccountAddress, executed_onchain: bool, witness_payload: ChannelWriteSetPayload, signature: Ed25519Signature) -> Result<()>{
         let mut channels = self.channels.borrow_mut();
-        let channel_state = channels.entry(participant).or_insert(ChannelState::new(self.account,participant, BTreeMap::new(), BTreeMap::new()));
-        channel_state.apply_witness(executed_onchain, witness_payload, signature);
+        let channel_state = channels.entry(participant).or_insert(Channel::new(ChannelState::empty(self.account), ChannelState::empty(participant)));
+        channel_state.apply_witness(executed_onchain, witness_payload, signature)?;
         Ok(())
     }
 
@@ -97,7 +98,7 @@ impl<C> LocalStateStorage<C>
 }
 
 mod account_state;
-mod channel_state;
+mod channel;
 mod local_state_view;
 #[cfg(test)]
 mod local_state_storage_test;
