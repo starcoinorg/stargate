@@ -16,6 +16,7 @@ use futures::sync::oneshot::{Canceled, Sender};
 use std::collections::HashMap;
 use crate::helper::get_unix_ts;
 use crypto::hash::CryptoHash;
+use tokio::prelude::task::AtomicTask;
 
 #[derive(Clone)]
 pub struct NetworkService {
@@ -81,7 +82,10 @@ fn run_network(
     let net_srv_2 = net_srv.clone();
     let net_ack_tx = net_tx.clone();
     let identify = net_srv.lock().peer_id().clone();
+    let task_notify = Arc::new(AtomicTask::new());
+    let notify = task_notify.clone();
     let network_fut = stream::poll_fn(move || {
+        notify.register();
         net_srv_2.lock().poll()
     }).for_each(
         move |event| {
@@ -133,6 +137,7 @@ fn run_network(
             net_srv
                 .lock()
                 .send_custom_message(&peer_id, message.clone().msg);
+            task_notify.notify();
             if net_srv.lock().is_open(&peer_id) == false {
                 error!("Message send to peer :{} is not connected", convert_peer_id_to_account_address(&peer_id).unwrap());
             }
