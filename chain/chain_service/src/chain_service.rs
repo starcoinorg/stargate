@@ -9,7 +9,7 @@ use super::transaction_storage::TransactionStorage;
 use std::{sync::{Arc, Mutex}, time::Duration, convert::TryFrom};
 use crypto::{hash::{CryptoHash, GENESIS_BLOCK_ID}, HashValue, ed25519::Ed25519Signature};
 use grpc_helpers::provide_grpc_response;
-use vm_genesis::{encode_genesis_transaction, encode_transfer_program, encode_create_account_program, GENESIS_KEYPAIR};
+use vm_genesis::{encode_genesis_transaction, encode_transfer_script, encode_create_account_script, GENESIS_KEYPAIR};
 use metrics::IntGauge;
 use futures03::{
     future::{FutureExt, TryFutureExt},
@@ -43,7 +43,7 @@ use proto_conv::{FromProto, IntoProto};
 use types::contract_event::ContractEvent;
 use types::event::EventKey;
 use types::transaction::{TransactionOutput, TransactionStatus, Version};
-use types::vm_error::VMStatus;
+use types::vm_error::{VMStatus, StatusCode};
 use super::event_storage::{gene_event_hash, EventStorage};
 use atomic_refcell::AtomicRefCell;
 use futures::sync::mpsc::UnboundedSender;
@@ -114,11 +114,11 @@ impl ChainService {
                     let signed_tx_hash = genesis_txn.hash();
                     let events: Vec<ContractEvent> = vec![];
                     let event_hash = gene_event_hash(&events).expect("genesis event hash err");
-                    let tx_info = TransactionInfo::new(signed_tx_hash, state_hash, event_hash, 0);
+                    let tx_info = TransactionInfo::new(signed_tx_hash, state_hash, event_hash, 0, StatusCode::EXECUTED);
                     let ledger_info = LedgerInfo::new(0, tx_info.hash(), HashValue::random(), *GENESIS_BLOCK_ID, 0, 0, None);
                     let ledger_info_with_sigs = LedgerInfoWithSignatures::new(ledger_info, HashMap::new());
 
-                    chain_service.insert_into_libra(&Some(ledger_info_with_sigs), genesis_txn, &accounts, events, 0, true);
+                    chain_service.insert_into_libra(&Some(ledger_info_with_sigs), genesis_txn, &accounts, events, 0, true, StatusCode::EXECUTED);
                 }
                 _ => {}
             };
@@ -164,9 +164,9 @@ impl ChainService {
         let output = output_vec.pop().expect("output vec is empty.");
         info!("apply_on_chain_transaction tx:{}, output: {}", sign_tx.raw_txn().hash(), output);
         let (ver, account_vec) = match output.status() {
-            TransactionStatus::Keep(_) => {
+            TransactionStatus::Keep(vm_status) => {
                 let (state_hash, accounts) = StateCache::apply_libra_output(&self.state_view, &output).expect("apply output err.");
-                let v = self.insert_into_libra(&None, sign_tx.clone(), &accounts, output.events().to_vec(), output.gas_used(), false);
+                let v = self.insert_into_libra(&None, sign_tx.clone(), &accounts, output.events().to_vec(), output.gas_used(), false, vm_status.major_status);
                 let addrs = accounts.iter().map(|(addr, blob)| -> AccountAddress { addr.clone() }).collect();
                 (v, addrs)
             }
@@ -191,12 +191,12 @@ impl ChainService {
         self.tx_pub.send(account_vec, wt_resp).unwrap();
     }
 
-    fn insert_into_libra(&self, sign: &Option<LedgerInfoWithSignatures<Ed25519Signature>>, sign_tx: SignedTransaction, accounts: &Vec<(AccountAddress, AccountStateBlob)>, events: Vec<ContractEvent>, gas: u64, is_genesis: bool) -> Version {
+    fn insert_into_libra(&self, sign: &Option<LedgerInfoWithSignatures<Ed25519Signature>>, sign_tx: SignedTransaction, accounts: &Vec<(AccountAddress, AccountStateBlob)>, events: Vec<ContractEvent>, gas: u64, is_genesis: bool, marjor_status: StatusCode) -> Version {
         let mut map = HashMap::new();
         accounts.iter().for_each(|(addr, account)| {
             map.insert(*addr, account.clone());
         });
-        let commit_tx = TransactionToCommit::new(sign_tx, map, events, gas);
+        let commit_tx = TransactionToCommit::new(sign_tx, map, events, gas, marjor_status);
 
         let libradb = self.libra_db.as_ref().borrow();
         if is_genesis {
@@ -287,10 +287,10 @@ impl ChainService {
 
     pub fn faucet_inner(&self, receiver: AccountAddress, amount: u64) -> Result<()> {
         let exist_flag = StateCache::exist_account(&self.state_view, self.state_view.latest_version().expect("latest_version is none."), &receiver);
-        let program = if !exist_flag {
-            encode_create_account_program(&receiver, amount)
+        let script = if !exist_flag {
+            encode_create_account_script(&receiver, amount)
         } else {
-            encode_transfer_program(&receiver, amount)
+            encode_transfer_script(&receiver, amount)
         };
 
         let sender = association_address();//AccountAddress::from_public_key(&GENESIS_KEYPAIR.1);
@@ -298,10 +298,10 @@ impl ChainService {
             Some(num) => num,
             _ => 0
         };
-        let signed_tx = RawTransaction::new(
+        let signed_tx = RawTransaction::new_script(
             sender,
             s_n,
-            program,
+            script,
             1000_000 as u64,
             1 as u64,
             Duration::from_secs(u64::max_value()),

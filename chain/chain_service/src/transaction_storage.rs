@@ -3,6 +3,7 @@ use types::proof::accumulator::Accumulator;
 use std::{collections::HashMap};
 use types::transaction::{SignedTransaction, TransactionInfo, Version};
 use crypto::hash::{CryptoHash, TransactionInfoHasher};
+use types::vm_error::StatusCode;
 
 pub struct TransactionStorage {
     signed_tx_vec: Vec<SignedTransaction>,
@@ -55,7 +56,7 @@ impl TransactionStorage {
         let signed_tx_hash = sign_tx.clone().hash();
         let version = self.insert_signed_transaction(sign_tx.clone());
 
-        let tx_info = TransactionInfo::new(signed_tx_hash, state_hash, event_hash, 0);
+        let tx_info = TransactionInfo::new(signed_tx_hash, state_hash, event_hash, 0, StatusCode::EXECUTED);
         self.insert_transaction_info(tx_info.clone());
 
         let hash_root = self.accumulator_append(tx_info);
