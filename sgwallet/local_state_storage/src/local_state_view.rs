@@ -33,6 +33,10 @@ impl<'txn, C> LocalStateView<'txn, C> where C: ChainClient {
             cache: AtomicRefCell::new(cache),
         }
     }
+
+    pub fn version(&self) -> Version {
+        self.version
+    }
 }
 
 impl<'txn, C> StateViewPlus for LocalStateView<'txn, C> where C: ChainClient {}

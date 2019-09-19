@@ -349,13 +349,13 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
                 return;
             },
         }
-        let sender_addr = open_channel_message.transaction.txn().clone().sender().clone();
+        let sender_addr = open_channel_message.transaction.txn().clone().sender();
         if (&open_channel_message.transaction.receiver() == &self.wallet.get_address()) {
             // sign message ,verify messsage,no send back
             let wallet = self.wallet.clone();
             let txn = open_channel_message.transaction.clone();
             let sender = self.sender.clone();
-            let hash_value = open_channel_message.transaction.clone().txn.into_raw_transaction().hash();
+            let hash_value = open_channel_message.transaction.txn().raw_txn().hash();
             let f = async move {
                 let receiver_open_txn:ChannelTransaction;
                 match wallet.verify_txn(&txn){
@@ -413,14 +413,14 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         let txn = off_chain_pay_message.transaction.clone();
         let txn_clone = txn.clone();
         let local_addr = self.wallet.get_address();
-        let sender_addr = off_chain_pay_message.transaction.txn().clone().sender().clone();
+        let sender_addr = off_chain_pay_message.transaction.txn().sender();
         let sender = self.sender.clone();
         if (&txn.receiver() == &local_addr) {
             // sign message ,verify messsage, execute tx local
             debug!("off chain txn as receiver");
             let wallet = self.wallet.clone();
             let sender = self.sender.clone();
-            let hash_value = off_chain_pay_message.transaction.clone().txn.into_raw_transaction().hash();
+            let hash_value = off_chain_pay_message.transaction.txn().raw_txn().hash();
             let f = async move {
                 let receiver_open_txn:ChannelTransaction;
                 match wallet.verify_txn(&txn){
@@ -491,7 +491,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
     fn channel_txn_onchain(&mut self, open_channel_message: ChannelTransactionMessage, msg_type: MessageType) -> Result<MessageFuture> {
         let sender = self.sender.clone();
 
-        let hash_value = open_channel_message.transaction.clone().txn.into_raw_transaction().hash();
+        let hash_value = open_channel_message.transaction.txn().raw_txn().hash();
         let addr = open_channel_message.transaction.receiver().clone();
         let msg = add_message_type(open_channel_message.into_proto_bytes().unwrap(), msg_type);
         self.sender.unbounded_send(NetworkMessage{ peer_id: addr, msg: Message::new_message(msg.to_vec())});
@@ -506,7 +506,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
     fn off_chain_pay(&mut self, coin_resource_tag: types::language_storage::StructTag, receiver_address: AccountAddress, amount: u64) -> Result<MessageFuture> {
         let off_chain_pay_tx = self.wallet.transfer_by_tag(coin_resource_tag, receiver_address, amount)?;
         let sender = self.sender.clone();
-        let hash_value = off_chain_pay_tx.clone().txn.into_raw_transaction().hash();
+        let hash_value = off_chain_pay_tx.txn().raw_txn().hash();
         let off_chain_pay_msg = OffChainPayMessage {
             transaction: off_chain_pay_tx,
         };

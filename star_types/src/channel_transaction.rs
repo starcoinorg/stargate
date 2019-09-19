@@ -1,7 +1,7 @@
 use failure::prelude::*;
 use crypto::ed25519::{Ed25519PublicKey, Ed25519Signature};
 use types::account_address::AccountAddress;
-use types::transaction::{RawTransaction, SignedTransaction, TransactionStatus, ChannelWriteSetPayload, TransactionOutput, ChannelScriptPayload, TransactionPayload};
+use types::transaction::{RawTransaction, SignedTransaction, TransactionStatus, ChannelWriteSetPayload, TransactionOutput, ChannelScriptPayload, TransactionPayload, Version};
 use types::contract_event::ContractEvent;
 use types::write_set::WriteSet;
 use types::vm_error::VMStatus;
@@ -13,18 +13,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ChannelTransaction {
+    /// The global status version on this tx executed.
+    version: Version,
     /// The sender signed transaction
-    pub txn: SignedTransaction,
+    txn: SignedTransaction,
 
-    pub witness_payload: ChannelWriteSetPayload,
-
-    /// the signature of witness_payload
-    pub witness_signature: Ed25519Signature,
+    witness_payload: ChannelWriteSetPayload,
+    /// The signature of witness_payload
+    witness_signature: Ed25519Signature,
 }
 
 impl ChannelTransaction {
-    pub fn new(txn: SignedTransaction, witness_payload: ChannelWriteSetPayload, witness_signature: Ed25519Signature) -> Self {
+    pub fn new(version: Version, txn: SignedTransaction, witness_payload: ChannelWriteSetPayload, witness_signature: Ed25519Signature) -> Self {
         Self {
+            version,
             txn,
             witness_payload,
             witness_signature,
@@ -37,6 +39,10 @@ impl ChannelTransaction {
 //        self.output_signatures.push(signature);
 //        Ok(())
 //    }
+
+    pub fn version(&self) -> Version {
+        self.version
+    }
 
     pub fn txn(&self) -> &SignedTransaction {
         &self.txn
@@ -84,7 +90,8 @@ impl ChannelTransaction {
 impl CanonicalSerialize for ChannelTransaction{
 
     fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
-        serializer.encode_struct(&self.txn)?
+        serializer.encode_u64(self.version)?
+            .encode_struct(&self.txn)?
             .encode_struct(&self.witness_payload)?
             .encode_bytes(&self.witness_signature.to_bytes())?;
         Ok(())
@@ -95,10 +102,12 @@ impl CanonicalDeserialize for ChannelTransaction{
 
     fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self> where
         Self: Sized {
+        let version = deserializer.decode_u64()?;
         let txn = deserializer.decode_struct()?;
         let witness_payload = deserializer.decode_struct()?;
         let signature_bytes = deserializer.decode_bytes()?;
         Ok(Self{
+            version,
             txn,
             witness_payload,
             witness_signature: Ed25519Signature::try_from(signature_bytes.as_slice())?

@@ -74,7 +74,7 @@ impl MessageProcessor {
     }
 
     pub fn send_response(&mut self, mut msg:ChannelTransaction) -> Result<()> {
-        let hash = msg.txn.clone().into_raw_transaction().hash();
+        let hash = msg.txn().raw_txn().hash();
 
         let mut tx_map= self.tx_map.lock().unwrap();
         match tx_map.get(&hash) {

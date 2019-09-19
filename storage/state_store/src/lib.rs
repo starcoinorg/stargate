@@ -112,7 +112,7 @@ pub trait StateStore : StateViewPlus {
     }
 
     fn apply_txn(&self, txn: &ChannelTransaction) -> Result<()> {
-        self.apply_write_set(&txn.witness_payload.write_set, 0)
+        self.apply_write_set(&txn.witness_payload().write_set, 0)
     }
 
     fn apply_libra_output(&self, txn_output: &types::transaction::TransactionOutput) -> Result<()> {

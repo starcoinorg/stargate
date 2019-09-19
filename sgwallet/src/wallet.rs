@@ -148,14 +148,14 @@ impl<C> Wallet<C>
         let write_set = output.write_set();
         let witness_payload = ChannelWriteSetPayload::new(channel_sequence_number, write_set.clone(), receiver);
         let signature = self.sign_write_set_payload(&witness_payload)?;
-        Ok(ChannelTransaction::new(txn, witness_payload, signature))
+        Ok(ChannelTransaction::new(state_view.version(), txn, witness_payload, signature))
     }
 
     /// Verify channel participant's txn
     pub fn verify_txn(&self, channel_txn: &ChannelTransaction) -> Result<ChannelTransaction> {
         debug!("verify_txn {}", channel_txn.txn().raw_txn().hash());
         ensure!(channel_txn.receiver() == self.account_address, "check receiver fail.");
-        let sender = channel_txn.txn.sender();
+        let sender = channel_txn.txn().sender();
         if !self.storage.exist_channel(&sender){
             self.watch_address(sender)?;
             //return Err(SgError{error_code:0,error_message:"111".to_string()}.into())
@@ -164,8 +164,8 @@ impl<C> Wallet<C>
         let mut txn = channel_txn.txn().clone();
         let txn_signature = self.sign_script_payload(channel_txn.channel_script_payload().ok_or(format_err!("txn must be channel script txn."))?)?;
         txn.set_receiver_public_key_and_signature(self.keypair.public_key.clone(), txn_signature);
-        //TODO pass version by channel_txn
-        let state_view = self.storage.new_state_view(None)?;
+        let version = channel_txn.version();
+        let state_view = self.storage.new_state_view(Some(version))?;
         let output = self.execute_transaction(&state_view,txn.clone())?;
         let write_set = output.write_set();
         let sender_payload = channel_txn.witness_payload();
@@ -173,7 +173,7 @@ impl<C> Wallet<C>
         let witness_payload = ChannelWriteSetPayload::new(sender_payload.channel_sequence_number, write_set.clone(), sender);
         let witness_signature = self.sign_write_set_payload(&witness_payload)?;
 
-        Ok(ChannelTransaction::new(txn, witness_payload, witness_signature))
+        Ok(ChannelTransaction::new(version, txn, witness_payload, witness_signature))
     }
 
     /// Open channel and deposit default asset.
@@ -245,17 +245,17 @@ impl<C> Wallet<C>
             let mut data=self.lock.lock().compat().await.unwrap();
             let (_,output) = if txn_sender == self.account_address {
                 // sender submit transaction to chain.
-                self.submit_transaction(txn.txn.clone()).await?
+                self.submit_transaction(txn.txn().clone()).await?
             }else{
                 self.watch_transaction(txn.txn()).await?
             };
             *data+=1;
             (true, output)
         } else {
-            (false, TransactionOutput::new_with_write_set(txn.witness_payload.write_set.clone()))
+            (false, TransactionOutput::new_with_write_set(txn.witness_payload().write_set.clone()))
         };
         self.check_output(&output)?;
-        self.storage.apply_witness(participant, execute_onchain, txn.witness_payload.clone(), txn.witness_signature.clone())?;
+        self.storage.apply_witness(participant, execute_onchain, txn.witness_payload().clone(), txn.witness_signature().clone())?;
         Ok(output)
     }
 
