@@ -75,10 +75,10 @@ impl ChainClient for MockChainClient {
         Ok(WatchStream::new(stream))
     }
 
-//    fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<SignedTransaction> {
-//        let chain_service = self.chain_service.as_ref().borrow();
-//        chain_service.get_transaction_by_seq_num_inner(address.clone(), seq_num)
-//    }
+    fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<SignedTransaction> {
+        let chain_service = self.chain_service.as_ref().borrow();
+        chain_service.get_transaction_by_seq_num_inner(address.clone(), seq_num)
+    }
 }
 
 

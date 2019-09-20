@@ -1,6 +1,6 @@
 use std::{convert::TryFrom, fs, sync::Arc};
 
-use chain_client::{RpcChainClient};
+use chain_client::{RpcChainClient, ChainClient, StarClient};
 use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
 use crypto::test_utils::KeyPair;
 use failure::*;
@@ -73,11 +73,11 @@ fn gen_node(
     wallet_config: &WalletConfig,
     network_service: NetworkService, sender:UnboundedSender<NetworkMessage>, receiver:UnboundedReceiver<NetworkMessage>,
     close_tx: futures_01::sync::oneshot::Sender<()>,
-) -> (Node<RpcChainClient>) {
+) -> (Node<StarClient>) {
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
-    let client = RpcChainClient::new(
+    let client = StarClient::new(
         &wallet_config.chain_address,
-        wallet_config.chain_port as u32,
+        wallet_config.chain_port as u32
     );
 
     info!("account addr is {:?}",hex::encode(account_address));

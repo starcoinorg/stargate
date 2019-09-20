@@ -1,6 +1,6 @@
 [network]
 address = 'localhost'
-port = 8000
+port = 9000
 
 [node_net_work]
 addr = 'localhost'
@@ -10,4 +10,4 @@ seeds = []
 
 [wallet]
 chain_address = 'localhost'
-chain_port = 3000
+chain_port = 8000

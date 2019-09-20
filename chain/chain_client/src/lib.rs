@@ -19,6 +19,9 @@ use types::contract_event::ContractEvent;
 use types::proof::SparseMerkleProof;
 
 pub mod watch_stream;
+mod star_client;
+
+pub use star_client::StarClient;
 
 pub trait ChainClient {
     type WatchResp: Stream<Item=WatchData, Error=grpcio::Error>;
@@ -27,7 +30,7 @@ pub trait ChainClient {
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()>;
     fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<()>;
     fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchStream<Self::WatchResp>>;
-//    fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<SignedTransaction>;
+    fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<SignedTransaction>;
 }
 
 #[derive(Clone)]
@@ -37,7 +40,7 @@ pub struct RpcChainClient {
 }
 
 impl RpcChainClient {
-    pub fn new(host: &str, port: u32) -> RpcChainClient {
+    pub fn new(host: &str, port: u32) -> Self {
         let conn_addr = format!("{}:{}", host, port);
 
         // Create a GRPC client
@@ -48,13 +51,12 @@ impl RpcChainClient {
             client: chain_grpc::ChainClient::new(ch),
         }
     }
-
 }
 
 impl ChainClient for RpcChainClient {
     type WatchResp = grpcio::ClientSStreamReceiver<WatchData>;
 
-    fn get_account_state_with_proof(&self, address: &AccountAddress, version: Option<Version>) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)>{
+    fn get_account_state_with_proof(&self, address: &AccountAddress, version: Option<Version>) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)> {
         let mut req = GetAccountStateWithProofRequest::new();
         req.set_address(address.to_vec());
         if version.is_some() {
@@ -102,14 +104,14 @@ impl ChainClient for RpcChainClient {
         //thread::spawn(print_data);
     }
 
-//    fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<SignedTransaction> {
-//        let mut req = GetTransactionBySeqNumRequest::new();
-//        req.set_address(address.to_vec());
-//        req.set_seq_num(seq_num);
-//        let resp = self.client.get_transaction_by_seq_num(&req);
-//        match resp {
-//            Ok(tx) => { Ok(SignedTransaction::from_proto(tx.get_signed_tx().clone()).unwrap()) }
-//            Err(err) => { bail_err!(err) }
-//        }
-//    }
+    fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<SignedTransaction> {
+        let mut req = GetTransactionBySeqNumRequest::new();
+        req.set_address(address.to_vec());
+        req.set_seq_num(seq_num);
+        let resp = self.client.get_transaction_by_seq_num(&req);
+        match resp {
+            Ok(tx) => { Ok(SignedTransaction::from_proto(tx.get_signed_tx().clone()).unwrap()) }
+            Err(err) => { bail_err!(err) }
+        }
+    }
 }
