@@ -23,18 +23,11 @@ pub mod watch_stream;
 pub trait ChainClient {
     type WatchResp: Stream<Item=WatchData, Error=grpcio::Error>;
 
-    fn latest_state_root(&self) -> Result<(HashValue,Version)>;
-    #[deprecated]
-    /// please use get_account_state_with_proof
-    fn get_account_state(&self, address: &AccountAddress) -> Result<Option<Vec<u8>>>;
     fn get_account_state_with_proof(&self, address: &AccountAddress, version: Option<Version>) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)>;
-    fn get_state_by_access_path(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>>;
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()>;
     fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<()>;
     fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchStream<Self::WatchResp>>;
-    fn watch_event(&self, address: &AccountAddress, event_keys: Vec<EventKey>) -> Result<WatchStream<Self::WatchResp>>;
-    fn get_transaction_by_ver(&self, ver: Version) -> Result<SignedTransaction>;
-    fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<SignedTransaction>;
+//    fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<SignedTransaction>;
 }
 
 #[derive(Clone)]
@@ -61,27 +54,6 @@ impl RpcChainClient {
 impl ChainClient for RpcChainClient {
     type WatchResp = grpcio::ClientSStreamReceiver<WatchData>;
 
-    fn latest_state_root(&self) -> Result<(HashValue,Version)> {
-        let req = LatestRootRequest::new();
-        let resp = self.client.latest_state_root(&req)?;
-        Ok((HashValue::from_slice(resp.state_root_hash.as_slice())?, 0u64))
-    }
-
-    fn get_account_state(&self, address: &AccountAddress) -> Result<Option<Vec<u8>>> {
-        let mut req = GetAccountStateWithProofRequest::new();
-        req.set_address(address.to_vec());
-        self.client.get_account_state_with_proof(&req).map_err(|e| {
-            format_err!("{:?}", e)
-        }).and_then(|resp| {
-            let tmp = if resp.has_account_state_blob() {
-                Some(resp.get_account_state_blob().get_blob().to_vec())
-            } else {
-                None
-            };
-            Ok(tmp)
-        })
-    }
-
     fn get_account_state_with_proof(&self, address: &AccountAddress, version: Option<Version>) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)>{
         let mut req = GetAccountStateWithProofRequest::new();
         req.set_address(address.to_vec());
@@ -97,22 +69,6 @@ impl ChainClient for RpcChainClient {
             None
         };
         Ok((version, account_state, proof))
-    }
-
-    fn get_state_by_access_path(&self, path: &AccessPath) -> Result<Option<Vec<u8>>> {
-        let mut req = AccessPathProto::new();
-        req.set_address(path.address.to_vec());
-        req.set_path(path.path.to_vec());
-        self.client.state_by_access_path(&req).map_err(|e| {
-            format_err!("{:?}", e)
-        }).and_then(|resp| {
-            let a_r = resp.account_resource.into_option();
-            let result = match a_r {
-                Some(resource) => { Some(resource.resource) }
-                None => { None }
-            };
-            Ok(result)
-        })
     }
 
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()> {
@@ -146,37 +102,14 @@ impl ChainClient for RpcChainClient {
         //thread::spawn(print_data);
     }
 
-    fn watch_event(&self, address: &AccountAddress, event_keys: Vec<EventKey>) -> Result<WatchStream<Self::WatchResp>> {
-        let keys = event_keys.iter().map(|key| -> EventKeyProto {
-            let mut event_key = EventKeyProto::new();
-            event_key.set_key(key.into_proto());
-            event_key
-        }).collect();
-        let mut req = WatchEventRequest::new();
-        req.set_address(address.to_vec());
-        req.set_keys(RepeatedField::from_vec(keys));
-        let event_stream = self.client.watch_event(&req).unwrap();
-        Ok(WatchStream::new(event_stream))
-    }
-
-    fn get_transaction_by_ver(&self, ver: Version) -> Result<SignedTransaction> {
-        let mut req = GetTransactionByVersionRequest::new();
-        req.set_ver(ver);
-        let resp = self.client.get_transaction_by_version(&req);
-        match resp {
-            Ok(tx) => { Ok(SignedTransaction::from_proto(tx.get_signed_tx().clone()).unwrap()) }
-            Err(err) => { bail_err!(err) }
-        }
-    }
-
-    fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<SignedTransaction> {
-        let mut req = GetTransactionBySeqNumRequest::new();
-        req.set_address(address.to_vec());
-        req.set_seq_num(seq_num);
-        let resp = self.client.get_transaction_by_seq_num(&req);
-        match resp {
-            Ok(tx) => { Ok(SignedTransaction::from_proto(tx.get_signed_tx().clone()).unwrap()) }
-            Err(err) => { bail_err!(err) }
-        }
-    }
+//    fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<SignedTransaction> {
+//        let mut req = GetTransactionBySeqNumRequest::new();
+//        req.set_address(address.to_vec());
+//        req.set_seq_num(seq_num);
+//        let resp = self.client.get_transaction_by_seq_num(&req);
+//        match resp {
+//            Ok(tx) => { Ok(SignedTransaction::from_proto(tx.get_signed_tx().clone()).unwrap()) }
+//            Err(err) => { bail_err!(err) }
+//        }
+//    }
 }

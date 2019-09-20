@@ -518,6 +518,7 @@ mod tests {
     use std::{time::Duration};
     use crypto::hash::{CryptoHash, TransactionInfoHasher};
     use state_cache::state_cache::StateCache;
+    use types::transaction::TransactionPayload;
 
     #[test]
     fn test_genesis() {
@@ -566,7 +567,7 @@ mod tests {
         let signed_tx = RawTransaction::new(
             account_address,
             s_n as u64,
-            program,
+            TransactionPayload::Script(program),
             1_000_000 as u64,
             1 as u64,
             Duration::from_secs(u64::max_value()),
