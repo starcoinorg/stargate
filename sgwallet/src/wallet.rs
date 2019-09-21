@@ -11,7 +11,7 @@ use {
     },
 };
 use canonical_serialization::SimpleSerializer;
-use chain_client::{ChainClient, RpcChainClient};
+use chain_client::{ChainClient, RpcChainClient, StarClient};
 use config::config::VMConfig;
 use crypto::{HashValue, SigningKey, VerifyingKey};
 use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
@@ -76,8 +76,8 @@ impl<C> Wallet<C>
         keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
         rpc_host: &str,
         rpc_port: u32,
-    ) -> Result<Wallet<RpcChainClient>> {
-        let client = Arc::new(RpcChainClient::new(rpc_host, rpc_port));
+    ) -> Result<Wallet<StarClient>> {
+        let client = Arc::new(StarClient::new(rpc_host, rpc_port));
         Wallet::new_with_client(executor, account_address, keypair, client)
     }
 
