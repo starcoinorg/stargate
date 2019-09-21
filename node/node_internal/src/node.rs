@@ -29,7 +29,7 @@ use futures_01::{future::Future, sync::oneshot,
 };
 use crate::message_processor::{MessageProcessor, MessageFuture};
 use crypto::hash::CryptoHash;
-use star_types::channel_transaction::ChannelTransaction;
+use star_types::channel_transaction::ChannelTransactionRequest;
 use futures::compat::Future01CompatExt;
 use std::time::{Duration, Instant};
 use tokio::timer::Delay;
@@ -129,7 +129,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         info!("start open channel ");
         let channel_txn = self.node_inner.clone().lock().unwrap().wallet.open(receiver, sender_amount, receiver_amount)?;
         info!("get open channel txn");
-        let open_channel_message = ChannelTransactionMessage::new(channel_txn);
+        let open_channel_message = ChannelTransactionRequestMessage::new(channel_txn);
         let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionMessage);
         f
     }
@@ -172,7 +172,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             bail!("could not connect to receiver")
         }
         let channel_txn = self.node_inner.clone().lock().unwrap().wallet.deposit_by_tag(asset_tag, receiver, sender_amount, receiver_amount)?;
-        let open_channel_message = ChannelTransactionMessage::new(channel_txn);
+        let open_channel_message = ChannelTransactionRequestMessage::new(channel_txn);
         let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionMessage);
         f
     }
@@ -215,7 +215,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         }
         info!("start to withdraw with {:?} {} {}", receiver, sender_amount, receiver_amount);
         let channel_txn = self.node_inner.clone().lock().unwrap().wallet.withdraw_by_tag(asset_tag, receiver, sender_amount, receiver_amount)?;
-        let open_channel_message = ChannelTransactionMessage::new(channel_txn);
+        let open_channel_message = ChannelTransactionRequestMessage::new(channel_txn);
         let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionMessage);
         f
     }
@@ -340,24 +340,24 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
 
     fn handle_channel(&mut self, data: Vec<u8>) {
         debug!("handle_open_channel");
-        let open_channel_message:ChannelTransactionMessage;
+        let open_channel_message: ChannelTransactionRequestMessage;
 
-        match ChannelTransactionMessage::from_proto_bytes(&data){
+        match ChannelTransactionRequestMessage::from_proto_bytes(&data){
             Ok(msg)  => {open_channel_message=msg;},
             Err(e) => {
                 warn!("get wrong message");
                 return;
             },
         }
-        let sender_addr = open_channel_message.transaction.txn().clone().sender();
-        if (&open_channel_message.transaction.receiver() == &self.wallet.get_address()) {
+        let sender_addr = open_channel_message.txn_request.txn().clone().sender();
+        if (&open_channel_message.txn_request.receiver() == &self.wallet.get_address()) {
             // sign message ,verify messsage,no send back
             let wallet = self.wallet.clone();
-            let txn = open_channel_message.transaction.clone();
+            let txn = open_channel_message.txn_request.clone();
             let sender = self.sender.clone();
-            let hash_value = open_channel_message.transaction.txn().raw_txn().hash();
+            let hash_value = open_channel_message.txn_request.txn().raw_txn().hash();
             let f = async move {
-                let receiver_open_txn:ChannelTransaction;
+                let receiver_open_txn: ChannelTransactionRequest;
                 match wallet.verify_txn(&txn){
                     Ok(tx)  => {receiver_open_txn=tx;},
                     Err(e) => {
@@ -365,7 +365,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
                         return;
                     },
                 }
-                let channel_txn_msg = ChannelTransactionMessage::new(receiver_open_txn);
+                let channel_txn_msg = ChannelTransactionRequestMessage::new(receiver_open_txn);
                 let msg = add_message_type(channel_txn_msg.into_proto_bytes().unwrap(), MessageType::ChannelTransactionMessage);
                 debug!("send msg to {:?}", sender_addr);
                 sender.unbounded_send(NetworkMessage{ peer_id: sender_addr, msg: Message::new_message(msg.to_vec())});
@@ -380,9 +380,9 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             };
             self.executor.spawn(f.boxed().unit_error().compat());
         }
-        if (&open_channel_message.transaction.txn().sender() == &self.wallet.get_address()) {
+        if (&open_channel_message.txn_request.txn().sender() == &self.wallet.get_address()) {
             let wallet = self.wallet.clone();
-            let txn = open_channel_message.transaction;
+            let txn = open_channel_message.txn_request;
             let txn_clone = txn.clone();
             let mut message_processor = self.message_processor.clone();
             let f = async move {
@@ -422,7 +422,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             let sender = self.sender.clone();
             let hash_value = off_chain_pay_message.transaction.txn().raw_txn().hash();
             let f = async move {
-                let receiver_open_txn:ChannelTransaction;
+                let receiver_open_txn: ChannelTransactionRequest;
                 match wallet.verify_txn(&txn){
                     Ok(tx)  => {receiver_open_txn=tx;},
                     Err(e) => {
@@ -488,11 +488,11 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         Ok(())
     }
 
-    fn channel_txn_onchain(&mut self, open_channel_message: ChannelTransactionMessage, msg_type: MessageType) -> Result<MessageFuture> {
+    fn channel_txn_onchain(&mut self, open_channel_message: ChannelTransactionRequestMessage, msg_type: MessageType) -> Result<MessageFuture> {
         let sender = self.sender.clone();
 
-        let hash_value = open_channel_message.transaction.txn().raw_txn().hash();
-        let addr = open_channel_message.transaction.receiver().clone();
+        let hash_value = open_channel_message.txn_request.txn().raw_txn().hash();
+        let addr = open_channel_message.txn_request.receiver().clone();
         let msg = add_message_type(open_channel_message.into_proto_bytes().unwrap(), msg_type);
         self.sender.unbounded_send(NetworkMessage{ peer_id: addr, msg: Message::new_message(msg.to_vec())});
         let (tx, rx) = channel(1);

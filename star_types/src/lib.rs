@@ -1,13 +1,13 @@
 #![feature(custom_attribute)]
 
 pub mod account_resource_ext;
-pub mod channel;
 pub mod message;
 pub mod channel_transaction;
 pub mod proto;
 pub mod resource;
 pub mod system_event;
 pub mod watch_tx_data;
+pub mod sg_error;
 
 #[cfg(test)]
 mod resource_test;

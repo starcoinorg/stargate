@@ -18,7 +18,7 @@ use futures03::{
     executor::block_on,
 };
 use tokio::runtime::{TaskExecutor, Runtime};
-use star_types::{channel_transaction::ChannelTransaction,
+use star_types::{channel_transaction::ChannelTransactionRequest,
                  proto::{chain_grpc::Chain,
                          chain::{LatestRootRequest, LatestRootResponse,
                                  FaucetRequest, FaucetResponse,
@@ -32,7 +32,7 @@ use star_types::{channel_transaction::ChannelTransaction,
                                  GetTransactionBySeqNumRequest,
                                  WatchData, WatchTxData,
                          },
-                         channel_transaction::ChannelTransaction as ChannelTransactionProto,
+                         channel_transaction::ChannelTransactionRequest as ChannelTransactionProto,
                  }, transaction_output_helper};
 use vm_runtime::{MoveVM, VMExecutor};
 use lazy_static::lazy_static;

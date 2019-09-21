@@ -160,7 +160,7 @@ mod tests {
         let participant1 = AccountAddress::random();
         account_state.insert(DataPath::channel_account_path(participant0), ChannelAccountResource::default().to_bytes());
         account_state.insert(DataPath::channel_account_path(participant1), ChannelAccountResource::default().to_bytes());
-        let mut channel_states = account_state.filter_channel_state();
+        let channel_states = account_state.filter_channel_state();
         assert_eq!(channel_states.len(), 2);
         assert_eq!(channel_states.get(&participant0).unwrap().len(), 1);
         assert_eq!(channel_states.get(&participant1).unwrap().len(), 1);

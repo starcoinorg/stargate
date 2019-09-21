@@ -12,43 +12,13 @@ use types::account_address::AccountAddress;
 use types::language_storage::StructTag;
 use std::fmt::{Display, Formatter};
 use include_dir::Dir;
+use star_types::channel_transaction::ChannelOp;
 
 
 static SCRIPTS_DIR:Dir = include_dir!("scripts");
 
 lazy_static! {
     static ref ASSET_SCRIPT_FOLDERS:Vec<(&'static str,StructTag)> = vec![("libra", coin_struct_tag())];
-}
-#[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
-pub enum ChannelOp{
-    Open,
-    Deposit,
-    Transfer,
-    Withdraw,
-    Close,
-}
-
-impl ChannelOp {
-    pub fn values() -> Vec<ChannelOp>{
-        vec![ChannelOp::Open, ChannelOp::Deposit, ChannelOp::Transfer, ChannelOp::Withdraw, ChannelOp::Close]
-    }
-
-    pub fn asset_op_values() -> Vec<ChannelOp>{
-        vec![ChannelOp::Deposit, ChannelOp::Transfer, ChannelOp::Withdraw]
-    }
-}
-
-impl Display for ChannelOp{
-
-    fn fmt(&self, f: &mut Formatter) -> ::std::fmt::Result {
-        match self{
-            ChannelOp::Open => write!(f, "open"),
-            ChannelOp::Deposit => write!(f, "deposit"),
-            ChannelOp::Transfer => write!(f, "transfer"),
-            ChannelOp::Withdraw => write!(f, "withdraw"),
-            ChannelOp::Close => write!(f, "close"),
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +37,10 @@ impl ScriptCode {
 
     pub fn code(&self)-> &Vec<u8>{
         &self.code
+    }
+
+    pub fn script_type(&self) -> ChannelOp {
+        self.script_type
     }
 
     pub fn encode_program(&self, args: Vec<TransactionArgument>) -> Program{

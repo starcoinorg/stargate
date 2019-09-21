@@ -2,50 +2,64 @@ use std::collections::BTreeMap;
 
 use crypto::ed25519::Ed25519Signature;
 use failure::prelude::*;
+use star_types::channel_transaction::{ChannelTransactionRequest, ChannelTransactionResponse, ChannelTransactionResponsePayload, ChannelTransactionRequestPayload, ChannelOp};
+use star_types::message::SgError;
+use star_types::sg_error::SgErrorCode;
 use types::access_path::{AccessPath, DataPath};
 use types::account_address::AccountAddress;
-use types::transaction::{Version, TransactionOutput, ChannelWriteSetPayload};
-use types::write_set::{WriteOp, WriteSet};
 use types::channel_account::ChannelAccountResource;
+use types::transaction::{ChannelWriteSetPayload, TransactionOutput, Version};
+use types::write_set::{WriteOp, WriteSet};
+use atomic_refcell::AtomicRefCell;
 
-#[derive(Clone, Debug)]
-pub struct ChannelState{
-    address: AccountAddress,
-    state:BTreeMap<Vec<u8>, Vec<u8>>,
+//TODO (jole) need maintain network state?
+#[derive(Clone, Debug, Copy)]
+pub enum ChannelStage {
+    /// Channel is waiting to open operator finish.
+    Opening,
+    /// Channel is idle, can execute new txn.
+    Idle,
+    /// Channel is pending for some tx not finished.
+    Pending,
+    Closed,
 }
 
-impl ChannelState{
+#[derive(Clone, Debug)]
+pub struct ChannelState {
+    address: AccountAddress,
+    state: AtomicRefCell<BTreeMap<Vec<u8>, Vec<u8>>>,
+}
 
-    pub fn empty(address: AccountAddress) -> Self{
-        Self{
+impl ChannelState {
+    pub fn empty(address: AccountAddress) -> Self {
+        Self {
             address,
-            state: BTreeMap::new(),
+            state: AtomicRefCell::new(BTreeMap::new()),
         }
     }
 
-    pub fn new(address: AccountAddress, state: BTreeMap<Vec<u8>,Vec<u8>>) -> Self{
-        Self{
+    pub fn new(address: AccountAddress, state: BTreeMap<Vec<u8>, Vec<u8>>) -> Self {
+        Self {
             address,
-            state
+            state: AtomicRefCell::new(state),
         }
     }
 
-    pub fn get(&self, path: &Vec<u8>) -> Option<&Vec<u8>>{
-        self.state.get(path)
+    pub fn get(&self, path: &Vec<u8>) -> Option<Vec<u8>> {
+        self.state.borrow().get(path).cloned()
     }
 
     pub fn len(&self) -> usize {
-        self.state.len()
+        self.state.borrow().len()
     }
 
-    pub fn remove(&mut self, path: &Vec<u8>) -> Option<Vec<u8>>{
-        self.state.remove(path)
+    pub fn remove(&self, path: &Vec<u8>) -> Option<Vec<u8>> {
+        self.state.borrow_mut().remove(path)
     }
 
-    pub fn insert(&mut self, path: Vec<u8>, value: Vec<u8>) -> Option<Vec<u8>>{
-        self.state.insert(path, value)
+    pub fn insert(&self, path: Vec<u8>, value: Vec<u8>) -> Option<Vec<u8>> {
+        self.state.borrow_mut().insert(path, value)
     }
-
 }
 
 #[derive(Clone, Debug, Default)]
@@ -60,7 +74,7 @@ impl WitnessData {
         Self {
             channel_sequence_number,
             write_set,
-            signature:Some(signature),
+            signature: Some(signature),
         }
     }
 
@@ -78,92 +92,153 @@ pub struct Channel {
     /// The version of chain when this ChannelState init.
     //TODO need version?
     //version: Version,
+    stage: AtomicRefCell<ChannelStage>,
     /// Current account state in this channel
     account: ChannelState,
     /// Participant state in this channel
     participant: ChannelState,
-    witness_data: Option<WitnessData>,
+    witness_data: AtomicRefCell<Option<WitnessData>>,
+    pending_txn_request: AtomicRefCell<Option<ChannelTransactionRequest>>,
 }
 
 impl Channel {
-    pub fn new(account: ChannelState,
-               participant: ChannelState) -> Self {
+    pub fn new(account: AccountAddress, participant: AccountAddress) -> Self {
         Self {
-            account,
-            participant,
-            witness_data: None,
+            stage: AtomicRefCell::new(ChannelStage::Opening),
+            account: ChannelState::empty(account),
+            participant: ChannelState::empty(participant),
+            witness_data: AtomicRefCell::new(None),
+            pending_txn_request: AtomicRefCell::new(None),
         }
     }
 
+    pub fn new_with_state(account: ChannelState,
+                          participant: ChannelState) -> Self {
+        Self {
+            stage: AtomicRefCell::new(ChannelStage::Idle),
+            account,
+            participant,
+            witness_data: AtomicRefCell::new(None),
+            pending_txn_request: AtomicRefCell::new(None),
+        }
+    }
+
+    pub fn stage(&self) -> ChannelStage{
+        *self.stage.borrow()
+    }
+
     pub fn get(&self, access_path: &AccessPath) -> Option<Vec<u8>> {
-        match self.witness_data.as_ref().and_then(|witness_data|witness_data.write_set.get(access_path)){
+        match self.witness_data.borrow().as_ref().and_then(|witness_data| witness_data.write_set.get(access_path)) {
             Some(op) => match op {
                 WriteOp::Value(value) => Some(value.clone()),
                 WriteOp::Deletion => None
             }
-            None => if access_path.address == self.participant.address{
-                self.participant.get(&access_path.path).cloned()
-            }else if access_path.address == self.account.address {
-                self.account.get(&access_path.path).cloned()
-            }else{
+            None => if access_path.address == self.participant.address {
+                self.participant.get(&access_path.path)
+            } else if access_path.address == self.account.address {
+                self.account.get(&access_path.path)
+            } else {
                 panic!("Unexpect access_path: {} for this channel: {:?}", access_path, self)
             }
         }
     }
 
-    pub fn update_witness_data(&mut self, witness_payload: ChannelWriteSetPayload, signature: Ed25519Signature) {
-        let ChannelWriteSetPayload{channel_sequence_number, write_set, receiver} = witness_payload;
-        self.witness_data = Some(WitnessData {
+    fn update_witness_data(&self, witness_payload: ChannelWriteSetPayload, signature: Ed25519Signature) {
+        let ChannelWriteSetPayload { channel_sequence_number, write_set, receiver } = witness_payload;
+        let mut witness_data = self.witness_data.borrow_mut();
+        *witness_data = Some(WitnessData {
             channel_sequence_number,
             write_set,
             signature: Some(signature),
         })
     }
 
-    pub fn reset_witness_data(&mut self) {
-        self.witness_data = None
+    fn reset_witness_data(&self) {
+        *self.witness_data.borrow_mut() = None
     }
 
-    pub fn apply_witness(&mut self, executed_onchain: bool, witness_payload: ChannelWriteSetPayload, signature: Ed25519Signature) -> Result<()>{
-        if executed_onchain{
-            for (ap,op) in witness_payload.write_set{
-                if ap.is_channel_resource(){
-                    let mut state = if ap.address == self.account.address{
-                        &mut self.account
-                    }else if ap.address == self.participant.address {
-                        &mut self.participant
-                    }else{
-                        bail!("Unexpect witness_payload access_path {:?} apply to channel state {:?}", ap, self.participant);
-                    };
-                    match op{
-                        WriteOp::Value(value) => state.insert(ap.path.clone(), value),
-                        WriteOp::Deletion => state.remove(&ap.path)
-                    };
-                }
+    fn reset_pending_txn_request(&self) {
+        *self.pending_txn_request.borrow_mut() = None
+    }
+
+    pub fn apply_witness(&self, witness_payload: ChannelWriteSetPayload, signature: Ed25519Signature) -> Result<()> {
+        self.update_witness_data(witness_payload, signature);
+        self.reset_pending_txn_request();
+        *self.stage.borrow_mut() = ChannelStage::Idle;
+        Ok(())
+    }
+
+    pub fn apply_output(&self, output: TransactionOutput) -> Result<()>{
+        //TODO
+        let pending_txn = self.pending_txn_request.borrow().as_ref().expect("must exist");
+        for (ap, op) in output.write_set() {
+            if ap.is_channel_resource() {
+                let state = if ap.address == self.account.address {
+                    &self.account
+                } else if ap.address == self.participant.address {
+                    &self.participant
+                } else {
+                    bail!("Unexpect witness_payload access_path {:?} apply to channel state {:?}", ap, self.participant);
+                };
+                match op {
+                    WriteOp::Value(value) => state.insert(ap.path.clone(), value.clone()),
+                    WriteOp::Deletion => state.remove(&ap.path)
+                };
             }
-            self.reset_witness_data();
-        }else{
-            self.update_witness_data(witness_payload, signature);
         }
+        self.reset_witness_data();
+        self.reset_pending_txn_request();
+        *self.stage.borrow_mut() = ChannelStage::Idle;
         Ok(())
     }
 
     pub fn witness_data(&self) -> WitnessData {
-        self.witness_data.as_ref().cloned().unwrap_or(WitnessData::new_with_sequence_number(self.account_resource().channel_sequence_number()))
+        match &*self.stage.borrow() {
+            ChannelStage::Opening => WitnessData::default(),
+            _ => self.witness_data.borrow().as_ref().cloned().unwrap_or(WitnessData::new_with_sequence_number(self.channel_sequence_number()))
+        }
     }
 
-    fn get_channel_account_resource(&self, access_path:&AccessPath) -> ChannelAccountResource{
+    fn get_channel_account_resource(&self, access_path: &AccessPath) -> ChannelAccountResource {
         self.get(access_path)
-            .and_then(|value|ChannelAccountResource::make_from(value).ok()).expect("channel must contains ChannelAccountResource")
+            .and_then(|value| ChannelAccountResource::make_from(value).ok()).expect("channel must contains ChannelAccountResource")
     }
 
-    pub fn account_resource(&self) -> ChannelAccountResource{
-        let access_path = AccessPath::new_for_data_path(self.account.address,DataPath::channel_account_path(self.participant.address));
+    pub fn account_resource(&self) -> ChannelAccountResource {
+        let access_path = AccessPath::new_for_data_path(self.account.address, DataPath::channel_account_path(self.participant.address));
         self.get_channel_account_resource(&access_path)
     }
 
-    pub fn participant_account_resource(&self) -> ChannelAccountResource{
-        let access_path = AccessPath::new_for_data_path(self.participant.address,DataPath::channel_account_path(self.account.address));
+    pub fn participant_account_resource(&self) -> ChannelAccountResource {
+        let access_path = AccessPath::new_for_data_path(self.participant.address, DataPath::channel_account_path(self.account.address));
         self.get_channel_account_resource(&access_path)
+    }
+
+    pub fn pending_txn_request(&self) -> Option<ChannelTransactionRequest> {
+        self.pending_txn_request.borrow().as_ref().cloned()
+    }
+
+    pub fn append_txn_request(&self, request: ChannelTransactionRequest) -> Result<()> {
+        let mut pending_txn_request = self.pending_txn_request.borrow_mut();
+        if pending_txn_request.is_some() {
+            bail!("exist a pending txn request.");
+        }
+        let operator = request.operator();
+        *pending_txn_request = Some(request);
+        if operator != ChannelOp::Open {
+            *self.stage.borrow_mut() = ChannelStage::Pending;
+        }
+        Ok(())
+    }
+
+    fn invalid_channel_stage_error(&self) -> Error {
+        SgError::new(SgErrorCode::INVALID_CHANNEL_STAGE, format!("Channel at stage: {:?}, unsupported this operator.", self.stage)).into()
+    }
+
+    pub fn channel_sequence_number(&self) -> u64 {
+        match &*self.stage.borrow(){
+            ChannelStage::Opening => 0,
+            _ => self.account_resource().channel_sequence_number()
+        }
     }
 }

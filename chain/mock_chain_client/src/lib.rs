@@ -9,7 +9,7 @@ use futures::{
     sync::mpsc::UnboundedReceiver,
     Stream, Poll,
 };
-use star_types::{proto::{chain::{WatchData}}, channel_transaction::ChannelTransaction};
+use star_types::{proto::{chain::{WatchData}}, channel_transaction::ChannelTransactionRequest};
 use atomic_refcell::{AtomicRefCell};
 use std::sync::Arc;
 use core::borrow::{BorrowMut};

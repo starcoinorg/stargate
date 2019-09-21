@@ -4,7 +4,7 @@ use types::proto::{transaction::SignedTransaction as SignedTransactionProto, acc
 use core::borrow::Borrow;
 use std::str::FromStr;
 use crypto::HashValue;
-use star_types::{watch_tx_data::WatchTxData, proto::{chain::WatchData, channel_transaction::ChannelTransaction as ChannelTransactionProto, star_account::AccountState, chain::{GetTransactionByVersionRequest, GetTransactionBySeqNumRequest, WatchEventRequest, EventKey as EventKeyProto}}, channel_transaction::ChannelTransaction, channel::SgChannelStream};
+use star_types::{watch_tx_data::WatchTxData, proto::{chain::WatchData, star_account::AccountState, chain::{GetTransactionByVersionRequest, GetTransactionBySeqNumRequest, WatchEventRequest, EventKey as EventKeyProto}}};
 use types::transaction::Version;
 use star_types::{proto::{chain_grpc, chain::{FaucetRequest, LatestRootRequest, GetAccountStateWithProofRequest, SubmitTransactionRequest, WatchTransactionRequest}}, resource::Resource};
 use grpcio::{EnvBuilder, ChannelBuilder};

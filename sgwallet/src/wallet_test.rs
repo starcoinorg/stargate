@@ -74,10 +74,10 @@ fn test_wallet() -> Result<()> {
 
         let receiver_open_txn = receiver_wallet.verify_txn(&open_txn).unwrap();
 
-        let sender_future = sender_wallet.apply_txn(&receiver_open_txn);
-        let receiver_future = receiver_wallet.apply_txn(&open_txn);
+        let sender_future = sender_wallet.apply_txn(receiver, &receiver_open_txn);
+        let receiver_future = receiver_wallet.apply_txn(sender, &receiver_open_txn);
 
-        sender_gas_used += sender_future.await.unwrap().gas_used();
+        sender_gas_used += sender_future.await.unwrap();
         receiver_future.await.unwrap();
 
         let sender_channel_balance = sender_wallet.channel_balance(receiver).unwrap();
@@ -93,10 +93,10 @@ fn test_wallet() -> Result<()> {
 
         let receiver_deposit_txn = receiver_wallet.verify_txn(&deposit_txn).unwrap();
 
-        let receiver_future = receiver_wallet.apply_txn(&deposit_txn);
-        let sender_future = sender_wallet.apply_txn(&receiver_deposit_txn);
+        let receiver_future = receiver_wallet.apply_txn(sender,&receiver_deposit_txn);
+        let sender_future = sender_wallet.apply_txn(receiver,&receiver_deposit_txn);
 
-        sender_gas_used += sender_future.await.unwrap().gas_used();
+        sender_gas_used += sender_future.await.unwrap();
         receiver_future.await.unwrap();
 
         let sender_channel_balance = sender_wallet.channel_balance(receiver).unwrap();
@@ -112,10 +112,10 @@ fn test_wallet() -> Result<()> {
 
         let receiver_transfer_txn = receiver_wallet.verify_txn(&transfer_txn).unwrap();
 
-        let receiver_future = receiver_wallet.apply_txn(&transfer_txn);
-        let sender_future = sender_wallet.apply_txn(&receiver_transfer_txn);
+        let receiver_future = receiver_wallet.apply_txn(sender,&receiver_transfer_txn);
+        let sender_future = sender_wallet.apply_txn(receiver, &receiver_transfer_txn);
 
-        sender_gas_used += sender_future.await.unwrap().gas_used();
+        sender_gas_used += sender_future.await.unwrap();
         receiver_future.await.unwrap();
 
         let sender_channel_balance = sender_wallet.channel_balance(receiver).unwrap();
@@ -131,10 +131,10 @@ fn test_wallet() -> Result<()> {
 
         let receiver_withdraw_txn = receiver_wallet.verify_txn(&withdraw_txn).unwrap();
 
-        let receiver_future = receiver_wallet.apply_txn(&withdraw_txn);
-        let sender_future = sender_wallet.apply_txn(&receiver_withdraw_txn);
+        let receiver_future = receiver_wallet.apply_txn(sender,&receiver_withdraw_txn);
+        let sender_future = sender_wallet.apply_txn(receiver,&receiver_withdraw_txn);
 
-        sender_gas_used += sender_future.await.unwrap().gas_used();
+        sender_gas_used += sender_future.await.unwrap();
         receiver_future.await.unwrap();
 
         let sender_channel_balance = sender_wallet.channel_balance(receiver).unwrap();

@@ -13,7 +13,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use scratchpad::ProofRead;
 use atomic_refcell::AtomicRefCell;
-use star_types::channel_transaction::ChannelTransaction;
+use star_types::channel_transaction::ChannelTransactionRequest;
 use types::account_config::{AccountResource, account_resource_path};
 use state_view::StateView;
 use logger::prelude::*;

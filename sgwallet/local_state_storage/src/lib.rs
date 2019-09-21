@@ -7,7 +7,6 @@ use chain_client::{ChainClient, RpcChainClient};
 use crypto::ed25519::Ed25519Signature;
 use failure::prelude::*;
 use logger::prelude::*;
-use star_types::channel_transaction::ChannelTransaction;
 use star_types::resource::Resource;
 use star_types::resource_type::resource_def::{ResourceDef, StructDefResolve};
 use state_store::{StateStore, StateViewPlus};
@@ -25,6 +24,7 @@ pub use crate::local_state_view::LocalStateView;
 
 use types::transaction::{Version, TransactionOutput, ChannelWriteSetPayload};
 use crate::channel::ChannelState;
+use star_types::message::SgError;
 
 pub struct LocalStateStorage<C>
     where
@@ -32,8 +32,8 @@ pub struct LocalStateStorage<C>
 {
     account: AccountAddress,
     client: Arc<C>,
-    channels: AtomicRefCell<HashMap<AccountAddress, Channel>>,
-    struct_cache: Arc<StructCache>,
+    channels: HashMap<AccountAddress, Channel>,
+    struct_cache: StructCache,
 }
 
 impl<C> LocalStateStorage<C>
@@ -41,29 +41,28 @@ impl<C> LocalStateStorage<C>
         C: ChainClient,
 {
     pub fn new(account: AccountAddress, client: Arc<C>) -> Result<Self> {
-        let storage = Self {
+        let mut storage = Self {
             account,
             client,
-            channels: AtomicRefCell::new(HashMap::new()),
-            struct_cache: Arc::new(StructCache::new()),
+            channels: HashMap::new(),
+            struct_cache: StructCache::new(),
         };
         storage.refresh_channels()?;
         Ok(storage)
     }
 
-    fn refresh_channels(&self) -> Result<()>{
+    fn refresh_channels(&mut self) -> Result<()>{
         let account_state = Self::get_account_state_by_client( self.client.clone(), self.account, None)?;
-        let mut channels = self.channels.borrow_mut();
         let my_channel_states = account_state.filter_channel_state();
         let version = account_state.version();
         for (participant,my_channel_state) in my_channel_states{
-            if !channels.contains_key(&participant) {
+            if !self.channels.contains_key(&participant) {
                 let participant_account_state = Self::get_account_state_by_client(self.client.clone(), participant, Some(version))?;
                 let mut participant_channel_states = participant_account_state.filter_channel_state();
                 let participant_channel_state = participant_channel_states.remove(&self.account).ok_or(format_err!("Can not find channel {} in {}", self.account, participant))?;
-                let channel = Channel::new(my_channel_state, participant_channel_state);
+                let channel = Channel::new_with_state(my_channel_state, participant_channel_state);
                 info!("Init new channel with: {}", participant);
-                channels.insert(participant, channel);
+                self.channels.insert(participant, channel);
             }
         }
         Ok(())
@@ -77,18 +76,20 @@ impl<C> LocalStateStorage<C>
     }
 
     pub fn get_witness_data(&self, participant: AccountAddress) -> Result<WitnessData> {
-        Ok(self.channels.borrow().get(&participant).map(|state|state.witness_data()).unwrap_or(WitnessData::default()))
+        Ok(self.channels.get(&participant).map(|state|state.witness_data()).unwrap_or(WitnessData::default()))
     }
 
     pub fn exist_channel(&self, participant: &AccountAddress) -> bool {
-        self.channels.borrow().contains_key(participant)
+        self.channels.contains_key(participant)
     }
 
-    pub fn apply_witness(&self, participant: AccountAddress, executed_onchain: bool, witness_payload: ChannelWriteSetPayload, signature: Ed25519Signature) -> Result<()>{
-        let mut channels = self.channels.borrow_mut();
-        let channel_state = channels.entry(participant).or_insert(Channel::new(ChannelState::empty(self.account), ChannelState::empty(participant)));
-        channel_state.apply_witness(executed_onchain, witness_payload, signature)?;
-        Ok(())
+    pub fn new_channel(&mut self, participant: AccountAddress){
+        let channel = Channel::new(self.account, participant);
+        self.channels.insert(participant, channel);
+    }
+
+    pub fn get_channel(&self, participant: &AccountAddress) -> Result<&Channel>{
+        self.channels.get(participant).ok_or(SgError::new_channel_not_exist_error(participant).into())
     }
 
     pub fn new_state_view(&self, version: Option<Version>) -> Result<LocalStateView<C>>{

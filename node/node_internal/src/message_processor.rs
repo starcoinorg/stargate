@@ -13,17 +13,17 @@ use logger::prelude::*;
 use failure::prelude::*;
 use crypto::hash::CryptoHash;
 use network::NetworkMessage;
-use star_types::channel_transaction::ChannelTransaction;
+use star_types::channel_transaction::ChannelTransactionRequest;
 use tokio::{runtime::TaskExecutor};
 use star_types::message::{SgError, ErrorMessage};
 use futures::future::err;
 
 pub struct MessageFuture {
-    rx: Receiver<Result<ChannelTransaction>>,
+    rx: Receiver<Result<ChannelTransactionRequest>>,
 }
 
 impl MessageFuture {
-    pub fn new(rx: Receiver<Result<ChannelTransaction>>) -> Self {
+    pub fn new(rx: Receiver<Result<ChannelTransactionRequest>>) -> Self {
         Self {
             rx,
         }
@@ -31,10 +31,10 @@ impl MessageFuture {
 }
 
 impl Future for MessageFuture {
-    type Item = ChannelTransaction;
+    type Item = ChannelTransactionRequest;
     type Error = SgError;
 
-    fn poll(&mut self) -> Poll<ChannelTransaction, Self::Error> {
+    fn poll(&mut self) -> Poll<ChannelTransactionRequest, Self::Error> {
         while let Async::Ready(v) = self.rx.poll().unwrap() {
             match v {
                 Some(v) => {
@@ -59,7 +59,7 @@ impl Future for MessageFuture {
 
 #[derive(Clone)]
 pub struct MessageProcessor {
-    tx_map: Arc<Mutex<HashMap<HashValue, Sender<Result<ChannelTransaction>>>>>,
+    tx_map: Arc<Mutex<HashMap<HashValue, Sender<Result<ChannelTransactionRequest>>>>>,
 }
 
 impl MessageProcessor {
@@ -69,11 +69,11 @@ impl MessageProcessor {
         }
     }
 
-    pub fn add_future(&self, hash: HashValue, mut sender: Sender<Result<ChannelTransaction>>) {
+    pub fn add_future(&self, hash: HashValue, mut sender: Sender<Result<ChannelTransactionRequest>>) {
         self.tx_map.lock().unwrap().entry(hash).or_insert(sender.clone());
     }
 
-    pub fn send_response(&mut self, mut msg:ChannelTransaction) -> Result<()> {
+    pub fn send_response(&mut self, mut msg: ChannelTransactionRequest) -> Result<()> {
         let hash = msg.txn().raw_txn().hash();
 
         let mut tx_map= self.tx_map.lock().unwrap();

@@ -47,7 +47,7 @@ impl<'txn, C> StateView for LocalStateView<'txn, C> where C: ChainClient {
             let AccessPath { address, path } = access_path;
             let participant = access_path.data_path().expect("data path must exist").participant().expect("participant must exist");
             let channel_key = if address == &self.storage.account { &participant } else { address };
-            Ok(self.storage.channels.borrow().get(channel_key).and_then(|channel| channel.get(access_path)))
+            Ok(self.storage.channels.get(channel_key).and_then(|channel| channel.get(access_path)))
         } else {
             let AccessPath { address, path } = access_path;
             let mut cache = self.cache.borrow_mut();

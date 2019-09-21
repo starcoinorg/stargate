@@ -20,11 +20,11 @@ message OpenChannelNodeNegotiateMessage {
 }
 
 message ChannelTransactionMessage {
-    star_types.ChannelTransaction transaction = 1;
+    star_types.ChannelTransactionRequest transaction = 1;
 }
 
 message OffChainPayMessage {
-    star_types.ChannelTransaction transaction = 1;
+    star_types.ChannelTransactionRequest transaction = 1;
 }
 
 message AddressMessage {
@@ -51,6 +51,6 @@ enum ErrorCode {
 
 message ErrorMessage{
     bytes raw_transaction_hash = 1;
-    ErrorCode error_code=2;
+    uint32 error_code=2;
     string error_message =3 ;
 }

@@ -3,13 +3,14 @@ use failure::prelude::*;
 #[cfg(any(test, feature = "testing"))]
 use proptest_derive::Arbitrary;
 use proto_conv::{FromProto, IntoProto,FromProtoBytes};
-use crate::channel_transaction::ChannelTransaction;
+use crate::channel_transaction::ChannelTransactionRequest;
 use crypto::ed25519::Ed25519Signature;
 use std::{convert::TryFrom, fmt};
 use crate::proto::message::{ReceiveSignMessage, ErrorCode};
 use parity_multiaddr::Multiaddr;
 use crypto::HashValue;
 use protobuf::ProtobufEnum;
+use crate::sg_error::SgErrorCode;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 //#[ProtoType(crate::proto::message::OpenChannelNodeNegotiateMessage)]
@@ -114,12 +115,12 @@ impl StructTag {
 #[derive(Clone, Debug, Eq, PartialEq,FromProto, IntoProto)]
 #[ProtoType(crate::proto::message::OffChainPayMessage)]
 pub struct OffChainPayMessage {
-    pub transaction: ChannelTransaction,
+    pub transaction: ChannelTransactionRequest,
 }
 
 impl OffChainPayMessage {
     pub fn new(
-        transaction: ChannelTransaction,
+        transaction: ChannelTransactionRequest,
     ) -> Self {
         OffChainPayMessage {
             transaction,
@@ -130,12 +131,12 @@ impl OffChainPayMessage {
 #[derive(Clone, Debug, Eq, PartialEq,FromProto, IntoProto)]
 #[ProtoType(crate::proto::message::ChannelTransactionMessage)]
 pub struct ChannelTransactionMessage {
-    pub transaction: ChannelTransaction,
+    pub transaction: ChannelTransactionRequest,
 }
 
 impl ChannelTransactionMessage {
     pub fn new(
-        transaction: ChannelTransaction,
+        transaction: ChannelTransactionRequest,
     ) -> Self {
         ChannelTransactionMessage{
             transaction,
@@ -187,18 +188,25 @@ pub struct ErrorMessage {
     pub error:SgError,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq,Fail)]
+#[derive(Clone, Debug, Eq, PartialEq, Fail)]
 #[fail(display = "error code is  {}, error message is {}", error_code,error_message)]
 pub struct SgError {
-    pub error_code:i32,
-    pub error_message:String,
+    pub error_code: SgErrorCode,
+    pub error_message: String,
 }
 
 impl SgError {
-    pub fn new(error_code:i32,error_message:String)->Self{
+    pub fn new(error_code: SgErrorCode,error_message:String)->Self{
         Self{
             error_code,
             error_message,
+        }
+    }
+
+    pub fn new_channel_not_exist_error(participant: &AccountAddress) -> Self{
+        Self {
+            error_code:SgErrorCode::CHANNEL_NOT_EXIST,
+            error_message: format!("Can not find channel by participant: {}", participant)
         }
     }
 }
@@ -219,7 +227,7 @@ impl FromProto for ErrorMessage {
         use crate::proto::message::ErrorCode;
 
         let raw_transaction_hash=HashValue::from_slice(error_message.get_raw_transaction_hash())?;
-        let error_code=error_message.get_error_code().value();
+        let error_code= SgErrorCode::try_from(error_message.get_error_code())?;
         let error_message = error_message.take_error_message();
         let error = SgError{
             error_code,
@@ -240,7 +248,7 @@ impl IntoProto for ErrorMessage {
 
         let mut error_message = Self::ProtoType::new();
         error_message.set_raw_transaction_hash(self.raw_transaction_hash.into_proto());
-        error_message.set_error_code(ErrorCode::from_i32(self.error.error_code).take().expect("error code is not right"));
+        error_message.set_error_code(self.error.error_code.into_proto());
         error_message.set_error_message(self.error.error_message);
         error_message
     }

@@ -8,7 +8,6 @@ use star_types::resource::Resource;
 use std::collections::HashMap;
 use types::language_storage::StructTag;
 use failure::_core::cell::RefCell;
-use star_types::channel_transaction::{ChannelTransaction};
 use types::account_config::coin_struct_tag;
 
 pub trait StateViewPlus: StateView + StructDefResolve {
@@ -109,10 +108,6 @@ pub trait StateStore : StateViewPlus {
             }
         }
         Ok(())
-    }
-
-    fn apply_txn(&self, txn: &ChannelTransaction) -> Result<()> {
-        self.apply_write_set(&txn.witness_payload().write_set, 0)
     }
 
     fn apply_libra_output(&self, txn_output: &types::transaction::TransactionOutput) -> Result<()> {
