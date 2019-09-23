@@ -113,22 +113,6 @@ impl StructTag {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq,FromProto, IntoProto)]
-#[ProtoType(crate::proto::message::OffChainPayMessage)]
-pub struct OffChainPayMessage {
-    pub transaction: ChannelTransactionRequest,
-}
-
-impl OffChainPayMessage {
-    pub fn new(
-        transaction: ChannelTransactionRequest,
-    ) -> Self {
-        OffChainPayMessage {
-            transaction,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq,FromProto, IntoProto)]
 #[ProtoType(crate::proto::message::ChannelTransactionRequestMessage)]
 pub struct ChannelTransactionRequestMessage {
     pub txn_request: ChannelTransactionRequest,
@@ -275,7 +259,6 @@ pub enum MessageType {
     OpenChannelNodeNegotiateMessage,
     ChannelTransactionRequestMessage,
     ChannelTransactionResponseMessage,
-    OffChainPayMessage,
     ErrorMessage,
 }
 
@@ -286,8 +269,7 @@ impl MessageType {
             MessageType::OpenChannelNodeNegotiateMessage => 1,
             MessageType::ChannelTransactionRequestMessage => 2,
             MessageType::ChannelTransactionResponseMessage => 3,
-            MessageType::OffChainPayMessage => 4,
-            MessageType::ErrorMessage => 5,
+            MessageType::ErrorMessage => 4,
         }
     }
 
@@ -296,8 +278,7 @@ impl MessageType {
             1 => Ok(MessageType::OpenChannelNodeNegotiateMessage),
             2 => Ok(MessageType::ChannelTransactionRequestMessage),
             3 => Ok(MessageType::ChannelTransactionResponseMessage),
-            4 => Ok(MessageType::OffChainPayMessage),
-            5 => Ok(MessageType::ErrorMessage),
+            4 => Ok(MessageType::ErrorMessage),
             _ => bail!("no such type"),
         }
     }

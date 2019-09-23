@@ -304,7 +304,6 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
                         MessageType::OpenChannelNodeNegotiateMessage => node_inner.clone().lock().unwrap().handle_open_channel_negotiate(data[2..].to_vec()),
                         MessageType::ChannelTransactionRequestMessage => node_inner.clone().lock().unwrap().handle_receiver_channel(data[2..].to_vec()),
                         MessageType::ChannelTransactionResponseMessage => node_inner.clone().lock().unwrap().handle_sender_channel(data[2..].to_vec(),peer_id),
-                        MessageType::OffChainPayMessage => node_inner.clone().lock().unwrap().handle_off_chain_pay(data[2..].to_vec()),
                         MessageType::ErrorMessage => node_inner.clone().lock().unwrap().handle_error_message(data[2..].to_vec()),
                         _=>warn!("message type not found {:?}",msg_type),
                     };
@@ -392,7 +391,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
     }
 
     fn handle_sender_channel(&mut self, data: Vec<u8>, receiver_addr: AccountAddress) {
-        debug!("receive channel");
+        debug!("sender channel");
         let open_channel_message: ChannelTransactionResponseMessage;
 
         match ChannelTransactionResponseMessage::from_proto_bytes(&data) {
@@ -417,73 +416,6 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             message_processor.send_response(txn_response.request_id());
         };
         self.executor.spawn(f.boxed().unit_error().compat());
-    }
-
-    fn handle_off_chain_pay(&mut self, data: Vec<u8>) {
-        debug!("off chain pay");
-        let off_chain_pay_message: OffChainPayMessage;
-
-        match OffChainPayMessage::from_proto_bytes(&data) {
-            Ok(msg) => { off_chain_pay_message = msg; }
-            Err(e) => {
-                warn!("get wrong message");
-                return;
-            }
-        }
-        let txn = off_chain_pay_message.transaction.clone();
-        let txn_clone = txn.clone();
-        let local_addr = self.wallet.get_address();
-        let sender_addr = off_chain_pay_message.transaction.txn().sender();
-        let sender = self.sender.clone();
-        if (&txn.receiver() == &local_addr) {
-            // sign message ,verify messsage, execute tx local
-            debug!("off chain txn as receiver");
-            let wallet = self.wallet.clone();
-            let sender = self.sender.clone();
-            let hash_value = off_chain_pay_message.transaction.txn().hash();
-            let f = async move {
-                let receiver_open_txn: ChannelTransactionResponse;
-                match wallet.verify_txn(&txn) {
-                    Ok(tx) => { receiver_open_txn = tx; }
-                    Err(e) => {
-                        sender.unbounded_send(NetworkMessage { peer_id: sender_addr, msg: Message::new_message(error_message(e, hash_value).to_vec()) });
-                        return;
-                    }
-                }
-//                match wallet.apply_txn(sender_addr, &receiver_open_txn).await {
-//                    Ok(_) => {}
-//                    Err(e) => {
-//                        warn!("apply tx fail");
-//                        sender.unbounded_send(NetworkMessage { peer_id: sender_addr, msg: Message::new_message(error_message(e, hash_value).to_vec()) });
-//                        return;
-//                    }
-//                };
-//                let channel_txn_msg = OffChainPayMessage::new(receiver_open_txn);
-//                let msg = add_message_type(channel_txn_msg.into_proto_bytes().unwrap(), MessageType::OffChainPayMessage);
-//                info!("send msg to {:?}", sender_addr);
-//                sender.unbounded_send(NetworkMessage { peer_id: sender_addr, msg: Message::new_message(msg.to_vec()) });
-            };
-            self.executor.spawn(f.boxed().unit_error().compat());
-        }
-        if (&txn_clone.txn().sender() == &local_addr) {
-            debug!("receive feed back pay");
-            let wallet = self.wallet.clone();
-            let txn = txn_clone.clone();
-            let mut message_processor = self.message_processor.clone();
-            let receiver = txn.receiver();
-            let f = async move {
-//                match wallet.apply_txn(receiver, &txn).await {
-//                    Ok(_) => {}
-//                    Err(e) => {
-//                        warn!("apply tx fail");
-//                        return;
-//                    }
-//                };
-//                message_processor.send_response(txn_clone);
-            };
-            self.executor.spawn(f.boxed().unit_error().compat());
-            info!("tx succ");
-        }
     }
 
     fn handle_error_message(&mut self, data: Vec<u8>) {
@@ -527,11 +459,11 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
     fn off_chain_pay(&mut self, coin_resource_tag: types::language_storage::StructTag, receiver_address: AccountAddress, amount: u64) -> Result<MessageFuture> {
         let off_chain_pay_tx = self.wallet.transfer_by_tag(coin_resource_tag, receiver_address, amount)?;
         let sender = self.sender.clone();
-        let hash_value = off_chain_pay_tx.txn().hash();
-        let off_chain_pay_msg = OffChainPayMessage {
-            transaction: off_chain_pay_tx,
+        let hash_value = off_chain_pay_tx.request_id();
+        let off_chain_pay_msg = ChannelTransactionRequestMessage {
+            txn_request: off_chain_pay_tx,
         };
-        let msg = add_message_type(off_chain_pay_msg.into_proto_bytes().unwrap(), MessageType::OffChainPayMessage);
+        let msg = add_message_type(off_chain_pay_msg.into_proto_bytes().unwrap(), MessageType::ChannelTransactionRequestMessage);
 
         self.sender.unbounded_send(NetworkMessage { peer_id: receiver_address, msg: Message::new_message(msg.to_vec()) });
         let (tx, rx) = channel(1);
