@@ -50,7 +50,7 @@ impl AssetCollector {
     }
 
     pub fn visitor(&self, tag:&StructTag, resource:&Resource){
-        self.incr(tag, resource.assert_balance().expect("this resource must be asset"))
+        self.incr(tag, resource.asset_balance().expect("this resource must be asset"))
     }
 }
 

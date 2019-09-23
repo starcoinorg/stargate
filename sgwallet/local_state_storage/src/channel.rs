@@ -45,6 +45,10 @@ impl ChannelState {
         }
     }
 
+    pub fn address(&self) -> AccountAddress{
+        self.address
+    }
+
     pub fn get(&self, path: &Vec<u8>) -> Option<Vec<u8>> {
         self.state.borrow().get(path).cloned()
     }
@@ -125,6 +129,14 @@ impl Channel {
 
     pub fn stage(&self) -> ChannelStage{
         *self.stage.borrow()
+    }
+
+    pub fn account(&self) -> &ChannelState {
+        &self.account
+    }
+
+    pub fn participant(&self) -> &ChannelState{
+        &self.participant
     }
 
     pub fn get(&self, access_path: &AccessPath) -> Option<Vec<u8>> {

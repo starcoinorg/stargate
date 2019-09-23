@@ -29,7 +29,7 @@ use star_types::resource_type::resource_def::StructDefResolve;
 use star_types::sg_error::SgErrorCode;
 use state_store::{StateStore, StateViewPlus};
 use state_view::StateView;
-use types::access_path::AccessPath;
+use types::access_path::{AccessPath, DataPath};
 use types::account_address::AccountAddress;
 use types::account_config::{account_resource_path, AccountResource, coin_struct_tag};
 use types::channel_account::{channel_account_resource_path, channel_account_struct_tag, ChannelAccountResource};
@@ -143,8 +143,7 @@ impl<C> Wallet<C>
         let channel_sequence_number =  channel.channel_sequence_number();
         let txn = self.create_signed_script_txn(channel, receiver, program)?;
         let storage = self.storage.borrow();
-        //TODO refactor state view, only hold a channel.
-        let state_view = storage.new_state_view(None)?;
+        let state_view = storage.new_state_view(None, &receiver)?;
         let output = self.execute_transaction(&state_view, txn.clone())?;
 
         let payload = if output.is_travel_txn() {
@@ -187,7 +186,7 @@ impl<C> Wallet<C>
         ensure!(channel.channel_sequence_number() == txn_request.channel_sequence_number(), "check channel_sequence_number fail.");
         let signed_txn = self.mock_signature(txn_request.txn().clone())?;
         let version = txn_request.version();
-        let state_view = storage.new_state_view(Some(version))?;
+        let state_view = storage.new_state_view(Some(version), &sender)?;
         let txn_payload_signature = signed_txn.receiver_signature().expect("signature must exist.");
         let output = self.execute_transaction(&state_view, signed_txn)?;
         let write_set = output.write_set();
@@ -343,9 +342,8 @@ impl<C> Wallet<C>
     }
 
     pub fn get(&self, path: &Vec<u8>) -> Result<Option<Vec<u8>>> {
-        self.storage.borrow().new_state_view(None).and_then(|state_view|{
-            state_view.get(&AccessPath::new(self.account_address, path.clone()))
-        })
+        let data_path = DataPath::from(path)?;
+        self.storage.borrow().get(&data_path)
     }
 
     pub fn account_resource(&self) -> Result<AccountResource> {
@@ -375,15 +373,14 @@ impl<C> Wallet<C>
         self.account_resource().map(|r| r.balance())
     }
 
-    fn get_resource(&self, access_path: &AccessPath) -> Result<Option<Resource>> {
+    fn get_resource(&self, path: &DataPath) -> Result<Option<Resource>> {
         let storage = self.storage.borrow();
-        let state_view = storage.new_state_view(None)?;
-        state_view.get_resource(access_path)
+        storage.get_resource(path)
     }
 
-    pub fn get_channel_resource(&self, participant: AccountAddress, resource_tag: StructTag) -> Result<Option<Resource>> {
-        let access_path = AccessPath::channel_resource_access_path(self.account_address, participant, resource_tag);
-        self.get_resource(&access_path)
+    fn get_channel_resource(&self, participant: AccountAddress, resource_tag: StructTag) -> Result<Option<Resource>> {
+        let data_path = DataPath::channel_resource_path(participant, resource_tag);
+        self.get_resource(&data_path)
     }
 
     pub fn channel_balance(&self, participant: AccountAddress) -> Result<u64> {
@@ -396,7 +393,7 @@ impl<C> Wallet<C>
         } else {
             self.get_channel_resource(participant, asset_tag.clone())
                 .and_then(|resource| match resource {
-                    Some(resource) => resource.assert_balance().ok_or(format_err!("resource {:?} not asset.", asset_tag)),
+                    Some(resource) => resource.asset_balance().ok_or(format_err!("resource {:?} not asset.", asset_tag)),
                     //if channel or resource not exist, take default value 0
                     None => Ok(0)
                 })

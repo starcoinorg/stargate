@@ -83,7 +83,7 @@ impl Resource {
     }
 
     /// if resource is asset, and return it balance
-    pub fn assert_balance(&self) -> Option<u64> {
+    pub fn asset_balance(&self) -> Option<u64> {
         if self.is_asset() {
             self.1.get(0).and_then(|field| Into::<Option<u64>>::into(field.clone()))
         } else {
