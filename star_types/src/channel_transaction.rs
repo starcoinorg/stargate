@@ -91,6 +91,8 @@ pub enum ChannelTransactionRequestPayload {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ChannelTransactionRequest {
+    /// The id of request
+    request_id: HashValue,
     /// The global status version on this tx executed.
     version: Version,
     operator: ChannelOp,
@@ -107,14 +109,32 @@ pub struct ChannelTransactionRequest {
 
 impl ChannelTransactionRequest {
     pub fn new(version: Version, operator: ChannelOp, txn: RawTransaction, payload: ChannelTransactionRequestPayload, public_key: Ed25519PublicKey) -> Self {
-        assert!(txn.payload().is_channel_script(), "Only support ChannelScript payload.");
+        let request_id = if let TransactionPayload::ChannelScript(script_payload) = txn.payload() {
+            Self::generate_request_id(txn.sender(), script_payload.receiver, script_payload.channel_sequence_number)
+        } else {
+            panic!("Only support ChannelScript payload.");
+        };
+
         Self {
+            request_id,
             version,
             operator,
             txn,
             payload,
             public_key,
         }
+    }
+    //TODO(jole) should use sequence_number?
+    fn generate_request_id(sender: AccountAddress, receiver: AccountAddress, channel_sequence_number: u64) -> HashValue {
+        let mut bytes = vec![];
+        bytes.append(&mut sender.to_vec());
+        bytes.append(&mut receiver.to_vec());
+        bytes.append(&mut channel_sequence_number.to_be_bytes().to_vec());
+        HashValue::from_sha3_256(bytes.as_slice())
+    }
+
+    pub fn request_id(&self) -> HashValue{
+        self.request_id
     }
 
     pub fn version(&self) -> Version {
@@ -175,6 +195,7 @@ pub enum ChannelTransactionResponsePayload {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ChannelTransactionResponse {
+    request_id: HashValue,
     channel_sequence_number: u64,
     payload: ChannelTransactionResponsePayload,
     /// The receiver's public key
@@ -182,12 +203,17 @@ pub struct ChannelTransactionResponse {
 }
 
 impl ChannelTransactionResponse {
-    pub fn new(channel_sequence_number: u64, payload: ChannelTransactionResponsePayload, public_key: Ed25519PublicKey) -> Self {
+    pub fn new(request_id: HashValue, channel_sequence_number: u64, payload: ChannelTransactionResponsePayload, public_key: Ed25519PublicKey) -> Self {
         Self {
+            request_id,
             channel_sequence_number,
             payload,
             public_key,
         }
+    }
+
+    pub fn request_id(&self) -> HashValue{
+        self.request_id
     }
 
     pub fn channel_sequence_number(&self) -> u64 {
@@ -295,7 +321,8 @@ impl CanonicalDeserialize for ChannelTransactionRequestPayload {
 
 impl CanonicalSerialize for ChannelTransactionRequest {
     fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
-        serializer.encode_u64(self.version)?
+        serializer.encode_bytes(self.request_id.to_vec().as_slice())?
+            .encode_u64(self.version)?
             .encode_u32(self.operator.into())?
             .encode_struct(&self.txn)?
             .encode_struct(&self.payload)?
@@ -307,12 +334,14 @@ impl CanonicalSerialize for ChannelTransactionRequest {
 impl CanonicalDeserialize for ChannelTransactionRequest {
     fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self> where
         Self: Sized {
+        let request_id = HashValue::from_slice(deserializer.decode_bytes()?.as_slice())?;
         let version = deserializer.decode_u64()?;
         let operator = ChannelOp::try_from(deserializer.decode_u32()?)?;
         let txn = deserializer.decode_struct()?;
         let payload = deserializer.decode_struct()?;
         let public_key_bytes = deserializer.decode_bytes()?;
         Ok(Self {
+            request_id,
             version,
             operator,
             txn,
@@ -386,7 +415,8 @@ impl CanonicalDeserialize for ChannelTransactionResponsePayload {
 
 impl CanonicalSerialize for ChannelTransactionResponse {
     fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
-        serializer.encode_u64(self.channel_sequence_number)?
+        serializer.encode_bytes(self.request_id.to_vec().as_slice())?
+            .encode_u64(self.channel_sequence_number)?
             .encode_struct(&self.payload)?
             .encode_bytes(&self.public_key.to_bytes())?;
         Ok(())
@@ -396,11 +426,13 @@ impl CanonicalSerialize for ChannelTransactionResponse {
 impl CanonicalDeserialize for ChannelTransactionResponse {
     fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self> where
         Self: Sized {
+        let request_id = HashValue::from_slice(deserializer.decode_bytes()?.as_slice())?;
         let channel_sequence_number = deserializer.decode_u64()?;
         let payload = deserializer.decode_struct()?;
         let public_key_bytes = deserializer.decode_bytes()?;
         let public_key = Ed25519PublicKey::try_from(public_key_bytes.as_slice())?;
         Ok(Self {
+            request_id,
             channel_sequence_number,
             payload,
             public_key,

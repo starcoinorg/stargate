@@ -215,7 +215,7 @@ impl<C> Wallet<C>
                 ChannelTransactionResponsePayload::Travel { txn_payload_signature }
             }
         };
-        Ok(ChannelTransactionResponse::new(txn_request.channel_sequence_number(), payload, self.keypair.public_key.clone()))
+        Ok(ChannelTransactionResponse::new(txn_request.request_id(), txn_request.channel_sequence_number(), payload, self.keypair.public_key.clone()))
     }
 
     /// Open channel and deposit default asset.
