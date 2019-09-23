@@ -183,7 +183,7 @@ impl<C> Wallet<C>
 
         let storage = self.storage.borrow();
         let channel = storage.get_channel(&sender)?;
-        channel.append_txn_request(txn_request.clone());
+        channel.append_txn_request(txn_request.clone())?;
         ensure!(channel.channel_sequence_number() == txn_request.channel_sequence_number(), "check channel_sequence_number fail.");
         let signed_txn = self.mock_signature(txn_request.txn().clone())?;
         let version = txn_request.version();

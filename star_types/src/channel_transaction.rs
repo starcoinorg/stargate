@@ -164,6 +164,7 @@ impl ChannelTransactionRequest {
     }
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ChannelTransactionResponsePayload {
     Offchain(Witness),
     Travel {
@@ -172,6 +173,7 @@ pub enum ChannelTransactionResponsePayload {
     },
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ChannelTransactionResponse {
     channel_sequence_number: u64,
     payload: ChannelTransactionResponsePayload,
