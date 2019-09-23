@@ -1,41 +1,43 @@
-use tokio::{runtime::TaskExecutor};
-use futures::{
-    compat::{Stream01CompatExt, Compat01As03},
-    future::FutureExt,
-    stream::{Stream, Fuse, StreamExt},
-    prelude::*,
-    executor::block_on,
-};
-use std::sync::{Arc, Mutex};
-use sgwallet::wallet::Wallet;
-use chain_client::ChainClient;
-use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
-use crypto::{SigningKey, HashValue};
-use crypto::test_utils::KeyPair;
-use star_types::message::{*};
-use proto_conv::{IntoProtoBytes, FromProto, FromProtoBytes};
-use types::account_address::AccountAddress;
-use failure::prelude::*;
 use std::{thread, time};
-use logger::prelude::*;
-use network::{{NetworkService, NetworkMessage}, Message};
-use futures_01::sync::mpsc::{UnboundedSender, UnboundedReceiver};
-use state_cache::state_cache::AccountState;
-use types::account_config::AccountResource;
-use star_types::system_event::Event;
-use types::language_storage::StructTag;
-use futures_01::{future::Future, sync::oneshot,
-                 sync::mpsc::channel,
-};
-use crate::message_processor::{MessageProcessor, MessageFuture};
-use crypto::hash::CryptoHash;
-use star_types::channel_transaction::{ChannelTransactionRequest, ChannelTransactionResponse};
-use futures::compat::Future01CompatExt;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tokio::timer::Delay;
-use node_proto::{OpenChannelResponse, PayResponse, ConnectResponse, DepositResponse, WithdrawResponse, ChannelBalanceResponse};
-use futures::future::err;
 
+use futures::{
+    compat::{Compat01As03, Stream01CompatExt},
+    executor::block_on,
+    future::FutureExt,
+    prelude::*,
+    stream::{Fuse, Stream, StreamExt},
+};
+use futures::compat::Future01CompatExt;
+use futures::future::err;
+use futures_01::{future::Future, sync::mpsc::channel,
+                 sync::oneshot,
+};
+use futures_01::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::{runtime::TaskExecutor};
+use tokio::timer::Delay;
+
+use chain_client::ChainClient;
+use crypto::{HashValue, SigningKey};
+use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
+use crypto::hash::CryptoHash;
+use crypto::test_utils::KeyPair;
+use failure::prelude::*;
+use logger::prelude::*;
+use network::{{NetworkMessage, NetworkService}, Message};
+use node_proto::{ChannelBalanceResponse, ConnectResponse, DepositResponse, OpenChannelResponse, PayResponse, WithdrawResponse};
+use proto_conv::{FromProto, FromProtoBytes, IntoProtoBytes};
+use sgwallet::wallet::Wallet;
+use star_types::channel_transaction::{ChannelTransactionRequest, ChannelTransactionResponse};
+use star_types::message::{*};
+use star_types::system_event::Event;
+use state_cache::state_cache::AccountState;
+use types::account_address::AccountAddress;
+use types::account_config::AccountResource;
+use types::language_storage::StructTag;
+
+use crate::message_processor::{MessageFuture, MessageProcessor};
 
 pub struct Node<C: ChainClient + Send + Sync + 'static> {
     executor: TaskExecutor,
@@ -293,6 +295,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
                     match message {
                     Ok(msg)=>{
                     let peer_id = msg.peer_id;
+                    if let Message::Payload(payload) = msg.msg {
                     let data = bytes::Bytes::from(payload.data);
 
                     let msg_type=parse_message_type(&data);
@@ -305,7 +308,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
                         MessageType::ErrorMessage => node_inner.clone().lock().unwrap().handle_error_message(data[2..].to_vec()),
                         _=>warn!("message type not found {:?}",msg_type),
                     };
-                    },
+                    }},
                     Err(e)=>{
 
                     }
@@ -371,7 +374,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
                         return;
                     }
                 }
-                let channel_txn_msg = ChannelTransactionResponseMessage::new(receiver_open_txn);
+                let channel_txn_msg = ChannelTransactionResponseMessage::new(receiver_open_txn.clone());
                 let msg = add_message_type(channel_txn_msg.into_proto_bytes().unwrap(), MessageType::ChannelTransactionResponseMessage);
                 debug!("send msg to {:?}", sender_addr);
                 sender.unbounded_send(NetworkMessage { peer_id: sender_addr, msg: Message::new_message(msg.to_vec()) });
@@ -411,7 +414,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
                     return;
                 }
             };
-            message_processor.send_response(txn_clone);
+            message_processor.send_response(txn_response.request_id());
         };
         self.executor.spawn(f.boxed().unit_error().compat());
     }
@@ -509,7 +512,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
     fn channel_txn_onchain(&mut self, open_channel_message: ChannelTransactionRequestMessage, msg_type: MessageType) -> Result<MessageFuture> {
         let sender = self.sender.clone();
 
-        let hash_value = open_channel_message.txn_request.txn().hash();
+        let hash_value = open_channel_message.txn_request.request_id();
         let addr = open_channel_message.txn_request.receiver().clone();
         let msg = add_message_type(open_channel_message.into_proto_bytes().unwrap(), msg_type);
         self.sender.unbounded_send(NetworkMessage { peer_id: addr, msg: Message::new_message(msg.to_vec()) });
