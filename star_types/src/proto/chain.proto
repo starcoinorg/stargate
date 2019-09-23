@@ -32,7 +32,7 @@ message GetTransactionBySeqNumRequest {
 }
 
 message GetTransactionResponse {
-    types.SignedTransaction signed_tx = 1;
+  types.SignedTransactionWithProof signed_tx = 1;
 }
 
 message WatchEventRequest {

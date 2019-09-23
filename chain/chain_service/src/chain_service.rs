@@ -42,7 +42,7 @@ use core::borrow::{Borrow, BorrowMut};
 use proto_conv::{FromProto, IntoProto};
 use types::contract_event::ContractEvent;
 use types::event::EventKey;
-use types::transaction::{TransactionOutput, TransactionStatus, Version};
+use types::transaction::{TransactionOutput, TransactionStatus, Version, SignedTransactionWithProof};
 use types::vm_error::{VMStatus, StatusCode};
 use super::event_storage::{gene_event_hash, EventStorage};
 use atomic_refcell::AtomicRefCell;
@@ -58,6 +58,7 @@ use libradb::data_storage::{DataStorage, ReadDataStorage, WriteData, ReadData};
 use state_cache::data_view::{StateDataView, AccountReader};
 use struct_cache::StructCache;
 use std::sync::mpsc;
+use types::proof::SignedTransactionProof;
 
 lazy_static! {
     static ref VM_CONFIG:VMConfig = VMConfig::onchain();
@@ -322,18 +323,25 @@ impl ChainService {
         self.task_exe.clone().spawn(send_future.boxed().unit_error().compat());
     }
 
-    pub fn get_transaction_by_ver(&self, ver: Version) -> Result<SignedTransaction> {
+    pub fn get_transaction_by_ver(&self, ver: Version) -> Result<SignedTransactionWithProof> {
         let read_db = self.read_db.as_ref().borrow();
         let mut proof = read_db.get_transactions(ver, 1, ver, false)?;
-        Ok(proof.transaction_and_infos.pop().expect("tx is none.").0)
+        let tx=proof.transaction_and_infos.pop().expect("tx is none.");
+        let first_proof=proof.proof_of_first_transaction;
+        Ok(SignedTransactionWithProof{
+            version: ver,
+            signed_transaction:tx.0,
+            events:None,
+            proof:SignedTransactionProof::new(first_proof.expect("should have"),tx.1),
+        })
     }
 
-    pub fn get_transaction_by_seq_num_inner(&self, account_address: AccountAddress, seq_num: u64) -> Result<SignedTransaction> {
+    pub fn get_transaction_by_seq_num_inner(&self, account_address: AccountAddress, seq_num: u64) -> Result<Option<SignedTransactionWithProof>> {
         let read_db = self.read_db.as_ref().borrow();
         let req = RequestItem::GetAccountTransactionBySequenceNumber { account: account_address, sequence_number: seq_num, fetch_events: false };
         let mut resp = read_db.update_to_latest_ledger(0, vec![req])?;
         let proof = resp.get(0).expect("res is none.").clone().into_get_account_txn_by_seq_num_response()?.0.expect("tx is none.");
-        Ok(proof.signed_transaction)
+        Ok(Some(proof))
     }
 }
 
@@ -484,10 +492,10 @@ impl Chain for ChainService {
                                   req: GetTransactionBySeqNumRequest,
                                   sink: ::grpcio::UnarySink<GetTransactionResponse>) {
         let mut resp = GetTransactionResponse::new();
-        AccountAddress::try_from(req.get_address().to_vec()).and_then(|address| -> Result<SignedTransaction> {
+        AccountAddress::try_from(req.get_address().to_vec()).and_then(|address| -> Result<Option<SignedTransactionWithProof>> {
             self.get_transaction_by_seq_num_inner(address, req.get_seq_num())
         }).and_then(|signed_tx| {
-            resp.set_signed_tx(signed_tx.into_proto());
+            resp.set_signed_tx(signed_tx.expect("should have tx").into_proto());
             Ok(())
         });
         provide_grpc_response(Ok(resp), ctx, sink);

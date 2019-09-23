@@ -15,6 +15,7 @@ use std::sync::Arc;
 use core::borrow::{BorrowMut};
 use std::sync::mpsc;
 use types::proof::SparseMerkleProof;
+use types::transaction::SignedTransactionWithProof;
 
 #[derive(Clone)]
 pub struct MockChainClient {
@@ -75,7 +76,7 @@ impl ChainClient for MockChainClient {
         Ok(WatchStream::new(stream))
     }
 
-    fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<SignedTransaction> {
+    fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<Option<SignedTransactionWithProof>> {
         let chain_service = self.chain_service.as_ref().borrow();
         chain_service.get_transaction_by_seq_num_inner(address.clone(), seq_num)
     }

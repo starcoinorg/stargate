@@ -1,7 +1,7 @@
 use failure::prelude::*;
 use crate::ChainClient;
 use types::{account_config::association_address, account_address::AccountAddress};
-use types::transaction::{Version, SignedTransaction, RawTransaction};
+use types::transaction::{Version, SignedTransaction, RawTransaction, SignedTransactionWithProof};
 use types::proof::SparseMerkleProof;
 use star_types::proto::chain::WatchData;
 use admission_control_proto::proto::admission_control_grpc::AdmissionControlClient;
@@ -116,11 +116,11 @@ impl ChainClient for StarClient {
         unimplemented!()
     }
 
-    fn get_transaction_by_seq_num(&self, account_address: &AccountAddress, seq_num: u64) -> Result<SignedTransaction> {
+    fn get_transaction_by_seq_num(&self, account_address: &AccountAddress, seq_num: u64) -> Result<Option<SignedTransactionWithProof>> {
         let req = RequestItem::GetAccountTransactionBySequenceNumber { account: account_address.clone(), sequence_number: seq_num, fetch_events: false };
         let mut resp = parse_response(self.do_request(&build_request(req, None)));
-        let proof = resp.get_get_account_transaction_by_sequence_number_response().get_signed_transaction_with_proof();
-        Ok(SignedTransaction::from_proto(proof.get_signed_transaction().clone()).expect("SignedTransaction parse from proto err."))
+        let proof = resp.take_get_account_transaction_by_sequence_number_response().take_signed_transaction_with_proof();
+        Ok(Some(SignedTransactionWithProof::from_proto(proof).expect("SignedTransaction parse from proto err.")))
     }
 }
 

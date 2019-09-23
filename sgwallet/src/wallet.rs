@@ -5,11 +5,6 @@ use atomic_refcell::AtomicRefCell;
 use futures::{sync::mpsc::channel};
 use tokio::{runtime::TaskExecutor};
 
-use {
-    futures_03::{
-        compat::Future01CompatExt,
-    },
-};
 use canonical_serialization::SimpleSerializer;
 use chain_client::{ChainClient, RpcChainClient, StarClient};
 use config::config::VMConfig;
@@ -40,6 +35,17 @@ use types::transaction_helpers::{ChannelPayloadSigner, TransactionSigner};
 use types::vm_error::*;
 use types::write_set::{WriteOp, WriteSet};
 use vm_runtime::{MoveVM, VMExecutor};
+
+use std::time::{Duration, Instant};
+use tokio::timer::{Interval,Delay};
+
+use {
+    futures_03::{
+        compat::{Future01CompatExt,Stream01CompatExt},
+        future::{FutureExt, TryFutureExt},
+        stream::{StreamExt},
+    },
+};
 
 use crate::scripts::*;
 use crate::transaction_processor::{start_processor, SubmitTransactionFuture, TransactionProcessor};
@@ -480,6 +486,28 @@ impl<C> Wallet<C>
             )),
         }
     }
+
+    pub async fn watch_transaction_loop(&self, seq:u64) -> Result<SignedTransactionWithProof> {
+        loop {
+            let timeout_time = Instant::now() + Duration::from_secs(1);
+            if let Err(e) = Delay::new(timeout_time).compat().await {
+                let result=self.client.get_transaction_by_seq_num(&self.account_address,seq);
+                match result {
+                    Ok(None) =>{
+                        continue;
+                    },
+                    Ok(Some(t))=>{
+                        return Ok(t);
+                    },
+                    Err(e) => {
+                        return Err(e);
+                    }
+                    _ => {}
+                }
+            };
+        }
+    }
+
 }
 
 impl<C> TransactionSigner for Wallet<C>

@@ -5,7 +5,7 @@ use core::borrow::Borrow;
 use std::str::FromStr;
 use crypto::HashValue;
 use star_types::{watch_tx_data::WatchTxData, proto::{chain::WatchData, star_account::AccountState, chain::{GetTransactionByVersionRequest, GetTransactionBySeqNumRequest, WatchEventRequest, EventKey as EventKeyProto}}};
-use types::transaction::Version;
+use types::transaction::{Version, SignedTransactionWithProof};
 use star_types::{proto::{chain_grpc, chain::{FaucetRequest, LatestRootRequest, GetAccountStateWithProofRequest, SubmitTransactionRequest, WatchTransactionRequest}}, resource::Resource};
 use grpcio::{EnvBuilder, ChannelBuilder};
 use std::{sync::Arc, thread};
@@ -30,7 +30,7 @@ pub trait ChainClient {
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()>;
     fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<()>;
     fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchStream<Self::WatchResp>>;
-    fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<SignedTransaction>;
+    fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<Option<SignedTransactionWithProof>>;
 }
 
 #[derive(Clone)]
@@ -104,13 +104,14 @@ impl ChainClient for RpcChainClient {
         //thread::spawn(print_data);
     }
 
-    fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<SignedTransaction> {
+    fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<Option<SignedTransactionWithProof>> {
         let mut req = GetTransactionBySeqNumRequest::new();
         req.set_address(address.to_vec());
         req.set_seq_num(seq_num);
         let resp = self.client.get_transaction_by_seq_num(&req);
         match resp {
-            Ok(tx) => { Ok(SignedTransaction::from_proto(tx.get_signed_tx().clone()).unwrap()) }
+            //Ok(tx) => { Ok(SignedTransaction::from_proto(tx.get_signed_tx().clone()).unwrap()) }
+            Ok(tx) => { Ok(None) }
             Err(err) => { bail_err!(err) }
         }
     }
