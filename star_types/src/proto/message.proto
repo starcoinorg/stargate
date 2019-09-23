@@ -24,7 +24,7 @@ message ChannelTransactionRequestMessage {
 }
 
 message ChannelTransactionResponseMessage {
-    star_types.ChannelTransactionResponse txn_reseponse = 1;
+    star_types.ChannelTransactionResponse txn_response = 1;
 }
 
 message OffChainPayMessage {

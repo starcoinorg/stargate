@@ -19,11 +19,11 @@ use star_types::message::{SgError, ErrorMessage};
 use futures::future::err;
 
 pub struct MessageFuture {
-    rx: Receiver<Result<ChannelTransactionRequest>>,
+    rx: Receiver<Result<()>>,
 }
 
 impl MessageFuture {
-    pub fn new(rx: Receiver<Result<ChannelTransactionRequest>>) -> Self {
+    pub fn new(rx: Receiver<Result<()>>) -> Self {
         Self {
             rx,
         }
@@ -31,10 +31,10 @@ impl MessageFuture {
 }
 
 impl Future for MessageFuture {
-    type Item = ChannelTransactionRequest;
+    type Item = ();
     type Error = SgError;
 
-    fn poll(&mut self) -> Poll<ChannelTransactionRequest, Self::Error> {
+    fn poll(&mut self) -> Poll<(), Self::Error> {
         while let Async::Ready(v) = self.rx.poll().unwrap() {
             match v {
                 Some(v) => {
@@ -49,7 +49,7 @@ impl Future for MessageFuture {
                 }
                 None => {
                     warn!("no data,return timeout");
-                    return Err(Self::Error::new(2,"future time out".to_string()));
+                    return Err(Self::Error::new(star_types::sg_error::SgErrorCode::TIMEOUT,"future time out".to_string()));
                 }
             }
         };
@@ -59,7 +59,7 @@ impl Future for MessageFuture {
 
 #[derive(Clone)]
 pub struct MessageProcessor {
-    tx_map: Arc<Mutex<HashMap<HashValue, Sender<Result<ChannelTransactionRequest>>>>>,
+    tx_map: Arc<Mutex<HashMap<HashValue, Sender<Result<()>>>>>,
 }
 
 impl MessageProcessor {
@@ -69,17 +69,16 @@ impl MessageProcessor {
         }
     }
 
-    pub fn add_future(&self, hash: HashValue, mut sender: Sender<Result<ChannelTransactionRequest>>) {
+    pub fn add_future(&self, hash: HashValue, mut sender: Sender<Result<()>>) {
         self.tx_map.lock().unwrap().entry(hash).or_insert(sender.clone());
     }
 
-    pub fn send_response(&mut self, mut msg: ChannelTransactionRequest) -> Result<()> {
-        let hash = msg.txn().raw_txn().hash();
+    pub fn send_response(&mut self, mut hash: HashValue) -> Result<()> {
 
         let mut tx_map= self.tx_map.lock().unwrap();
         match tx_map.get(&hash) {
             Some(tx) => {
-                match tx.clone().send(Ok(msg)).wait() {
+                match tx.clone().send(Ok(())).wait() {
                     Ok(_new_tx) => {
                         info!("send message succ");
                         tx_map.remove(&hash);
@@ -123,6 +122,6 @@ fn error_translate(e:Error)->SgError{
         err.clone()
     } else {
         info!("this is a common error");
-        SgError::new(0,format!("{:?}", e))
+        SgError::new(star_types::sg_error::SgErrorCode::UNKNOWN,format!("{:?}", e))
     }
 }

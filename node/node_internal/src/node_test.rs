@@ -127,7 +127,7 @@ fn error_test()->Result<()>{
 }
 
 fn new_error()->Result<()>{
-    Err(SgError::new(0,"111".to_string()).into())
+    Err(SgError::new(star_types::sg_error::SgErrorCode::UNKNOWN,"111".to_string()).into())
 }
 
 fn create_negotiate_message(sender_addr:AccountAddress,receiver_addr:AccountAddress,private_key:Ed25519PrivateKey)->OpenChannelNodeNegotiateMessage{

@@ -41,7 +41,7 @@ pub struct Node<C: ChainClient + Send + Sync + 'static> {
     executor: TaskExecutor,
     node_inner: Arc<Mutex<NodeInner<C>>>,
     event_sender: UnboundedSender<Event>,
-    default_max_deposit:u64,
+    default_max_deposit: u64,
 }
 
 struct NodeInner<C: ChainClient + Send + Sync + 'static> {
@@ -59,7 +59,7 @@ struct NodeInner<C: ChainClient + Send + Sync + 'static> {
 
 impl<C: ChainClient + Send + Sync + 'static> Node<C> {
     pub fn new(executor: TaskExecutor, wallet: Wallet<C>, keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
-               mut network_service: NetworkService, sender: UnboundedSender<NetworkMessage>, receiver: UnboundedReceiver<NetworkMessage>,net_close_tx: oneshot::Sender<()>,
+               mut network_service: NetworkService, sender: UnboundedSender<NetworkMessage>, receiver: UnboundedReceiver<NetworkMessage>, net_close_tx: oneshot::Sender<()>,
     ) -> Self {
         let executor_clone = executor.clone();
         let (event_sender, event_receiver) = futures_01::sync::mpsc::unbounded();
@@ -80,7 +80,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             executor,
             node_inner: Arc::new(Mutex::new(node_inner)),
             event_sender,
-            default_max_deposit:10000000,
+            default_max_deposit: 10000000,
         }
     }
 
@@ -90,21 +90,21 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
 
     pub fn open_channel_oneshot(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> futures::channel::oneshot::Receiver<Result<OpenChannelResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
-        let f:MessageFuture;
-        match self.open_channel_async(receiver, sender_amount, receiver_amount){
-            Ok(msg_future)=>{f=msg_future;},
-            Err(e)=> {
+        let f: MessageFuture;
+        match self.open_channel_async(receiver, sender_amount, receiver_amount) {
+            Ok(msg_future) => { f = msg_future; }
+            Err(e) => {
                 resp_sender
                     .send(Err(failure::Error::from(e)))
                     .expect("Failed to send error message.");
                 return resp_receiver;
-            },
+            }
         };
 
         let f_to_channel = async {
-            match f.compat().await{
+            match f.compat().await {
                 Ok(sender) => resp_sender
-                    .send(Ok(OpenChannelResponse{}))
+                    .send(Ok(OpenChannelResponse {}))
                     .expect("Did open channel processor thread panic?"),
                 Err(e) => resp_sender
                     .send(Err(failure::Error::from(e)))
@@ -130,26 +130,26 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         let channel_txn = self.node_inner.clone().lock().unwrap().wallet.open(receiver, sender_amount, receiver_amount)?;
         info!("get open channel txn");
         let open_channel_message = ChannelTransactionRequestMessage::new(channel_txn);
-        let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionMessage);
+        let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionRequestMessage);
         f
     }
 
-    pub fn deposit_oneshot(&self,asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> futures::channel::oneshot::Receiver<Result<DepositResponse>> {
+    pub fn deposit_oneshot(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> futures::channel::oneshot::Receiver<Result<DepositResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
-        let f:MessageFuture;
-        match self.deposit_async(asset_tag,receiver, sender_amount, receiver_amount){
-            Ok(msg_future)=>{f=msg_future;},
-            Err(e)=> {
+        let f: MessageFuture;
+        match self.deposit_async(asset_tag, receiver, sender_amount, receiver_amount) {
+            Ok(msg_future) => { f = msg_future; }
+            Err(e) => {
                 resp_sender
-                .send(Err(failure::Error::from(e)))
-                .expect("Failed to send error message.");
+                    .send(Err(failure::Error::from(e)))
+                    .expect("Failed to send error message.");
                 return resp_receiver;
-            },
+            }
         };
         let f_to_channel = async {
-            match f.compat().await{
+            match f.compat().await {
                 Ok(sender) => resp_sender
-                    .send(Ok(DepositResponse{}))
+                    .send(Ok(DepositResponse {}))
                     .expect("Did open channel processor thread panic?"),
                 Err(e) => resp_sender
                     .send(Err(failure::Error::from(e)))
@@ -173,27 +173,27 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         }
         let channel_txn = self.node_inner.clone().lock().unwrap().wallet.deposit_by_tag(asset_tag, receiver, sender_amount, receiver_amount)?;
         let open_channel_message = ChannelTransactionRequestMessage::new(channel_txn);
-        let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionMessage);
+        let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionRequestMessage);
         f
     }
 
-    pub fn withdraw_oneshot(&self,asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> futures::channel::oneshot::Receiver<Result<WithdrawResponse>> {
+    pub fn withdraw_oneshot(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> futures::channel::oneshot::Receiver<Result<WithdrawResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
-        let f:MessageFuture;
-        match self.withdraw_async(asset_tag,receiver, sender_amount, receiver_amount){
-            Ok(msg_future)=>{f=msg_future;},
-            Err(e)=> {
+        let f: MessageFuture;
+        match self.withdraw_async(asset_tag, receiver, sender_amount, receiver_amount) {
+            Ok(msg_future) => { f = msg_future; }
+            Err(e) => {
                 resp_sender
                     .send(Err(failure::Error::from(e)))
                     .expect("Failed to send error message.");
                 return resp_receiver;
-            },
+            }
         };
 
         let f_to_channel = async {
-            match f.compat().await{
+            match f.compat().await {
                 Ok(sender) => resp_sender
-                    .send(Ok(WithdrawResponse{}))
+                    .send(Ok(WithdrawResponse {}))
                     .expect("Did open channel processor thread panic?"),
                 Err(e) => resp_sender
                     .send(Err(failure::Error::from(e)))
@@ -216,28 +216,28 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         info!("start to withdraw with {:?} {} {}", receiver, sender_amount, receiver_amount);
         let channel_txn = self.node_inner.clone().lock().unwrap().wallet.withdraw_by_tag(asset_tag, receiver, sender_amount, receiver_amount)?;
         let open_channel_message = ChannelTransactionRequestMessage::new(channel_txn);
-        let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionMessage);
+        let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionRequestMessage);
         f
     }
 
-    pub fn off_chain_pay_oneshot(&self,asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64) -> futures::channel::oneshot::Receiver<Result<PayResponse>> {
+    pub fn off_chain_pay_oneshot(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64) -> futures::channel::oneshot::Receiver<Result<PayResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
 
-        let f:MessageFuture;
-        match self.off_chain_pay_async(asset_tag,receiver, sender_amount){
-            Ok(msg_future)=>{f=msg_future;},
-            Err(e)=> {
+        let f: MessageFuture;
+        match self.off_chain_pay_async(asset_tag, receiver, sender_amount) {
+            Ok(msg_future) => { f = msg_future; }
+            Err(e) => {
                 resp_sender
                     .send(Err(failure::Error::from(e)))
                     .expect("Failed to send error message.");
                 return resp_receiver;
-            },
+            }
         };
 
         let f_to_channel = async {
-            match f.compat().await{
+            match f.compat().await {
                 Ok(sender) => resp_sender
-                    .send(Ok(PayResponse{}))
+                    .send(Ok(PayResponse {}))
                     .expect("Did open channel processor thread panic?"),
                 Err(e) => resp_sender
                     .send(Err(failure::Error::from(e)))
@@ -290,19 +290,25 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             futures::select! {
                 message = receiver.select_next_some() => {
                     info!("receive message ");
-                    if let Message::Payload(payload) = message.unwrap().msg {
-                        let data = bytes::Bytes::from(payload.data);
+                    match message {
+                    Ok(msg)=>{
+                    let peer_id = msg.peer_id;
+                    let data = bytes::Bytes::from(payload.data);
 
                     let msg_type=parse_message_type(&data);
                     debug!("message type is {:?}",msg_type);
                     match msg_type {
                         MessageType::OpenChannelNodeNegotiateMessage => node_inner.clone().lock().unwrap().handle_open_channel_negotiate(data[2..].to_vec()),
                         MessageType::ChannelTransactionRequestMessage => node_inner.clone().lock().unwrap().handle_receiver_channel(data[2..].to_vec()),
-                        MessageType::ChannelTransactionResponseMessage => node_inner.clone().lock().unwrap().handle_sender_channel(data[2..].to_vec()),
+                        MessageType::ChannelTransactionResponseMessage => node_inner.clone().lock().unwrap().handle_sender_channel(data[2..].to_vec(),peer_id),
                         MessageType::OffChainPayMessage => node_inner.clone().lock().unwrap().handle_off_chain_pay(data[2..].to_vec()),
                         MessageType::ErrorMessage => node_inner.clone().lock().unwrap().handle_error_message(data[2..].to_vec()),
                         _=>warn!("message type not found {:?}",msg_type),
                     };
+                    },
+                    Err(e)=>{
+
+                    }
                     }
                 },
                 _ = event_receiver.select_next_some() => {
@@ -319,7 +325,6 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
 }
 
 impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
-
     fn handle_open_channel_negotiate(&self, data: Vec<u8>) {
         debug!("handle_open_channel_negotiate");
         let negotiate_message = OpenChannelNodeNegotiateMessage::from_proto_bytes(&data).unwrap();
@@ -343,12 +348,12 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         debug!("receive channel");
         let open_channel_message: ChannelTransactionRequestMessage;
 
-        match ChannelTransactionRequestMessage::from_proto_bytes(&data){
-            Ok(msg)  => {open_channel_message=msg;},
+        match ChannelTransactionRequestMessage::from_proto_bytes(&data) {
+            Ok(msg) => { open_channel_message = msg; }
             Err(e) => {
                 warn!("get wrong message");
                 return;
-            },
+            }
         }
         let sender_addr = open_channel_message.txn_request.txn().clone().sender();
         if (&open_channel_message.txn_request.receiver() == &self.wallet.get_address()) {
@@ -359,73 +364,68 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             let hash_value = open_channel_message.txn_request.txn().hash();
             let f = async move {
                 let receiver_open_txn: ChannelTransactionResponse;
-                match wallet.verify_txn(&txn){
-                    Ok(tx)  => {receiver_open_txn=tx;},
+                match wallet.verify_txn(&txn) {
+                    Ok(tx) => { receiver_open_txn = tx; }
                     Err(e) => {
-                        sender.unbounded_send(NetworkMessage{ peer_id: sender_addr, msg: Message::new_message(error_message(e,hash_value).to_vec())});
+                        sender.unbounded_send(NetworkMessage { peer_id: sender_addr, msg: Message::new_message(error_message(e, hash_value).to_vec()) });
                         return;
-                    },
+                    }
                 }
                 let channel_txn_msg = ChannelTransactionResponseMessage::new(receiver_open_txn);
                 let msg = add_message_type(channel_txn_msg.into_proto_bytes().unwrap(), MessageType::ChannelTransactionResponseMessage);
                 debug!("send msg to {:?}", sender_addr);
-                sender.unbounded_send(NetworkMessage{ peer_id: sender_addr, msg: Message::new_message(msg.to_vec())});
-                match wallet.apply_txn(sender_addr,&receiver_open_txn).await {
-                    Ok(_)  => {},
+                sender.unbounded_send(NetworkMessage { peer_id: sender_addr, msg: Message::new_message(msg.to_vec()) });
+                match wallet.apply_txn(sender_addr, &receiver_open_txn).await {
+                    Ok(_) => {}
                     Err(e) => {
                         warn!("apply tx fail");
-                        sender.unbounded_send(NetworkMessage{ peer_id: sender_addr, msg: Message::new_message(error_message(e,hash_value).to_vec())});
+                        sender.unbounded_send(NetworkMessage { peer_id: sender_addr, msg: Message::new_message(error_message(e, hash_value).to_vec()) });
                         return;
-                    },
+                    }
                 };
             };
             self.executor.spawn(f.boxed().unit_error().compat());
         }
     }
 
-    fn handle_sender_channel(&mut self, data: Vec<u8>){
+    fn handle_sender_channel(&mut self, data: Vec<u8>, receiver_addr: AccountAddress) {
         debug!("receive channel");
         let open_channel_message: ChannelTransactionResponseMessage;
 
-        match ChannelTransactionResponseMessage::from_proto_bytes(&data){
-            Ok(msg)  => {open_channel_message=msg;},
+        match ChannelTransactionResponseMessage::from_proto_bytes(&data) {
+            Ok(msg) => { open_channel_message = msg; }
             Err(e) => {
                 warn!("get wrong message");
                 return;
-            },
+            }
         }
 
-        if (&open_channel_message.txn_request.txn().sender() == &self.wallet.get_address()) {
-            let wallet = self.wallet.clone();
-            let txn = open_channel_message.txn_request;
-            let txn_clone = txn.clone();
-            let receiver=open_channel_message.txn_request.receiver();
-            let mut message_processor = self.message_processor.clone();
-            let f = async move {
-                match wallet.apply_txn(receiver,&txn).await{
-                    Ok(_)  => {},
-                    Err(e) => {
-                        warn!("apply tx fail");
-                        return;
-                    },
-                };
-                message_processor.send_response(txn_clone);
+        let wallet = self.wallet.clone();
+        let txn_response = open_channel_message.txn_response;
+        let mut message_processor = self.message_processor.clone();
+        let f = async move {
+            match wallet.apply_txn(receiver_addr, &txn_response).await {
+                Ok(_) => {}
+                Err(e) => {
+                    warn!("apply tx fail");
+                    return;
+                }
             };
-            self.executor.spawn(f.boxed().unit_error().compat());
-        }
-
+            message_processor.send_response(txn_clone);
+        };
+        self.executor.spawn(f.boxed().unit_error().compat());
     }
 
     fn handle_off_chain_pay(&mut self, data: Vec<u8>) {
         debug!("off chain pay");
-        let off_chain_pay_message:OffChainPayMessage ;
+        let off_chain_pay_message: OffChainPayMessage;
 
-        match OffChainPayMessage::from_proto_bytes(&data){
-            Ok(msg)  => {off_chain_pay_message=msg;},
+        match OffChainPayMessage::from_proto_bytes(&data) {
+            Ok(msg) => { off_chain_pay_message = msg; }
             Err(e) => {
                 warn!("get wrong message");
                 return;
-            },
+            }
         }
         let txn = off_chain_pay_message.transaction.clone();
         let txn_clone = txn.clone();
@@ -440,25 +440,25 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             let hash_value = off_chain_pay_message.transaction.txn().hash();
             let f = async move {
                 let receiver_open_txn: ChannelTransactionResponse;
-                match wallet.verify_txn(&txn){
-                    Ok(tx)  => {receiver_open_txn=tx;},
+                match wallet.verify_txn(&txn) {
+                    Ok(tx) => { receiver_open_txn = tx; }
                     Err(e) => {
-                        sender.unbounded_send(NetworkMessage{ peer_id: sender_addr, msg: Message::new_message(error_message(e,hash_value).to_vec())});
+                        sender.unbounded_send(NetworkMessage { peer_id: sender_addr, msg: Message::new_message(error_message(e, hash_value).to_vec()) });
                         return;
-                    },
+                    }
                 }
-                match wallet.apply_txn(sender_addr,&receiver_open_txn).await {
-                    Ok(_)  => {},
-                    Err(e) => {
-                        warn!("apply tx fail");
-                        sender.unbounded_send(NetworkMessage{ peer_id: sender_addr, msg: Message::new_message(error_message(e,hash_value).to_vec())});
-                        return;
-                    },
-                };
-                let channel_txn_msg = OffChainPayMessage::new(receiver_open_txn);
-                let msg = add_message_type(channel_txn_msg.into_proto_bytes().unwrap(), MessageType::OffChainPayMessage);
-                info!("send msg to {:?}", sender_addr);
-                sender.unbounded_send(NetworkMessage{ peer_id: sender_addr, msg: Message::new_message(msg.to_vec())});
+//                match wallet.apply_txn(sender_addr, &receiver_open_txn).await {
+//                    Ok(_) => {}
+//                    Err(e) => {
+//                        warn!("apply tx fail");
+//                        sender.unbounded_send(NetworkMessage { peer_id: sender_addr, msg: Message::new_message(error_message(e, hash_value).to_vec()) });
+//                        return;
+//                    }
+//                };
+//                let channel_txn_msg = OffChainPayMessage::new(receiver_open_txn);
+//                let msg = add_message_type(channel_txn_msg.into_proto_bytes().unwrap(), MessageType::OffChainPayMessage);
+//                info!("send msg to {:?}", sender_addr);
+//                sender.unbounded_send(NetworkMessage { peer_id: sender_addr, msg: Message::new_message(msg.to_vec()) });
             };
             self.executor.spawn(f.boxed().unit_error().compat());
         }
@@ -467,34 +467,34 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             let wallet = self.wallet.clone();
             let txn = txn_clone.clone();
             let mut message_processor = self.message_processor.clone();
-            let receiver=txn.receiver();
+            let receiver = txn.receiver();
             let f = async move {
-                match wallet.apply_txn(receiver,&txn).await{
-                    Ok(_)  => {},
-                    Err(e) => {
-                        warn!("apply tx fail");
-                        return;
-                    },
-                };
-                message_processor.send_response(txn_clone);
+//                match wallet.apply_txn(receiver, &txn).await {
+//                    Ok(_) => {}
+//                    Err(e) => {
+//                        warn!("apply tx fail");
+//                        return;
+//                    }
+//                };
+//                message_processor.send_response(txn_clone);
             };
             self.executor.spawn(f.boxed().unit_error().compat());
             info!("tx succ");
         }
     }
 
-    fn handle_error_message(&mut self, data: Vec<u8>){
+    fn handle_error_message(&mut self, data: Vec<u8>) {
         debug!("off error message");
-        let err_message:ErrorMessage ;
+        let err_message: ErrorMessage;
 
-        match ErrorMessage::from_proto_bytes(&data){
-            Ok(msg)  => {
+        match ErrorMessage::from_proto_bytes(&data) {
+            Ok(msg) => {
                 self.message_processor.future_error(msg);
-            },
+            }
             Err(e) => {
                 warn!("get wrong message");
                 return;
-            },
+            }
         }
     }
 
@@ -502,21 +502,21 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         let addr = negotiate_message.raw_negotiate_message.receiver_addr;
         let msg = negotiate_message.into_proto_bytes()?;
         let msg = add_message_type(msg, MessageType::OpenChannelNodeNegotiateMessage);
-        self.sender.unbounded_send(NetworkMessage{ peer_id: addr, msg: Message::new_message(msg.to_vec())});
+        self.sender.unbounded_send(NetworkMessage { peer_id: addr, msg: Message::new_message(msg.to_vec()) });
         Ok(())
     }
 
     fn channel_txn_onchain(&mut self, open_channel_message: ChannelTransactionRequestMessage, msg_type: MessageType) -> Result<MessageFuture> {
         let sender = self.sender.clone();
 
-        let hash_value = open_channel_message.txn_request.txn().raw_txn().hash();
+        let hash_value = open_channel_message.txn_request.txn().hash();
         let addr = open_channel_message.txn_request.receiver().clone();
         let msg = add_message_type(open_channel_message.into_proto_bytes().unwrap(), msg_type);
-        self.sender.unbounded_send(NetworkMessage{ peer_id: addr, msg: Message::new_message(msg.to_vec())});
+        self.sender.unbounded_send(NetworkMessage { peer_id: addr, msg: Message::new_message(msg.to_vec()) });
         let (tx, rx) = channel(1);
         let message_future = MessageFuture::new(rx);
         self.message_processor.add_future(hash_value.clone(), tx);
-        self.future_timeout(hash_value,self.default_future_timeout);
+        self.future_timeout(hash_value, self.default_future_timeout);
 
         Ok(message_future)
     }
@@ -524,26 +524,26 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
     fn off_chain_pay(&mut self, coin_resource_tag: types::language_storage::StructTag, receiver_address: AccountAddress, amount: u64) -> Result<MessageFuture> {
         let off_chain_pay_tx = self.wallet.transfer_by_tag(coin_resource_tag, receiver_address, amount)?;
         let sender = self.sender.clone();
-        let hash_value = off_chain_pay_tx.txn().raw_txn().hash();
+        let hash_value = off_chain_pay_tx.txn().hash();
         let off_chain_pay_msg = OffChainPayMessage {
             transaction: off_chain_pay_tx,
         };
         let msg = add_message_type(off_chain_pay_msg.into_proto_bytes().unwrap(), MessageType::OffChainPayMessage);
 
-        self.sender.unbounded_send(NetworkMessage{ peer_id: receiver_address, msg: Message::new_message(msg.to_vec())});
+        self.sender.unbounded_send(NetworkMessage { peer_id: receiver_address, msg: Message::new_message(msg.to_vec()) });
         let (tx, rx) = channel(1);
         let message_future = MessageFuture::new(rx);
         self.message_processor.add_future(hash_value.clone(), tx.clone());
-        self.future_timeout(hash_value,self.default_future_timeout);
+        self.future_timeout(hash_value, self.default_future_timeout);
 
         Ok(message_future)
     }
 
-    fn future_timeout(&self,hash:HashValue,timeout:u64){
-        if(timeout==0){
-            return
+    fn future_timeout(&self, hash: HashValue, timeout: u64) {
+        if (timeout == 0) {
+            return;
         }
-        let processor=self.message_processor.clone();
+        let processor = self.message_processor.clone();
         let task = Delay::new(Instant::now() + Duration::from_millis(timeout))
             .and_then(move |_| {
                 processor.remove_future(hash);
@@ -568,14 +568,14 @@ fn add_message_type(data: Vec<u8>, messaget_type: MessageType) -> bytes::Bytes {
     bytes::Bytes::from(result_vec)
 }
 
-fn error_message(e:Error,hash_value:HashValue)->bytes::Bytes{
-    let error_message :ErrorMessage;
+fn error_message(e: Error, hash_value: HashValue) -> bytes::Bytes {
+    let error_message: ErrorMessage;
     if let Some(err) = e.downcast_ref::<SgError>() {
         info!("this is a sg error");
-        error_message=ErrorMessage::new(hash_value,err.clone());
+        error_message = ErrorMessage::new(hash_value, err.clone());
     } else {
         info!("this is a common error");
-        error_message=ErrorMessage::new(hash_value,SgError::new(0,format!("{:?}", e)));
+        error_message = ErrorMessage::new(hash_value, SgError::new(star_types::sg_error::SgErrorCode::UNKNOWN, format!("{:?}", e)));
     }
     let msg = add_message_type(error_message.into_proto_bytes().unwrap(), MessageType::ErrorMessage);
     msg
