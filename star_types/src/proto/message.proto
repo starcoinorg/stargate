@@ -19,8 +19,12 @@ message OpenChannelNodeNegotiateMessage {
     ReceiveSignMessage receiver_sign = 3 ;
 }
 
-message ChannelTransactionMessage {
-    star_types.ChannelTransactionRequest transaction = 1;
+message ChannelTransactionRequestMessage {
+    star_types.ChannelTransactionRequest txn_request = 1;
+}
+
+message ChannelTransactionResponseMessage {
+    star_types.ChannelTransactionResponse txn_reseponse = 1;
 }
 
 message OffChainPayMessage {

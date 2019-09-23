@@ -3,7 +3,7 @@ use failure::prelude::*;
 #[cfg(any(test, feature = "testing"))]
 use proptest_derive::Arbitrary;
 use proto_conv::{FromProto, IntoProto,FromProtoBytes};
-use crate::channel_transaction::ChannelTransactionRequest;
+use crate::channel_transaction::{ChannelTransactionRequest, ChannelTransactionResponse};
 use crypto::ed25519::Ed25519Signature;
 use std::{convert::TryFrom, fmt};
 use crate::proto::message::{ReceiveSignMessage, ErrorCode};
@@ -129,17 +129,33 @@ impl OffChainPayMessage {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq,FromProto, IntoProto)]
-#[ProtoType(crate::proto::message::ChannelTransactionMessage)]
-pub struct ChannelTransactionMessage {
-    pub transaction: ChannelTransactionRequest,
+#[ProtoType(crate::proto::message::ChannelTransactionRequestMessage)]
+pub struct ChannelTransactionRequestMessage {
+    pub txn_request: ChannelTransactionRequest,
 }
 
-impl ChannelTransactionMessage {
+impl ChannelTransactionRequestMessage {
     pub fn new(
-        transaction: ChannelTransactionRequest,
+        txn_request: ChannelTransactionRequest,
     ) -> Self {
-        ChannelTransactionMessage{
-            transaction,
+        Self{
+            txn_request,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq,FromProto, IntoProto)]
+#[ProtoType(crate::proto::message::ChannelTransactionResponseMessage)]
+pub struct ChannelTransactionResponseMessage {
+    pub txn_response: ChannelTransactionResponse,
+}
+
+impl ChannelTransactionResponseMessage {
+    pub fn new(
+        txn_response: ChannelTransactionResponse
+    ) -> Self {
+        Self{
+            txn_response,
         }
     }
 }
@@ -257,7 +273,8 @@ impl IntoProto for ErrorMessage {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MessageType {
     OpenChannelNodeNegotiateMessage,
-    ChannelTransactionMessage,
+    ChannelTransactionRequestMessage,
+    ChannelTransactionResponseMessage,
     OffChainPayMessage,
     ErrorMessage,
 }
@@ -267,18 +284,20 @@ impl MessageType {
     pub fn get_type(self)->u16{
         match self {
             MessageType::OpenChannelNodeNegotiateMessage => 1,
-            MessageType::ChannelTransactionMessage => 2,
-            MessageType::OffChainPayMessage => 3,
-            MessageType::ErrorMessage => 4,
+            MessageType::ChannelTransactionRequestMessage => 2,
+            MessageType::ChannelTransactionResponseMessage => 3,
+            MessageType::OffChainPayMessage => 4,
+            MessageType::ErrorMessage => 5,
         }
     }
 
     pub fn from_type(msg_type:u16)->Result<Self>{
         match msg_type {
             1 => Ok(MessageType::OpenChannelNodeNegotiateMessage),
-            2 => Ok(MessageType::ChannelTransactionMessage),
-            3 => Ok(MessageType::OffChainPayMessage),
-            4 => Ok(MessageType::ErrorMessage),
+            2 => Ok(MessageType::ChannelTransactionRequestMessage),
+            3 => Ok(MessageType::ChannelTransactionResponseMessage),
+            4 => Ok(MessageType::OffChainPayMessage),
+            5 => Ok(MessageType::ErrorMessage),
             _ => bail!("no such type"),
         }
     }
