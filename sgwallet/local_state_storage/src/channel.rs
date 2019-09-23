@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crypto::ed25519::Ed25519Signature;
 use failure::prelude::*;
-use star_types::channel_transaction::{ChannelTransactionRequest, ChannelTransactionResponse, ChannelTransactionResponsePayload, ChannelTransactionRequestPayload, ChannelOp};
+use star_types::channel_transaction::{ChannelTransactionRequest, ChannelTransactionResponse, ChannelTransactionResponsePayload, ChannelTransactionRequestPayload, ChannelOp, ChannelTransactionRequestAndOutput};
 use star_types::message::SgError;
 use star_types::sg_error::SgErrorCode;
 use types::access_path::{AccessPath, DataPath};
@@ -64,6 +64,10 @@ impl ChannelState {
     pub fn insert(&self, path: Vec<u8>, value: Vec<u8>) -> Option<Vec<u8>> {
         self.state.borrow_mut().insert(path, value)
     }
+
+    pub fn update_state(&self, state: BTreeMap<Vec<u8>,Vec<u8>>){
+        *self.state.borrow_mut() = state;
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -102,7 +106,7 @@ pub struct Channel {
     /// Participant state in this channel
     participant: ChannelState,
     witness_data: AtomicRefCell<Option<WitnessData>>,
-    pending_txn_request: AtomicRefCell<Option<ChannelTransactionRequest>>,
+    pending_txn_request: AtomicRefCell<Option<ChannelTransactionRequestAndOutput>>,
 }
 
 impl Channel {
@@ -180,6 +184,16 @@ impl Channel {
         Ok(())
     }
 
+    pub fn apply_state(&self, account: ChannelState, participant: ChannelState) -> Result<()>{
+        let pending_txn = self.pending_txn_request.borrow().as_ref().expect("must exist");
+        self.account.update_state(account.state.borrow().clone());
+        self.participant.update_state(participant.state.borrow().clone());
+        self.reset_witness_data();
+        self.reset_pending_txn_request();
+        *self.stage.borrow_mut() = ChannelStage::Idle;
+        Ok(())
+    }
+
     pub fn apply_output(&self, output: TransactionOutput) -> Result<()>{
         //TODO
         let pending_txn = self.pending_txn_request.borrow().as_ref().expect("must exist");
@@ -226,16 +240,16 @@ impl Channel {
         self.get_channel_account_resource(&access_path)
     }
 
-    pub fn pending_txn_request(&self) -> Option<ChannelTransactionRequest> {
+    pub fn pending_txn_request(&self) -> Option<ChannelTransactionRequestAndOutput> {
         self.pending_txn_request.borrow().as_ref().cloned()
     }
 
-    pub fn append_txn_request(&self, request: ChannelTransactionRequest) -> Result<()> {
+    pub fn append_txn_request(&self, request: ChannelTransactionRequestAndOutput) -> Result<()> {
         let mut pending_txn_request = self.pending_txn_request.borrow_mut();
         if pending_txn_request.is_some() {
             bail!("exist a pending txn request.");
         }
-        let operator = request.operator();
+        let operator = request.request.operator();
         *pending_txn_request = Some(request);
         if operator != ChannelOp::Open {
             *self.stage.borrow_mut() = ChannelStage::Pending;

@@ -184,6 +184,21 @@ impl ChannelTransactionRequest {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ChannelTransactionRequestAndOutput{
+    pub request: ChannelTransactionRequest,
+    pub output: TransactionOutput,
+}
+
+impl ChannelTransactionRequestAndOutput{
+    pub fn new(request: ChannelTransactionRequest, output: TransactionOutput) -> Self{
+        Self{
+            request,
+            output
+        }
+    }
+}
+
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ChannelTransactionResponsePayload {
     Offchain(Witness),

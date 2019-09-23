@@ -75,6 +75,10 @@ impl<C> LocalStateStorage<C>
         AccountState::from_account_state_blob(version, state_blob, proof)
     }
 
+    pub fn get_account_state(&self, account: AccountAddress, version: Option<Version>) -> Result<AccountState> {
+        Self::get_account_state_by_client(self.client.clone(), account, version)
+    }
+
     pub fn get_witness_data(&self, participant: AccountAddress) -> Result<WitnessData> {
         Ok(self.channels.get(&participant).map(|state| state.witness_data()).unwrap_or(WitnessData::default()))
     }
@@ -119,6 +123,7 @@ impl<C> LocalStateStorage<C>
             }
         }
     }
+
 }
 
 mod account_state;
