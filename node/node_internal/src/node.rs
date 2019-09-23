@@ -295,9 +295,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
                     match message {
                     Ok(msg)=>{
                     let peer_id = msg.peer_id;
-                    if let Message::Payload(payload) = msg.msg {
-                    let data = bytes::Bytes::from(payload.data);
-
+                    let data = bytes::Bytes::from(msg.data);
                     let msg_type=parse_message_type(&data);
                     debug!("message type is {:?}",msg_type);
                     match msg_type {
@@ -307,7 +305,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
                         MessageType::ErrorMessage => node_inner.clone().lock().unwrap().handle_error_message(data[2..].to_vec()),
                         _=>warn!("message type not found {:?}",msg_type),
                     };
-                    }},
+                    },
                     Err(e)=>{
 
                     }
@@ -369,19 +367,19 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
                 match wallet.verify_txn(&txn) {
                     Ok(tx) => { receiver_open_txn = tx; }
                     Err(e) => {
-                        sender.unbounded_send(NetworkMessage { peer_id: sender_addr, msg: Message::new_message(error_message(e, hash_value).to_vec()) });
+                        sender.unbounded_send(NetworkMessage { peer_id: sender_addr, data: error_message(e, hash_value).to_vec() });
                         return;
                     }
                 }
                 let channel_txn_msg = ChannelTransactionResponseMessage::new(receiver_open_txn.clone());
                 let msg = add_message_type(channel_txn_msg.into_proto_bytes().unwrap(), MessageType::ChannelTransactionResponseMessage);
                 debug!("send msg to {:?}", sender_addr);
-                sender.unbounded_send(NetworkMessage { peer_id: sender_addr, msg: Message::new_message(msg.to_vec()) });
+                sender.unbounded_send(NetworkMessage { peer_id: sender_addr, data: msg.to_vec() });
                 match wallet.apply_txn(sender_addr, &receiver_open_txn).await {
                     Ok(_) => {}
                     Err(e) => {
                         warn!("apply tx fail");
-                        sender.unbounded_send(NetworkMessage { peer_id: sender_addr, msg: Message::new_message(error_message(e, hash_value).to_vec()) });
+                        sender.unbounded_send(NetworkMessage { peer_id: sender_addr, data: error_message(e, hash_value).to_vec() });
                         return;
                     }
                 };
@@ -437,7 +435,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         let addr = negotiate_message.raw_negotiate_message.receiver_addr;
         let msg = negotiate_message.into_proto_bytes()?;
         let msg = add_message_type(msg, MessageType::OpenChannelNodeNegotiateMessage);
-        self.sender.unbounded_send(NetworkMessage { peer_id: addr, msg: Message::new_message(msg.to_vec()) });
+        self.sender.unbounded_send(NetworkMessage { peer_id: addr, data: msg.to_vec() });
         Ok(())
     }
 
@@ -447,7 +445,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         let hash_value = open_channel_message.txn_request.request_id();
         let addr = open_channel_message.txn_request.receiver().clone();
         let msg = add_message_type(open_channel_message.into_proto_bytes().unwrap(), msg_type);
-        self.sender.unbounded_send(NetworkMessage { peer_id: addr, msg: Message::new_message(msg.to_vec()) });
+        self.sender.unbounded_send(NetworkMessage { peer_id: addr, data: msg.to_vec() });
         let (tx, rx) = channel(1);
         let message_future = MessageFuture::new(rx);
         self.message_processor.add_future(hash_value.clone(), tx);
@@ -465,7 +463,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         };
         let msg = add_message_type(off_chain_pay_msg.into_proto_bytes().unwrap(), MessageType::ChannelTransactionRequestMessage);
 
-        self.sender.unbounded_send(NetworkMessage { peer_id: receiver_address, msg: Message::new_message(msg.to_vec()) });
+        self.sender.unbounded_send(NetworkMessage { peer_id: receiver_address, data: msg.to_vec() });
         let (tx, rx) = channel(1);
         let message_future = MessageFuture::new(rx);
         self.message_processor.add_future(hash_value.clone(), tx.clone());

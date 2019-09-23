@@ -10,12 +10,12 @@ use types::account_address::AccountAddress;
 use crate::helper::get_unix_ts;
 
 #[derive(Clone, Debug)]
-pub struct NetworkMessage {
+pub struct InnerMessage {
     pub peer_id: AccountAddress,
     pub msg: Message,
 }
 
-impl CryptoHash for NetworkMessage {
+impl CryptoHash for InnerMessage {
     type Hasher = TestOnlyHasher;
 
     fn hash(&self) -> HashValue {
@@ -61,4 +61,17 @@ impl Message {
     pub fn new_message(data: Vec<u8>) -> Message {
         Message::Payload(PayloadMsg { id: 0, data })
     }
+
+    pub fn as_payload(self) -> Option<Vec<u8>> {
+        match self {
+            Message::Payload(p) => Some(p.data),
+            _ => None
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct NetworkMessage {
+    pub peer_id: AccountAddress,
+    pub data: Vec<u8>,
 }

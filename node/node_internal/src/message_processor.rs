@@ -12,7 +12,6 @@ use crypto::HashValue;
 use logger::prelude::*;
 use failure::prelude::*;
 use crypto::hash::CryptoHash;
-use network::NetworkMessage;
 use star_types::channel_transaction::ChannelTransactionRequest;
 use tokio::{runtime::TaskExecutor};
 use star_types::message::{SgError, ErrorMessage};

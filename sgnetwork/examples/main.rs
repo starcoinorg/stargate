@@ -40,7 +40,6 @@ fn main() {
 
     if peer_id.len() == 0 {
         let receive_fut = rx.for_each(|msg| {
-            println!("{:?}", msg.hash());
             Ok(())
         });
         executor.spawn(receive_fut);
@@ -50,12 +49,12 @@ fn main() {
             .map_err(|_e| ())
             .for_each(move |_| {
                 let random_bytes: Vec<u8> = (0..10240).map(|_| { rand::random::<u8>() }).collect();
-                let message = Message::new_message(random_bytes);
+
                 let peer_id_hex = format!("0x{}", &peer_id);
                 let peer_id = AccountAddress::from_hex_literal(&peer_id_hex).unwrap();
                 let _ = tx.unbounded_send(NetworkMessage {
                     peer_id,
-                    msg: message,
+                    data: random_bytes,
                 });
                 Ok(())
             });

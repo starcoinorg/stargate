@@ -11,12 +11,13 @@ use sg_config::config::NetworkConfig;
 use std::{io, sync::Arc, thread};
 use types::account_address::AccountAddress;
 use logger::prelude::*;
-use crate::message::{Message, NetworkMessage};
+use crate::message::{Message, NetworkMessage, PayloadMsg};
 use futures::sync::oneshot::{Canceled, Sender};
 use std::collections::HashMap;
 use crate::helper::get_unix_ts;
 use crypto::hash::CryptoHash;
 use tokio::prelude::task::AtomicTask;
+use crate::message::Message::Payload;
 
 #[derive(Clone)]
 pub struct NetworkService {
@@ -80,8 +81,9 @@ fn run_network(
 
 
     let net_srv_2 = net_srv.clone();
-    let net_ack_tx = net_tx.clone();
+
     let identify = net_srv.lock().peer_id().clone();
+    let ack_sender = net_srv.clone();
     let task_notify = Arc::new(AtomicTask::new());
     let notify = task_notify.clone();
     let network_fut = stream::poll_fn(move || {
@@ -94,15 +96,12 @@ fn run_network(
                     match message {
                         Message::Payload(payload) => {
                             //receive message
+                            info!("Receive message with peer_id:{:?}", &peer_id);
                             let address = convert_peer_id_to_account_address(&peer_id).unwrap();
-                            let netMsg = NetworkMessage {
-                                peer_id: address.clone(),
-                                msg: Message::Payload(payload.clone()),
-                            };
-                            info!("Receive custom message:{:?},{:?}", netMsg.hash(), &peer_id);
-                            let _ = _tx.unbounded_send(netMsg);
+                            let user_msg = NetworkMessage { peer_id: address, data: payload.data };
+                            let _ = _tx.unbounded_send(user_msg);
                             if payload.id != 0 {
-                                net_ack_tx.unbounded_send(NetworkMessage { peer_id: address, msg: Message::ACK(payload.id) });
+                                ack_sender.lock().send_custom_message(&peer_id, Message::ACK(payload.id));
                             }
                         }
                         Message::ACK(message_id) => {
@@ -133,15 +132,16 @@ fn run_network(
 
     let protocol_fut = stream::poll_fn(move || _rx.poll()).for_each(
         move |message| {
+            let account_address = message.peer_id.clone();
             let peer_id = convert_account_address_to_peer_id(message.peer_id).unwrap();
             net_srv
                 .lock()
-                .send_custom_message(&peer_id, message.clone().msg);
+                .send_custom_message(&peer_id, Message::new_message(message.data));
             task_notify.notify();
             if net_srv.lock().is_open(&peer_id) == false {
                 error!("Message send to peer :{} is not connected", convert_peer_id_to_account_address(&peer_id).unwrap());
             }
-            info!("Already send message:{:?},{:?}", message.hash(), &peer_id);
+            info!("Already send message {:?}", &peer_id);
             Ok(())
         }
     ).then(|res| {

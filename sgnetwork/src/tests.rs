@@ -21,12 +21,12 @@ mod tests {
     use types::account_address::AccountAddress;
 
     use crate::{
-        build_network_service, convert_account_address_to_peer_id, Message, NetworkComponent, NetworkMessage,
-        NetworkService,
+        build_network_service, convert_account_address_to_peer_id, Message, NetworkComponent, NetworkService,
     };
     use crate::helper::convert_boot_nodes;
 
     use futures::sync::oneshot;
+    use crate::message::NetworkMessage;
 
     fn build_test_network_pair() -> (NetworkComponent, NetworkComponent) {
         let mut l = build_test_network_services(2, 50400).into_iter();
@@ -96,23 +96,26 @@ mod tests {
         let msg_peer_id_2 = service2.identify();
         // Once sender has been droped, the select_all will return directly. clone it to prevent it.
         let _tx22 = tx2.clone();
+        let _tx11 = tx1.clone();
         let mut count = 0;
-        let sender_fut = Interval::new(Instant::now(), Duration::from_millis(10))
+        //wait the network started.
+        //thread::sleep(Duration::from_secs(1));
+        let sender_fut = Interval::new(Instant::now(), Duration::from_millis(1))
             .take(10000)
             .map_err(|_e| ())
             .for_each(move |_| {
                 count += 1;
                 let random_bytes: Vec<u8> = (0..10240).map(|_| { rand::random::<u8>() }).collect();
-                let message = Message::new_message(random_bytes);
+
                 match if count % 2 == 0 {
                     tx2.unbounded_send(NetworkMessage {
                         peer_id: msg_peer_id_1,
-                        msg: message.clone(),
+                        data: random_bytes,
                     })
                 } else {
                     tx1.unbounded_send(NetworkMessage {
                         peer_id: msg_peer_id_2,
-                        msg: message,
+                        data: random_bytes,
                     })
                 } {
                     Ok(()) => Ok(()),
