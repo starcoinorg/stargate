@@ -17,6 +17,9 @@ use std::sync::mpsc;
 use types::proof::SparseMerkleProof;
 use types::transaction::SignedTransactionWithProof;
 
+pub mod mock_star_client;
+pub mod mock_star_node;
+
 #[derive(Clone)]
 pub struct MockChainClient {
     //exe: TaskExecutor,
