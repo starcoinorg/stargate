@@ -35,6 +35,8 @@ crash_handler = { path = "../../libra/common/crash_handler" }
 grpcio-sys = "0.4.4"
 rayon = "1.2.0"
 executable_helpers = { path = "../../libra/common/executable_helpers" }
+proto_conv = { path = "../../libra/common/proto_conv", features = ["derive"] }
+vm_genesis = { path = "../../libra/language/vm/vm_genesis" }
 
 [dev-dependencies]
 crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }

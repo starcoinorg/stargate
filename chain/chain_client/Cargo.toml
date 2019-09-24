@@ -18,6 +18,24 @@ crypto = { path = "../../libra/crypto/crypto" }
 failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
 admission_control_proto = { version = "0.1.0", path = "../../libra/admission_control/admission_control_proto" }
 vm_genesis = { path = "../../libra/language/vm/vm_genesis" }
+admission_control_service = { path = "../../libra/admission_control/admission_control_service" }
+executable_helpers = { path = "../../libra/common/executable_helpers" }
+config = { path = "../../libra/config"}
+
+execution_proto = { path = "../../libra/execution/execution_proto" }
+execution_service = { path = "../../libra/execution/execution_service" }
+crash_handler = { path = "../../libra/common/crash_handler" }
+grpcio-sys = "0.4.4"
+rayon = "1.2.0"
+mempool = { path = "../../libra/mempool" }
+logger = { path = "../../libra/common/logger"}
+futures03 = { package = "futures-preview", version = "=0.3.0-alpha.17", features = ["async-await", "nightly", "io-compat", "compat"] }
+metrics = { path = "../../libra/common/metrics" }
+storage_client = { path = "../../libra/storage/storage_client" }
+storage_service = { path = "../../libra/storage/storage_service" }
+vm_validator = { path = "../../libra/vm_validator" }
+tokio = "0.1.22"
+star_node = { path = "../star_node" }
 
 [dev-dependencies]
 crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }

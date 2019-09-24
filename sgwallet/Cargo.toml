@@ -29,7 +29,7 @@ futures = { package = "futures", version = "0.1.28" }
 proto_conv = { path = "../libra/common/proto_conv", features = ["derive"] }
 stdlib = { path = "../libra/language/stdlib" }
 ir_to_bytecode = { path = "../libra/language/compiler/ir_to_bytecode" }
-futures_03 = { version = "0.3.0-alpha.16", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }
+futures_03 = { version = "0.3.0-alpha.17", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }
 futures_locks = { version = "=0.3.0", package = "futures-locks", features=["tokio"]}
 vm_runtime = {path="../libra/language/vm/vm_runtime"}
 vm_cache_map = {path="../libra/language/vm/vm_runtime/vm_cache_map"}

@@ -10,7 +10,7 @@ edition = "2018"
 network = { package = "sgnetwork", path = "../../sgnetwork"}
 
 switch = { package = "switch",path="../../switch"}
-futures = { version = "0.3.0-alpha.16", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }
+futures = { version = "0.3.0-alpha.17", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }
 futures_01 = { version = "0.1.25", package = "futures" }
 lazy_static = "1.2.0"
 ctrlc = "3.1.3"

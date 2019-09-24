@@ -17,7 +17,7 @@ use crypto::Uniform;
 use failure::_core::time::Duration;
 use failure::prelude::*;
 use logger::prelude::*;
-use mock_chain_client::MockChainClient;
+use mock_chain_client::{MockChainClient, mock_star_client::MockStarClient};
 use types::account_address::AccountAddress;
 
 use super::wallet::*;
@@ -48,7 +48,7 @@ fn test_wallet() -> Result<()> {
     let mut rt = Runtime::new()?;
     let executor = rt.executor();
 
-    let (mock_chain_service, db_shutdown_receiver) = MockChainClient::new(executor.clone());
+    let (mock_chain_service, handle) = MockStarClient::new();
     let client = Arc::new(mock_chain_service);
     let sender = AccountAddress::from_public_key(&sender_keypair.public_key);
     let receiver = AccountAddress::from_public_key(&receiver_keypair.public_key);
@@ -157,6 +157,5 @@ fn test_wallet() -> Result<()> {
     };
 
     rt.block_on(f.boxed().unit_error().compat()).unwrap();
-    //db_shutdown_receiver.recv().expect("db_shutdown_receiver err.");
     Ok(())
 }

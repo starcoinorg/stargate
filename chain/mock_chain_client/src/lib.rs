@@ -90,11 +90,12 @@ impl ChainClient for MockChainClient {
 mod tests {
     use super::*;
     use tokio::runtime::Runtime;
+    use crate::mock_star_client::MockStarClient;
 
     #[test]
     fn test_mock_client() {
         let rt = Runtime::new().unwrap();
-        let (client,_) = MockChainClient::new(rt.executor());
+        let (client, handle) = MockStarClient::new();
         let state = client.get_account_state_with_proof(&AccountAddress::default(), None).unwrap().1.unwrap();
         println!("state: {:#?}", state)
     }
@@ -102,7 +103,7 @@ mod tests {
     #[test]
     fn test_mock_faucet() {
         let rt = Runtime::new().unwrap();
-        let (client,_) = MockChainClient::new(rt.executor());
+        let (client, handle) = MockStarClient::new();
         let mut state = client.get_account_state_with_proof(&AccountAddress::default(), None).unwrap().1.unwrap();
         println!("state: {:#?}", state);
         let receiver = AccountAddress::random();
@@ -115,8 +116,8 @@ mod tests {
     #[test]
     fn test_faucet_state() {
         let mut rt1 = Runtime::new().unwrap();
-        let (mock_chain_service, db_shutdown_receiver) = MockChainClient::new(rt1.executor());
-        let client=Arc::new(mock_chain_service);
+        let (mock_chain_service, handle) = MockStarClient::new();
+        let client = Arc::new(mock_chain_service);
         let mut state = client.get_account_state_with_proof(&AccountAddress::default(), None).unwrap().1.unwrap();
         println!("state: {:#?}", state);
         let receiver = AccountAddress::random();

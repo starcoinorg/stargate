@@ -20,7 +20,7 @@ use bytes::Bytes;
 use rand::prelude::*;
 
 use chain_client::{ChainClient, RpcChainClient};
-use mock_chain_client::MockChainClient;
+use mock_chain_client::{MockChainClient, mock_star_client::MockStarClient};
 use crypto::test_utils::KeyPair;
 use crypto::Uniform;
 use types::account_address::AccountAddress;
@@ -49,7 +49,7 @@ fn node_test() -> Result<()> {
     let mut rt = Runtime::new().unwrap();
     let executor = rt.executor();
 
-    let (mock_chain_service, db_shutdown_receiver) = MockChainClient::new(executor.clone());
+    let (mock_chain_service, handle) = MockStarClient::new();
     let client= Arc::new(mock_chain_service);
     let network_config1 = create_node_network_config("/ip4/127.0.0.1/tcp/5000".to_string(),vec![]);
     let (mut node1,addr1,keypair1) = gen_node(executor.clone(),&network_config1,client.clone());
@@ -100,7 +100,6 @@ fn node_test() -> Result<()> {
     rt.block_on(f.boxed().unit_error().compat()).unwrap();
 
     drop(client);
-    //db_shutdown_receiver.recv().expect("db shutdown msg err.");
 
     debug!("here");
     //rt.shutdown_on_idle().wait().unwrap();

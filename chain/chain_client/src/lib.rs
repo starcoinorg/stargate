@@ -19,7 +19,7 @@ use types::contract_event::ContractEvent;
 use types::proof::SparseMerkleProof;
 
 pub mod watch_stream;
-mod star_client;
+pub mod star_client;
 
 pub use star_client::StarClient;
 

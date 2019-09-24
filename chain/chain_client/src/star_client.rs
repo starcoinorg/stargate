@@ -4,7 +4,9 @@ use types::{account_config::association_address, account_address::AccountAddress
 use types::transaction::{Version, SignedTransaction, RawTransaction, SignedTransactionWithProof};
 use types::proof::SparseMerkleProof;
 use star_types::proto::chain::WatchData;
-use admission_control_proto::proto::admission_control_grpc::AdmissionControlClient;
+use admission_control_proto::proto::{admission_control_grpc::AdmissionControlClient,
+                                     admission_control_client::AdmissionControlClientTrait};
+use admission_control_service::admission_control_client::AdmissionControlClient as MockAdmissionControlClient;
 use crate::watch_stream::{WatchResp, WatchStream};
 use vm_genesis::{encode_transfer_script, encode_create_account_script, GENESIS_KEYPAIR};
 use std::time::Duration;
@@ -18,6 +20,12 @@ use core::borrow::Borrow;
 use std::convert::TryInto;
 use types::account_config::AccountResource;
 use admission_control_proto::proto::admission_control::SubmitTransactionRequest;
+use executable_helpers::helpers::{
+    setup_executable, ARG_CONFIG_PATH, ARG_DISABLE_LOGGING, ARG_PEER_ID,
+};
+use config::trusted_peers::ConfigHelpers;
+use mempool::core_mempool_client::CoreMemPoolClient;
+use vm_validator::vm_validator::VMValidator;
 
 #[derive(Clone)]
 pub struct StarClient {
@@ -124,7 +132,7 @@ impl ChainClient for StarClient {
     }
 }
 
-fn build_request(req: RequestItem, ver: Option<Version>) -> UpdateToLatestLedgerRequest {
+pub fn build_request(req: RequestItem, ver: Option<Version>) -> UpdateToLatestLedgerRequest {
     let mut repeated = ::protobuf::RepeatedField::new();
     repeated.push(req.into_proto());
     let mut req = UpdateToLatestLedgerRequest::new();
@@ -137,6 +145,29 @@ fn build_request(req: RequestItem, ver: Option<Version>) -> UpdateToLatestLedger
     req
 }
 
-fn parse_response(resp: UpdateToLatestLedgerResponse) -> ResponseItem {
+pub fn parse_response(resp: UpdateToLatestLedgerResponse) -> ResponseItem {
     resp.get_response_items().get(0).expect("response item is none.").clone()
 }
+
+//pub fn create_star_client(host: &str, port: u32) -> StarClient {
+//    let conn_addr = format!("{}:{}", host, port);
+//    let env = Arc::new(EnvBuilder::new().name_prefix("ac-grpc-client-").build());
+//    let ch = ChannelBuilder::new(env).connect(&conn_addr);
+//    StarClient::new(AdmissionControlClient::new(ch))
+//}
+//
+//pub fn mock_star_client() -> (StarClient, StarHandle) {
+//    let (mut config, _logger, _args) = setup_executable(
+//        "Mock star single node".to_string(),
+//        vec![ARG_PEER_ID, ARG_CONFIG_PATH, ARG_DISABLE_LOGGING],
+//    );
+//    if config.consensus.get_consensus_peers().len() == 0 {
+//        let (_, single_peer_consensus_config) = ConfigHelpers::get_test_consensus_config(1, None);
+//        config.consensus.consensus_peers = single_peer_consensus_config;
+//        let genesis_path = star_node::genesis::genesis_blob();
+//        config.execution.genesis_file_location = genesis_path;
+//    }
+//
+//    let (ac_client, node_handle) = setup_environment(&mut config);
+//    (StarClient::new(ac_client), node_handle)
+//}

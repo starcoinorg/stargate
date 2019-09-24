@@ -4,7 +4,7 @@ use std::io::Result;
 use rand::prelude::*;
 
 use chain_client::{ChainClient, RpcChainClient};
-use mock_chain_client::MockChainClient;
+use mock_chain_client::{MockChainClient, mock_star_client::MockStarClient};
 use crypto::test_utils::KeyPair;
 use crypto::Uniform;
 use types::account_address::AccountAddress;
@@ -27,7 +27,7 @@ use tokio::runtime::{Runtime, TaskExecutor};
 use crate::node::Node;
 use std::convert::identity;
 
-pub fn gen_node(executor: TaskExecutor, config: &NetworkConfig, client: Arc<MockChainClient>) -> (Node<MockChainClient>, AccountAddress, KeyPair<Ed25519PrivateKey, Ed25519PublicKey>) {
+pub fn gen_node(executor: TaskExecutor, config: &NetworkConfig, client: Arc<MockStarClient>) -> (Node<MockStarClient>, AccountAddress, KeyPair<Ed25519PrivateKey, Ed25519PublicKey>) {
     let amount: u64 = 10_000_000;
     let mut rng: StdRng = SeedableRng::seed_from_u64(get_unix_ts());//SeedableRng::from_seed([0; 32]);
     let keypair = KeyPair::generate_for_testing(&mut rng);
