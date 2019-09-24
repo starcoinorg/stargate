@@ -76,6 +76,7 @@ impl<C> Wallet<C>
     const TXN_EXPIRATION: i64 = 1000 * 60;
     const MAX_GAS_AMOUNT: u64 = 200000;
     const GAS_UNIT_PRICE: u64 = 1;
+    const RETRY_INTERVAL: u64 = 1000;
 
     pub fn new(
         executor: TaskExecutor,
@@ -312,7 +313,7 @@ impl<C> Wallet<C>
                     // sender submit transaction to chain.
                     self.submit_transaction(signed_txn).await?
                 } else {
-                    self.watch_transaction_loop(signed_txn.sequence_number()).await?
+                    self.watch_transaction(signed_txn.sequence_number()).await?
                 };
                 //self.check_output(&output)?;
                 let gas = txn_with_proof.proof.transaction_info().gas_used();
@@ -453,44 +454,13 @@ impl<C> Wallet<C>
         debug!("submit_transaction {}", raw_txn_hash);
         let seq_number = signed_transaction.sequence_number();
         let _resp = self.client.submit_transaction(signed_transaction)?;
-        let watch_future = self.watch_transaction_loop(seq_number);
+        let watch_future = self.watch_transaction(seq_number);
         watch_future.await
-        //Ok(Self::convert(txn,output))
     }
 
-    fn do_watch_transaction(&self, raw_txn_hash: HashValue) -> SubmitTransactionFuture {
-        debug!("watch_transaction {}", raw_txn_hash);
-        let (tx, rx) = channel(1);
-        let watch_future = SubmitTransactionFuture::new(rx);
-        self.txn_processor.lock().unwrap().add_future(raw_txn_hash, tx);
-        watch_future
-    }
-
-    pub async fn watch_transaction(&self, raw_tx_hash: HashValue) -> Result<SignedTransactionWithProof> {
-        let watch_future = self.do_watch_transaction(raw_tx_hash);
-        let (txn, output) = watch_future.compat().await?;
-        Ok(Self::convert(txn,output))
-    }
-
-    fn convert(txn: SignedTransaction, output: TransactionOutput) -> SignedTransactionWithProof {
-        let major_status = match output.status() {
-            TransactionStatus::Keep(status) => status.major_status,
-            TransactionStatus::Discard(status) => status.major_status,
-        };
-        let txn_hash = txn.hash();
-        SignedTransactionWithProof {
-            version: 0,
-            signed_transaction: txn,
-            events: None,
-            proof: SignedTransactionProof::new(AccumulatorProof::new(vec![]), TransactionInfo::new(
-                txn_hash, HashValue::random(), HashValue::random(), output.gas_used(), major_status,
-            )),
-        }
-    }
-
-    pub async fn watch_transaction_loop(&self, seq:u64) -> Result<SignedTransactionWithProof> {
+    pub async fn watch_transaction(&self, seq:u64) -> Result<SignedTransactionWithProof> {
         loop {
-            let timeout_time = Instant::now() + Duration::from_millis(1000);
+            let timeout_time = Instant::now() + Duration::from_millis(Self::RETRY_INTERVAL);
             if let Ok(_) = Delay::new(timeout_time).compat().await {
                 info!("seq number is {}",seq);
                 let result=self.client.get_transaction_by_seq_num(&self.account_address,seq);
