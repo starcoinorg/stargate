@@ -13,7 +13,7 @@ use grpc_helpers::ServerHandle;
 use grpcio::{ChannelBuilder, EnvBuilder, ServerBuilder};
 use grpcio_sys;
 use logger::prelude::*;
-use mempool::{proto::{mempool_grpc::MempoolClient, core_mempool_client::CoreMemPoolClient}, MempoolRuntime};
+use mempool::{core_mempool_client::CoreMemPoolClient, proto::{mempool_grpc::MempoolClient}, MempoolRuntime};
 use metrics::metric_server;
 use std::{
     cmp::min,
