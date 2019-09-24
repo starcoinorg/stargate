@@ -1,10 +1,9 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use admission_control_proto::proto::admission_control_grpc::{
-    create_admission_control, AdmissionControlClient,
-};
-use admission_control_service::admission_control_service::AdmissionControlService;
+use admission_control_proto::proto::admission_control_grpc::create_admission_control;
+use admission_control_service::{admission_control_service::AdmissionControlService,
+                                admission_control_client::AdmissionControlClient};
 use config::config::{NetworkConfig, NodeConfig, RoleType};
 use crypto::{ed25519::*, ValidKey};
 use execution_proto::proto::execution_grpc;
@@ -31,12 +30,11 @@ use types::account_address::AccountAddress as PeerId;
 use vm_validator::vm_validator::VMValidator;
 
 pub struct StarHandle {
-    _ac: ServerHandle,
     _execution: ServerHandle,
     _storage: ServerHandle,
 }
 
-fn setup_ac<R>(config: &NodeConfig, r: Arc<R>) -> (::grpcio::Server, AdmissionControlClient) where R: StorageRead + Clone + 'static {
+fn setup_ac<R>(config: &NodeConfig, r: Arc<R>) -> AdmissionControlClient<CoreMemPoolClient, VMValidator> where R: StorageRead + Clone + 'static {
     let env = Arc::new(
         EnvBuilder::new()
             .name_prefix("grpc-ac-")
@@ -59,16 +57,8 @@ fn setup_ac<R>(config: &NodeConfig, r: Arc<R>) -> (::grpcio::Server, AdmissionCo
             .admission_control
             .need_to_check_mempool_before_validation,
     );
-    let service = create_admission_control(handle);
-    let server = ServerBuilder::new(Arc::clone(&env))
-        .register_service(service)
-        .bind(config.admission_control.address.clone(), port)
-        .build()
-        .expect("Unable to create grpc server");
 
-    let connection_str = format!("localhost:{}", port);
-    let client = AdmissionControlClient::new(ChannelBuilder::new(env).connect(&connection_str));
-    (server, client)
+    AdmissionControlClient::new(handle)
 }
 
 fn setup_executor<R, W>(config: &NodeConfig, r: Arc<R>, w: Arc<W>) -> ::grpcio::Server where R: StorageRead + 'static, W: StorageWrite + 'static {
@@ -83,7 +73,7 @@ fn setup_executor<R, W>(config: &NodeConfig, r: Arc<R>, w: Arc<W>) -> ::grpcio::
         .expect("Unable to create grpc server")
 }
 
-pub fn setup_environment(node_config: &mut NodeConfig) -> (AdmissionControlClient, StarHandle) {
+pub fn setup_environment(node_config: &mut NodeConfig) -> (AdmissionControlClient<CoreMemPoolClient, VMValidator>, StarHandle) {
     crash_handler::setup_panic_handler();
 
     // Some of our code uses the rayon global thread pool. Name the rayon threads so it doesn't
@@ -113,12 +103,10 @@ pub fn setup_environment(node_config: &mut NodeConfig) -> (AdmissionControlClien
 
     // Initialize and start AC.
     instant = Instant::now();
-    let (ac_server, ac_client) = setup_ac(&node_config, Arc::clone(&storage_service));
-    let ac = ServerHandle::setup(ac_server);
+    let ac_client = setup_ac(&node_config, Arc::clone(&storage_service));
     debug!("AC started in {} ms", instant.elapsed().as_millis());
 
     let star_handle = StarHandle {
-        _ac: ac,
         _execution: execution,
         _storage: storage,
     };

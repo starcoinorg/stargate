@@ -40,7 +40,7 @@ fn register_signals(term: Arc<AtomicBool>) {
     }
 }
 
-fn genesis_blob() -> String {
+pub fn genesis_blob() -> String {
     let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
     let genesis_txn = genesis_checked_txn.into_inner();
 //    let tmp_dir = TempPath::new();

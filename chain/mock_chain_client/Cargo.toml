@@ -34,6 +34,7 @@ grpc_helpers = { path = "../../libra/common/grpc_helpers" }
 crash_handler = { path = "../../libra/common/crash_handler" }
 grpcio-sys = "0.4.4"
 rayon = "1.2.0"
+executable_helpers = { path = "../../libra/common/executable_helpers" }
 
 [dev-dependencies]
 crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }
