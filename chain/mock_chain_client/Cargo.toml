@@ -37,6 +37,8 @@ rayon = "1.2.0"
 executable_helpers = { path = "../../libra/common/executable_helpers" }
 proto_conv = { path = "../../libra/common/proto_conv", features = ["derive"] }
 vm_genesis = { path = "../../libra/language/vm/vm_genesis" }
+tokio-timer = "0.2.11"
+protobuf = "2.7"
 
 [dev-dependencies]
 crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }
