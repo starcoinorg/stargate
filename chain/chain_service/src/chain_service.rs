@@ -326,36 +326,26 @@ impl ChainService {
     pub fn get_transaction_by_ver(&self, ver: Version) -> Result<SignedTransactionWithProof> {
         let read_db = self.read_db.as_ref().borrow();
         let mut proof = read_db.get_transactions(ver, 1, ver, false)?;
-        let tx=proof.transaction_and_infos.pop().expect("tx is none.");
-        let first_proof=proof.proof_of_first_transaction;
-        Ok(SignedTransactionWithProof{
+        let tx = proof.transaction_and_infos.pop().expect("tx is none.");
+        let first_proof = proof.proof_of_first_transaction;
+        Ok(SignedTransactionWithProof {
             version: ver,
-            signed_transaction:tx.0,
-            events:None,
-            proof:SignedTransactionProof::new(first_proof.expect("should have"),tx.1),
+            signed_transaction: tx.0,
+            events: None,
+            proof: SignedTransactionProof::new(first_proof.expect("should have"), tx.1),
         })
     }
 
     pub fn get_transaction_by_seq_num_inner(&self, account_address: AccountAddress, seq_num: u64) -> Result<Option<SignedTransactionWithProof>> {
         let read_db = self.read_db.as_ref().borrow();
-        let req = RequestItem::GetAccountTransactionBySequenceNumber { account: account_address, sequence_number: seq_num, fetch_events: false };
-        let mut resp = read_db.update_to_latest_ledger(0, vec![req])?;
-
-        if(resp.len()==0){
-            return Ok(None);
-        }
-        info!("resp is {:?}",resp);
-        let res = resp.get(0).expect("res is none.");
-        //res.into_get_account_txn_by_seq_num_response()?.0.expect("tx is none.");
-        match res.clone().into_get_account_txn_by_seq_num_response()?.0{
-            Some(proof)=>{
-                return Ok(Some(proof));
-            },
-            None=>{
-                return Ok(None);
-            }
-        }
-
+        let version = self.get_latest_version();
+        let list = read_db.get_transactions(version, 1, version, false)?;
+        let mut infos = list.transaction_and_infos;
+        let (txn, info) = infos.pop().expect("transaction_and_infos is none.");
+        let first_proof = list.proof_of_first_transaction.expect("proof_of_first_transaction is none.");
+        let proof = SignedTransactionProof::new(first_proof, info);
+        let txn_proof = SignedTransactionWithProof { version, signed_transaction: txn, events: None, proof };
+        Ok(Some(txn_proof))
     }
 }
 
