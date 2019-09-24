@@ -39,6 +39,8 @@ use sg_config::config::NetworkConfig;
 use crate::test_helper::{*};
 use crate::node::Node;
 use futures::compat::Future01CompatExt;
+use std::time::{Duration, Instant};
+use tokio::timer::Delay;
 
 #[test]
 fn node_test() -> Result<()> {
@@ -74,9 +76,9 @@ fn node_test() -> Result<()> {
         let deposit_amount = 10000;
         node2.deposit_async(coin_struct_tag(), addr1, deposit_amount, deposit_amount).unwrap().compat().await.unwrap();
 
+        delay(Duration::from_millis(100)).await;
         assert_eq!(node2.channel_balance(addr1, coin_struct_tag()).unwrap(), fund_amount + deposit_amount);
         assert_eq!(node1.channel_balance(addr2, coin_struct_tag()).unwrap(), fund_amount + deposit_amount);
-
 
         let transfer_amount = 1_000;
         let offchain_txn = node2.off_chain_pay_async(coin_struct_tag(), addr1, transfer_amount).unwrap().compat().await.unwrap();
@@ -88,6 +90,7 @@ fn node_test() -> Result<()> {
         let wd_amount = 10000;
         node2.withdraw_async(coin_struct_tag(), addr1, wd_amount, wd_amount).unwrap().compat().await.unwrap();
 
+        delay(Duration::from_millis(100)).await;
         assert_eq!(node2.channel_balance(addr1, coin_struct_tag()).unwrap(), fund_amount - transfer_amount - wd_amount + deposit_amount);
         assert_eq!(node1.channel_balance(addr2, coin_struct_tag()).unwrap(), fund_amount + transfer_amount - wd_amount + deposit_amount);
 
@@ -103,6 +106,11 @@ fn node_test() -> Result<()> {
     debug!("here");
     //rt.shutdown_on_idle().wait().unwrap();
     Ok(())
+}
+
+async fn delay(duration:Duration){
+    let timeout_time = Instant::now() + duration;
+    Delay::new(timeout_time).compat().await.unwrap();
 }
 
 #[test]
