@@ -312,7 +312,7 @@ impl<C> Wallet<C>
                     // sender submit transaction to chain.
                     self.submit_transaction(signed_txn).await?
                 } else {
-                    self.watch_transaction(raw_txn_hash).await?
+                    self.watch_transaction_loop(signed_txn.sequence_number()).await?
                 };
                 //self.check_output(&output)?;
                 let gas = txn_with_proof.proof.transaction_info().gas_used();
@@ -451,10 +451,11 @@ impl<C> Wallet<C>
     pub async fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<SignedTransactionWithProof> {
         let raw_txn_hash = signed_transaction.raw_txn().hash();
         debug!("submit_transaction {}", raw_txn_hash);
-        let watch_future = self.do_watch_transaction(raw_txn_hash);
+        let seq_number = signed_transaction.sequence_number();
         let _resp = self.client.submit_transaction(signed_transaction)?;
-        let (txn,output) = watch_future.compat().await?;
-        Ok(Self::convert(txn,output))
+        let watch_future = self.watch_transaction_loop(seq_number);
+        watch_future.await
+        //Ok(Self::convert(txn,output))
     }
 
     fn do_watch_transaction(&self, raw_txn_hash: HashValue) -> SubmitTransactionFuture {
@@ -489,9 +490,11 @@ impl<C> Wallet<C>
 
     pub async fn watch_transaction_loop(&self, seq:u64) -> Result<SignedTransactionWithProof> {
         loop {
-            let timeout_time = Instant::now() + Duration::from_secs(1);
-            if let Err(e) = Delay::new(timeout_time).compat().await {
+            let timeout_time = Instant::now() + Duration::from_millis(1000);
+            if let Ok(_) = Delay::new(timeout_time).compat().await {
+                info!("seq number is {}",seq);
                 let result=self.client.get_transaction_by_seq_num(&self.account_address,seq);
+                info!("result is {:?}",result);
                 match result {
                     Ok(None) =>{
                         continue;
