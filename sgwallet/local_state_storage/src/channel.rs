@@ -249,7 +249,7 @@ impl Channel {
         if pending_txn_request.is_some() {
             bail!("exist a pending txn request.");
         }
-        let operator = request.request.operator();
+        let operator = request.request.operator().clone();
         *pending_txn_request = Some(request);
         if operator != ChannelOp::Open {
             *self.stage.borrow_mut() = ChannelStage::Pending;

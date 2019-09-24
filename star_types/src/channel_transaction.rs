@@ -19,40 +19,75 @@ use types::write_set::WriteSet;
 
 #[derive(
 Clone,
-Copy,
 Debug,
 Eq,
 Hash,
 PartialEq,
 PartialOrd,
 Ord,
-IntoPrimitive,
-TryFromPrimitive,
 Serialize,
 Deserialize,
 )]
-#[repr(u32)]
 pub enum ChannelOp {
-    Open = 0,
-    Deposit = 1,
-    Transfer = 2,
-    Withdraw = 3,
-    Close = 4,
+    Open,
+    Execute {
+        package_name: String,
+        script_name: String,
+    },
+    Close,
 }
 
 impl ChannelOp {
-    pub fn values() -> Vec<ChannelOp> {
-        vec![ChannelOp::Open, ChannelOp::Deposit, ChannelOp::Transfer, ChannelOp::Withdraw, ChannelOp::Close]
-    }
-
-    pub fn asset_op_values() -> Vec<ChannelOp> {
-        vec![ChannelOp::Deposit, ChannelOp::Transfer, ChannelOp::Withdraw]
-    }
-
     pub fn is_open(&self) -> bool {
         match self {
             ChannelOp::Open => true,
             _ => false,
+        }
+    }
+
+    pub fn to_string(&self) -> String{
+        format!("{}", self)
+    }
+}
+
+impl CanonicalSerialize for ChannelOp {
+    fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
+        match self {
+            ChannelOp::Open => {
+                serializer.encode_u32(ChannelOpType::Open as u32)?;
+            }
+            ChannelOp::Execute { package_name, script_name } => {
+                serializer.encode_u32(ChannelOpType::Execute as u32)?;
+                serializer.encode_string(package_name.as_str())?;
+                serializer.encode_string(script_name.as_str())?;
+            }
+            ChannelOp::Close => {
+                serializer.encode_u32(ChannelOpType::Close as u32)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl CanonicalDeserialize for ChannelOp {
+    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self> where
+        Self: Sized {
+        let decoded_channel_op_type = deserializer.decode_u32()?;
+        let channel_op_type = ChannelOpType::from_u32(decoded_channel_op_type);
+        match channel_op_type {
+            Some(ChannelOpType::Open) => Ok(ChannelOp::Open),
+            Some(ChannelOpType::Execute) => {
+                let package_name = deserializer.decode_string()?;
+                let script_name = deserializer.decode_string()?;
+                Ok(ChannelOp::Execute { package_name, script_name })
+            }
+            Some(ChannelOpType::Close) => Ok(ChannelOp::Close),
+            None => {
+                Err(format_err!(
+                "ParseError: Unable to decode ChannelOpType, found {}",
+                decoded_channel_op_type
+                ))
+            }
         }
     }
 }
@@ -61,10 +96,25 @@ impl Display for ChannelOp {
     fn fmt(&self, f: &mut Formatter) -> ::std::fmt::Result {
         match self {
             ChannelOp::Open => write!(f, "open"),
-            ChannelOp::Deposit => write!(f, "deposit"),
-            ChannelOp::Transfer => write!(f, "transfer"),
-            ChannelOp::Withdraw => write!(f, "withdraw"),
+            ChannelOp::Execute { package_name, script_name } => write!(f, "{}.{}", package_name, script_name),
             ChannelOp::Close => write!(f, "close"),
+        }
+    }
+}
+
+enum ChannelOpType {
+    Open = 0,
+    Execute = 1,
+    Close = 2,
+}
+
+impl ChannelOpType {
+    fn from_u32(value: u32) -> Option<ChannelOpType> {
+        match value {
+            0 => Some(ChannelOpType::Open),
+            1 => Some(ChannelOpType::Execute),
+            2 => Some(ChannelOpType::Close),
+            _ => None,
         }
     }
 }
@@ -133,7 +183,7 @@ impl ChannelTransactionRequest {
         HashValue::from_sha3_256(bytes.as_slice())
     }
 
-    pub fn request_id(&self) -> HashValue{
+    pub fn request_id(&self) -> HashValue {
         self.request_id
     }
 
@@ -141,8 +191,8 @@ impl ChannelTransactionRequest {
         self.version
     }
 
-    pub fn operator(&self) -> ChannelOp {
-        self.operator
+    pub fn operator(&self) -> &ChannelOp {
+        &self.operator
     }
 
     pub fn txn(&self) -> &RawTransaction {
@@ -185,16 +235,16 @@ impl ChannelTransactionRequest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ChannelTransactionRequestAndOutput{
+pub struct ChannelTransactionRequestAndOutput {
     pub request: ChannelTransactionRequest,
     pub output: TransactionOutput,
 }
 
-impl ChannelTransactionRequestAndOutput{
-    pub fn new(request: ChannelTransactionRequest, output: TransactionOutput) -> Self{
-        Self{
+impl ChannelTransactionRequestAndOutput {
+    pub fn new(request: ChannelTransactionRequest, output: TransactionOutput) -> Self {
+        Self {
             request,
-            output
+            output,
         }
     }
 }
@@ -227,7 +277,7 @@ impl ChannelTransactionResponse {
         }
     }
 
-    pub fn request_id(&self) -> HashValue{
+    pub fn request_id(&self) -> HashValue {
         self.request_id
     }
 
@@ -338,7 +388,7 @@ impl CanonicalSerialize for ChannelTransactionRequest {
     fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
         serializer.encode_bytes(self.request_id.to_vec().as_slice())?
             .encode_u64(self.version)?
-            .encode_u32(self.operator.into())?
+            .encode_struct(&self.operator)?
             .encode_struct(&self.txn)?
             .encode_struct(&self.payload)?
             .encode_bytes(&self.public_key.to_bytes())?;
@@ -351,7 +401,7 @@ impl CanonicalDeserialize for ChannelTransactionRequest {
         Self: Sized {
         let request_id = HashValue::from_slice(deserializer.decode_bytes()?.as_slice())?;
         let version = deserializer.decode_u64()?;
-        let operator = ChannelOp::try_from(deserializer.decode_u32()?)?;
+        let operator = deserializer.decode_struct()?;
         let txn = deserializer.decode_struct()?;
         let payload = deserializer.decode_struct()?;
         let public_key_bytes = deserializer.decode_bytes()?;

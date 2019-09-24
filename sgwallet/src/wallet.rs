@@ -1,10 +1,19 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use atomic_refcell::AtomicRefCell;
 use futures::{sync::mpsc::channel};
 use tokio::{runtime::TaskExecutor};
+use tokio::timer::{Delay, Interval};
 
+use {
+    futures_03::{
+        compat::{Future01CompatExt, Stream01CompatExt},
+        future::{FutureExt, TryFutureExt},
+        stream::StreamExt,
+    },
+};
 use canonical_serialization::SimpleSerializer;
 use chain_client::{ChainClient, RpcChainClient, StarClient};
 use config::config::VMConfig;
@@ -36,17 +45,6 @@ use types::vm_error::*;
 use types::write_set::{WriteOp, WriteSet};
 use vm_runtime::{MoveVM, VMExecutor};
 
-use std::time::{Duration, Instant};
-use tokio::timer::{Interval,Delay};
-
-use {
-    futures_03::{
-        compat::{Future01CompatExt,Stream01CompatExt},
-        future::{FutureExt, TryFutureExt},
-        stream::{StreamExt},
-    },
-};
-
 use crate::scripts::*;
 
 lazy_static! {
@@ -63,7 +61,7 @@ pub struct Wallet<C>
     keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
     client: Arc<C>,
     storage: Arc<AtomicRefCell<LocalStateStorage<C>>>,
-    script_registry: AssetScriptRegistry,
+    script_registry: ChannelScriptRegistry,
     lock: futures_locks::Mutex<u64>,
 }
 
@@ -94,7 +92,7 @@ impl<C> Wallet<C>
         client: Arc<C>,
     ) -> Result<Self> {
         let storage = Arc::new(AtomicRefCell::new(LocalStateStorage::new(account_address, client.clone())?));
-        let script_registry = AssetScriptRegistry::build()?;
+        let script_registry = ChannelScriptRegistry::build()?;
         Ok(Self {
             account_address,
             keypair,
@@ -131,16 +129,18 @@ impl<C> Wallet<C>
         unimplemented!()
     }
 
-    fn execute_asset_op(&self, channel: &Channel, asset_tag: &StructTag, op: ChannelOp, receiver: AccountAddress, args: Vec<TransactionArgument>) -> Result<ChannelTransactionRequest> {
-        let scripts = self.script_registry.get_scripts(&asset_tag).ok_or(format_err!("Unsupported asset {:?}", asset_tag))?;
-        let script = scripts.get_script(op);
-        self.execute_script(channel, script, receiver, args)
-    }
+    fn execute(&self, channel_op: ChannelOp, channel: &Channel, receiver: AccountAddress, args: Vec<TransactionArgument>) -> Result<ChannelTransactionRequest> {
+        let script = match &channel_op {
+            ChannelOp::Open => self.script_registry.open_script(),
+            ChannelOp::Close => self.script_registry.close_script(),
+            ChannelOp::Execute { package_name, script_name } => {
+                self.script_registry.get_script(package_name, script_name).ok_or(format_err!("Can not find script by package {} and script name {}", package_name, script_name))?
+            }
+        };
 
-    fn execute_script(&self, channel: &Channel, script: &ScriptCode, receiver: AccountAddress, args: Vec<TransactionArgument>) -> Result<ChannelTransactionRequest> {
-        let program = script.encode_script(args);
+        let script = script.encode_script(args);
         let channel_sequence_number = channel.channel_sequence_number();
-        let txn = self.create_signed_script_txn(channel, receiver, program)?;
+        let txn = self.create_signed_script_txn(channel, receiver, script)?;
         let storage = self.storage.borrow();
         let state_view = storage.new_state_view(None, &receiver)?;
         let output = self.execute_transaction(&state_view, txn.clone())?;
@@ -160,7 +160,7 @@ impl<C> Wallet<C>
             ChannelTransactionRequestPayload::Offchain(witness)
         };
         let version = state_view.version();
-        let request = ChannelTransactionRequest::new(version, script.script_type(), txn.raw_txn().clone(), payload, self.keypair.public_key.clone());
+        let request = ChannelTransactionRequest::new(version, channel_op.clone(), txn.raw_txn().clone(), payload, self.keypair.public_key.clone());
         channel.append_txn_request(ChannelTransactionRequestAndOutput::new(request.clone(), output))?;
         Ok(request)
     }
@@ -226,58 +226,46 @@ impl<C> Wallet<C>
         self.storage.borrow_mut().new_channel(receiver);
         let storage = self.storage.borrow();
         let channel = storage.get_channel(&receiver)?;
-        //TODO watch when channel is establish and track watch thead.
-        self.execute_script(channel, self.script_registry.open_script(), receiver, vec![
+        self.execute(ChannelOp::Open, channel, receiver, vec![
             TransactionArgument::U64(sender_amount),
             TransactionArgument::U64(receiver_amount),
         ])
     }
 
-    pub fn deposit_by_tag(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<ChannelTransactionRequest> {
-        info!("wallet.deposit asset_tag:{:?}, receiver:{}, sender_amount:{}, receiver_amount:{}", &asset_tag, receiver, sender_amount, receiver_amount);
-        let storage = self.storage.borrow();
-        let channel = storage.get_channel(&receiver)?;
-        self.execute_asset_op(channel, &asset_tag, ChannelOp::Deposit, receiver, vec![
-            TransactionArgument::U64(sender_amount),
-            TransactionArgument::U64(receiver_amount),
-        ])
-    }
 
     pub fn deposit(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<ChannelTransactionRequest> {
-        self.deposit_by_tag(Self::default_asset(), receiver, sender_amount, receiver_amount)
-    }
-
-    pub fn transfer_by_tag(&self, asset_tag: StructTag, receiver: AccountAddress, amount: u64) -> Result<ChannelTransactionRequest> {
-        info!("wallet.deposit asset_tag:{:?}, receiver:{}, amount:{}", &asset_tag, receiver, amount);
+        info!("wallet.deposit receiver:{}, sender_amount:{}, receiver_amount:{}", receiver, sender_amount, receiver_amount);
         let storage = self.storage.borrow();
         let channel = storage.get_channel(&receiver)?;
-        self.execute_asset_op(channel, &asset_tag, ChannelOp::Transfer, receiver, vec![
-            TransactionArgument::U64(amount),
+        self.execute(ChannelOp::Execute { package_name: DEFAULT_PACKAGE.to_owned(), script_name: "deposit".to_string() }, channel, receiver, vec![
+            TransactionArgument::U64(sender_amount),
+            TransactionArgument::U64(receiver_amount),
         ])
     }
 
     pub fn transfer(&self, receiver: AccountAddress, amount: u64) -> Result<ChannelTransactionRequest> {
-        self.transfer_by_tag(Self::default_asset(), receiver, amount)
-    }
-
-    pub fn withdraw_by_tag(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<ChannelTransactionRequest> {
-        info!("wallet.withdraw asset_tag:{:?}, receiver:{}, sender_amount:{}, receiver_amount:{}", &asset_tag, receiver, sender_amount, receiver_amount);
+        info!("wallet.transfer receiver:{}, amount:{}", receiver, amount);
         let storage = self.storage.borrow();
         let channel = storage.get_channel(&receiver)?;
-        self.execute_asset_op(channel, &asset_tag, ChannelOp::Withdraw, receiver, vec![
-            TransactionArgument::U64(sender_amount),
-            TransactionArgument::U64(receiver_amount),
+        self.execute(ChannelOp::Execute { package_name: DEFAULT_PACKAGE.to_owned(), script_name: "transfer".to_string() }, channel, receiver, vec![
+            TransactionArgument::U64(amount),
         ])
     }
 
     pub fn withdraw(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<ChannelTransactionRequest> {
-        self.withdraw_by_tag(Self::default_asset(), receiver, sender_amount, receiver_amount)
+        info!("wallet.withdraw receiver:{}, sender_amount:{}, receiver_amount:{}", receiver, sender_amount, receiver_amount);
+        let storage = self.storage.borrow();
+        let channel = storage.get_channel(&receiver)?;
+        self.execute(ChannelOp::Execute { package_name: DEFAULT_PACKAGE.to_owned(), script_name: "withdraw".to_string() }, channel, receiver, vec![
+            TransactionArgument::U64(sender_amount),
+            TransactionArgument::U64(receiver_amount),
+        ])
     }
 
     pub fn close(&self, receiver: AccountAddress) -> Result<ChannelTransactionRequest> {
         let storage = self.storage.borrow();
         let channel = storage.get_channel(&receiver)?;
-        self.execute_script(channel, self.script_registry.close_script(), receiver, vec![])
+        self.execute(ChannelOp::Close, channel, receiver, vec![])
     }
 
     pub async fn apply_txn(&self, participant: AccountAddress, response: &ChannelTransactionResponse) -> Result<u64> {
@@ -447,20 +435,20 @@ impl<C> Wallet<C>
         watch_future.await
     }
 
-    pub async fn watch_transaction(&self, seq:u64) -> Result<SignedTransactionWithProof> {
+    pub async fn watch_transaction(&self, seq: u64) -> Result<SignedTransactionWithProof> {
         loop {
             let timeout_time = Instant::now() + Duration::from_millis(Self::RETRY_INTERVAL);
             if let Ok(_) = Delay::new(timeout_time).compat().await {
-                info!("seq number is {}",seq);
-                let result=self.client.get_transaction_by_seq_num(&self.account_address,seq);
-                info!("result is {:?}",result);
+                info!("seq number is {}", seq);
+                let result = self.client.get_transaction_by_seq_num(&self.account_address, seq);
+                info!("result is {:?}", result);
                 match result {
-                    Ok(None) =>{
+                    Ok(None) => {
                         continue;
-                    },
-                    Ok(Some(t))=>{
+                    }
+                    Ok(Some(t)) => {
                         return Ok(t);
-                    },
+                    }
                     Err(e) => {
                         return Err(e);
                     }
@@ -469,7 +457,6 @@ impl<C> Wallet<C>
             };
         }
     }
-
 }
 
 impl<C> TransactionSigner for Wallet<C>

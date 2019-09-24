@@ -35,7 +35,6 @@ use star_types::system_event::Event;
 use state_cache::state_cache::AccountState;
 use types::account_address::AccountAddress;
 use types::account_config::AccountResource;
-use types::language_storage::StructTag;
 
 use crate::message_processor::{MessageFuture, MessageProcessor};
 
@@ -136,10 +135,10 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         f
     }
 
-    pub fn deposit_oneshot(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> futures::channel::oneshot::Receiver<Result<DepositResponse>> {
+    pub fn deposit_oneshot(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> futures::channel::oneshot::Receiver<Result<DepositResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
         let f: MessageFuture;
-        match self.deposit_async(asset_tag, receiver, sender_amount, receiver_amount) {
+        match self.deposit_async(receiver, sender_amount, receiver_amount) {
             Ok(msg_future) => { f = msg_future; }
             Err(e) => {
                 resp_sender
@@ -162,7 +161,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         resp_receiver
     }
 
-    pub fn deposit_async(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<MessageFuture> {
+    pub fn deposit_async(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<MessageFuture> {
         if (receiver_amount > self.default_max_deposit) {
             bail!("deposit coin amount too big")
         }
@@ -173,16 +172,16 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         if (!is_receiver_connected) {
             bail!("could not connect to receiver")
         }
-        let channel_txn = self.node_inner.clone().lock().unwrap().wallet.deposit_by_tag(asset_tag, receiver, sender_amount, receiver_amount)?;
+        let channel_txn = self.node_inner.clone().lock().unwrap().wallet.deposit(receiver, sender_amount, receiver_amount)?;
         let open_channel_message = ChannelTransactionRequestMessage::new(channel_txn);
         let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionRequestMessage);
         f
     }
 
-    pub fn withdraw_oneshot(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> futures::channel::oneshot::Receiver<Result<WithdrawResponse>> {
+    pub fn withdraw_oneshot(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> futures::channel::oneshot::Receiver<Result<WithdrawResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
         let f: MessageFuture;
-        match self.withdraw_async(asset_tag, receiver, sender_amount, receiver_amount) {
+        match self.withdraw_async(receiver, sender_amount, receiver_amount) {
             Ok(msg_future) => { f = msg_future; }
             Err(e) => {
                 resp_sender
@@ -206,7 +205,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         resp_receiver
     }
 
-    pub fn withdraw_async(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<MessageFuture> {
+    pub fn withdraw_async(&self, receiver: AccountAddress, sender_amount: u64, receiver_amount: u64) -> Result<MessageFuture> {
         if (receiver_amount < sender_amount) {
             bail!("sender amount should smaller than receiver amount.")
         }
@@ -216,17 +215,17 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             bail!("could not connect to receiver")
         }
         info!("start to withdraw with {:?} {} {}", receiver, sender_amount, receiver_amount);
-        let channel_txn = self.node_inner.clone().lock().unwrap().wallet.withdraw_by_tag(asset_tag, receiver, sender_amount, receiver_amount)?;
+        let channel_txn = self.node_inner.clone().lock().unwrap().wallet.withdraw(receiver, sender_amount, receiver_amount)?;
         let open_channel_message = ChannelTransactionRequestMessage::new(channel_txn);
         let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(open_channel_message, MessageType::ChannelTransactionRequestMessage);
         f
     }
 
-    pub fn off_chain_pay_oneshot(&self, asset_tag: StructTag, receiver: AccountAddress, sender_amount: u64) -> futures::channel::oneshot::Receiver<Result<PayResponse>> {
+    pub fn off_chain_pay_oneshot(&self, receiver: AccountAddress, sender_amount: u64) -> futures::channel::oneshot::Receiver<Result<PayResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
 
         let f: MessageFuture;
-        match self.off_chain_pay_async(asset_tag, receiver, sender_amount) {
+        match self.off_chain_pay_async(receiver, sender_amount) {
             Ok(msg_future) => { f = msg_future; }
             Err(e) => {
                 resp_sender
@@ -250,12 +249,12 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         resp_receiver
     }
 
-    pub fn off_chain_pay_async(&self, coin_resource_tag: StructTag, receiver_address: AccountAddress, amount: u64) -> Result<MessageFuture> {
+    pub fn off_chain_pay_async(&self, receiver_address: AccountAddress, amount: u64) -> Result<MessageFuture> {
         let is_receiver_connected = self.node_inner.clone().lock().unwrap().network_service.is_connected(receiver_address);
         if (!is_receiver_connected) {
             bail!("could not connect to receiver")
         }
-        let f = self.node_inner.clone().lock().unwrap().off_chain_pay(coin_resource_tag, receiver_address, amount);
+        let f = self.node_inner.clone().lock().unwrap().off_chain_pay(receiver_address, amount);
         f
     }
 
@@ -269,8 +268,8 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         self.node_inner.clone().lock().unwrap().wallet.account_resource()
     }
 
-    pub fn channel_balance(&self, participant: AccountAddress, asset_tag: StructTag) -> Result<u64> {
-        self.node_inner.clone().lock().unwrap().wallet.channel_balance_by_tag(participant, asset_tag)
+    pub fn channel_balance(&self, participant: AccountAddress) -> Result<u64> {
+        self.node_inner.clone().lock().unwrap().wallet.channel_balance(participant)
     }
 
     pub fn set_default_timeout(&self, timeout: u64) {
@@ -454,8 +453,8 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         Ok(message_future)
     }
 
-    fn off_chain_pay(&mut self, coin_resource_tag: types::language_storage::StructTag, receiver_address: AccountAddress, amount: u64) -> Result<MessageFuture> {
-        let off_chain_pay_tx = self.wallet.transfer_by_tag(coin_resource_tag, receiver_address, amount)?;
+    fn off_chain_pay(&mut self, receiver_address: AccountAddress, amount: u64) -> Result<MessageFuture> {
+        let off_chain_pay_tx = self.wallet.transfer( receiver_address, amount)?;
         let sender = self.sender.clone();
         let hash_value = off_chain_pay_tx.request_id();
         let off_chain_pay_msg = ChannelTransactionRequestMessage {
