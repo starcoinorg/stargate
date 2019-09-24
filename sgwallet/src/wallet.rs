@@ -48,7 +48,6 @@ use {
 };
 
 use crate::scripts::*;
-use crate::transaction_processor::{start_processor, SubmitTransactionFuture, TransactionProcessor};
 
 lazy_static! {
     pub static ref DEFAULT_ASSET:StructTag = coin_struct_tag();
@@ -65,7 +64,6 @@ pub struct Wallet<C>
     client: Arc<C>,
     storage: Arc<AtomicRefCell<LocalStateStorage<C>>>,
     script_registry: AssetScriptRegistry,
-    txn_processor: Arc<Mutex<TransactionProcessor>>,
     lock: futures_locks::Mutex<u64>,
 }
 
@@ -97,21 +95,14 @@ impl<C> Wallet<C>
     ) -> Result<Self> {
         let storage = Arc::new(AtomicRefCell::new(LocalStateStorage::new(account_address, client.clone())?));
         let script_registry = AssetScriptRegistry::build()?;
-        let transaction_processor = Arc::new(Mutex::new(TransactionProcessor::new()));
-        start_processor(client.clone(), account_address, transaction_processor.clone())?;
         Ok(Self {
             account_address,
             keypair,
             client,
             storage,
             script_registry,
-            txn_processor: transaction_processor,
             lock: futures_locks::Mutex::new(1),
         })
-    }
-
-    fn watch_address(&self, account_address: AccountAddress) -> Result<()> {
-        start_processor(self.client.clone(), account_address, self.txn_processor.clone())
     }
 
     pub fn default_asset() -> StructTag {
@@ -185,7 +176,6 @@ impl<C> Wallet<C>
                 bail!("Channel with address {} exist.", sender);
             }
             self.storage.borrow_mut().new_channel(sender);
-            self.watch_address(sender)?;
         }
 
         let storage = self.storage.borrow();
@@ -237,7 +227,6 @@ impl<C> Wallet<C>
         let storage = self.storage.borrow();
         let channel = storage.get_channel(&receiver)?;
         //TODO watch when channel is establish and track watch thead.
-        self.watch_address(receiver)?;
         self.execute_script(channel, self.script_registry.open_script(), receiver, vec![
             TransactionArgument::U64(sender_amount),
             TransactionArgument::U64(receiver_amount),
