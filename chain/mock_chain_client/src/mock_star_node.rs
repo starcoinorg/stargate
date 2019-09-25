@@ -13,7 +13,7 @@ use grpc_helpers::ServerHandle;
 use grpcio::{ChannelBuilder, EnvBuilder, ServerBuilder};
 use grpcio_sys;
 use logger::prelude::*;
-use mempool::{core_mempool_client::CoreMemPoolClient, proto::{mempool_grpc::MempoolClient, mempool::GetBlockRequest}, MempoolRuntime};
+use mempool::{core_mempool_client::CoreMemPoolClient, proto::{mempool_grpc::MempoolClient, mempool::{TransactionExclusion, GetBlockRequest}}, MempoolRuntime};
 use metrics::metric_server;
 use std::{
     cmp::min,
@@ -32,9 +32,23 @@ use vm_validator::vm_validator::VMValidator;
 use tokio_timer::Interval;
 use futures::{Stream, Future};
 use mempool::proto::mempool_client::MempoolClientTrait;
+use crypto::hash::GENESIS_BLOCK_ID;
+use admission_control_proto::proto::admission_control_client::AdmissionControlClientTrait;
+use types::{account_state_blob::AccountStateBlob, proof::SparseMerkleProof, transaction::{SignedTransactionWithProof, RawTransaction, SignedTransaction, Version},
+            account_config::{association_address, AccountResource}, account_address::AccountAddress, get_with_proof::RequestItem};
+use chain_client::star_client::{build_request, parse_response};
+use core::borrow::Borrow;
+use proto_conv::FromProto;
+use lazy_static::lazy_static;
+use std::sync::Mutex;
+use std::thread::sleep;
 
 pub struct StarHandle {
     _storage: ServerHandle,
+}
+
+lazy_static! {
+    static ref LATEST_BLOCK_HASH: Mutex<Vec<HashValue>> = Mutex::new(vec![*GENESIS_BLOCK_ID]);
 }
 
 fn setup_ac<R>(config: &NodeConfig, r: Arc<R>) -> (AdmissionControlClient<CoreMemPoolClient, VMValidator>, CoreMemPoolClient) where R: StorageRead + Clone + 'static {
@@ -72,13 +86,6 @@ fn setup_executor<R, W>(config: &NodeConfig, r: Arc<R>, w: Arc<W>) -> ExecutionS
 pub fn setup_environment(node_config: &mut NodeConfig) -> (AdmissionControlClient<CoreMemPoolClient, VMValidator>, StarHandle) {
     crash_handler::setup_panic_handler();
 
-    // Some of our code uses the rayon global thread pool. Name the rayon threads so it doesn't
-    // cause confusion, otherwise the threads would have their parent's name.
-    rayon::ThreadPoolBuilder::new()
-        .thread_name(|index| format!("rayon-global-{}", index))
-        .build_global()
-        .expect("Building rayon global thread pool should work.");
-
     let mut instant = Instant::now();
     let (storage, storage_service) = start_storage_service_and_return_service(&node_config);
     debug!(
@@ -102,30 +109,53 @@ pub fn setup_environment(node_config: &mut NodeConfig) -> (AdmissionControlClien
     let (ac_client, mempool_client) = setup_ac(&node_config, Arc::clone(&storage_service));
     debug!("AC started in {} ms", instant.elapsed().as_millis());
 
-    commit_block(mempool_client, execution_service);
+    commit_block(ac_client.clone(), mempool_client, execution_service);
     let star_handle = StarHandle {
         _storage: storage,
     };
     (ac_client, star_handle)
 }
 
-fn commit_block(mempool_client:CoreMemPoolClient, execution_service:ExecutionService) {
-    let task = Interval::new(Instant::now(), Duration::from_millis(1_000))
+fn commit_block(ac_client: AdmissionControlClient<CoreMemPoolClient, VMValidator>, mempool_client: CoreMemPoolClient, execution_service: ExecutionService) {
+    let task = Interval::new(Instant::now(), Duration::from_secs(3))
         .for_each(move |_| {
             let mut block_req = GetBlockRequest::new();
+            block_req.set_max_block_size(1);
             let block_resp = mempool_client.get_block(&block_req).expect("get_block err.");
             let block = block_resp.get_block();
-            let txns = block.get_transactions();
+            let mut txns = block.get_transactions();
+
+            println!("txn size: {:?} of current block.", txns.len());
+
             if txns.len() > 0 {
+                let mut tmp_txn_vec = vec![];
+                txns.clone().iter().for_each(|txn| {
+                    let tmp = SignedTransaction::from_proto(txn.clone()).expect("from pb err.");
+                    tmp_txn_vec.push(tmp);
+                });
+
+                // exe
                 let repeated = ::protobuf::RepeatedField::from_vec(txns.to_vec());
                 let mut exe_req = ExecuteBlockRequest::new();
                 let block_id = HashValue::random();
                 let pre_block_id = HashValue::random();
                 exe_req.set_transactions(repeated);
-                exe_req.set_parent_block_id(pre_block_id.to_vec());
+
+                let len = LATEST_BLOCK_HASH.lock().unwrap().len();
+                println!("block hight: {:?}", len);
+                let latest_hash = LATEST_BLOCK_HASH.lock().unwrap().get(len - 1).unwrap().clone();
+
+                println!("new block hash: {:?}", latest_hash);
+
+                exe_req.set_parent_block_id(latest_hash.to_vec());
+
+
                 exe_req.set_block_id(block_id.to_vec());
                 let exe_resp = execution_service.execute_block_inner(exe_req.clone());
 
+                LATEST_BLOCK_HASH.lock().unwrap().push(block_id);
+
+                // commit
                 let mut info = LedgerInfo::new();
                 info.set_version(exe_resp.get_version());
                 info.set_consensus_block_id(exe_req.get_block_id().to_vec());
@@ -141,9 +171,41 @@ fn commit_block(mempool_client:CoreMemPoolClient, execution_service:ExecutionSer
                 let mut req = CommitBlockRequest::new();
                 req.set_ledger_info_with_sigs(info_sign.clone());
                 execution_service.commit_block_inner(req);
+
+                // remove from mem pool
+                let mut remove_req = GetBlockRequest::new();
+
+                let mut txn_exc_vec = vec![];
+                tmp_txn_vec.iter().for_each(|txn| {
+                    let address = txn.sender();
+
+                    // get seq num
+                    let req = RequestItem::GetAccountState { address };
+                    let ledger_req = build_request(req, None);
+                    let resp = ac_client.update_to_latest_ledger(&ledger_req).expect("Call update_to_latest_ledger err.");
+                    let resp_item = parse_response(resp);
+                    let proof = resp_item.get_get_account_state_response().get_account_state_with_proof();
+                    if proof.has_blob() {
+                        let blob = proof.get_blob().get_blob().to_vec();
+                        let a_s_b = AccountStateBlob::from(blob);
+                        let account_btree = a_s_b.borrow().try_into().expect("blob to btree err.");
+                        let account_resource = AccountResource::make_from(&account_btree).expect("make account resource err.");
+                        let mut txn_exc = TransactionExclusion::new();
+                        txn_exc.set_sender(txn.sender().to_vec());
+                        txn_exc.set_sequence_number(account_resource.sequence_number());
+
+                        txn_exc_vec.push(txn_exc);
+                    }
+                });
+
+                let repeated_txn_exc = ::protobuf::RepeatedField::from_vec(txn_exc_vec);
+                remove_req.set_transactions(repeated_txn_exc);
+
+                sleep(Duration::from_millis(1_500));
+                mempool_client.remove_txn(&remove_req);
             }
             Ok(())
-        }).map_err(|e| {panic!("interval errored; err={:?}", e)});
+        }).map_err(|e| { panic!("interval errored; err={:?}", e) });
 
     thread::spawn(move || { tokio::run(task) });
 }

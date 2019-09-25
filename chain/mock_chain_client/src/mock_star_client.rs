@@ -3,7 +3,7 @@ use std::sync::Arc;
 use config::trusted_peers::ConfigHelpers;
 use crate::mock_star_node::{setup_environment, StarHandle};
 use executable_helpers::helpers::{
-    setup_executable, ARG_CONFIG_PATH, ARG_DISABLE_LOGGING, ARG_PEER_ID,load_configs_from_args,
+    setup_executable, ARG_CONFIG_PATH, ARG_DISABLE_LOGGING, ARG_PEER_ID, load_configs_from_args,
 };
 use chain_client::{ChainClient, watch_stream::WatchStream};
 use futures::{
@@ -59,7 +59,7 @@ impl MockStarClient {
         }
 
         let (ac_client, node_handle) = setup_environment(&mut config);
-        (MockStarClient { ac_client:Arc::new(ac_client) }, node_handle)
+        (MockStarClient { ac_client: Arc::new(ac_client) }, node_handle)
     }
 
     fn do_request(&self, req: &UpdateToLatestLedgerRequest) -> UpdateToLatestLedgerResponse {
@@ -88,7 +88,7 @@ impl MockStarClient {
         }
     }
 
-    fn account_sequence_number(&self, account_address: &AccountAddress) -> Option<Version> {
+    pub fn account_sequence_number(&self, account_address: &AccountAddress) -> Option<Version> {
         match self.get_account_state_with_proof_inner(account_address, None).expect("get account state err.").1 {
             Some(blob) => {
                 let a_s_b = AccountStateBlob::from(blob);
@@ -123,7 +123,7 @@ impl ChainClient for MockStarClient {
             sender,
             s_n,
             script,
-            1000_000 as u64,
+            100_000 as u64,
             1 as u64,
             Duration::from_secs(u64::max_value()),
         ).sign(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone())
@@ -147,8 +147,13 @@ impl ChainClient for MockStarClient {
     fn get_transaction_by_seq_num(&self, account_address: &AccountAddress, seq_num: u64) -> Result<Option<SignedTransactionWithProof>> {
         let req = RequestItem::GetAccountTransactionBySequenceNumber { account: account_address.clone(), sequence_number: seq_num, fetch_events: false };
         let mut resp = parse_response(self.do_request(&build_request(req, None)));
-        let proof = resp.take_get_account_transaction_by_sequence_number_response().take_signed_transaction_with_proof();
-        Ok(Some(SignedTransactionWithProof::from_proto(proof).expect("SignedTransaction parse from proto err.")))
+        let mut tmp = resp.take_get_account_transaction_by_sequence_number_response();
+        if tmp.has_signed_transaction_with_proof() {
+            let proof = tmp.take_signed_transaction_with_proof();
+            Ok(Some(SignedTransactionWithProof::from_proto(proof).expect("SignedTransaction parse from proto err.")))
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -159,18 +164,28 @@ mod tests {
     use types::account_address::AccountAddress;
     use std::thread::sleep;
     use std::time::Duration;
+    use super::*;
 
     #[test]
-    fn test_mock_star_client() {
+    fn test_mock_star_client_xxx() {
         let (client, _handle) = MockStarClient::new();
+        let a = client.get_account_state_with_proof(&association_address(), None).unwrap();
+        println!("{:?}", a.2)
     }
 
     #[test]
     fn test_mock_star_client_faucet() {
         ::logger::init_for_e2e_testing();
         let (client, _handle) = MockStarClient::new();
-        let addr = AccountAddress::random();
-        client.faucet(addr, 1000);
+        for _i in 1..3 {
+            let addr = AccountAddress::random();
+            client.faucet(addr, 1000);
+            sleep(Duration::from_secs(5));
+            client.faucet(addr, 1000);
+            sleep(Duration::from_secs(5));
+            client.faucet(addr, 1000);
+            assert_eq!(client.account_exist(&addr, None), true);
+        }
         sleep(Duration::from_secs(15))
     }
 }

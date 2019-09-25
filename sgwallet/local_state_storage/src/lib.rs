@@ -25,6 +25,8 @@ pub use crate::channel::{Channel, WitnessData};
 use crate::channel::ChannelState;
 pub use crate::channel_state_view::ChannelStateView;
 use crate::client_state_view::ClientStateView;
+use std::thread::sleep;
+use std::time::Duration;
 
 pub struct LocalStateStorage<C>
     where
@@ -69,6 +71,21 @@ impl<C> LocalStateStorage<C>
     }
 
     fn get_account_state_by_client(client: Arc<C>, account: AccountAddress, version: Option<Version>) -> Result<AccountState> {
+        for _i in 0..3 {
+            let flag = client.get_account_state_with_proof(&account, version).and_then(|(version, state, proof)| {
+                let tmp = match state {
+                    Some(t) => true,
+                    _ => false
+                };
+                Ok(tmp)
+            })?;
+
+            if flag {
+                break;
+            } else {
+                sleep(Duration::from_secs(1))
+            }
+        }
         let (version, state_blob, proof) = client.get_account_state_with_proof(&account, version).and_then(|(version, state, proof)| {
             Ok((version, state.ok_or(format_err!("can not find account by address:{}", account))?, proof))
         })?;
@@ -113,7 +130,7 @@ impl<C> LocalStateStorage<C>
 
     pub fn get_resource(&self, path: &DataPath) -> Result<Option<Resource>> {
         let state = self.get(path)?;
-        let client_state_view = ClientStateView::new(None,self.client.clone());
+        let client_state_view = ClientStateView::new(None, self.client.clone());
         match state {
             None => Ok(None),
             Some(state) => {
@@ -123,7 +140,6 @@ impl<C> LocalStateStorage<C>
             }
         }
     }
-
 }
 
 mod account_state;
