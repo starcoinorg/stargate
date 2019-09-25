@@ -93,9 +93,9 @@ pub fn setup_environment(node_config: &mut NodeConfig) -> (AdmissionControlClien
         instant.elapsed().as_millis()
     );
 
-    let metrics_port = node_config.debug_interface.metrics_server_port;
-    let metric_host = node_config.debug_interface.address.clone();
-    thread::spawn(move || metric_server::start_server((metric_host.as_str(), metrics_port)));
+//    let metrics_port = node_config.debug_interface.metrics_server_port;
+//    let metric_host = node_config.debug_interface.address.clone();
+//    thread::spawn(move || {println!("----{}---{}----", metrics_port, metric_host);metric_server::start_server((metric_host.as_str(), metrics_port))});
 
     // Initialize and start AC.
     instant = Instant::now();
@@ -116,32 +116,34 @@ fn commit_block(mempool_client:CoreMemPoolClient, execution_service:ExecutionSer
             let block_resp = mempool_client.get_block(&block_req).expect("get_block err.");
             let block = block_resp.get_block();
             let txns = block.get_transactions();
-            let repeated = ::protobuf::RepeatedField::from_vec(txns.to_vec());
-            let mut exe_req = ExecuteBlockRequest::new();
-            let block_id = HashValue::random();
-            let pre_block_id = HashValue::random();
-            exe_req.set_transactions(repeated);
-            exe_req.set_parent_block_id(pre_block_id.to_vec());
-            exe_req.set_block_id(block_id.to_vec());
-            let exe_resp = execution_service.execute_block_inner(exe_req.clone());
+            if txns.len() > 0 {
+                let repeated = ::protobuf::RepeatedField::from_vec(txns.to_vec());
+                let mut exe_req = ExecuteBlockRequest::new();
+                let block_id = HashValue::random();
+                let pre_block_id = HashValue::random();
+                exe_req.set_transactions(repeated);
+                exe_req.set_parent_block_id(pre_block_id.to_vec());
+                exe_req.set_block_id(block_id.to_vec());
+                let exe_resp = execution_service.execute_block_inner(exe_req.clone());
 
-            let mut info = LedgerInfo::new();
-            info.set_version(exe_resp.get_version());
-            info.set_consensus_block_id(exe_req.get_block_id().to_vec());
-            info.set_consensus_data_hash(HashValue::random().to_vec());
-            info.set_epoch_num(0);
-            info.set_next_validator_set(ValidatorSet::default());
-            info.set_timestamp_usecs(u64::max_value());
-            info.set_transaction_accumulator_hash(exe_resp.get_root_hash().to_vec());
-            let mut info_sign = LedgerInfoWithSignatures::new();
-            //        exe_resp.get_validators()
-            //        info.set_signatures()
-            info_sign.set_ledger_info(info);
-            let mut req = CommitBlockRequest::new();
-            req.set_ledger_info_with_sigs(info_sign.clone());
-            execution_service.commit_block_inner(req);
+                let mut info = LedgerInfo::new();
+                info.set_version(exe_resp.get_version());
+                info.set_consensus_block_id(exe_req.get_block_id().to_vec());
+                info.set_consensus_data_hash(HashValue::random().to_vec());
+                info.set_epoch_num(0);
+                info.set_next_validator_set(ValidatorSet::default());
+                info.set_timestamp_usecs(u64::max_value());
+                info.set_transaction_accumulator_hash(exe_resp.get_root_hash().to_vec());
+                let mut info_sign = LedgerInfoWithSignatures::new();
+                //        exe_resp.get_validators()
+                //        info.set_signatures()
+                info_sign.set_ledger_info(info);
+                let mut req = CommitBlockRequest::new();
+                req.set_ledger_info_with_sigs(info_sign.clone());
+                execution_service.commit_block_inner(req);
+            }
             Ok(())
-        }).map_err(|e| panic!("interval errored; err={:?}", e));
+        }).map_err(|e| {panic!("interval errored; err={:?}", e)});
 
     thread::spawn(move || { tokio::run(task) });
 }

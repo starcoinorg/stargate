@@ -3,7 +3,7 @@ use std::sync::Arc;
 use config::trusted_peers::ConfigHelpers;
 use crate::mock_star_node::{setup_environment, StarHandle};
 use executable_helpers::helpers::{
-    setup_executable, ARG_CONFIG_PATH, ARG_DISABLE_LOGGING, ARG_PEER_ID,
+    setup_executable, ARG_CONFIG_PATH, ARG_DISABLE_LOGGING, ARG_PEER_ID,load_configs_from_args,
 };
 use chain_client::{ChainClient, watch_stream::WatchStream};
 use futures::{
@@ -27,6 +27,7 @@ use types::account_config::AccountResource;
 use std::time::Duration;
 use admission_control_proto::proto::admission_control::SubmitTransactionRequest;
 use vm_genesis::{encode_transfer_script, encode_create_account_script, GENESIS_KEYPAIR};
+use clap::ArgMatches;
 
 pub struct MockStreamReceiver<T> {
     inner_rx: UnboundedReceiver<T>
@@ -48,10 +49,8 @@ pub struct MockStarClient {
 
 impl MockStarClient {
     pub fn new() -> (Self, StarHandle) {
-        let (mut config, _logger, _args) = setup_executable(
-            "Mock star single node".to_string(),
-            vec![ARG_PEER_ID, ARG_CONFIG_PATH, ARG_DISABLE_LOGGING],
-        );
+        let args = ArgMatches::default();
+        let mut config = load_configs_from_args(&args);
         if config.consensus.get_consensus_peers().len() == 0 {
             let (_, single_peer_consensus_config) = ConfigHelpers::get_test_consensus_config(1, None);
             config.consensus.consensus_peers = single_peer_consensus_config;
@@ -150,5 +149,28 @@ impl ChainClient for MockStarClient {
         let mut resp = parse_response(self.do_request(&build_request(req, None)));
         let proof = resp.take_get_account_transaction_by_sequence_number_response().take_signed_transaction_with_proof();
         Ok(Some(SignedTransactionWithProof::from_proto(proof).expect("SignedTransaction parse from proto err.")))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MockStarClient;
+    use chain_client::ChainClient;
+    use types::account_address::AccountAddress;
+    use std::thread::sleep;
+    use std::time::Duration;
+
+    #[test]
+    fn test_mock_star_client() {
+        let (client, _handle) = MockStarClient::new();
+    }
+
+    #[test]
+    fn test_mock_star_client_faucet() {
+        ::logger::init_for_e2e_testing();
+        let (client, _handle) = MockStarClient::new();
+        let addr = AccountAddress::random();
+        client.faucet(addr, 1000);
+        sleep(Duration::from_secs(15))
     }
 }

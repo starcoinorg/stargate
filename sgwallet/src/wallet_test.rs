@@ -48,7 +48,7 @@ fn test_wallet() -> Result<()> {
     let mut rt = Runtime::new()?;
     let executor = rt.executor();
 
-    let (mock_chain_service, handle) = MockStarClient::new();
+    let (mock_chain_service, handle) = MockStarClient::new();//MockChainClient::new(executor.clone());
     let client = Arc::new(mock_chain_service);
     let sender = AccountAddress::from_public_key(&sender_keypair.public_key);
     let receiver = AccountAddress::from_public_key(&receiver_keypair.public_key);
