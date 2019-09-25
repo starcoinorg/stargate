@@ -22,6 +22,68 @@ use types::account_address::AccountAddress;
 
 use super::wallet::*;
 use tokio::runtime::current_thread::block_on_all;
+use star_types::script::ChannelScriptPackage;
+use types::transaction::TransactionArgument;
+
+
+pub fn setup_wallet<C>(client: Arc<C>, executor: TaskExecutor, init_balance: u64)  -> Result<Wallet<C>> where
+    C: ChainClient + Send + Sync + 'static{
+    let mut seed_rng = rand::rngs::OsRng::new().expect("can't access OsRng");
+    let seed_buf: [u8; 32] = seed_rng.gen();
+    let mut rng0: StdRng = SeedableRng::from_seed(seed_buf);
+    let account_keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey> = KeyPair::generate_for_testing(&mut rng0);
+
+    let account = AccountAddress::from_public_key(&account_keypair.public_key);
+    client.faucet(account, init_balance)?;
+    let wallet = Wallet::new_with_client(executor, account, account_keypair, client)?;
+    assert_eq!(init_balance, wallet.balance()?);
+    Ok(wallet)
+}
+
+pub fn open_channel<C>(sender_wallet: Arc<Wallet<C>>, receiver_wallet: Arc<Wallet<C>>, sender_fund_amount: u64, receiver_fund_amount: u64) -> Result<()> where
+    C: ChainClient + Send + Sync + 'static{
+    let mut rt = Runtime::new()?;
+    let f = async move {
+        let sender = sender_wallet.account();
+        let receiver = receiver_wallet.account();
+
+        let open_txn = sender_wallet.open(receiver, sender_fund_amount, receiver_fund_amount).unwrap();
+        debug_assert!(open_txn.is_travel_txn(), "open_txn must travel txn");
+
+        let receiver_open_txn = receiver_wallet.verify_txn(&open_txn).unwrap();
+
+        let sender_future = sender_wallet.apply_txn(receiver, &receiver_open_txn);
+        let receiver_future = receiver_wallet.apply_txn(sender, &receiver_open_txn);
+
+        let gas_used = sender_future.await.unwrap();
+        receiver_future.await.unwrap();
+        gas_used
+    };
+    rt.block_on(f.boxed().unit_error().compat()).unwrap();
+    Ok(())
+}
+
+pub fn execute_script<C>(sender_wallet: Arc<Wallet<C>>, receiver_wallet: Arc<Wallet<C>>, package_name: &'static str, script_name: &'static str, args: Vec<TransactionArgument>) -> Result<()> where
+    C: ChainClient + Send + Sync + 'static{
+    let mut rt = Runtime::new()?;
+    let f = async move {
+        let sender = sender_wallet.account();
+        let receiver = receiver_wallet.account();
+
+        let txn_request = sender_wallet.execute_script(receiver, package_name, script_name, args).unwrap();
+        let txn_response = receiver_wallet.verify_txn(&txn_request).unwrap();
+
+        let sender_future = sender_wallet.apply_txn(receiver, &txn_response);
+        let receiver_future = receiver_wallet.apply_txn(sender, &txn_response);
+
+        let gas_used = sender_future.await.unwrap();
+        receiver_future.await.unwrap();
+        gas_used
+    };
+    rt.block_on(f.boxed().unit_error().compat()).unwrap();
+    Ok(())
+}
+
 
 #[test]
 fn test_wallet() -> Result<()> {
@@ -39,31 +101,19 @@ fn test_wallet() -> Result<()> {
     let sender_withdraw_amount: u64 = 4_000_000;
     let receiver_withdraw_amount: u64 = 5_000_000;
 
-    let mut rng0: StdRng = SeedableRng::from_seed([0; 32]);
-    let mut rng1: StdRng = SeedableRng::from_seed([1; 32]);
-
-    let sender_keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey> = KeyPair::generate_for_testing(&mut rng0);
-    let receiver_keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey> = KeyPair::generate_for_testing(&mut rng1);
-
     let mut rt = Runtime::new()?;
     let executor = rt.executor();
 
-    let (mock_chain_service, handle) = MockStarClient::new();//MockChainClient::new(executor.clone());
+    let (mock_chain_service, handle) = MockChainClient::new(executor.clone());
     let client = Arc::new(mock_chain_service);
-    let sender = AccountAddress::from_public_key(&sender_keypair.public_key);
-    let receiver = AccountAddress::from_public_key(&receiver_keypair.public_key);
 
+    let sender_wallet = Arc::new(setup_wallet(client.clone(), executor.clone(),sender_amount).unwrap());
+    let receiver_wallet = Arc::new(setup_wallet(client.clone(),executor.clone(), receiver_amount).unwrap());
+
+    let sender = sender_wallet.account();
+    let receiver = receiver_wallet.account();
     debug!("sender_address: {}", sender);
     debug!("receiver_address: {}", receiver);
-
-    client.faucet(sender, sender_amount)?;
-    client.faucet(receiver, receiver_amount)?;
-
-    let sender_wallet = Arc::new(Wallet::new_with_client(executor.clone(), sender, sender_keypair, client.clone()).unwrap());
-    let receiver_wallet = Arc::new(Wallet::new_with_client(executor.clone(), receiver, receiver_keypair, client).unwrap());
-
-    assert_eq!(sender_amount, sender_wallet.balance().unwrap());
-    assert_eq!(receiver_amount, receiver_wallet.balance().unwrap());
 
     let mut sender_gas_used = 0;
 
@@ -157,5 +207,28 @@ fn test_wallet() -> Result<()> {
     };
 
     rt.block_on(f.boxed().unit_error().compat()).unwrap();
+    Ok(())
+}
+
+#[test]
+fn test_wallet_install_package() -> Result<()>{
+    let init_balance = 1000000;
+    let mut rt = Runtime::new()?;
+    let executor = rt.executor();
+
+    let (mock_chain_service, handle) = MockChainClient::new(executor.clone());
+    let client = Arc::new(mock_chain_service);
+
+    let alice = Arc::new(setup_wallet(client.clone(), executor.clone(),init_balance)?);
+    let bob = Arc::new(setup_wallet(client.clone(), executor.clone(),init_balance)?);
+
+    let transfer_code = alice.get_script("libra", "transfer").unwrap();
+    let package = ChannelScriptPackage::new("test".to_string(), vec![transfer_code]);
+    alice.install_package(package.clone())?;
+    bob.install_package(package.clone())?;
+
+    open_channel(alice.clone(), bob.clone(), 100000, 100000)?;
+
+    execute_script(alice.clone(), bob.clone(), "test", "transfer", vec![TransactionArgument::U64(10000)])?;
     Ok(())
 }

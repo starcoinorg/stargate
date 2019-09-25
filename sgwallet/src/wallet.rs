@@ -30,6 +30,7 @@ use star_types::channel_transaction::{ChannelOp, ChannelTransactionRequest, Chan
 use star_types::message::{ErrorMessage, SgError};
 use star_types::resource::Resource;
 use star_types::resource_type::resource_def::StructDefResolve;
+use star_types::script::{ChannelScriptPackage, ScriptCode};
 use star_types::sg_error::SgErrorCode;
 use state_store::{StateStore, StateViewPlus};
 use state_view::StateView;
@@ -57,11 +58,11 @@ pub struct Wallet<C>
     where
         C: ChainClient + Send + Sync + 'static,
 {
-    account_address: AccountAddress,
+    account: AccountAddress,
     keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
     client: Arc<C>,
     storage: Arc<AtomicRefCell<LocalStateStorage<C>>>,
-    script_registry: ChannelScriptRegistry,
+    script_registry: PackageRegistry,
     lock: futures_locks::Mutex<u64>,
 }
 
@@ -76,31 +77,35 @@ impl<C> Wallet<C>
 
     pub fn new(
         executor: TaskExecutor,
-        account_address: AccountAddress,
+        account: AccountAddress,
         keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
         rpc_host: &str,
         rpc_port: u32,
     ) -> Result<Wallet<StarClient>> {
         let client = Arc::new(StarClient::new(rpc_host, rpc_port));
-        Wallet::new_with_client(executor, account_address, keypair, client)
+        Wallet::new_with_client(executor, account, keypair, client)
     }
 
     pub fn new_with_client(
         _executor: TaskExecutor,
-        account_address: AccountAddress,
+        account: AccountAddress,
         keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
         client: Arc<C>,
     ) -> Result<Self> {
-        let storage = Arc::new(AtomicRefCell::new(LocalStateStorage::new(account_address, client.clone())?));
-        let script_registry = ChannelScriptRegistry::build()?;
+        let storage = Arc::new(AtomicRefCell::new(LocalStateStorage::new(account, client.clone())?));
+        let script_registry = PackageRegistry::build()?;
         Ok(Self {
-            account_address,
+            account,
             keypair,
             client,
             storage,
             script_registry,
             lock: futures_locks::Mutex::new(1),
         })
+    }
+
+    pub fn account(&self) -> AccountAddress{
+        self.account
     }
 
     pub fn default_asset() -> StructTag {
@@ -169,7 +174,7 @@ impl<C> Wallet<C>
     pub fn verify_txn(&self, txn_request: &ChannelTransactionRequest) -> Result<ChannelTransactionResponse> {
         let txn_hash = txn_request.txn().hash();
         debug!("verify_txn {}", txn_hash);
-        ensure!(txn_request.receiver() == self.account_address, "check receiver fail.");
+        ensure!(txn_request.receiver() == self.account, "check receiver fail.");
         let sender = txn_request.sender();
         if txn_request.operator().is_open() {
             if self.storage.borrow().exist_channel(&sender) {
@@ -197,7 +202,7 @@ impl<C> Wallet<C>
                 ensure!(write_set == &sender_payload.write_set, "check write_set fail.");
                 txn_request.public_key()
                     .verify_signature(&sender_payload.hash(), &sender_witness.witness_signature)?;
-                let witness_payload = ChannelWriteSetPayload::new(sender_payload.channel_sequence_number, write_set.clone(), self.account_address);
+                let witness_payload = ChannelWriteSetPayload::new(sender_payload.channel_sequence_number, write_set.clone(), self.account);
                 let witness_signature = self.sign_write_set_payload(&witness_payload)?;
                 let new_witness = Witness {
                     witness_payload,
@@ -286,7 +291,7 @@ impl<C> Wallet<C>
                 ChannelTransactionResponsePayload::Travel { txn_payload_signature }) => {
                 let mut signed_txn = SignedTransaction::new(request.txn().clone(), request.public_key().clone(), txn_signature.clone());
                 signed_txn.set_receiver_public_key_and_signature(response.public_key().clone(), txn_payload_signature.clone());
-                let txn_with_proof = if request.sender() == self.account_address {
+                let txn_with_proof = if request.sender() == self.account {
                     // sender submit transaction to chain.
                     self.submit_transaction(signed_txn).await?
                 } else {
@@ -295,17 +300,17 @@ impl<C> Wallet<C>
                 //self.check_output(&output)?;
                 let gas = txn_with_proof.proof.transaction_info().gas_used();
 //                let version = txn_with_proof.version;
-//                let account_state = self.storage.borrow().get_account_state(self.account_address, Some(version))?;
+//                let account_state = self.storage.borrow().get_account_state(self.account, Some(version))?;
 //                let participant_state = self.storage.borrow().get_account_state(participant, Some(version))?;
 //                let account_channel_state = account_state.filter_channel_state().remove(&participant).unwrap();
-//                let participant_channel_state = participant_state.filter_channel_state().remove(&self.account_address).unwrap();
+//                let participant_channel_state = participant_state.filter_channel_state().remove(&self.account).unwrap();
 //                channel.apply_state(account_channel_state, participant_channel_state)?;
                 channel.apply_output(output)?;
                 gas
             }
             (ChannelTransactionRequestPayload::Offchain(sender_witness),
                 ChannelTransactionResponsePayload::Offchain(receiver_witness)) => {
-                if request.sender() == self.account_address {
+                if request.sender() == self.account {
                     channel.apply_witness(receiver_witness.witness_payload.clone(), receiver_witness.witness_signature.clone())?;
                 } else {
                     channel.apply_witness(sender_witness.witness_payload.clone(), sender_witness.witness_signature.clone())?;
@@ -317,21 +322,21 @@ impl<C> Wallet<C>
         Ok(gas)
     }
 
-    fn check_output(&self, output: &TransactionOutput) -> Result<()> {
-        info!("check_output: {}", output);
-        match output.status() {
-            TransactionStatus::Discard(vm_status) => {
-                bail!("transaction execute fail for: {:#?}", vm_status)
-            }
-            TransactionStatus::Keep(vm_status) => {
-                match &vm_status.major_status {
-                    StatusCode::EXECUTED => {}
-                    _ => bail!("transaction executed but status code : {:#?}", vm_status)
-                }
-            }
-        }
+    pub fn execute_script(&self, receiver: AccountAddress, package_name:&str, script_name:&str, args: Vec<TransactionArgument>) -> Result<ChannelTransactionRequest>{
+        info!("wallet.execute_script receiver:{}, package_name:{}, script_name:{}, args:{:?}", receiver, package_name, script_name, args);
+        let storage = self.storage.borrow();
+        let channel = storage.get_channel(&receiver)?;
+        self.execute(ChannelOp::Execute { package_name: package_name.to_string(), script_name: script_name.to_string() }, channel, receiver, args)
+    }
 
+    pub fn install_package(&self, package: ChannelScriptPackage) -> Result<()> {
+        //TODO(jole) package should limit channel?
+        self.script_registry.install_package(package)?;
         Ok(())
+    }
+
+    pub fn get_script(&self, package_name: &str, script_name: &str) -> Option<ScriptCode>{
+        self.script_registry.get_script(package_name, script_name)
     }
 
     pub fn get(&self, path: &Vec<u8>) -> Result<Option<Vec<u8>>> {
@@ -404,7 +409,7 @@ impl<C> Wallet<C>
         let channel_script = ChannelScriptPayload::new(channel.channel_sequence_number(), write_set, receiver, script);
         let txn = types::transaction_helpers::create_unsigned_payload_txn(
             TransactionPayload::ChannelScript(channel_script),
-            self.account_address,
+            self.account,
             self.sequence_number()?,
             Self::MAX_GAS_AMOUNT,
             Self::GAS_UNIT_PRICE,
@@ -423,7 +428,7 @@ impl<C> Wallet<C>
     }
 
     pub fn get_address(&self) -> AccountAddress {
-        self.account_address
+        self.account
     }
 
     pub async fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<SignedTransactionWithProof> {
@@ -440,7 +445,7 @@ impl<C> Wallet<C>
             let timeout_time = Instant::now() + Duration::from_millis(Self::RETRY_INTERVAL);
             if let Ok(_) = Delay::new(timeout_time).compat().await {
                 info!("seq number is {}", seq);
-                let result = self.client.get_transaction_by_seq_num(&self.account_address, seq);
+                let result = self.client.get_transaction_by_seq_num(&self.account, seq);
                 info!("result is {:?}", result);
                 match result {
                     Ok(None) => {
