@@ -37,6 +37,7 @@ fn main() {
         "Star single node".to_string(),
         vec![ARG_PEER_ID, ARG_CONFIG_PATH, ARG_DISABLE_LOGGING],
     );
+    println!("config is {:?}",config);
     if config.consensus.get_consensus_peers().len() == 0 {
         let (_, single_peer_consensus_config) = ConfigHelpers::get_test_consensus_config(1, None);
         config.consensus.consensus_peers = single_peer_consensus_config;

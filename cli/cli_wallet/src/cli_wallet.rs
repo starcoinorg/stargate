@@ -102,10 +102,44 @@ impl WalletLibrary{
         self.key_pair = Some(keypair);
         account_address
     }
+
+    pub fn sign_txn(&self, txn: RawTransaction) -> Result<SignedTransaction> {
+        match self.addr {
+            None=>{Err(WalletError::LibraWalletGeneric(
+                "Well, that address is nowhere to be found... This is awkward".to_string(),
+            ))},
+            Some(addr)=>{
+                if(addr==txn.sender()){
+                    let child_key = self.key_pair.as_ref().expect("should have keypair");
+                    match txn.sign(&child_key.private_key,child_key.public_key.clone()){
+                        Ok(signed_txn)=>{
+                            Ok(signed_txn.into_inner())
+                        },
+                        Err(e)=>{
+                            Err(WalletError::LibraWalletGeneric(
+                                format!("err is {}",e),
+                            ))
+                        }
+                    }
+                }else {
+                    Err(WalletError::LibraWalletGeneric(
+                        "Well, that address is nowhere to be found... This is awkward".to_string(),
+                    ))
+                }
+            }
+        }
+    }
+
 }
 
 fn get_unix_ts()->u64{
     let start = SystemTime::now();
     let since_the_epoch = start.duration_since(UNIX_EPOCH).expect("Time went backwards");;   
     since_the_epoch.as_millis() as u64
+}
+
+impl TransactionSigner for WalletLibrary {
+    fn sign_txn(&self, raw_txn: RawTransaction) -> failure::prelude::Result<SignedTransaction> {
+        Ok(self.sign_txn(raw_txn)?)
+    }
 }

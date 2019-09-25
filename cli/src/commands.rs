@@ -1,4 +1,4 @@
-use crate::{client_proxy::ClientProxy,account_commands::AccountCommand,node_commands::NodeCommand};
+use crate::{client_proxy::ClientProxy,account_commands::AccountCommand,node_commands::NodeCommand,dev_commands::DevCommand};
 use std::sync::Arc;
 use std::collections::HashMap;
 use failure::prelude::*;
@@ -31,6 +31,7 @@ pub fn get_commands() -> (
     let commands: Vec<Arc<dyn Command>> = vec![
         Arc::new(AccountCommand {}),
         Arc::new(NodeCommand {}),
+        Arc::new(DevCommand{}),
     ];
     let mut alias_to_cmd = HashMap::new();
     for command in &commands {

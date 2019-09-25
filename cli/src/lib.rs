@@ -8,6 +8,7 @@ pub mod commands;
 pub mod client_proxy;
 mod node_commands;
 mod account_commands;
+mod dev_commands;
 
 /// Struct used to store data for each created account.  We track the sequence number
 /// so we can create new transactions easily

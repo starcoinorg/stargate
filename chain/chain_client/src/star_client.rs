@@ -68,7 +68,7 @@ impl StarClient {
         }
     }
 
-    fn account_sequence_number(&self, account_address: &AccountAddress) -> Option<Version> {
+    pub fn account_sequence_number(&self, account_address: &AccountAddress) -> Option<Version> {
         match self.get_account_state_with_proof_inner(account_address, None).expect("get account state err.").1 {
             Some(blob) => {
                 let a_s_b = AccountStateBlob::from(blob);
