@@ -64,6 +64,7 @@ members = [
     "node/node_internal",
     "cli",
     "cli/cli_wallet",
+    "sgcompiler",
 ]
 
 [replace]

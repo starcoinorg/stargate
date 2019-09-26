@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
+use atomic_refcell::AtomicRefCell;
 use include_dir::Dir;
 
 use failure::prelude::*;
@@ -8,14 +9,14 @@ use ir_to_bytecode::{compiler::compile_program};
 use ir_to_bytecode::parser::parse_program;
 use lazy_static::lazy_static;
 use logger::prelude::*;
+use sgcompiler::{compile_package_with_files, ScriptFile, compile_script};
 use star_types::channel_transaction::ChannelOp;
+use star_types::script_package::{ChannelScriptPackage, ScriptCode};
 use stdlib::stdlib_modules;
 use types::account_address::AccountAddress;
 use types::account_config::coin_struct_tag;
 use types::language_storage::StructTag;
 use types::transaction::{Program, Script, TransactionArgument};
-use star_types::script_package::{ScriptCode, ChannelScriptPackage};
-use atomic_refcell::AtomicRefCell;
 
 static SCRIPTS_DIR: Dir = include_dir!("scripts");
 
@@ -37,12 +38,12 @@ impl PackageRegistry {
     pub fn build() -> Result<Self> {
         let mut packages = HashMap::new();
         let open_script = compile_script_with_file("open.mvir")?;
+        let close_script = compile_script_with_file("close.mvir")?;
         info!("{:?}", SCRIPTS_DIR.dirs());
         for dir in SCRIPTS_DIR.dirs() {
             let package = compile_package(dir)?;
             packages.insert(package.package_name().to_string(), package);
         }
-        let close_script = compile_script_with_file("close.mvir")?;
         Ok(Self {
             open_script: ScriptCode::new(ChannelOp::Open.to_string(), open_script),
             packages: AtomicRefCell::new(packages),
@@ -54,8 +55,8 @@ impl PackageRegistry {
             and_then(|package| package.get_script(script_name).cloned())
     }
 
-    pub fn install_package(&self, package: ChannelScriptPackage) -> Result<()>{
-        if self.packages.borrow().contains_key(package.package_name()){
+    pub fn install_package(&self, package: ChannelScriptPackage) -> Result<()> {
+        if self.packages.borrow().contains_key(package.package_name()) {
             bail!("package with name:{} exist", package.package_name());
         }
         self.packages.borrow_mut().insert(package.package_name().to_string(), package);
@@ -76,35 +77,13 @@ fn compile_script_with_file(path: &str) -> Result<Vec<u8>> {
     compile_script(script_str)
 }
 
-pub fn compile_package(dir: &Dir) -> Result<ChannelScriptPackage> {
-    let mut scripts = vec![];
+fn compile_package(dir: &Dir) -> Result<ChannelScriptPackage> {
     let package_name = dir.path().to_str().unwrap();
-    info!("scan package {}", package_name);
-    for file in dir.files() {
-        let ext = file.path().extension().unwrap_or_default();
-        if ext != "mvir" {
-            warn!("file {} is not a mvir file", file.path().display());
-            continue;
-        }
-        //TODO handle unwrap
-        let script_name = file.path().file_stem().unwrap().to_str().unwrap();
-        let script = compile_script(file.contents_utf8().unwrap())?;
-        info!("find package: {} script {}", package_name, script_name);
-        scripts.push(ScriptCode::new(script_name.to_string(), script));
-    }
-    Ok(ChannelScriptPackage::new(package_name.to_string(), scripts))
+    let script_files = dir.files().iter()
+        .map(|file| ScriptFile::new(file.path().to_path_buf(), file.contents_utf8().expect("script contents must is string").to_string())).collect();
+    compile_package_with_files(package_name, script_files)
 }
 
-fn compile_script(script_str: &str) -> Result<Vec<u8>> {
-    let ast_program = parse_program(script_str)?;
-    let compiled_program =
-        compile_program(AccountAddress::default(), ast_program, stdlib_modules())?;
-    let mut script_bytes = vec![];
-    compiled_program
-        .script
-        .serialize(&mut script_bytes)?;
-    Ok(script_bytes)
-}
 
 #[cfg(test)]
 mod tests {

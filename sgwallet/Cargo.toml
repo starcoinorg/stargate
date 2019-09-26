@@ -36,6 +36,7 @@ vm_cache_map = {path="../libra/language/vm/vm_runtime/vm_cache_map"}
 state_view = { path = "../libra/storage/state_view"}
 config = { path = "../libra/config"}
 canonical_serialization = { path = "../libra/common/canonical_serialization"}
+sgcompiler = { path = "../sgcompiler"}
 
 [dev-dependencies]
 crypto = { path = "../libra/crypto/crypto", features = ["testing"] }
