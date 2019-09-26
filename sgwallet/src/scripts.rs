@@ -9,7 +9,7 @@ use ir_to_bytecode::{compiler::compile_program};
 use ir_to_bytecode::parser::parse_program;
 use lazy_static::lazy_static;
 use logger::prelude::*;
-use sgcompiler::{compile_package_with_files, ScriptFile, compile_script};
+use sgcompiler::{compile_package_with_files, compile_script, ScriptFile};
 use star_types::channel_transaction::ChannelOp;
 use star_types::script_package::{ChannelScriptPackage, ScriptCode};
 use stdlib::stdlib_modules;
@@ -37,19 +37,30 @@ pub struct PackageRegistry {
 impl PackageRegistry {
     pub fn build() -> Result<Self> {
         let mut packages = HashMap::new();
-        let open_script = compile_script_with_file("open.mvir")?;
-        let close_script = compile_script_with_file("close.mvir")?;
+        let open_script_source = get_file_contents("open.mvir")?;
+        let open_script = compile_script(open_script_source)?;
+        let close_script_source = get_file_contents("close.mvir")?;
+        let close_script = compile_script(close_script_source)?;
         info!("{:?}", SCRIPTS_DIR.dirs());
         for dir in SCRIPTS_DIR.dirs() {
             let package = compile_package(dir)?;
             packages.insert(package.package_name().to_string(), package);
         }
         Ok(Self {
-            open_script: ScriptCode::new(ChannelOp::Open.to_string(), open_script),
+            open_script: ScriptCode::new(ChannelOp::Open.to_string(), open_script_source.to_string(), open_script),
             packages: AtomicRefCell::new(packages),
-            close_script: ScriptCode::new(ChannelOp::Close.to_string(), close_script),
+            close_script: ScriptCode::new(ChannelOp::Close.to_string(), close_script_source.to_string(), close_script),
         })
     }
+
+    pub fn get_package(&self, package_name: &str) -> Option<ChannelScriptPackage> {
+        self.packages.borrow().get(package_name).cloned()
+    }
+
+    pub fn packages(&self) -> Vec<ChannelScriptPackage> {
+        self.packages.borrow().iter().map(|(_, v)| v.clone()).collect()
+    }
+
     pub fn get_script(&self, package_name: &str, script_name: &str) -> Option<ScriptCode> {
         self.packages.borrow().get(package_name).
             and_then(|package| package.get_script(script_name).cloned())
@@ -72,9 +83,8 @@ impl PackageRegistry {
     }
 }
 
-fn compile_script_with_file(path: &str) -> Result<Vec<u8>> {
-    let script_str = SCRIPTS_DIR.get_file(path).and_then(|file| file.contents_utf8()).ok_or(format_err!("Can not find script by path:{}", path))?;
-    compile_script(script_str)
+fn get_file_contents(path: &str) -> Result<&str> {
+    SCRIPTS_DIR.get_file(path).and_then(|file| file.contents_utf8()).ok_or(format_err!("Can not find script by path:{}", path))
 }
 
 fn compile_package(dir: &Dir) -> Result<ChannelScriptPackage> {
@@ -100,6 +110,8 @@ mod tests {
     fn test_compile_script() {
         init_for_e2e_testing();
         let registry = PackageRegistry::build().unwrap();
+        let package = registry.get_package("libra").unwrap();
+        println!("{}", package);
         registry.get_script("libra", "transfer").unwrap();
     }
 }

@@ -65,7 +65,7 @@ pub fn compile_package_with_files(package_name: &str, script_files: Vec<ScriptFi
         let script_name = file.script_name();
         let script = compile_script(file.contents())?;
         info!("find package: {} script {}", package_name, script_name);
-        scripts.push(ScriptCode::new(script_name.to_string(), script));
+        scripts.push(ScriptCode::new(script_name.to_string(), file.contents().to_string(), script));
     }
     Ok(ChannelScriptPackage::new(package_name.to_string(), scripts))
 }
