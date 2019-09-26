@@ -6,7 +6,7 @@ use types::proto::{transaction::SignedTransaction as SignedTransactionProto, acc
 use core::borrow::Borrow;
 use std::str::FromStr;
 use crypto::HashValue;
-use star_types::{watch_tx_data::WatchTxData, proto::{chain::WatchData, star_account::AccountState, chain::{GetTransactionByVersionRequest, GetTransactionBySeqNumRequest, WatchEventRequest, EventKey as EventKeyProto}}};
+use star_types::{watch_tx_data::WatchTxData, proto::{chain::WatchData, chain::{GetTransactionByVersionRequest, GetTransactionBySeqNumRequest, WatchEventRequest, EventKey as EventKeyProto}}};
 use types::transaction::{Version, SignedTransactionWithProof};
 use star_types::{proto::{chain_grpc, chain::{FaucetRequest, LatestRootRequest, GetAccountStateWithProofRequest, SubmitTransactionRequest, WatchTransactionRequest}}, resource::Resource};
 use grpcio::{EnvBuilder, ChannelBuilder};
@@ -22,8 +22,10 @@ use types::proof::SparseMerkleProof;
 
 pub mod watch_stream;
 pub mod star_client;
+pub mod client_state_view;
 
 pub use star_client::StarClient;
+use star_types::account_state::AccountState;
 
 pub trait ChainClient {
     fn get_account_state_with_proof(&self, address: &AccountAddress, version: Option<Version>) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)>;
@@ -31,6 +33,13 @@ pub trait ChainClient {
     fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<()>;
     fn watch_transaction(&self, address: &AccountAddress, seq_num: u64) -> Result<Option<SignedTransactionWithProof>>;
     fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<Option<SignedTransactionWithProof>>;
+
+    fn get_account_state(&self, account: AccountAddress, version: Option<Version>) -> Result<AccountState> {
+        let (version, state_blob, proof) = self.get_account_state_with_proof(&account, version).and_then(|(version, state, proof)| {
+            Ok((version, state.ok_or(format_err!("can not find account by address:{}", account))?, proof))
+        })?;
+        AccountState::from_account_state_blob(version, state_blob, proof)
+    }
 }
 
 #[derive(Clone)]

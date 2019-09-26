@@ -36,6 +36,8 @@ storage_service = { path = "../../libra/storage/storage_service" }
 vm_validator = { path = "../../libra/vm_validator" }
 tokio = "0.1.22"
 star_node = { path = "../star_node" }
+state_view = {path = "../../libra/storage/state_view"}
+atomic_refcell = "0.1.3"
 
 [dev-dependencies]
 crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }

@@ -6,7 +6,7 @@ use atomic_refcell::AtomicRefCell;
 use itertools::Itertools;
 
 use failure::prelude::*;
-use star_types::account_resource_ext;
+use crate::account_resource_ext;
 use types::access_path::DataPath;
 use types::account_address::AccountAddress;
 use types::account_config::{account_resource_path, AccountResource};
@@ -135,8 +135,6 @@ impl Into<AccountStateBlob> for &AccountState {
 mod tests {
     use types::account_config::AccountResource;
     use types::channel_account::ChannelAccountResource;
-
-    use crate::AccountState;
 
     use super::*;
 

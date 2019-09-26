@@ -3,18 +3,17 @@ use std::sync::Arc;
 
 use atomic_refcell::AtomicRefCell;
 
-use chain_client::ChainClient;
 use failure::prelude::*;
 use logger::prelude::*;
 use star_types::resource_type::resource_def::{ResourceDef, StructDefResolve};
-use state_store::StateViewPlus;
 use state_view::StateView;
 use types::access_path::AccessPath;
 use types::account_address::AccountAddress;
 use types::language_storage::StructTag;
 use types::transaction::Version;
 
-use crate::{AccountState, Channel, LocalStateStorage};
+use star_types::account_state::AccountState;
+use crate::ChainClient;
 
 /// A state_view directly fetch remote chain, but lock version.
 pub struct ClientStateView<C> where C: ChainClient {
@@ -53,7 +52,7 @@ impl<C> StateView for ClientStateView<C> where C: ChainClient {
         let AccessPath { address, path } = access_path;
         let mut cache = self.cache.borrow_mut();
         let account_state = cache.entry(*address).
-            or_insert(LocalStateStorage::get_account_state_by_client(self.client.clone(), *address, self.version)?);
+            or_insert(self.client.get_account_state( *address, self.version)?);
         Ok(account_state.get(path))
     }
 

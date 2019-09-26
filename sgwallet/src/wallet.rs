@@ -23,7 +23,7 @@ use crypto::hash::{CryptoHash, CryptoHasher, TestOnlyHasher};
 use crypto::test_utils::KeyPair;
 use failure::prelude::*;
 use lazy_static::lazy_static;
-use local_state_storage::{Channel, LocalStateStorage, WitnessData};
+use local_state_storage::{LocalStateStorage};
 use logger::prelude::*;
 use star_types::{account_resource_ext, transaction_output_helper};
 use star_types::channel_transaction::{ChannelOp, ChannelTransactionRequest, ChannelTransactionRequestAndOutput, ChannelTransactionRequestPayload, ChannelTransactionResponse, ChannelTransactionResponsePayload, Witness};
@@ -47,6 +47,7 @@ use types::write_set::{WriteOp, WriteSet};
 use vm_runtime::{MoveVM, VMExecutor};
 
 use crate::scripts::*;
+use star_types::channel::{Channel, WitnessData};
 
 lazy_static! {
     pub static ref DEFAULT_ASSET:StructTag = coin_struct_tag();

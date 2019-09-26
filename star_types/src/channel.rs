@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 
 use crypto::ed25519::Ed25519Signature;
 use failure::prelude::*;
-use star_types::channel_transaction::{ChannelTransactionRequest, ChannelTransactionResponse, ChannelTransactionResponsePayload, ChannelTransactionRequestPayload, ChannelOp, ChannelTransactionRequestAndOutput};
-use star_types::message::SgError;
-use star_types::sg_error::SgErrorCode;
+use crate::channel_transaction::{ChannelTransactionRequest, ChannelTransactionResponse, ChannelTransactionResponsePayload, ChannelTransactionRequestPayload, ChannelOp, ChannelTransactionRequestAndOutput};
+use crate::message::SgError;
+use crate::sg_error::SgErrorCode;
 use types::access_path::{AccessPath, DataPath};
 use types::account_address::AccountAddress;
 use types::channel_account::ChannelAccountResource;

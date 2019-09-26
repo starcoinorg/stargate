@@ -20,13 +20,12 @@ use types::transaction::{ChannelWriteSetPayload, TransactionOutput, Version};
 use types::write_set::{WriteOp, WriteSet};
 use vm_runtime_types::loaded_data::struct_def::StructDef;
 
-pub use crate::account_state::AccountState;
-pub use crate::channel::{Channel, WitnessData};
-use crate::channel::ChannelState;
 pub use crate::channel_state_view::ChannelStateView;
-use crate::client_state_view::ClientStateView;
 use std::thread::sleep;
 use std::time::Duration;
+use star_types::channel::{Channel, WitnessData};
+use star_types::account_state::AccountState;
+use chain_client::client_state_view::ClientStateView;
 
 pub struct LocalStateStorage<C>
     where
@@ -54,12 +53,12 @@ impl<C> LocalStateStorage<C>
     }
 
     fn refresh_channels(&mut self) -> Result<()> {
-        let account_state = Self::get_account_state_by_client(self.client.clone(), self.account, None)?;
+        let account_state = self.get_account_state(self.account,None)?;
         let my_channel_states = account_state.filter_channel_state();
         let version = account_state.version();
         for (participant, my_channel_state) in my_channel_states {
             if !self.channels.contains_key(&participant) {
-                let participant_account_state = Self::get_account_state_by_client(self.client.clone(), participant, Some(version))?;
+                let participant_account_state = self.get_account_state(participant, Some(version))?;
                 let mut participant_channel_states = participant_account_state.filter_channel_state();
                 let participant_channel_state = participant_channel_states.remove(&self.account).ok_or(format_err!("Can not find channel {} in {}", self.account, participant))?;
                 let channel = Channel::new_with_state(my_channel_state, participant_channel_state);
@@ -70,15 +69,8 @@ impl<C> LocalStateStorage<C>
         Ok(())
     }
 
-    fn get_account_state_by_client(client: Arc<C>, account: AccountAddress, version: Option<Version>) -> Result<AccountState> {
-        let (version, state_blob, proof) = client.get_account_state_with_proof(&account, version).and_then(|(version, state, proof)| {
-            Ok((version, state.ok_or(format_err!("can not find account by address:{}", account))?, proof))
-        })?;
-        AccountState::from_account_state_blob(version, state_blob, proof)
-    }
-
     pub fn get_account_state(&self, account: AccountAddress, version: Option<Version>) -> Result<AccountState> {
-        Self::get_account_state_by_client(self.client.clone(), account, version)
+        self.client.get_account_state(account, version)
     }
 
     pub fn get_witness_data(&self, participant: AccountAddress) -> Result<WitnessData> {
@@ -108,7 +100,7 @@ impl<C> LocalStateStorage<C>
             let participant = path.participant().expect("participant must exist");
             Ok(self.channels.get(&participant).and_then(|channel| channel.get(&AccessPath::new_for_data_path(self.account, path.clone()))))
         } else {
-            let account_state = Self::get_account_state_by_client(self.client.clone(), self.account, None)?;
+            let account_state = self.get_account_state(self.account, None)?;
             Ok(account_state.get(&path.to_vec()))
         }
     }
@@ -127,9 +119,6 @@ impl<C> LocalStateStorage<C>
     }
 }
 
-mod account_state;
-mod channel;
-mod client_state_view;
 mod channel_state_view;
 #[cfg(test)]
 mod local_state_storage_test;

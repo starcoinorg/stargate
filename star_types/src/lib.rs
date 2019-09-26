@@ -18,6 +18,8 @@ pub mod resource_value;
 pub mod resource_value_serializer;
 pub mod resource_type;
 pub mod script_package;
+pub mod account_state;
+pub mod channel;
 
 #[cfg(test)]
 mod tests {
