@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package star_types;
+
+message ChannelScriptPackage {
+    bytes payload = 1;
+}

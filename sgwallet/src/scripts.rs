@@ -14,7 +14,7 @@ use types::account_address::AccountAddress;
 use types::account_config::coin_struct_tag;
 use types::language_storage::StructTag;
 use types::transaction::{Program, Script, TransactionArgument};
-use star_types::script::{ScriptCode,ChannelScriptPackage};
+use star_types::script_package::{ScriptCode, ChannelScriptPackage};
 use atomic_refcell::AtomicRefCell;
 
 static SCRIPTS_DIR: Dir = include_dir!("scripts");

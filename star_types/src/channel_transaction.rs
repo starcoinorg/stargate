@@ -3,7 +3,6 @@ use std::fmt::{Display, Formatter};
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use protobuf::RepeatedField;
-use radix_trie::TrieKey;
 use serde::{Deserialize, Serialize};
 
 use canonical_serialization::{CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer, SimpleDeserializer, SimpleSerializer};

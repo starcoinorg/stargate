@@ -22,7 +22,7 @@ use types::account_address::AccountAddress;
 
 use super::wallet::*;
 use tokio::runtime::current_thread::block_on_all;
-use star_types::script::ChannelScriptPackage;
+use star_types::script_package::ChannelScriptPackage;
 use types::transaction::TransactionArgument;
 
 

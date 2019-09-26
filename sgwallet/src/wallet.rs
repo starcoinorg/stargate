@@ -30,7 +30,7 @@ use star_types::channel_transaction::{ChannelOp, ChannelTransactionRequest, Chan
 use star_types::message::{ErrorMessage, SgError};
 use star_types::resource::Resource;
 use star_types::resource_type::resource_def::StructDefResolve;
-use star_types::script::{ChannelScriptPackage, ScriptCode};
+use star_types::script_package::{ChannelScriptPackage, ScriptCode};
 use star_types::sg_error::SgErrorCode;
 use state_store::{StateStore, StateViewPlus};
 use state_view::StateView;
