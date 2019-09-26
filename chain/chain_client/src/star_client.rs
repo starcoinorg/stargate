@@ -26,6 +26,7 @@ use executable_helpers::helpers::{
 use config::trusted_peers::ConfigHelpers;
 use mempool::core_mempool_client::CoreMemPoolClient;
 use vm_validator::vm_validator::VMValidator;
+use logger::*;
 
 #[derive(Clone)]
 pub struct StarClient {
@@ -127,8 +128,13 @@ impl ChainClient for StarClient {
     fn get_transaction_by_seq_num(&self, account_address: &AccountAddress, seq_num: u64) -> Result<Option<SignedTransactionWithProof>> {
         let req = RequestItem::GetAccountTransactionBySequenceNumber { account: account_address.clone(), sequence_number: seq_num, fetch_events: false };
         let mut resp = parse_response(self.do_request(&build_request(req, None)));
-        let proof = resp.take_get_account_transaction_by_sequence_number_response().take_signed_transaction_with_proof();
-        Ok(Some(SignedTransactionWithProof::from_proto(proof).expect("SignedTransaction parse from proto err.")))
+        let mut tmp = resp.take_get_account_transaction_by_sequence_number_response();
+        if tmp.has_signed_transaction_with_proof() {
+            let proof = tmp.take_signed_transaction_with_proof();
+            Ok(Some(SignedTransactionWithProof::from_proto(proof).expect("SignedTransaction parse from proto err.")))
+        } else {
+            Ok(None)
+        }
     }
 }
 

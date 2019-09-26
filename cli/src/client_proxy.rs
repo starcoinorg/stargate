@@ -117,10 +117,13 @@ impl ClientProxy {
     /// Compile move program
     pub fn compile_program(&mut self, space_delim_strings: &[&str]) -> Result<String> {
         let file_path = space_delim_strings[1];
-        let is_module = if space_delim_strings.len() > 3 {
-            parse_bool(space_delim_strings[2])?
-        } else {
-            false
+        let is_module = match space_delim_strings[2] {
+            "module" => true,
+            "script" => false,
+            _ => bail!(
+                "Invalid program type: {}. Available options: module, script",
+                space_delim_strings[3]
+            ),
         };
         let output_path = {
             if space_delim_strings.len() == 4 {
@@ -132,34 +135,21 @@ impl ClientProxy {
                 path
             }
         };
-        // custom handler of old module format
-        // TODO: eventually retire code after vm separation between modules and scripts
-        let tmp_source = if is_module {
-            let mut tmp_file = NamedTempFile::new()?;
-            let code = format!(
-                "\
-                 modules:\n\
-                 {}\n\
-                 script:\n\
-                 main(){{\n\
-                 return;\n\
-                 }}",
-                fs::read_to_string(file_path)?
-            );
-            writeln!(tmp_file, "{}", code)?;
-            Some(tmp_file)
-        } else {
-            None
-        };
 
-        let source_path = tmp_source
-            .as_ref()
-            .map(|f| f.path().to_str().unwrap())
-            .unwrap_or(file_path);
-        let args = format!(
-            "run -p compiler -- -a {} -o {} {}",
-            self.wallet.get_address(), output_path, source_path
+        let tmp_source_path = NamedTempFile::new()?;
+        let mut tmp_source_file = std::fs::File::create(tmp_source_path.as_ref())?;
+        let mut code = fs::read_to_string(file_path)?;
+        code = code.replace("{{sender}}", &format!("0x{}", self.wallet.get_address()));
+        writeln!(tmp_source_file, "{}", code)?;
+
+        let mut args = format!(
+            "run -p compiler -- {} -a {} -o {}{}",
+            tmp_source_path.path().display(),
+            self.wallet.get_address(),
+            output_path,
+            if is_module { " -m" } else { "" },
         );
+
         let status = Command::new("cargo")
             .args(args.split(' '))
             .spawn()?
@@ -167,6 +157,7 @@ impl ClientProxy {
         if !status.success() {
             return Err(format_err!("compilation failed"));
         }
+
         Ok(output_path)
     }
 
@@ -178,7 +169,7 @@ impl ClientProxy {
 
         self.chain_client.submit_transaction(txn);
 
-        self.wait_for_transaction(&addr, sequence_number + 1);
+        self.wait_for_transaction(&addr, sequence_number );
 
         Ok(())
     }
@@ -233,7 +224,7 @@ impl ClientProxy {
 
             if let Ok(Some((txn_with_proof))) =
             self.chain_client.get_transaction_by_seq_num
-                (&account, sequence_number - 1)
+                (&account, sequence_number )
             {
                 println!("transaction is stored!");
                 break;
