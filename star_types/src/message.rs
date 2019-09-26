@@ -11,6 +11,7 @@ use parity_multiaddr::Multiaddr;
 use crypto::HashValue;
 use protobuf::ProtobufEnum;
 use crate::sg_error::SgErrorCode;
+use crate::script_package::ChannelScriptPackage;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 //#[ProtoType(crate::proto::message::OpenChannelNodeNegotiateMessage)]
@@ -282,4 +283,10 @@ impl MessageType {
             _ => bail!("no such type"),
         }
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq,FromProto, IntoProto)]
+#[ProtoType(crate::proto::message::InstallChannelScriptPackageRequest)]
+pub struct InstallChannelScriptPackageRequest {
+    pub channel_script_package :ChannelScriptPackage,
 }
