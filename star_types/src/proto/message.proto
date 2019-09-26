@@ -4,7 +4,6 @@ package star_types;
 
 import "transaction.proto";
 import "channel_transaction.proto";
-import "script_package.proto";
 
 message RawNegotiateMessage {
     bytes sender_addr = 1;
@@ -54,8 +53,4 @@ message ErrorMessage{
     bytes raw_transaction_hash = 1;
     uint32 error_code=2;
     string error_message =3 ;
-}
-
-message InstallChannelScriptPackageRequest{
-    star_types.ChannelScriptPackage channel_script_package=1;
 }

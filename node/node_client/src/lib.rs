@@ -1,10 +1,11 @@
-use node_proto::{proto::{node_grpc}, OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse,
+use node_proto::{OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse,
                  ConnectRequest, ConnectResponse, WithdrawRequest, WithdrawResponse, ChannelBalanceRequest,
                  ChannelBalanceResponse, DepositRequest, DepositResponse};
 use failure::{bail, Result};
 use grpcio::{ChannelBuilder, Environment};
 use proto_conv::{FromProto, IntoProto};
 use std::sync::Arc;
+use star_types::proto::node_grpc;
 
 pub struct NodeClient {
     client: node_grpc::NodeClient,

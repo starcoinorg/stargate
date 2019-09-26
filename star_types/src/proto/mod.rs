@@ -11,3 +11,6 @@ pub mod chain_grpc;
 pub mod chain_client;
 pub mod change_set;
 pub mod script_package;
+pub mod node;
+pub mod node_grpc;
+pub mod node_client;

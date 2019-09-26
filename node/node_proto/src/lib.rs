@@ -1,5 +1,3 @@
-pub mod proto;
-
 //#[cfg(test)]
 //mod protobuf_conversion_test;
 
@@ -8,9 +6,10 @@ use failure::prelude::*;
 #[cfg(any(test, feature = "testing"))]
 use proptest_derive::Arbitrary;
 use proto_conv::{FromProto, IntoProto};
+use star_types::script_package::ChannelScriptPackage;
 
 #[derive(Clone, Debug, Eq, PartialEq, FromProto, IntoProto)]
-#[ProtoType(crate::proto::node::OpenChannelRequest)]
+#[ProtoType(star_types::proto::node::OpenChannelRequest)]
 #[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct OpenChannelRequest {
     pub remote_addr:AccountAddress,
@@ -45,7 +44,7 @@ impl OpenChannelResponse {
 }
 
 impl FromProto for OpenChannelResponse {
-    type ProtoType = crate::proto::node::OpenChannelResponse;
+    type ProtoType = star_types::proto::node::OpenChannelResponse;
 
     fn from_proto(mut object: Self::ProtoType) -> Result<Self> {
         Ok(OpenChannelResponse {
@@ -54,7 +53,7 @@ impl FromProto for OpenChannelResponse {
 }
 
 impl IntoProto for OpenChannelResponse {
-    type ProtoType = crate::proto::node::OpenChannelResponse;
+    type ProtoType = star_types::proto::node::OpenChannelResponse;
 
     fn into_proto(self) -> Self::ProtoType {
         let mut out = Self::ProtoType::new();        
@@ -63,7 +62,7 @@ impl IntoProto for OpenChannelResponse {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, FromProto, IntoProto)]
-#[ProtoType(crate::proto::node::PayRequest)]
+#[ProtoType(star_types::proto::node::PayRequest)]
 #[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct PayRequest {
     pub remote_addr: AccountAddress,
@@ -96,7 +95,7 @@ impl PayResponse {
 }
 
 impl FromProto for PayResponse {
-    type ProtoType = crate::proto::node::PayResponse;
+    type ProtoType = star_types::proto::node::PayResponse;
 
     fn from_proto(mut object: Self::ProtoType) -> Result<Self> {
         Ok(PayResponse {
@@ -105,7 +104,7 @@ impl FromProto for PayResponse {
 }
 
 impl IntoProto for PayResponse {
-    type ProtoType = crate::proto::node::PayResponse;
+    type ProtoType = star_types::proto::node::PayResponse;
 
     fn into_proto(self) -> Self::ProtoType {
         let mut out = Self::ProtoType::new();        
@@ -115,7 +114,7 @@ impl IntoProto for PayResponse {
 
 
 #[derive(Clone, Debug, Eq, PartialEq, FromProto, IntoProto)]
-#[ProtoType(crate::proto::node::ConnectRequest)]
+#[ProtoType(star_types::proto::node::ConnectRequest)]
 #[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct ConnectRequest {
     pub remote_addr: AccountAddress,
@@ -133,7 +132,7 @@ impl ConnectRequest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq,FromProto,IntoProto)]
-#[ProtoType(crate::proto::node::ConnectResponse)]
+#[ProtoType(star_types::proto::node::ConnectResponse)]
 #[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct ConnectResponse {
 }
@@ -148,7 +147,7 @@ impl ConnectResponse {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq,FromProto,IntoProto)]
-#[ProtoType(crate::proto::node::DepositRequest)]
+#[ProtoType(star_types::proto::node::DepositRequest)]
 #[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct DepositRequest {
     pub remote_addr:AccountAddress,
@@ -167,7 +166,7 @@ impl DepositRequest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq,FromProto,IntoProto)]
-#[ProtoType(crate::proto::node::DepositResponse)]
+#[ProtoType(star_types::proto::node::DepositResponse)]
 #[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct DepositResponse {
 }
@@ -182,7 +181,7 @@ impl DepositResponse {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq,FromProto,IntoProto)]
-#[ProtoType(crate::proto::node::WithdrawRequest)]
+#[ProtoType(star_types::proto::node::WithdrawRequest)]
 #[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct WithdrawRequest {
     pub remote_addr:AccountAddress,
@@ -201,7 +200,7 @@ impl WithdrawRequest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq,FromProto,IntoProto)]
-#[ProtoType(crate::proto::node::WithdrawResponse)]
+#[ProtoType(star_types::proto::node::WithdrawResponse)]
 #[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct WithdrawResponse {
 }
@@ -216,7 +215,7 @@ impl WithdrawResponse {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq,FromProto,IntoProto)]
-#[ProtoType(crate::proto::node::ChannelBalanceRequest)]
+#[ProtoType(star_types::proto::node::ChannelBalanceRequest)]
 #[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct ChannelBalanceRequest {
     pub remote_addr:AccountAddress,
@@ -231,7 +230,7 @@ impl ChannelBalanceRequest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq,FromProto,IntoProto)]
-#[ProtoType(crate::proto::node::ChannelBalanceResponse)]
+#[ProtoType(star_types::proto::node::ChannelBalanceResponse)]
 #[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct ChannelBalanceResponse {
     pub balance:u64,
@@ -243,4 +242,10 @@ impl ChannelBalanceResponse {
             balance,
         }
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq,FromProto, IntoProto)]
+#[ProtoType(star_types::proto::node::InstallChannelScriptPackageRequest)]
+pub struct InstallChannelScriptPackageRequest {
+    pub channel_script_package :ChannelScriptPackage,
 }

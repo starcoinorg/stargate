@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package node;
 
+import "script_package.proto";
+
 service Node {
     rpc OpenChannel(OpenChannelRequest) returns (OpenChannelResponse) {}
   
@@ -80,4 +82,8 @@ message ChannelBalanceRequest{
 
 message ChannelBalanceResponse{
         uint64 balance=1;        
+}
+
+message InstallChannelScriptPackageRequest{
+    star_types.ChannelScriptPackage channel_script_package=1;
 }

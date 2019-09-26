@@ -2,8 +2,7 @@
 
 //use config::config::NodeConfig;
 use node_proto::{
-    OpenChannelRequest,OpenChannelResponse,PayRequest,PayResponse,ConnectRequest,ConnectResponse,DepositRequest,DepositResponse,WithdrawRequest,WithdrawResponse,ChannelBalanceRequest,ChannelBalanceResponse,
-    proto::node_grpc::create_node
+    OpenChannelRequest,OpenChannelResponse,PayRequest,PayResponse,ConnectRequest,ConnectResponse,DepositRequest,DepositResponse,WithdrawRequest,WithdrawResponse,ChannelBalanceRequest,ChannelBalanceResponse
 };
 use failure::Result;
 use futures01::future::Future;
@@ -19,6 +18,7 @@ use std::sync::{Arc,Mutex,mpsc};
 use sg_config::config::{NodeConfig};
 use node_internal::node::Node as Node_Internal;
 use chain_client::{ChainClient};
+use star_types::proto::node_grpc::create_node;
 
 pub fn setup_node_service<C>(config: &NodeConfig,node:Arc<Node_Internal<C>>) -> ::grpcio::Server 
 where C: ChainClient+Clone+ Send+Sync+'static{
@@ -46,8 +46,8 @@ impl<C: ChainClient+Clone +Send+Sync+'static> NodeService<C> {
     }
 }
 
-impl<C: ChainClient+Clone +Send+Sync+'static> node_proto::proto::node_grpc::Node for NodeService<C> {
-    fn open_channel(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::OpenChannelRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::OpenChannelResponse>){
+impl<C: ChainClient+Clone +Send+Sync+'static> star_types::proto::node_grpc::Node for NodeService<C> {
+    fn open_channel(&mut self, ctx: ::grpcio::RpcContext, req: star_types::proto::node::OpenChannelRequest, sink: ::grpcio::UnarySink<star_types::proto::node::OpenChannelResponse>){
         let request = OpenChannelRequest::from_proto(req).unwrap();
         let rx=self.node.open_channel_oneshot( request.remote_addr, request.local_amount,request.remote_amount);
         //let resp=OpenChannelResponse{}.into_proto();
@@ -56,39 +56,39 @@ impl<C: ChainClient+Clone +Send+Sync+'static> node_proto::proto::node_grpc::Node
         ctx.spawn(fut.boxed().unit_error().compat());
     }
 
-    fn pay(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::PayRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::PayResponse>){
+    fn pay(&mut self, ctx: ::grpcio::RpcContext, req: star_types::proto::node::PayRequest, sink: ::grpcio::UnarySink<star_types::proto::node::PayResponse>){
         let request = PayRequest::from_proto(req).unwrap();
         let rx= self.node.off_chain_pay_oneshot(request.remote_addr, request.amount);
         let fut=process_response(rx,sink);
         ctx.spawn(fut.boxed().unit_error().compat());
     }
 
-    fn send_off_line_tx(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::SendOffLineTxRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::SendOffLineTxResponse>){
+    fn send_off_line_tx(&mut self, ctx: ::grpcio::RpcContext, req: star_types::proto::node::SendOffLineTxRequest, sink: ::grpcio::UnarySink<star_types::proto::node::SendOffLineTxResponse>){
         println!("send off line tx");
     }  
 
-    fn connect(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::ConnectRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::ConnectResponse>){
+    fn connect(&mut self, ctx: ::grpcio::RpcContext, req: star_types::proto::node::ConnectRequest, sink: ::grpcio::UnarySink<star_types::proto::node::ConnectResponse>){
         let connect_req = ConnectRequest::from_proto(req).unwrap();
         //self.node.connect(connect_req.remote_ip.parse().unwrap(),connect_req.remote_addr);
         let resp=ConnectResponse{}.into_proto();
         provide_grpc_response(Ok(resp),ctx,sink);
     }
 
-    fn deposit(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::DepositRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::DepositResponse>){
+    fn deposit(&mut self, ctx: ::grpcio::RpcContext, req: star_types::proto::node::DepositRequest, sink: ::grpcio::UnarySink<star_types::proto::node::DepositResponse>){
         let request = DepositRequest::from_proto(req).unwrap();
         let rx=self.node.deposit_oneshot(request.remote_addr, request.local_amount,request.remote_amount);
         let fut=process_response(rx,sink);
         ctx.spawn(fut.boxed().unit_error().compat());
     }
 
-    fn withdraw(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::WithdrawRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::WithdrawResponse>){
+    fn withdraw(&mut self, ctx: ::grpcio::RpcContext, req: star_types::proto::node::WithdrawRequest, sink: ::grpcio::UnarySink<star_types::proto::node::WithdrawResponse>){
         let request = WithdrawRequest::from_proto(req).unwrap();
         let rx=self.node.withdraw_oneshot(request.remote_addr, request.local_amount,request.remote_amount);
         let fut=process_response(rx,sink);
         ctx.spawn(fut.boxed().unit_error().compat());
     }
 
-    fn channel_balance(&mut self, ctx: ::grpcio::RpcContext, req: node_proto::proto::node::ChannelBalanceRequest, sink: ::grpcio::UnarySink<node_proto::proto::node::ChannelBalanceResponse>){
+    fn channel_balance(&mut self, ctx: ::grpcio::RpcContext, req: star_types::proto::node::ChannelBalanceRequest, sink: ::grpcio::UnarySink<star_types::proto::node::ChannelBalanceResponse>){
         let request = ChannelBalanceRequest::from_proto(req).unwrap();
         let balance=self.node.channel_balance(request.remote_addr).unwrap();
         let resp=ChannelBalanceResponse::new(balance).into_proto();

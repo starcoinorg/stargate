@@ -284,9 +284,3 @@ impl MessageType {
         }
     }
 }
-
-#[derive(Clone, Debug, Eq, PartialEq,FromProto, IntoProto)]
-#[ProtoType(crate::proto::message::InstallChannelScriptPackageRequest)]
-pub struct InstallChannelScriptPackageRequest {
-    pub channel_script_package :ChannelScriptPackage,
-}
