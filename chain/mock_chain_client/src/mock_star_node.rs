@@ -100,10 +100,6 @@ pub fn setup_environment(node_config: &mut NodeConfig) -> (AdmissionControlClien
         instant.elapsed().as_millis()
     );
 
-//    let metrics_port = node_config.debug_interface.metrics_server_port;
-//    let metric_host = node_config.debug_interface.address.clone();
-//    thread::spawn(move || {println!("----{}---{}----", metrics_port, metric_host);metric_server::start_server((metric_host.as_str(), metrics_port))});
-
     // Initialize and start AC.
     instant = Instant::now();
     let (ac_client, mempool_client) = setup_ac(&node_config, Arc::clone(&storage_service));
@@ -129,8 +125,15 @@ fn commit_block(ac_client: AdmissionControlClient<CoreMemPoolClient, VMValidator
 
             if txns.len() > 0 {
                 let mut tmp_txn_vec = vec![];
+                let mut txn_exc_vec = vec![];
                 txns.clone().iter().for_each(|txn| {
                     let tmp = SignedTransaction::from_proto(txn.clone()).expect("from pb err.");
+
+                    let mut txn_exc = TransactionExclusion::new();
+                    txn_exc.set_sender(tmp.sender().to_vec());
+                    txn_exc.set_sequence_number(tmp.sequence_number());
+                    txn_exc_vec.push(txn_exc);
+
                     tmp_txn_vec.push(tmp);
                 });
 
@@ -175,33 +178,9 @@ fn commit_block(ac_client: AdmissionControlClient<CoreMemPoolClient, VMValidator
                 // remove from mem pool
                 let mut remove_req = GetBlockRequest::new();
 
-                let mut txn_exc_vec = vec![];
-                tmp_txn_vec.iter().for_each(|txn| {
-                    let address = txn.sender();
-
-                    // get seq num
-                    let req = RequestItem::GetAccountState { address };
-                    let ledger_req = build_request(req, None);
-                    let resp = ac_client.update_to_latest_ledger(&ledger_req).expect("Call update_to_latest_ledger err.");
-                    let resp_item = parse_response(resp);
-                    let proof = resp_item.get_get_account_state_response().get_account_state_with_proof();
-                    if proof.has_blob() {
-                        let blob = proof.get_blob().get_blob().to_vec();
-                        let a_s_b = AccountStateBlob::from(blob);
-                        let account_btree = a_s_b.borrow().try_into().expect("blob to btree err.");
-                        let account_resource = AccountResource::make_from(&account_btree).expect("make account resource err.");
-                        let mut txn_exc = TransactionExclusion::new();
-                        txn_exc.set_sender(txn.sender().to_vec());
-                        txn_exc.set_sequence_number(account_resource.sequence_number());
-
-                        txn_exc_vec.push(txn_exc);
-                    }
-                });
-
                 let repeated_txn_exc = ::protobuf::RepeatedField::from_vec(txn_exc_vec);
                 remove_req.set_transactions(repeated_txn_exc);
 
-                sleep(Duration::from_millis(1_500));
                 mempool_client.remove_txn(&remove_req);
             }
             Ok(())

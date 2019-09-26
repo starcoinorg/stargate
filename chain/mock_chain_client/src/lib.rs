@@ -1,3 +1,5 @@
+#![feature(async_await)]
+
 use failure::prelude::*;
 use chain_service::chain_service::ChainService;
 use chain_client::{ChainClient, watch_stream::WatchStream};
@@ -52,8 +54,6 @@ impl<T> Stream for MockStreamReceiver<T> {
 }
 
 impl ChainClient for MockChainClient {
-    type WatchResp = MockStreamReceiver<WatchData>;
-
     fn get_account_state_with_proof(&self, address: &AccountAddress, version: Option<Version>) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)> {
         let chain_service = self.chain_service.as_ref().borrow();
         let (version, state,proof) = chain_service.get_account_state_with_proof_inner(address, version).ok_or(format_err!("Can not find account state by address: {}", address))?;
@@ -72,11 +72,12 @@ impl ChainClient for MockChainClient {
         Ok(())
     }
 
-    fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchStream<Self::WatchResp>> {
-        let chain_service = self.chain_service.as_ref().borrow();
-        let rx = chain_service.watch_transaction_inner(*address, ver);
-        let stream = MockStreamReceiver { inner_rx: rx };
-        Ok(WatchStream::new(stream))
+    fn watch_transaction(&self, address: &AccountAddress, seq_num: u64) -> Result<Option<SignedTransactionWithProof>> {
+//        let chain_service = self.chain_service.as_ref().borrow();
+//        let rx = chain_service.watch_transaction_inner(*address, ver);
+//        let stream = MockStreamReceiver { inner_rx: rx };
+//        Ok(WatchStream::new(stream))
+        unimplemented!()
     }
 
     fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<Option<SignedTransactionWithProof>> {

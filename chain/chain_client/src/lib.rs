@@ -1,3 +1,5 @@
+#![feature(async_await)]
+
 use failure::prelude::*;
 use types::{account_address::AccountAddress, access_path::AccessPath, transaction::SignedTransaction};
 use types::proto::{transaction::SignedTransaction as SignedTransactionProto, access_path::AccessPath as AccessPathProto};
@@ -24,12 +26,10 @@ pub mod star_client;
 pub use star_client::StarClient;
 
 pub trait ChainClient {
-    type WatchResp: Stream<Item=WatchData, Error=grpcio::Error>;
-
     fn get_account_state_with_proof(&self, address: &AccountAddress, version: Option<Version>) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)>;
     fn faucet(&self, address: AccountAddress, amount: u64) -> Result<()>;
     fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<()>;
-    fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchStream<Self::WatchResp>>;
+    fn watch_transaction(&self, address: &AccountAddress, seq_num: u64) -> Result<Option<SignedTransactionWithProof>>;
     fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<Option<SignedTransactionWithProof>>;
 }
 
@@ -54,8 +54,6 @@ impl RpcChainClient {
 }
 
 impl ChainClient for RpcChainClient {
-    type WatchResp = grpcio::ClientSStreamReceiver<WatchData>;
-
     fn get_account_state_with_proof(&self, address: &AccountAddress, version: Option<Version>) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)> {
         let mut req = GetAccountStateWithProofRequest::new();
         req.set_address(address.to_vec());
@@ -88,20 +86,21 @@ impl ChainClient for RpcChainClient {
         Ok(())
     }
 
-    fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchStream<Self::WatchResp>> {
-        //        let print_data = move || {
-        let mut req = WatchTransactionRequest::new();
-        req.set_address(address.to_vec());
-        let items_stream = self.client.watch_transaction(&req).unwrap();
-        Ok(WatchStream::new(items_stream))
-        //            let f = items_stream.for_each(|item| {
-        //                println!("received sign {:?}", item);
-        //                Ok(())
-        //            });
-        //            f.wait().unwrap();
-        //        };
-
-        //thread::spawn(print_data);
+    fn watch_transaction(&self, address: &AccountAddress, seq_num: u64) -> Result<Option<SignedTransactionWithProof>> {
+//        //        let print_data = move || {
+//        let mut req = WatchTransactionRequest::new();
+//        req.set_address(address.to_vec());
+//        let items_stream = self.client.watch_transaction(&req).unwrap();
+//        Ok(WatchStream::new(items_stream))
+//        //            let f = items_stream.for_each(|item| {
+//        //                println!("received sign {:?}", item);
+//        //                Ok(())
+//        //            });
+//        //            f.wait().unwrap();
+//        //        };
+//
+//        //thread::spawn(print_data);
+        unimplemented!()
     }
 
     fn get_transaction_by_seq_num(&self, address: &AccountAddress, seq_num: u64) -> Result<Option<SignedTransactionWithProof>> {

@@ -71,21 +71,6 @@ impl<C> LocalStateStorage<C>
     }
 
     fn get_account_state_by_client(client: Arc<C>, account: AccountAddress, version: Option<Version>) -> Result<AccountState> {
-        for _i in 0..3 {
-            let flag = client.get_account_state_with_proof(&account, version).and_then(|(version, state, proof)| {
-                let tmp = match state {
-                    Some(t) => true,
-                    _ => false
-                };
-                Ok(tmp)
-            })?;
-
-            if flag {
-                break;
-            } else {
-                sleep(Duration::from_secs(1))
-            }
-        }
         let (version, state_blob, proof) = client.get_account_state_with_proof(&account, version).and_then(|(version, state, proof)| {
             Ok((version, state.ok_or(format_err!("can not find account by address:{}", account))?, proof))
         })?;

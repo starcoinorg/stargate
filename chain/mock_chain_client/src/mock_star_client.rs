@@ -24,10 +24,17 @@ use types::{account_state_blob::AccountStateBlob, account_config::get_account_re
 use core::borrow::Borrow;
 use std::convert::TryInto;
 use types::account_config::AccountResource;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use admission_control_proto::proto::admission_control::SubmitTransactionRequest;
 use vm_genesis::{encode_transfer_script, encode_create_account_script, GENESIS_KEYPAIR};
 use clap::ArgMatches;
+use tokio_timer::Delay;
+use futures03::{
+    compat::{Future01CompatExt, Stream01CompatExt},
+    future::{FutureExt, TryFutureExt},
+    stream::StreamExt,
+};
+use tokio::runtime::Runtime;
 
 pub struct MockStreamReceiver<T> {
     inner_rx: UnboundedReceiver<T>
@@ -62,14 +69,14 @@ impl MockStarClient {
         (MockStarClient { ac_client: Arc::new(ac_client) }, node_handle)
     }
 
-    fn do_request(&self, req: &UpdateToLatestLedgerRequest) -> UpdateToLatestLedgerResponse {
-        self.ac_client.update_to_latest_ledger(req).expect("Call update_to_latest_ledger err.")
+    fn do_request(ac_client: &AdmissionControlClient<CoreMemPoolClient, VMValidator>, req: &UpdateToLatestLedgerRequest) -> UpdateToLatestLedgerResponse {
+        ac_client.update_to_latest_ledger(req).expect("Call update_to_latest_ledger err.")
     }
 
     fn get_account_state_with_proof_inner(&self, account_address: &AccountAddress, version: Option<Version>)
                                           -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)> {
         let req = RequestItem::GetAccountState { address: account_address.clone() };
-        let resp = parse_response(self.do_request(&build_request(req, version)));
+        let resp = parse_response(Self::do_request(&self.ac_client, &build_request(req, version)));
         let proof = resp.get_get_account_state_response().get_account_state_with_proof();
         let blob = if proof.has_blob() {
             Some(proof.get_blob().get_blob().to_vec())
@@ -99,11 +106,45 @@ impl MockStarClient {
             None => None
         }
     }
+
+    fn get_transaction_by_seq_num_inner(ac_client: &AdmissionControlClient<CoreMemPoolClient, VMValidator>, account_address: &AccountAddress, seq_num: u64) -> Result<Option<SignedTransactionWithProof>> {
+        let req = RequestItem::GetAccountTransactionBySequenceNumber { account: account_address.clone(), sequence_number: seq_num, fetch_events: false };
+        let mut resp = parse_response(Self::do_request(ac_client, &build_request(req, None)));
+        let mut tmp = resp.take_get_account_transaction_by_sequence_number_response();
+        if tmp.has_signed_transaction_with_proof() {
+            let proof = tmp.take_signed_transaction_with_proof();
+            Ok(Some(SignedTransactionWithProof::from_proto(proof).expect("SignedTransaction parse from proto err.")))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn watch_inner(ac_client: &AdmissionControlClient<CoreMemPoolClient, VMValidator>, address: &AccountAddress, seq: u64) -> Result<Option<SignedTransactionWithProof>> {
+        let end_time = Instant::now() + Duration::from_millis(10_000);
+        loop {
+            let timeout_time = Instant::now() + Duration::from_millis(1000);
+            if let Ok(_) = Delay::new(timeout_time).compat().await {
+                println!("seq number is {}", seq);
+                let result = Self::get_transaction_by_seq_num_inner(ac_client, address, seq)?;
+                println!("result is {:?}", result);
+                let flag = timeout_time >= end_time;
+                match result {
+                    None => {
+                        if flag {
+                            return Ok(None);
+                        }
+                        continue;
+                    }
+                    Some(t) => {
+                        return Ok(Some(t));
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl ChainClient for MockStarClient {
-    type WatchResp = MockStreamReceiver<WatchData>;
-
     fn get_account_state_with_proof(&self, account_address: &AccountAddress, version: Option<Version>)
                                     -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)> {
         self.get_account_state_with_proof_inner(account_address, version)
@@ -120,7 +161,7 @@ impl ChainClient for MockStarClient {
         let sender = association_address();
         let s_n = self.account_sequence_number(&sender).expect("seq num is none.");
         let signed_tx = RawTransaction::new_script(
-            sender,
+            sender.clone(),
             s_n,
             script,
             100_000 as u64,
@@ -130,7 +171,15 @@ impl ChainClient for MockStarClient {
             .unwrap()
             .into_inner();
 
-        self.submit_transaction(signed_tx)
+        self.submit_transaction(signed_tx);
+        let mut rt = Runtime::new()?;
+        let tmp = self.ac_client.clone();
+        let f = async move {
+            let faucet_watch = Self::watch_inner(&tmp, &sender, s_n);
+            faucet_watch.await.unwrap().expect("proof is none, faucet fail.");
+        };
+        rt.block_on(f.boxed().unit_error().compat()).unwrap();
+        Ok(())
     }
 
     fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<()> {
@@ -140,20 +189,12 @@ impl ChainClient for MockStarClient {
         Ok(())
     }
 
-    fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchStream<Self::WatchResp>> {
+    fn watch_transaction(&self, address: &AccountAddress, seq: u64) -> Result<Option<SignedTransactionWithProof>> {
         unimplemented!()
     }
 
     fn get_transaction_by_seq_num(&self, account_address: &AccountAddress, seq_num: u64) -> Result<Option<SignedTransactionWithProof>> {
-        let req = RequestItem::GetAccountTransactionBySequenceNumber { account: account_address.clone(), sequence_number: seq_num, fetch_events: false };
-        let mut resp = parse_response(self.do_request(&build_request(req, None)));
-        let mut tmp = resp.take_get_account_transaction_by_sequence_number_response();
-        if tmp.has_signed_transaction_with_proof() {
-            let proof = tmp.take_signed_transaction_with_proof();
-            Ok(Some(SignedTransactionWithProof::from_proto(proof).expect("SignedTransaction parse from proto err.")))
-        } else {
-            Ok(None)
-        }
+        Self::get_transaction_by_seq_num_inner(&self.ac_client, account_address, seq_num)
     }
 }
 
@@ -167,7 +208,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_mock_star_client_xxx() {
+    fn test_mock_star_client_proof() {
         let (client, _handle) = MockStarClient::new();
         let a = client.get_account_state_with_proof(&association_address(), None).unwrap();
         println!("{:?}", a.2)
@@ -180,9 +221,7 @@ mod tests {
         for _i in 1..3 {
             let addr = AccountAddress::random();
             client.faucet(addr, 1000);
-            sleep(Duration::from_secs(5));
             client.faucet(addr, 1000);
-            sleep(Duration::from_secs(5));
             client.faucet(addr, 1000);
             assert_eq!(client.account_exist(&addr, None), true);
         }

@@ -9,7 +9,7 @@ use admission_control_proto::proto::{admission_control_grpc::AdmissionControlCli
 use admission_control_service::admission_control_client::AdmissionControlClient as MockAdmissionControlClient;
 use crate::watch_stream::{WatchResp, WatchStream};
 use vm_genesis::{encode_transfer_script, encode_create_account_script, GENESIS_KEYPAIR};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::sync::Arc;
 use grpcio::{EnvBuilder, ChannelBuilder};
 use types::get_with_proof::RequestItem;
@@ -27,6 +27,13 @@ use config::trusted_peers::ConfigHelpers;
 use mempool::core_mempool_client::CoreMemPoolClient;
 use vm_validator::vm_validator::VMValidator;
 use logger::*;
+use tokio::timer::Delay;
+use futures03::{
+    compat::{Future01CompatExt, Stream01CompatExt},
+    future::{FutureExt, TryFutureExt},
+    stream::StreamExt,
+};
+use futures03::executor::block_on;
 
 #[derive(Clone)]
 pub struct StarClient {
@@ -83,8 +90,6 @@ impl StarClient {
 }
 
 impl ChainClient for StarClient {
-    type WatchResp = grpcio::ClientSStreamReceiver<WatchData>;
-
     fn get_account_state_with_proof(&self, account_address: &AccountAddress, version: Option<Version>)
                                     -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)> {
         self.get_account_state_with_proof_inner(account_address, version)
@@ -101,7 +106,7 @@ impl ChainClient for StarClient {
         let sender = association_address();
         let s_n = self.account_sequence_number(&sender).expect("seq num is none.");
         let signed_tx = RawTransaction::new_script(
-            sender,
+            sender.clone(),
             s_n,
             script,
             1000_000 as u64,
@@ -111,7 +116,8 @@ impl ChainClient for StarClient {
             .unwrap()
             .into_inner();
 
-        self.submit_transaction(signed_tx)
+        self.submit_transaction(signed_tx);
+        Ok(())
     }
 
     fn submit_transaction(&self, signed_transaction: SignedTransaction) -> Result<()> {
@@ -121,7 +127,7 @@ impl ChainClient for StarClient {
         Ok(())
     }
 
-    fn watch_transaction(&self, address: &AccountAddress, ver: Version) -> Result<WatchStream<Self::WatchResp>> {
+    fn watch_transaction(&self, address: &AccountAddress, seq: u64) -> Result<Option<SignedTransactionWithProof>> {
         unimplemented!()
     }
 
