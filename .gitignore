@@ -2,7 +2,6 @@
 **/*.rs.bk
 .idea
 *.iml
-Cargo.lock
 
 # Ignore generated files in proto folders
 **/proto/*.rs
