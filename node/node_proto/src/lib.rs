@@ -249,3 +249,16 @@ impl ChannelBalanceResponse {
 pub struct InstallChannelScriptPackageRequest {
     pub channel_script_package :ChannelScriptPackage,
 }
+
+#[derive(Clone, Debug, Eq, PartialEq,FromProto,IntoProto)]
+#[ProtoType(star_types::proto::node::InstallChannelScriptPackageResponse)]
+#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
+pub struct InstallChannelScriptPackageResponse {
+}
+
+impl InstallChannelScriptPackageResponse {
+    pub fn new()->Self{
+        Self{
+        }
+    }
+}

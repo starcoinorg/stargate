@@ -18,6 +18,8 @@ service Node {
     rpc Withdraw(WithdrawRequest) returns (WithdrawResponse) {}
 
     rpc ChannelBalance(ChannelBalanceRequest) returns (ChannelBalanceResponse) {}
+
+    rpc InstallChannelScriptPackage(InstallChannelScriptPackageRequest) returns (InstallChannelScriptPackageResponse) {}
 }
   
 message OpenChannelRequest {
@@ -86,4 +88,8 @@ message ChannelBalanceResponse{
 
 message InstallChannelScriptPackageRequest{
     star_types.ChannelScriptPackage channel_script_package=1;
+}
+
+message InstallChannelScriptPackageResponse{
+
 }

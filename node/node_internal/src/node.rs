@@ -282,7 +282,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         self.event_sender.unbounded_send(Event::SHUTDOWN);
     }
 
-    fn install_package(&self,channel_script_package :ChannelScriptPackage)->Result<()>{
+    pub fn install_package(&self,channel_script_package :ChannelScriptPackage)->Result<()>{
         self.node_inner.clone().lock().unwrap().install_package(channel_script_package)
     }
 

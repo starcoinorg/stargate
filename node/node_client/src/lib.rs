@@ -1,6 +1,4 @@
-use node_proto::{OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse,
-                 ConnectRequest, ConnectResponse, WithdrawRequest, WithdrawResponse, ChannelBalanceRequest,
-                 ChannelBalanceResponse, DepositRequest, DepositResponse};
+use node_proto::{OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, ConnectRequest, ConnectResponse, WithdrawRequest, WithdrawResponse, ChannelBalanceRequest, ChannelBalanceResponse, DepositRequest, DepositResponse, InstallChannelScriptPackageResponse, InstallChannelScriptPackageRequest};
 use failure::{bail, Result};
 use grpcio::{ChannelBuilder, Environment};
 use proto_conv::{FromProto, IntoProto};
@@ -66,4 +64,11 @@ impl NodeClient {
         }
     }
 
+    pub fn install_channel_script_package(&self,request:InstallChannelScriptPackageRequest)->Result<InstallChannelScriptPackageResponse>{
+        let proto_request = request.into_proto();
+        match self.client.install_channel_script_package(&proto_request) {
+            Ok(proto_response) => Ok(InstallChannelScriptPackageResponse::from_proto(proto_response)?),
+            Err(err) => bail!("GRPC error: {}", err),
+        }
+    }
 }

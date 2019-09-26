@@ -2,7 +2,9 @@
 
 //use config::config::NodeConfig;
 use node_proto::{
-    OpenChannelRequest,OpenChannelResponse,PayRequest,PayResponse,ConnectRequest,ConnectResponse,DepositRequest,DepositResponse,WithdrawRequest,WithdrawResponse,ChannelBalanceRequest,ChannelBalanceResponse
+    OpenChannelRequest,OpenChannelResponse,PayRequest,PayResponse,ConnectRequest,ConnectResponse,DepositRequest,
+    DepositResponse,WithdrawRequest,WithdrawResponse,ChannelBalanceRequest,ChannelBalanceResponse,
+    InstallChannelScriptPackageRequest,InstallChannelScriptPackageResponse
 };
 use failure::Result;
 use futures01::future::Future;
@@ -19,6 +21,7 @@ use sg_config::config::{NodeConfig};
 use node_internal::node::Node as Node_Internal;
 use chain_client::{ChainClient};
 use star_types::proto::node_grpc::create_node;
+use star_types::script_package::ChannelScriptPackage;
 
 pub fn setup_node_service<C>(config: &NodeConfig,node:Arc<Node_Internal<C>>) -> ::grpcio::Server 
 where C: ChainClient+Clone+ Send+Sync+'static{
@@ -92,6 +95,13 @@ impl<C: ChainClient+Clone +Send+Sync+'static> star_types::proto::node_grpc::Node
         let request = ChannelBalanceRequest::from_proto(req).unwrap();
         let balance=self.node.channel_balance(request.remote_addr).unwrap();
         let resp=ChannelBalanceResponse::new(balance).into_proto();
+        provide_grpc_response(Ok(resp),ctx,sink);
+    }
+
+    fn install_channel_script_package(&mut self, ctx: ::grpcio::RpcContext, req: star_types::proto::node::InstallChannelScriptPackageRequest, sink: ::grpcio::UnarySink<star_types::proto::node::InstallChannelScriptPackageResponse>){
+        let request = InstallChannelScriptPackageRequest::from_proto(req).unwrap();
+        self.node.install_package(request.channel_script_package).unwrap();
+        let resp=InstallChannelScriptPackageResponse::new().into_proto();
         provide_grpc_response(Ok(resp),ctx,sink);
     }
 
