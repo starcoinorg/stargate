@@ -37,6 +37,7 @@ use types::account_address::AccountAddress;
 use types::account_config::AccountResource;
 
 use crate::message_processor::{MessageFuture, MessageProcessor};
+use star_types::script_package::ChannelScriptPackage;
 
 pub struct Node<C: ChainClient + Send + Sync + 'static> {
     executor: TaskExecutor,
@@ -281,6 +282,10 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         self.event_sender.unbounded_send(Event::SHUTDOWN);
     }
 
+    fn install_package(&self,channel_script_package :ChannelScriptPackage)->Result<()>{
+        self.node_inner.clone().lock().unwrap().install_package(channel_script_package)
+    }
+
     async fn start(node_inner: Arc<Mutex<NodeInner<C>>>, mut receiver: UnboundedReceiver<NetworkMessage>, mut event_receiver: UnboundedReceiver<Event>) {
         info!("start receive message");
         let mut receiver = receiver.compat().fuse();
@@ -469,6 +474,10 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         self.future_timeout(hash_value, self.default_future_timeout);
 
         Ok(message_future)
+    }
+
+    fn install_package(&self,channel_script_package :ChannelScriptPackage)->Result<()>{
+        self.wallet.install_package(channel_script_package)
     }
 
     fn future_timeout(&self, hash: HashValue, timeout: u64) {
