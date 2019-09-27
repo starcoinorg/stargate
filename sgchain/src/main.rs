@@ -41,11 +41,11 @@ fn main() {
     if config.consensus.get_consensus_peers().len() == 0 {
         let (_, single_peer_consensus_config) = ConfigHelpers::get_test_consensus_config(1, None);
         config.consensus.consensus_peers = single_peer_consensus_config;
-        let genesis_path = star_node::genesis::genesis_blob();
+        let genesis_path = sgchain::star_chain_client::genesis_blob();
         config.execution.genesis_file_location = genesis_path;
     }
 
-    let (_ac_handle, _node_handle) = star_node::star_node::setup_environment(&mut config);
+    let (_ac_handle, _node_handle) = sgchain::setup_environment(&mut config);
 
     let term = Arc::new(AtomicBool::new(false));
     register_signals(Arc::clone(&term));

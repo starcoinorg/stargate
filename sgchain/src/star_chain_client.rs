@@ -269,7 +269,7 @@ fn parse_response(resp: UpdateToLatestLedgerResponse) -> ResponseItem {
     resp.get_response_items().get(0).expect("response item is none.").clone()
 }
 
-fn genesis_blob() -> String {
+pub fn genesis_blob() -> String {
     let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
     let genesis_txn = genesis_checked_txn.into_inner();
 //    let tmp_dir = TempPath::new();

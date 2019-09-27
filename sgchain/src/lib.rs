@@ -5,3 +5,5 @@ mod mock_star_node;
 
 pub mod star_chain_client;
 pub mod client_state_view;
+
+pub use star_node::setup_environment;
