@@ -3,7 +3,7 @@ use crypto::{
     traits::{Uniform},
 };
 use grpcio::{EnvBuilder, ServerBuilder};
-use node_proto::proto::node_grpc::create_node;
+use star_types::proto::node_grpc::create_node;
 use node_service::NodeService;
 use rand::{rngs::StdRng, SeedableRng};
 
@@ -12,11 +12,11 @@ use node_internal::test_helper::{*};
 
 use sg_config::config::NodeConfig;
 use std::sync::Arc;
-use mock_chain_client::{MockChainClient, mock_star_client::MockStarClient};
+use sgchain::star_chain_client::{MockChainClient};
 
 pub fn create_and_start_server(config: &NodeConfig,executor:TaskExecutor) -> (grpcio::Server) {
     let _client_env = Arc::new(EnvBuilder::new().build());
-    let (mock_chain_service, handle) = MockStarClient::new();
+    let (mock_chain_service, handle) = MockChainClient::new();
     let client= Arc::new(mock_chain_service);
 
     let (node,_addr,_keypair) = gen_node(executor,&config.net_config,client);
