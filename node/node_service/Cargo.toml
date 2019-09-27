@@ -24,5 +24,4 @@ node_client = { path = "../node_client" }
 crypto = { path = "../../libra/crypto/crypto" }
 types = { package = "types", path = "../../libra/types"}
 sg_config = {path="../../sgconfig"}
-chain_client = { path = "../../chain/chain_client"}
-mock_chain_client = { path = "../../chain/mock_chain_client" }
+sgchain = { path = "../../sgchain"}

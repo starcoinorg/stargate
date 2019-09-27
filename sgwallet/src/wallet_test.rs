@@ -10,14 +10,13 @@ use {
         future::{FutureExt, TryFutureExt},
     },
 };
-use chain_client::{ChainClient, RpcChainClient};
+use sgchain::star_chain_client::{ChainClient, MockChainClient};
 use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
 use crypto::test_utils::KeyPair;
 use crypto::Uniform;
 use failure::_core::time::Duration;
 use failure::prelude::*;
 use logger::prelude::*;
-use mock_chain_client::{MockChainClient, mock_star_client::MockStarClient};
 use types::account_address::AccountAddress;
 
 use super::wallet::*;
@@ -104,7 +103,7 @@ fn test_wallet() -> Result<()> {
     let mut rt = Runtime::new()?;
     let executor = rt.executor();
 
-    let (mock_chain_service, handle) = MockStarClient::new();
+    let (mock_chain_service, handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
 
     let sender_wallet = Arc::new(setup_wallet(client.clone(), executor.clone(),sender_amount).unwrap());
@@ -216,7 +215,7 @@ fn test_wallet_install_package() -> Result<()>{
     let mut rt = Runtime::new()?;
     let executor = rt.executor();
 
-    let (mock_chain_service, handle) = MockChainClient::new(executor.clone());
+    let (mock_chain_service, handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
 
     let alice = Arc::new(setup_wallet(client.clone(), executor.clone(),init_balance)?);

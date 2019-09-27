@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use atomic_refcell::AtomicRefCell;
 
-use chain_client::ChainClient;
+use sgchain::star_chain_client::ChainClient;
 use failure::prelude::*;
 use logger::prelude::*;
 use star_types::channel::Channel;

@@ -1,50 +1,36 @@
-use failure::prelude::*;
+use std::sync::Arc;
 use crate::ChainClient;
+use failure::prelude::*;
 use types::{account_config::{association_address, AccountResource}, account_address::AccountAddress,
             transaction::{Version, SignedTransaction, RawTransaction, SignedTransactionWithProof},
-            proof::SparseMerkleProof, get_with_proof::RequestItem,
+            proof::SparseMerkleProof, get_with_proof::RequestItem, account_state_blob::AccountStateBlob,
             proto::get_with_proof::{ResponseItem, UpdateToLatestLedgerRequest, UpdateToLatestLedgerResponse}};
-use star_types::proto::chain::WatchData;
-use admission_control_proto::proto::{admission_control_grpc::AdmissionControlClient,
-                                     admission_control_client::AdmissionControlClientTrait};
+use admission_control_proto::proto::{admission_control::SubmitTransactionRequest,
+                                     admission_control_client::AdmissionControlClientTrait,
+                                     admission_control_grpc::AdmissionControlClient};
 use admission_control_service::admission_control_client::AdmissionControlClient as MockAdmissionControlClient;
-use crate::watch_stream::{WatchResp, WatchStream};
-use vm_genesis::{encode_transfer_script, encode_create_account_script, GENESIS_KEYPAIR};
-use std::time::{Duration, Instant};
-use std::sync::Arc;
-use grpcio::{EnvBuilder, ChannelBuilder};
-use proto_conv::{IntoProto, FromProto};
-use types::{account_state_blob::AccountStateBlob, account_config::get_account_resource_or_default};
 use core::borrow::Borrow;
+use proto_conv::{IntoProto, FromProto};
 use std::convert::TryInto;
-use admission_control_proto::proto::admission_control::SubmitTransactionRequest;
-use executable_helpers::helpers::{
-    setup_executable, ARG_CONFIG_PATH, ARG_DISABLE_LOGGING, ARG_PEER_ID,
-};
+use vm_genesis::{encode_transfer_script, encode_create_account_script, GENESIS_KEYPAIR};
+use std::time::Duration;
+use grpcio::{EnvBuilder, ChannelBuilder};
 use config::trusted_peers::ConfigHelpers;
+use executable_helpers::helpers::{
+    setup_executable, ARG_CONFIG_PATH, ARG_DISABLE_LOGGING, ARG_PEER_ID, load_configs_from_args,
+};
+use crate::mock_star_node::{setup_environment, StarHandle};
+use clap::ArgMatches;
 use mempool::core_mempool_client::CoreMemPoolClient;
 use vm_validator::vm_validator::VMValidator;
-use logger::*;
-use tokio::timer::Delay;
-use futures03::{
-    compat::{Future01CompatExt, Stream01CompatExt},
-    future::{FutureExt, TryFutureExt},
-    stream::StreamExt,
-};
 
-#[derive(Clone)]
-pub struct StarClient {
-    pub ac_client: AdmissionControlClient,
+pub struct StarChainClient<C> {
+    ac_client: Arc<C>
 }
 
-impl StarClient {
-    pub fn new(host: &str, port: u32) -> Self {
-        let conn_addr = format!("{}:{}", host, port);
-        let env = Arc::new(EnvBuilder::new().name_prefix("ac-grpc-client-").build());
-        let ch = ChannelBuilder::new(env).connect(&conn_addr);
-        Self {
-            ac_client: AdmissionControlClient::new(ch),
-        }
+impl<C> StarChainClient<C> where C: AdmissionControlClientTrait {
+    pub fn new(c: C) -> Self {
+        StarChainClient { ac_client: Arc::new(c) }
     }
 
     fn do_request(&self, req: &UpdateToLatestLedgerRequest) -> UpdateToLatestLedgerResponse {
@@ -86,7 +72,7 @@ impl StarClient {
     }
 }
 
-impl ChainClient for StarClient {
+impl<C> ChainClient for StarChainClient<C> where C: AdmissionControlClientTrait {
     fn get_account_state_with_proof(&self, account_address: &AccountAddress, version: Option<Version>)
                                     -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)> {
         self.get_account_state_with_proof_inner(account_address, version)
@@ -158,25 +144,22 @@ pub fn parse_response(resp: UpdateToLatestLedgerResponse) -> ResponseItem {
     resp.get_response_items().get(0).expect("response item is none.").clone()
 }
 
-//pub fn create_star_client(host: &str, port: u32) -> StarClient {
-//    let conn_addr = format!("{}:{}", host, port);
-//    let env = Arc::new(EnvBuilder::new().name_prefix("ac-grpc-client-").build());
-//    let ch = ChannelBuilder::new(env).connect(&conn_addr);
-//    StarClient::new(AdmissionControlClient::new(ch))
-//}
-//
-//pub fn mock_star_client() -> (StarClient, StarHandle) {
-//    let (mut config, _logger, _args) = setup_executable(
-//        "Mock star single node".to_string(),
-//        vec![ARG_PEER_ID, ARG_CONFIG_PATH, ARG_DISABLE_LOGGING],
-//    );
-//    if config.consensus.get_consensus_peers().len() == 0 {
-//        let (_, single_peer_consensus_config) = ConfigHelpers::get_test_consensus_config(1, None);
-//        config.consensus.consensus_peers = single_peer_consensus_config;
-//        let genesis_path = star_node::genesis::genesis_blob();
-//        config.execution.genesis_file_location = genesis_path;
-//    }
-//
-//    let (ac_client, node_handle) = setup_environment(&mut config);
-//    (StarClient::new(ac_client), node_handle)
-//}
+pub fn create_star_client(host: &str, port: u32) -> AdmissionControlClient {
+    let conn_addr = format!("{}:{}", host, port);
+    let env = Arc::new(EnvBuilder::new().name_prefix("ac-grpc-client-").build());
+    let ch = ChannelBuilder::new(env).connect(&conn_addr);
+    AdmissionControlClient::new(ch)
+}
+
+pub fn mock_star_client() -> (MockAdmissionControlClient<CoreMemPoolClient, VMValidator>, StarHandle) {
+    let args = ArgMatches::default();
+    let mut config = load_configs_from_args(&args);
+    if config.consensus.get_consensus_peers().len() == 0 {
+        let (_, single_peer_consensus_config) = ConfigHelpers::get_test_consensus_config(1, None);
+        config.consensus.consensus_peers = single_peer_consensus_config;
+        let genesis_path = star_node::genesis::genesis_blob();
+        config.execution.genesis_file_location = genesis_path;
+    }
+
+    setup_environment(&mut config)
+}

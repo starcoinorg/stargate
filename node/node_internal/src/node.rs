@@ -18,7 +18,7 @@ use futures_01::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::{runtime::TaskExecutor};
 use tokio::timer::Delay;
 
-use chain_client::ChainClient;
+use sgchain::star_chain_client::ChainClient;
 use crypto::{HashValue, SigningKey};
 use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
 use crypto::hash::CryptoHash;

@@ -10,16 +10,17 @@ use types::{
     transaction_helpers::{create_signed_txn, TransactionSigner},
 };
 use tempfile::{NamedTempFile, TempPath};
-use chain_client::{RpcChainClient, ChainClient, StarClient};
+use sgchain::star_chain_client::StarChainClient;
 use node_proto::{OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, ConnectRequest, ConnectResponse, WithdrawRequest, WithdrawResponse, ChannelBalanceRequest, ChannelBalanceResponse, DepositRequest, DepositResponse};
 use std::{
     io::{stdout, Write},
     sync::Arc,
     fs,
     process::Command,
-    thread,time
+    thread, time,
 };
 use types::transaction::{TransactionPayload, Script};
+use sgchain::star_chain_client::ChainClient;
 
 const GAS_UNIT_PRICE: u64 = 0;
 const MAX_GAS_AMOUNT: u64 = 100_000;
@@ -28,7 +29,7 @@ const TX_EXPIRATION: i64 = 100;
 pub struct ClientProxy {
     node_client: NodeClient,
     wallet: WalletLibrary,
-    chain_client: StarClient,
+    chain_client: StarChainClient,
     temp_files: Vec<TempPath>,
 }
 
@@ -43,7 +44,7 @@ impl ClientProxy {
     ) -> Result<Self> {
         let env_builder_arc = Arc::new(EnvBuilder::new().build());
         let node_client = NodeClient::new(env_builder_arc, host, port);
-        let chain_client = StarClient::new(chain_host, chain_port as u32);
+        let chain_client = StarChainClient::new(chain_host, chain_port as u32);
         Ok(ClientProxy {
             node_client,
             wallet: WalletLibrary::new(faucet_account_file),
@@ -162,14 +163,14 @@ impl ClientProxy {
     }
 
     fn submit_program(&mut self, space_delim_strings: &[&str], program: TransactionPayload) -> Result<()> {
-        let addr=self.wallet.get_address();
-        let sequence_number=self.chain_client.account_sequence_number(&addr).expect("should have seq number");
+        let addr = self.wallet.get_address();
+        let sequence_number = self.chain_client.account_sequence_number(&addr).expect("should have seq number");
 
-        let txn = self.create_submit_transaction(program , sequence_number,None, None)?;
+        let txn = self.create_submit_transaction(program, sequence_number, None, None)?;
 
-        self.chain_client.submit_transaction(txn);
+        self.chain_client.submit_signed_transaction(txn);
 
-        self.wait_for_transaction(&addr, sequence_number );
+        self.wait_for_transaction(&addr, sequence_number);
 
         Ok(())
     }
@@ -198,11 +199,11 @@ impl ClientProxy {
     fn create_submit_transaction(
         &mut self,
         program: TransactionPayload,
-        seq:u64,
+        seq: u64,
         max_gas_amount: Option<u64>,
         gas_unit_price: Option<u64>,
     ) -> Result<SignedTransaction> {
-        let addr=self.wallet.get_address();
+        let addr = self.wallet.get_address();
         return create_signed_txn(
             *Box::new(&self.wallet),
             program,
@@ -224,7 +225,7 @@ impl ClientProxy {
 
             if let Ok(Some((txn_with_proof))) =
             self.chain_client.get_transaction_by_seq_num
-                (&account, sequence_number )
+            (&account, sequence_number)
             {
                 println!("transaction is stored!");
                 break;
@@ -236,7 +237,6 @@ impl ClientProxy {
             thread::sleep(time::Duration::from_millis(10));
         }
     }
-
 }
 
 fn parse_bool(para: &str) -> Result<bool> {

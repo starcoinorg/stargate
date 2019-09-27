@@ -47,10 +47,6 @@ members = [
     "libra/admission_control/admission_control_service",
     "star_types",
     "routing",
-    "chain/chain_client",
-    "chain/chain_service",
-    "chain/mock_chain_client",
-    "chain/star_node",
     "sgnetwork",
     "network-libp2p",
     "network-libp2p/peerset",
@@ -65,6 +61,7 @@ members = [
     "cli",
     "cli/cli_wallet",
     "sgcompiler",
+    "sgchain"
 ]
 
 [replace]

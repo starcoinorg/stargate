@@ -15,7 +15,7 @@ use {
     },
 };
 use canonical_serialization::SimpleSerializer;
-use chain_client::{ChainClient, RpcChainClient, StarClient};
+use sgchain::star_chain_client::{ChainClient, StarChainClient};
 use config::config::VMConfig;
 use crypto::{HashValue, SigningKey, VerifyingKey};
 use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
@@ -82,8 +82,9 @@ impl<C> Wallet<C>
         keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
         rpc_host: &str,
         rpc_port: u32,
-    ) -> Result<Wallet<StarClient>> {
-        let client = Arc::new(StarClient::new(rpc_host, rpc_port));
+    ) -> Result<Wallet<StarChainClient>> {
+        let chain_client = StarChainClient::new(rpc_host, rpc_port as u32);
+        let client = Arc::new(chain_client);
         Wallet::new_with_client(executor, account, keypair, client)
     }
 
@@ -438,7 +439,7 @@ impl<C> Wallet<C>
         debug!("submit_transaction {}", raw_txn_hash);
         let seq_number = signed_transaction.sequence_number();
         let sender = &signed_transaction.sender();
-        let _resp = self.client.submit_transaction(signed_transaction)?;
+        let _resp = self.client.submit_signed_transaction(signed_transaction)?;
         let watch_future = self.watch_transaction(sender,seq_number);
         watch_future.await
     }

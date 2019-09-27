@@ -23,13 +23,12 @@ rand = "0.6.5"
 logger = { path = "../../libra/common/logger" }
 sg_config = { path = "../../sgconfig"}
 sgwallet = { path="../../sgwallet"}
-chain_client = { path = "../../chain/chain_client"}
+sgchain = { path = "../../sgchain"}
 types = { path = "../../libra/types" }
 star_types = { path = "../../star_types" }
 state_cache = { path = "../../storage/state_cache" }
 
 crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }
-mock_chain_client = { path = "../../chain/mock_chain_client" }
 proto_conv = { path = "../../libra/common/proto_conv", features = ["derive"] }
 failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
 hex = { version = "0.3.2", default-features = false }

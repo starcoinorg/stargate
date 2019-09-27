@@ -21,6 +21,9 @@ use types::transaction::SignedTransactionWithProof;
 
 pub mod mock_star_client;
 pub mod mock_star_node;
+mod star_chain_client;
+
+pub use star_chain_client::StarChainClient;
 
 #[derive(Clone)]
 pub struct MockChainClient {

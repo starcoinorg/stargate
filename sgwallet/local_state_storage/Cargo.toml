@@ -13,7 +13,7 @@ crypto = { path = "../../libra/crypto/crypto" }
 types = { path = "../../libra/types"}
 star_types = { path = "../../star_types" }
 state_cache = {path = "../../storage/state_cache"}
-chain_client = {path = "../../chain/chain_client"}
+sgchain = { path = "../../sgchain" }
 state_view = {path = "../../libra/storage/state_view"}
 state_store = {path = "../../storage/state_store"}
 struct_cache = {path = "../../storage/struct_cache" }
@@ -24,4 +24,4 @@ tokio = "0.1.22"
 
 [dev-dependencies]
 crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }
-mock_chain_client = { path = "../../chain/mock_chain_client" }
+sgchain = { path = "../../sgchain" }

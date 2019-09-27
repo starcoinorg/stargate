@@ -20,7 +20,7 @@ star_types = { path = "../star_types" }
 crypto = { path = "../libra/crypto/crypto" }
 
 local_state_storage = { path = "./local_state_storage"}
-chain_client = { path = "../chain/chain_client"}
+sgchain = { path = "../sgchain" }
 vm_genesis = { path = "../libra/language/vm/vm_genesis" }
 logger = { path = "../libra/common/logger"}
 state_store = { path = "../storage/state_store"}
@@ -40,4 +40,4 @@ sgcompiler = { path = "../sgcompiler"}
 
 [dev-dependencies]
 crypto = { path = "../libra/crypto/crypto", features = ["testing"] }
-mock_chain_client = { path = "../chain/mock_chain_client" }
+sgchain = { path = "../sgchain" }

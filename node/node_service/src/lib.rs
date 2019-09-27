@@ -19,7 +19,7 @@ use proto_conv::{FromProto, IntoProto};
 use std::sync::{Arc,Mutex,mpsc};
 use sg_config::config::{NodeConfig};
 use node_internal::node::Node as Node_Internal;
-use chain_client::{ChainClient};
+use sgchain::star_chain_client::ChainClient;
 use star_types::proto::node_grpc::create_node;
 use star_types::script_package::ChannelScriptPackage;
 

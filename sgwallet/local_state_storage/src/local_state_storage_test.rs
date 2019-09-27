@@ -1,5 +1,5 @@
 use super::*;
-use mock_chain_client::{MockChainClient, mock_star_client::MockStarClient};
+use sgchain::star_chain_client::{MockChainClient};
 use types::account_config::account_resource_path;
 use tokio::runtime::{Runtime, TaskExecutor};
 
@@ -8,7 +8,7 @@ fn test_local_state_storage() {
     let rt = Runtime::new().unwrap();
     let executor = rt.executor();
 
-    let (mock_chain_service , handle)= MockStarClient::new();
+    let (mock_chain_service, _handle)  = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
     let account_address = AccountAddress::random();
     client.faucet(account_address, 1_000_000).unwrap();

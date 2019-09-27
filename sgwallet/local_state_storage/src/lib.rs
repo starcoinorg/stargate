@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use atomic_refcell::AtomicRefCell;
 
-use chain_client::{ChainClient, RpcChainClient};
+use sgchain::star_chain_client::ChainClient;
 use crypto::ed25519::Ed25519Signature;
 use failure::prelude::*;
 use logger::prelude::*;
