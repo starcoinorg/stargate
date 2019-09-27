@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use atomic_refcell::AtomicRefCell;
 
-use sgchain::star_chain_client::ChainClient;
+use super::star_chain_client::ChainClient;
 use failure::prelude::*;
 use logger::prelude::*;
 use star_types::resource_type::resource_def::{ResourceDef, StructDefResolve};
@@ -14,7 +14,6 @@ use types::language_storage::StructTag;
 use types::transaction::Version;
 
 use star_types::account_state::AccountState;
-use crate::ChainClient;
 
 /// A state_view directly fetch remote chain, but lock version.
 pub struct ClientStateView<'a> {

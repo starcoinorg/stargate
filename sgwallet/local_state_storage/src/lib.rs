@@ -25,7 +25,7 @@ use std::thread::sleep;
 use std::time::Duration;
 use star_types::channel::{Channel, WitnessData};
 use star_types::account_state::AccountState;
-use chain_client::client_state_view::ClientStateView;
+use sgchain::client_state_view::ClientStateView;
 
 pub struct LocalStateStorage<C>
     where

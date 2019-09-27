@@ -22,7 +22,6 @@ use types::proof::SparseMerkleProof;
 
 pub mod watch_stream;
 pub mod star_client;
-pub mod client_state_view;
 
 pub use star_client::StarClient;
 use star_types::account_state::AccountState;

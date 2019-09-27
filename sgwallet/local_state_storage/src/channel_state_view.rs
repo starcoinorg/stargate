@@ -16,7 +16,7 @@ use types::language_storage::StructTag;
 use types::transaction::Version;
 
 use crate::LocalStateStorage;
-use chain_client::client_state_view::ClientStateView;
+use sgchain::client_state_view::ClientStateView;
 
 pub struct ChannelStateView<'txn>{
     channel: &'txn Channel,

@@ -17,4 +17,4 @@ vm = { path = "../libra/language/vm" }
 bytecode_verifier = { path = "../libra/language/bytecode_verifier"}
 logger = { path = "../libra/common/logger"}
 state_view = {path = "../libra/storage/state_view"}
-chain_client = { path = "../chain/chain_client"}
+sgchain = { path = "../sgchain"}

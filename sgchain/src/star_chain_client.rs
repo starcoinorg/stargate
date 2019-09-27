@@ -30,8 +30,21 @@ use futures03::{
 };
 use tokio::runtime::Runtime;
 use tokio_timer::Delay;
+use star_types::account_state::AccountState;
 
-pub trait ChainClient: AdmissionControlClientTrait {
+pub trait ChainClient {
+
+    fn submit_transaction(&self, req: &SubmitTransactionRequest) -> ::grpcio::Result<SubmitTransactionResponse>;
+
+    fn update_to_latest_ledger(&self, req: &UpdateToLatestLedgerRequest) -> ::grpcio::Result<UpdateToLatestLedgerResponse>;
+
+    fn get_account_state(&self, account: AccountAddress, version: Option<Version>) -> Result<AccountState> {
+        let (version, state_blob, proof) = self.get_account_state_with_proof(&account, version).and_then(|(version, state, proof)| {
+            Ok((version, state.ok_or(format_err!("can not find account by address:{}", account))?, proof))
+        })?;
+        AccountState::from_account_state_blob(version, state_blob, proof)
+    }
+
     fn get_account_state_with_proof(&self, account_address: &AccountAddress, version: Option<Version>)
                                     -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)> {
         self.get_account_state_with_proof_inner(account_address, version)
@@ -141,9 +154,7 @@ impl ChainClient for StarChainClient {
         self.submit_signed_transaction(signed_tx).expect("commit signed txn err.");
         Ok(())
     }
-}
 
-impl AdmissionControlClientTrait for StarChainClient {
     fn submit_transaction(&self, req: &SubmitTransactionRequest) -> ::grpcio::Result<SubmitTransactionResponse> {
         self.ac_client.submit_transaction(req)
     }
@@ -179,7 +190,7 @@ impl MockChainClient {
             let timeout_time = Instant::now() + Duration::from_millis(1000);
             if let Ok(_) = Delay::new(timeout_time).compat().await {
                 println!("seq number is {}", seq);
-                let result = ac_client.get_transaction_by_seq_num( address, seq)?;
+                let result = ac_client.get_transaction_by_seq_num(address, seq)?;
                 println!("result is {:?}", result);
                 let flag = timeout_time >= end_time;
                 match result {
@@ -199,6 +210,7 @@ impl MockChainClient {
 }
 
 impl ChainClient for MockChainClient {
+
     fn faucet(&self, receiver: AccountAddress, amount: u64) -> Result<()> {
         let exist_flag = self.account_exist(&receiver, None);
         let script = if !exist_flag {
@@ -230,9 +242,7 @@ impl ChainClient for MockChainClient {
         rt.block_on(f.boxed().unit_error().compat()).unwrap();
         Ok(())
     }
-}
 
-impl AdmissionControlClientTrait for MockChainClient {
     fn submit_transaction(&self, req: &SubmitTransactionRequest) -> ::grpcio::Result<SubmitTransactionResponse> {
         self.ac_client.submit_transaction(req)
     }

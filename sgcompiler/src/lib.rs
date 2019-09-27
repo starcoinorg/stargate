@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use bytecode_verifier::VerifiedModule;
-use chain_client::ChainClient;
-use chain_client::client_state_view::ClientStateView;
+use sgchain::star_chain_client::ChainClient;
+use sgchain::client_state_view::ClientStateView;
 use failure::prelude::*;
 use ir_to_bytecode::compiler::compile_program;
 use ir_to_bytecode::parser::{parse_program, parse_script, parse_module};
