@@ -48,7 +48,8 @@ use types::write_set::{WriteOp, WriteSet};
 use vm_runtime::{MoveVM, VMExecutor};
 
 use crate::scripts::*;
-use sgcompiler::Compiler;
+use sgcompiler::{Compiler, StateViewModuleLoader};
+use sgchain::client_state_view::ClientStateView;
 
 lazy_static! {
     pub static ref DEFAULT_ASSET:StructTag = coin_struct_tag();
@@ -78,7 +79,6 @@ impl<C> Wallet<C>
     const RETRY_INTERVAL: u64 = 1000;
 
     pub fn new(
-        executor: TaskExecutor,
         account: AccountAddress,
         keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
         rpc_host: &str,
@@ -86,11 +86,10 @@ impl<C> Wallet<C>
     ) -> Result<Wallet<StarChainClient>> {
         let chain_client = StarChainClient::new(rpc_host, rpc_port as u32);
         let client = Arc::new(chain_client);
-        Wallet::new_with_client(executor, account, keypair, client)
+        Wallet::new_with_client(account, keypair, client)
     }
 
     pub fn new_with_client(
-        _executor: TaskExecutor,
         account: AccountAddress,
         keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
         client: Arc<C>,
@@ -109,6 +108,10 @@ impl<C> Wallet<C>
 
     pub fn account(&self) -> AccountAddress {
         self.account
+    }
+
+    pub fn client(&self) -> &dyn ChainClient {
+        &*self.client
     }
 
     pub fn default_asset() -> StructTag {
@@ -340,9 +343,7 @@ impl<C> Wallet<C>
     }
 
     /// Deploy a module to Chain
-    pub async fn deploy_module(&self, module_source_code: &str) -> Result<SignedTransactionWithProof> {
-        let compiler = Compiler::new(self.account);
-        let module_byte_code = compiler.compile_module(module_source_code)?;
+    pub async fn deploy_module(&self, module_byte_code: Vec<u8>) -> Result<SignedTransactionWithProof> {
         let payload = TransactionPayload::Module(Module::new(module_byte_code));
         let txn = create_signed_payload_txn(self, payload, self.account, self.sequence_number()?,
                                             Self::MAX_GAS_AMOUNT, Self::GAS_UNIT_PRICE, Self::TXN_EXPIRATION)?;

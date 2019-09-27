@@ -1,0 +1,6 @@
+module MyModule{
+
+    public do_nothing(){
+        return;
+    }
+}

@@ -33,7 +33,7 @@ pub fn gen_node(executor: TaskExecutor, config: &NetworkConfig, client: Arc<Mock
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     println!("account_address: {}", account_address);
     client.faucet(account_address, amount).unwrap();
-    let mut wallet = Wallet::new_with_client(executor.clone(), account_address, keypair.clone(), client).unwrap();
+    let mut wallet = Wallet::new_with_client(account_address, keypair.clone(), client).unwrap();
     let (network, tx, rx,close_tx) = build_network_service(config, keypair.clone());
     let identify = network.identify();
     thread::sleep(Duration::from_millis(1000));

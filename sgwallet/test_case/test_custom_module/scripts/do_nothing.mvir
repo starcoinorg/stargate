@@ -1,0 +1,6 @@
+import Transaction.MyModule;
+
+main(){
+    MyModule.do_nothing();
+    return;
+}
