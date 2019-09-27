@@ -23,9 +23,10 @@ use crypto::hash::{CryptoHash, CryptoHasher, TestOnlyHasher};
 use crypto::test_utils::KeyPair;
 use failure::prelude::*;
 use lazy_static::lazy_static;
-use local_state_storage::{LocalStateStorage};
+use local_state_storage::LocalStateStorage;
 use logger::prelude::*;
 use star_types::{account_resource_ext, transaction_output_helper};
+use star_types::channel::{Channel, WitnessData};
 use star_types::channel_transaction::{ChannelOp, ChannelTransactionRequest, ChannelTransactionRequestAndOutput, ChannelTransactionRequestPayload, ChannelTransactionResponse, ChannelTransactionResponsePayload, Witness};
 use star_types::message::{ErrorMessage, SgError};
 use star_types::resource::Resource;
@@ -40,14 +41,14 @@ use types::account_config::{account_resource_path, AccountResource, coin_struct_
 use types::channel_account::{channel_account_resource_path, channel_account_struct_tag, ChannelAccountResource};
 use types::language_storage::StructTag;
 use types::proof::{AccumulatorProof, SignedTransactionProof};
-use types::transaction::{ChannelScriptPayload, ChannelWriteSetPayload, Program, RawTransaction, Script, SignedTransaction, SignedTransactionWithProof, TransactionArgument, TransactionInfo, TransactionOutput, TransactionPayload, TransactionStatus, Version};
-use types::transaction_helpers::{ChannelPayloadSigner, TransactionSigner};
+use types::transaction::{ChannelScriptPayload, ChannelWriteSetPayload, Module, Program, RawTransaction, Script, SignedTransaction, SignedTransactionWithProof, TransactionArgument, TransactionInfo, TransactionOutput, TransactionPayload, TransactionStatus, Version};
+use types::transaction_helpers::{ChannelPayloadSigner, create_signed_payload_txn, TransactionSigner};
 use types::vm_error::*;
 use types::write_set::{WriteOp, WriteSet};
 use vm_runtime::{MoveVM, VMExecutor};
 
 use crate::scripts::*;
-use star_types::channel::{Channel, WitnessData};
+use sgcompiler::Compiler;
 
 lazy_static! {
     pub static ref DEFAULT_ASSET:StructTag = coin_struct_tag();
@@ -106,7 +107,7 @@ impl<C> Wallet<C>
         })
     }
 
-    pub fn account(&self) -> AccountAddress{
+    pub fn account(&self) -> AccountAddress {
         self.account
     }
 
@@ -325,7 +326,7 @@ impl<C> Wallet<C>
         Ok(gas)
     }
 
-    pub fn execute_script(&self, receiver: AccountAddress, package_name:&str, script_name:&str, args: Vec<TransactionArgument>) -> Result<ChannelTransactionRequest>{
+    pub fn execute_script(&self, receiver: AccountAddress, package_name: &str, script_name: &str, args: Vec<TransactionArgument>) -> Result<ChannelTransactionRequest> {
         info!("wallet.execute_script receiver:{}, package_name:{}, script_name:{}, args:{:?}", receiver, package_name, script_name, args);
         let storage = self.storage.borrow();
         let channel = storage.get_channel(&receiver)?;
@@ -338,7 +339,18 @@ impl<C> Wallet<C>
         Ok(())
     }
 
-    pub fn get_script(&self, package_name: &str, script_name: &str) -> Option<ScriptCode>{
+    /// Deploy a module to Chain
+    pub async fn deploy_module(&self, module_source_code: &str) -> Result<SignedTransactionWithProof> {
+        let compiler = Compiler::new(self.account);
+        let module_byte_code = compiler.compile_module(module_source_code)?;
+        let payload = TransactionPayload::Module(Module::new(module_byte_code));
+        let txn = create_signed_payload_txn(self, payload, self.account, self.sequence_number()?,
+                                            Self::MAX_GAS_AMOUNT, Self::GAS_UNIT_PRICE, Self::TXN_EXPIRATION)?;
+        //TODO need execute at local vm for check?
+        self.submit_transaction(txn).await
+    }
+
+    pub fn get_script(&self, package_name: &str, script_name: &str) -> Option<ScriptCode> {
         self.script_registry.get_script(package_name, script_name)
     }
 
@@ -440,11 +452,11 @@ impl<C> Wallet<C>
         let seq_number = signed_transaction.sequence_number();
         let sender = &signed_transaction.sender();
         let _resp = self.client.submit_signed_transaction(signed_transaction)?;
-        let watch_future = self.watch_transaction(sender,seq_number);
+        let watch_future = self.watch_transaction(sender, seq_number);
         watch_future.await
     }
 
-    pub async fn watch_transaction(&self, sender:&AccountAddress, seq: u64) -> Result<SignedTransactionWithProof> {
+    pub async fn watch_transaction(&self, sender: &AccountAddress, seq: u64) -> Result<SignedTransactionWithProof> {
         loop {
             let timeout_time = Instant::now() + Duration::from_millis(Self::RETRY_INTERVAL);
             if let Ok(_) = Delay::new(timeout_time).compat().await {

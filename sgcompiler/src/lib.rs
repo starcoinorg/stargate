@@ -106,19 +106,22 @@ impl<'a> ModuleLoader for StateViewModuleLoader<'a> {
     }
 }
 
-pub struct SgCompiler<'a> {
+pub struct Compiler<'a> {
+    address: AccountAddress,
     module_loader: &'a dyn ModuleLoader,
 }
 
-impl<'a> SgCompiler<'a> {
-    pub fn new() -> Self {
+impl<'a> Compiler<'a> {
+    pub fn new(address: AccountAddress) -> Self {
         Self {
+            address,
             module_loader: &EmptyModuleLoader{}
         }
     }
 
-    pub fn new_with_module_loader(module_loader: &'a dyn ModuleLoader) -> Self {
+    pub fn new_with_module_loader(address: AccountAddress, module_loader: &'a dyn ModuleLoader) -> Self {
         Self {
+            address,
             module_loader
         }
     }
@@ -137,7 +140,7 @@ impl<'a> SgCompiler<'a> {
         let ast_script = parse_script(script_str)?;
         let deps = self.load_deps(ast_script.get_external_deps())?;
         let compiled_script =
-            ir_to_bytecode::compiler::compile_script(AccountAddress::default(), ast_script, &deps)?;
+            ir_to_bytecode::compiler::compile_script(self.address, ast_script, &deps)?;
         let mut byte_code = vec![];
         compiled_script
             .serialize(&mut byte_code)?;
@@ -148,7 +151,7 @@ impl<'a> SgCompiler<'a> {
         let ast_module = parse_module(module_str)?;
         let deps = self.load_deps(ast_module.get_external_deps())?;
         let compiled_module =
-            ir_to_bytecode::compiler::compile_module(AccountAddress::default(), ast_module, &deps)?;
+            ir_to_bytecode::compiler::compile_module(self.address, ast_module, &deps)?;
         let mut byte_code = vec![];
         compiled_module
             .serialize(&mut byte_code)?;
@@ -216,7 +219,7 @@ mod tests {
     #[test]
     fn test_compile() -> Result<()> {
         init_for_e2e_testing();
-        let compiler = SgCompiler::new();
+        let compiler = Compiler::new(AccountAddress::default());
         let package1_path = get_test_package("package1");
         let package = compiler.compile_package(package1_path)?;
         let script = package.get_script("empty");
@@ -230,7 +233,8 @@ mod tests {
         let module_loader = MockModuleLoader::new();
         let module_id = ModuleId::new(AccountAddress::default(), Identifier::from(IdentStr::new("Mock")?));
         module_loader.mock_empty_module(&module_id)?;
-        let compiler = SgCompiler::new_with_module_loader(&module_loader);
+        let address = AccountAddress::random();
+        let compiler = Compiler::new_with_module_loader(address, &module_loader);
 
         let package_path = get_test_package("package_with_custom_module");
         let package = compiler.compile_package(package_path)?;

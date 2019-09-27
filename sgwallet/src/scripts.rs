@@ -9,7 +9,7 @@ use ir_to_bytecode::{compiler::compile_program};
 use ir_to_bytecode::parser::parse_program;
 use lazy_static::lazy_static;
 use logger::prelude::*;
-use sgcompiler::{ScriptFile, SgCompiler};
+use sgcompiler::{ScriptFile, Compiler};
 use star_types::channel_transaction::ChannelOp;
 use star_types::script_package::{ChannelScriptPackage, ScriptCode};
 use stdlib::stdlib_modules;
@@ -37,7 +37,7 @@ pub struct PackageRegistry {
 impl PackageRegistry {
     pub fn build() -> Result<Self> {
         let mut packages = HashMap::new();
-        let compiler = SgCompiler::new();
+        let compiler = Compiler::new(AccountAddress::default());
         let open_script_source = get_file_contents("open.mvir")?;
         let open_script = compiler.compile_script(open_script_source)?;
         let close_script_source = get_file_contents("close.mvir")?;
