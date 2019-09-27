@@ -9,7 +9,7 @@ use ir_to_bytecode::{compiler::compile_program};
 use ir_to_bytecode::parser::parse_program;
 use lazy_static::lazy_static;
 use logger::prelude::*;
-use sgcompiler::{compile_package_with_files, compile_script, ScriptFile};
+use sgcompiler::{ScriptFile, SgCompiler};
 use star_types::channel_transaction::ChannelOp;
 use star_types::script_package::{ChannelScriptPackage, ScriptCode};
 use stdlib::stdlib_modules;
@@ -37,13 +37,17 @@ pub struct PackageRegistry {
 impl PackageRegistry {
     pub fn build() -> Result<Self> {
         let mut packages = HashMap::new();
+        let compiler = SgCompiler::new();
         let open_script_source = get_file_contents("open.mvir")?;
-        let open_script = compile_script(open_script_source)?;
+        let open_script = compiler.compile_script(open_script_source)?;
         let close_script_source = get_file_contents("close.mvir")?;
-        let close_script = compile_script(close_script_source)?;
+        let close_script = compiler.compile_script(close_script_source)?;
         info!("{:?}", SCRIPTS_DIR.dirs());
         for dir in SCRIPTS_DIR.dirs() {
-            let package = compile_package(dir)?;
+            let package_name = dir.path().to_str().unwrap();
+            let script_files = dir.files().iter()
+                .map(|file| ScriptFile::new(file.path().to_path_buf(), file.contents_utf8().expect("script contents must is string").to_string())).collect();
+            let package = compiler.compile_package_with_files(package_name, script_files)?;
             packages.insert(package.package_name().to_string(), package);
         }
         Ok(Self {
@@ -86,14 +90,6 @@ impl PackageRegistry {
 fn get_file_contents(path: &str) -> Result<&str> {
     SCRIPTS_DIR.get_file(path).and_then(|file| file.contents_utf8()).ok_or(format_err!("Can not find script by path:{}", path))
 }
-
-fn compile_package(dir: &Dir) -> Result<ChannelScriptPackage> {
-    let package_name = dir.path().to_str().unwrap();
-    let script_files = dir.files().iter()
-        .map(|file| ScriptFile::new(file.path().to_path_buf(), file.contents_utf8().expect("script contents must is string").to_string())).collect();
-    compile_package_with_files(package_name, script_files)
-}
-
 
 #[cfg(test)]
 mod tests {

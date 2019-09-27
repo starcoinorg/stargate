@@ -18,15 +18,15 @@ use types::transaction::Version;
 use crate::LocalStateStorage;
 use chain_client::client_state_view::ClientStateView;
 
-pub struct ChannelStateView<'txn, C> where C: ChainClient {
+pub struct ChannelStateView<'txn>{
     channel: &'txn Channel,
-    client_state_view: ClientStateView<C>,
+    client_state_view: ClientStateView<'txn>,
 }
 
-impl<'txn, C> ChannelStateView<'txn, C> where C: ChainClient {
-    pub fn new(channel: &'txn Channel, client: Arc<C>) -> Result<Self> {
+impl<'txn> ChannelStateView<'txn> {
+    pub fn new(channel: &'txn Channel, client: &'txn dyn ChainClient) -> Result<Self> {
         let account_state = client.get_account_state(channel.account().address(), None)?;
-        let client_state_view = ClientStateView::new_with_account_state(channel.account().address(), account_state, client.clone());
+        let client_state_view = ClientStateView::new_with_account_state(channel.account().address(), account_state, client);
         Ok(Self {
             channel,
             client_state_view,
@@ -38,7 +38,7 @@ impl<'txn, C> ChannelStateView<'txn, C> where C: ChainClient {
     }
 }
 
-impl<'txn, C> StateView for ChannelStateView<'txn, C> where C: ChainClient {
+impl<'txn> StateView for ChannelStateView<'txn> {
     fn get(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
         if access_path.is_channel_resource() {
             let AccessPath { address, path } = access_path;

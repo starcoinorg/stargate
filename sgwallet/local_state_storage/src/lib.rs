@@ -90,9 +90,9 @@ impl<C> LocalStateStorage<C>
         self.channels.get(participant).ok_or(SgError::new_channel_not_exist_error(participant).into())
     }
 
-    pub fn new_state_view(&self, version: Option<Version>, participant: &AccountAddress) -> Result<ChannelStateView<C>> {
+    pub fn new_state_view(&self, version: Option<Version>, participant: &AccountAddress) -> Result<ChannelStateView> {
         let channel = self.get_channel(participant)?;
-        ChannelStateView::new(channel, self.client.clone())
+        ChannelStateView::new(channel, &*self.client)
     }
 
     pub fn get(&self, path: &DataPath) -> Result<Option<Vec<u8>>> {
@@ -107,7 +107,7 @@ impl<C> LocalStateStorage<C>
 
     pub fn get_resource(&self, path: &DataPath) -> Result<Option<Resource>> {
         let state = self.get(path)?;
-        let client_state_view = ClientStateView::new(None, self.client.clone());
+        let client_state_view = ClientStateView::new(None, &*self.client);
         match state {
             None => Ok(None),
             Some(state) => {

@@ -16,14 +16,14 @@ use star_types::account_state::AccountState;
 use crate::ChainClient;
 
 /// A state_view directly fetch remote chain, but lock version.
-pub struct ClientStateView<C> where C: ChainClient {
+pub struct ClientStateView<'a> {
     version: Option<Version>,
-    client: Arc<C>,
+    client: &'a dyn ChainClient,
     cache: AtomicRefCell<HashMap<AccountAddress, AccountState>>,
 }
 
-impl<C> ClientStateView<C> where C: ChainClient {
-    pub fn new(version: Option<Version>, client: Arc<C>) -> Self {
+impl<'a> ClientStateView<'a> {
+    pub fn new(version: Option<Version>, client: &'a dyn ChainClient) -> Self {
         Self {
             version,
             client,
@@ -31,7 +31,7 @@ impl<C> ClientStateView<C> where C: ChainClient {
         }
     }
 
-    pub fn new_with_account_state(account: AccountAddress, account_state: AccountState, client: Arc<C>) -> Self {
+    pub fn new_with_account_state(account: AccountAddress, account_state: AccountState, client: &'a dyn ChainClient) -> Self {
         let version = account_state.version();
         let mut cache = HashMap::new();
         cache.insert(account, account_state);
@@ -47,7 +47,7 @@ impl<C> ClientStateView<C> where C: ChainClient {
     }
 }
 
-impl<C> StateView for ClientStateView<C> where C: ChainClient {
+impl<'a> StateView for ClientStateView<'a> {
     fn get(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
         let AccessPath { address, path } = access_path;
         let mut cache = self.cache.borrow_mut();

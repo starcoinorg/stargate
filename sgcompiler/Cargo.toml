@@ -13,4 +13,8 @@ types = { path = "../libra/types" }
 star_types = { path = "../star_types" }
 stdlib = { path = "../libra/language/stdlib" }
 ir_to_bytecode = { path = "../libra/language/compiler/ir_to_bytecode" }
+vm = { path = "../libra/language/vm" }
+bytecode_verifier = { path = "../libra/language/bytecode_verifier"}
 logger = { path = "../libra/common/logger"}
+state_view = {path = "../libra/storage/state_view"}
+chain_client = { path = "../chain/chain_client"}
