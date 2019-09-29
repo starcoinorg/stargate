@@ -30,7 +30,7 @@ use types::proto::{transaction::SignedTransactionsBlock, validator_set::Validato
 use execution_proto::proto::execution::{CommitBlockRequest, ExecuteBlockRequest};
 use vm_validator::vm_validator::VMValidator;
 use tokio_timer::Interval;
-use futures::{Stream, Future};
+use futures::{Stream, Future, future};
 use mempool::proto::mempool_client::MempoolClientTrait;
 use crypto::hash::GENESIS_BLOCK_ID;
 use admission_control_proto::proto::admission_control_client::AdmissionControlClientTrait;
@@ -41,6 +41,7 @@ use proto_conv::FromProto;
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 use std::thread::sleep;
+use futures::sync::mpsc::{unbounded, UnboundedSender};
 
 pub struct StarHandle {
     _storage: ServerHandle,
@@ -82,7 +83,7 @@ fn setup_executor<R, W>(config: &NodeConfig, r: Arc<R>, w: Arc<W>) -> ExecutionS
     ExecutionService::new(r, w, config)
 }
 
-pub fn setup_environment(node_config: &mut NodeConfig) -> (AdmissionControlClient<CoreMemPoolClient, VMValidator>, StarHandle) {
+pub fn setup_environment(node_config: &mut NodeConfig) -> (AdmissionControlClient<CoreMemPoolClient, VMValidator>, StarHandle, UnboundedSender<()>) {
     crash_handler::setup_panic_handler();
 
     let mut instant = Instant::now();
@@ -104,15 +105,32 @@ pub fn setup_environment(node_config: &mut NodeConfig) -> (AdmissionControlClien
     let (ac_client, mempool_client) = setup_ac(&node_config, Arc::clone(&storage_service));
     debug!("AC started in {} ms", instant.elapsed().as_millis());
 
-    commit_block(ac_client.clone(), mempool_client, execution_service);
+    let shutdown_sender = commit_block(ac_client.clone(), mempool_client, execution_service);
     let star_handle = StarHandle {
         _storage: storage,
     };
-    (ac_client, star_handle)
+    (ac_client, star_handle, shutdown_sender)
 }
 
-fn commit_block(ac_client: AdmissionControlClient<CoreMemPoolClient, VMValidator>, mempool_client: CoreMemPoolClient, execution_service: ExecutionService) {
+fn commit_block(ac_client: AdmissionControlClient<CoreMemPoolClient, VMValidator>, mempool_client: CoreMemPoolClient, execution_service: ExecutionService) -> UnboundedSender<()> {
+    let (shutdown_sender, mut shutdown_receiver) = unbounded();
+
     let task = Interval::new(Instant::now(), Duration::from_secs(3))
+        .take_while(move |_| {
+            match shutdown_receiver.poll() {
+                Ok(opt) => {
+                    match opt {
+                        futures::Async::Ready(shutdown) => {
+                            info!("Build block task exit.");
+                            return future::ok(false);
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+            return future::ok(true);
+        })
         .for_each(move |_| {
             let mut block_req = GetBlockRequest::new();
             block_req.set_max_block_size(1);
@@ -120,7 +138,7 @@ fn commit_block(ac_client: AdmissionControlClient<CoreMemPoolClient, VMValidator
             let block = block_resp.get_block();
             let mut txns = block.get_transactions();
 
-            println!("txn size: {:?} of current block.", txns.len());
+            info!("txn size: {:?} of current block.", txns.len());
 
             if txns.len() > 0 {
                 let mut tmp_txn_vec = vec![];
@@ -144,10 +162,10 @@ fn commit_block(ac_client: AdmissionControlClient<CoreMemPoolClient, VMValidator
                 exe_req.set_transactions(repeated);
 
                 let len = LATEST_BLOCK_HASH.lock().unwrap().len();
-                println!("block hight: {:?}", len);
+                info!("block height: {:?}", len);
                 let latest_hash = LATEST_BLOCK_HASH.lock().unwrap().get(len - 1).unwrap().clone();
 
-                println!("new block hash: {:?}", latest_hash);
+                info!("new block hash: {:?}", latest_hash);
 
                 exe_req.set_parent_block_id(latest_hash.to_vec());
 
@@ -183,7 +201,16 @@ fn commit_block(ac_client: AdmissionControlClient<CoreMemPoolClient, VMValidator
                 mempool_client.remove_txn(&remove_req);
             }
             Ok(())
-        }).map_err(|e| { panic!("interval errored; err={:?}", e) });
+        }).map_err(|e| { println!("interval errored; err={:?}", e) });
 
-    thread::spawn(move || { tokio::run(task) });
+    thread::spawn(move || {
+//        let mut rt = tokio::runtime::Runtime::new().unwrap();
+//        let executor = rt.executor();
+//        executor.spawn(task);
+//        rt.shutdown_on_idle().wait().unwrap();
+
+        tokio::run(task)
+    });
+
+    shutdown_sender
 }

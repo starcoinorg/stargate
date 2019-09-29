@@ -19,7 +19,7 @@ use bytes::Bytes;
 
 use rand::prelude::*;
 
-use sgchain::star_chain_client::{MockChainClient};
+use sgchain::star_chain_client::{MockChainClient, stop_mock_chain};
 use crypto::test_utils::KeyPair;
 use crypto::Uniform;
 use types::account_address::AccountAddress;
@@ -39,11 +39,12 @@ use crate::node::Node;
 use futures::compat::Future01CompatExt;
 use std::time::{Duration, Instant};
 use tokio::timer::Delay;
+use core::borrow::Borrow;
 
 #[test]
 fn node_test() -> Result<()> {
     ::logger::init_for_e2e_testing();
-    env_logger::init();
+    //env_logger::init();
     let mut rt1 = Runtime::new().unwrap();
     let mut rt = Runtime::new().unwrap();
     let executor = rt.executor();
@@ -98,7 +99,7 @@ fn node_test() -> Result<()> {
     };
     rt.block_on(f.boxed().unit_error().compat()).unwrap();
 
-    drop(client);
+    stop_mock_chain(&client);
 
     debug!("here");
     //rt.shutdown_on_idle().wait().unwrap();

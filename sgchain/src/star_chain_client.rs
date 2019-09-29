@@ -31,6 +31,7 @@ use futures03::{
 use tokio::runtime::Runtime;
 use tokio_timer::Delay;
 use star_types::account_state::AccountState;
+use futures::sync::mpsc::UnboundedSender;
 
 pub trait ChainClient {
 
@@ -167,6 +168,7 @@ impl ChainClient for StarChainClient {
 #[derive(Clone)]
 pub struct MockChainClient {
     ac_client: Arc<MockAdmissionControlClient<CoreMemPoolClient, VMValidator>>,
+    pub shutdown_sender: Arc<UnboundedSender<()>>,
 }
 
 impl MockChainClient {
@@ -180,8 +182,8 @@ impl MockChainClient {
             config.execution.genesis_file_location = genesis_path;
         }
 
-        let (ac_client, _handle) = setup_environment(&mut config);
-        (MockChainClient { ac_client: Arc::new(ac_client) }, _handle)
+        let (ac_client, _handle, shutdown_sender) = setup_environment(&mut config);
+        (MockChainClient { ac_client: Arc::new(ac_client), shutdown_sender:Arc::new(shutdown_sender) }, _handle)
     }
 
     async fn watch_inner(ac_client: &MockChainClient, address: &AccountAddress, seq: u64) -> Result<Option<SignedTransactionWithProof>> {
@@ -207,6 +209,10 @@ impl MockChainClient {
             }
         }
     }
+}
+
+pub fn stop_mock_chain(client:&MockChainClient) {
+    client.shutdown_sender.unbounded_send(()).expect("send shutdown msg err.")
 }
 
 impl ChainClient for MockChainClient {
@@ -283,7 +289,7 @@ pub fn genesis_blob() -> String {
     let file = format!("{}/{}", path, "genesis.blob");
     let mut genesis_file = File::create(Path::new(&file)).expect("open genesis file err.");
     genesis_file.write_all(genesis_txn.into_proto_bytes().expect("genesis_txn to bytes err.").as_slice()).expect("write genesis file err.");
-    genesis_file.flush().unwrap();
+    genesis_file.flush().expect("======err=====");
     info!("genesis blob path: {}", file);
     file
 }
