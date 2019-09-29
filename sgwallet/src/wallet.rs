@@ -153,7 +153,7 @@ impl<C> Wallet<C>
         let channel_sequence_number = channel.channel_sequence_number();
         let txn = self.create_signed_script_txn(channel, receiver, script)?;
         let storage = self.storage.borrow();
-        let state_view = storage.new_state_view(None, &receiver)?;
+        let state_view = storage.new_channel_view(None, &receiver)?;
         let output = self.execute_transaction(&state_view, txn.clone())?;
 
         let payload = if output.is_travel_txn() {
@@ -195,7 +195,7 @@ impl<C> Wallet<C>
         ensure!(channel.channel_sequence_number() == txn_request.channel_sequence_number(), "check channel_sequence_number fail.");
         let signed_txn = self.mock_signature(txn_request.txn().clone())?;
         let version = txn_request.version();
-        let state_view = storage.new_state_view(Some(version), &sender)?;
+        let state_view = storage.new_channel_view(Some(version), &sender)?;
         let txn_payload_signature = signed_txn.receiver_signature().expect("signature must exist.");
         let output = self.execute_transaction(&state_view, signed_txn)?;
         //TODO verify output.

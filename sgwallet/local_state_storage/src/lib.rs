@@ -1,21 +1,15 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{HashMap};
 use std::sync::Arc;
 
-use atomic_refcell::AtomicRefCell;
-
 use sgchain::star_chain_client::ChainClient;
-use crypto::ed25519::Ed25519Signature;
 use failure::prelude::*;
 use logger::prelude::*;
 use star_types::message::SgError;
 use star_types::resource::Resource;
-use star_types::resource_type::resource_def::{ResourceDef, StructDefResolve};
-use state_store::{StateStore, StateViewPlus};
 use state_view::StateView;
 use struct_cache::StructCache;
-use types::access_path::{Access, AccessPath, DataPath};
+use types::access_path::{AccessPath, DataPath};
 use types::account_address::AccountAddress;
-use types::language_storage::StructTag;
 use types::transaction::{ChannelWriteSetPayload, TransactionOutput, Version};
 use types::write_set::{WriteOp, WriteSet};
 use vm_runtime_types::loaded_data::struct_def::StructDef;
@@ -90,9 +84,13 @@ impl<C> LocalStateStorage<C>
         self.channels.get(participant).ok_or(SgError::new_channel_not_exist_error(participant).into())
     }
 
-    pub fn new_state_view(&self, version: Option<Version>, participant: &AccountAddress) -> Result<ChannelStateView> {
+    pub fn new_channel_view(&self, version: Option<Version>, participant: &AccountAddress) -> Result<ChannelStateView> {
         let channel = self.get_channel(participant)?;
-        ChannelStateView::new(channel, &*self.client)
+        ChannelStateView::new(channel, version, &*self.client)
+    }
+
+    pub fn new_state_view(&self, version: Option<Version>) -> Result<ClientStateView> {
+        Ok(ClientStateView::new(version, &*self.client))
     }
 
     pub fn get(&self, path: &DataPath) -> Result<Option<Vec<u8>>> {
@@ -107,12 +105,12 @@ impl<C> LocalStateStorage<C>
 
     pub fn get_resource(&self, path: &DataPath) -> Result<Option<Resource>> {
         let state = self.get(path)?;
-        let client_state_view = ClientStateView::new(None, &*self.client);
+        let state_view = self.new_state_view(None)?;
         match state {
             None => Ok(None),
             Some(state) => {
                 let tag = path.resource_tag().ok_or(format_err!("path {:?} is not a resource path.", path))?;
-                let def = self.struct_cache.find_struct(&tag, &client_state_view)?;
+                let def = self.struct_cache.find_struct(&tag, &state_view)?;
                 Ok(Some(Resource::decode(tag.clone(), def, state.as_slice())?))
             }
         }
