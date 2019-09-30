@@ -302,7 +302,8 @@ impl<C> Wallet<C>
                     // sender submit transaction to chain.
                     self.submit_transaction(signed_txn).await?
                 } else {
-                    self.watch_transaction(sender, signed_txn.sequence_number()).await?
+                    let watch_future = self.client.watch_transaction(sender, signed_txn.sequence_number());
+                    watch_future.await?.expect("proof is none.")
                 };
                 //self.check_output(&output)?;
                 let gas = txn_with_proof.proof.transaction_info().gas_used();
@@ -453,30 +454,14 @@ impl<C> Wallet<C>
         let seq_number = signed_transaction.sequence_number();
         let sender = &signed_transaction.sender();
         let _resp = self.client.submit_signed_transaction(signed_transaction)?;
-        let watch_future = self.watch_transaction(sender, seq_number);
-        watch_future.await
-    }
-
-    pub async fn watch_transaction(&self, sender: &AccountAddress, seq: u64) -> Result<SignedTransactionWithProof> {
-        loop {
-            let timeout_time = Instant::now() + Duration::from_millis(Self::RETRY_INTERVAL);
-            if let Ok(_) = Delay::new(timeout_time).compat().await {
-                info!("seq number is {}", seq);
-                let result = self.client.get_transaction_by_seq_num(sender, seq);
-                info!("result is {:?}", result);
-                match result {
-                    Ok(None) => {
-                        continue;
-                    }
-                    Ok(Some(t)) => {
-                        return Ok(t);
-                    }
-                    Err(e) => {
-                        return Err(e);
-                    }
-                    _ => {}
-                }
-            };
+        let watch_future = self.client.watch_transaction(sender, seq_number);
+        match watch_future.await? {
+            Some(proof) => {
+                Ok(proof)
+            }
+            None => {
+                Err(format_err!("proof not found by address {:?} and seq num {} .", sender, seq_number))
+            }
         }
     }
 }
