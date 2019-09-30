@@ -158,6 +158,25 @@ impl<'a> Compiler<'a> {
         Ok(byte_code)
     }
 
+    pub fn compile_program(&self, program_str: &str) -> Result<Vec<u8>> {
+        let ast_program = parse_program(program_str)?;
+        // aggragator deps
+        let mut deps =  ast_program.script.get_external_deps();
+        let modules = ast_program.modules.clone();
+        for program_module in modules {
+            deps.extend_from_slice(& program_module.get_external_deps());
+        }
+        let deps_module = self.load_deps(deps)?;
+        let compiled_program =
+            ir_to_bytecode::compiler::compile_program(self.address, ast_program, &deps_module)?;
+        let mut byte_code = vec![];
+        for module in compiled_program.modules.into_iter() {
+            module.serialize(&mut byte_code)?;
+        }
+        compiled_program.script.serialize(&mut byte_code)?;
+        Ok(byte_code)
+    }
+
     pub fn compile_package_with_files(&self, package_name: &str, script_files: Vec<ScriptFile>) -> Result<ChannelScriptPackage> {
         let mut scripts = vec![];
         info!("compile package {}", package_name);
