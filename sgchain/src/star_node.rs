@@ -36,7 +36,7 @@ use std::{
     time::Instant,
 };
 use storage_client::{
-    StorageRead, StorageReadServiceClient, StorageWrite, StorageWriteServiceClient,
+    StorageRead, StorageWrite,
 };
 use storage_service::start_storage_service_and_return_service;
 use tokio::runtime::{Builder, Runtime};
@@ -114,8 +114,6 @@ where
     R: StorageRead + 'static,
     W: StorageWrite + 'static,
 {
-    let client_env = Arc::new(EnvBuilder::new().name_prefix("grpc-exe-sto-").build());
-
     let handle = ExecutionService::new(r, w, config);
     let service = execution_grpc::create_execution(handle);
     ::grpcio::ServerBuilder::new(Arc::new(EnvBuilder::new().name_prefix("grpc-exe-").build()))

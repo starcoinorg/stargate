@@ -8,15 +8,11 @@ use admission_control_service::admission_control_client::AdmissionControlClient 
 use async_trait::async_trait;
 use config::{config::NodeConfigHelpers, trusted_peers::ConfigHelpers};
 use core::borrow::Borrow;
-use executable_helpers::helpers::{
-    load_configs_from_args, setup_executable, ARG_CONFIG_PATH, ARG_DISABLE_LOGGING, ARG_PEER_ID,
-};
 use failure::prelude::*;
 use futures::sync::mpsc::UnboundedSender;
 use futures03::{
-    compat::{Future01CompatExt, Stream01CompatExt},
+    compat::{Future01CompatExt},
     future::{FutureExt, TryFutureExt},
-    stream::StreamExt,
 };
 use grpcio::{ChannelBuilder, EnvBuilder};
 use logger::prelude::*;
@@ -25,7 +21,7 @@ use proto_conv::{FromProto, IntoProto, IntoProtoBytes};
 use star_types::account_state::AccountState;
 use std::{
     convert::TryInto,
-    fs::{create_dir_all, File},
+    fs::{File},
     io::Write,
     path::Path,
     sync::Arc,
@@ -33,7 +29,6 @@ use std::{
 };
 use tokio::runtime::Runtime;
 use tokio_timer::Delay;
-use tools::tempdir::TempPath;
 use types::{
     account_address::AccountAddress,
     account_config::{association_address, AccountResource},
@@ -52,7 +47,7 @@ use vm_genesis::{
 use vm_validator::vm_validator::VMValidator;
 
 #[async_trait]
-pub trait ChainClient {
+pub trait ChainClient: Send + Sync {
     fn submit_transaction(
         &self,
         req: &SubmitTransactionRequest,
@@ -216,7 +211,7 @@ pub trait ChainClient {
             .expect("get account state err.")
             .1
         {
-            Some(blob) => true,
+            Some(_blob) => true,
             None => false,
         }
     }
@@ -338,7 +333,7 @@ fn build_request(req: RequestItem, ver: Option<Version>) -> UpdateToLatestLedger
 
 pub fn faucet_sync<C>(client: C, receiver: AccountAddress, amount: u64) -> Result<()>
 where
-    C: 'static + ChainClient + Sync + Send,
+    C: 'static + ChainClient,
 {
     let mut rt = Runtime::new().expect("faucet runtime err.");
     let f = async move { client.faucet(receiver, amount).await };

@@ -4383,7 +4383,6 @@ dependencies = [
  "grpcio 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "grpcio-sys 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "jemallocator 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "logger 0.1.0",
  "mempool 0.1.0",
  "metrics 0.1.0",

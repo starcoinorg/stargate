@@ -42,7 +42,7 @@ pub fn gen_node(
     let keypair = KeyPair::generate_for_testing(&mut rng);
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     println!("account_address: {}", account_address);
-    faucet_sync(client.as_ref().clone(), account_address, amount);
+    faucet_sync(client.as_ref().clone(), account_address, amount).unwrap();
     let mut wallet = Wallet::new_with_client(account_address, keypair.clone(), client).unwrap();
     let (network, tx, rx, close_tx) = build_network_service(config, keypair.clone());
     let identify = network.identify();

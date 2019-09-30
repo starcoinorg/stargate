@@ -207,7 +207,7 @@ impl ClientProxy {
 
         let txn = self.create_submit_transaction(program, sequence_number, None, None)?;
 
-        self.chain_client.submit_signed_transaction(txn);
+        self.chain_client.submit_signed_transaction(txn)?;
 
         self.wait_for_transaction(&addr, sequence_number);
 

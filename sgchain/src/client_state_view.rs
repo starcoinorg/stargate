@@ -1,14 +1,12 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap};
 
 use atomic_refcell::AtomicRefCell;
 
 use super::star_chain_client::ChainClient;
 use failure::prelude::*;
-use logger::prelude::*;
-use star_types::resource_type::resource_def::{ResourceDef, StructDefResolve};
 use state_view::StateView;
 use types::{
-    access_path::AccessPath, account_address::AccountAddress, language_storage::StructTag,
+    access_path::AccessPath, account_address::AccountAddress,
     transaction::Version,
 };
 
