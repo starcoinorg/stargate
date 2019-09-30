@@ -11,7 +11,7 @@ use core::borrow::Borrow;
 use failure::prelude::*;
 use futures::sync::mpsc::UnboundedSender;
 use futures03::{
-    compat::{Future01CompatExt},
+    compat::Future01CompatExt,
     future::{FutureExt, TryFutureExt},
 };
 use grpcio::{ChannelBuilder, EnvBuilder};
@@ -21,7 +21,7 @@ use proto_conv::{FromProto, IntoProto, IntoProtoBytes};
 use star_types::account_state::AccountState;
 use std::{
     convert::TryInto,
-    fs::{File},
+    fs::File,
     io::Write,
     path::Path,
     sync::Arc,

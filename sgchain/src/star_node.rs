@@ -35,9 +35,7 @@ use std::{
     thread,
     time::Instant,
 };
-use storage_client::{
-    StorageRead, StorageWrite,
-};
+use storage_client::{StorageRead, StorageWrite};
 use storage_service::start_storage_service_and_return_service;
 use tokio::runtime::{Builder, Runtime};
 use types::account_address::AccountAddress as PeerId;

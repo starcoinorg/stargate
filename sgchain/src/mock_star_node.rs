@@ -1,13 +1,13 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use admission_control_service::admission_control_service::AdmissionControlService;
-use admission_control_service::admission_control_client::AdmissionControlClient;
-use config::config::{NodeConfig};
-use crypto::{hash::GENESIS_BLOCK_ID, HashValue};
-use execution_proto::proto::{
-    execution::{CommitBlockRequest, ExecuteBlockRequest},
+use admission_control_service::{
+    admission_control_client::AdmissionControlClient,
+    admission_control_service::AdmissionControlService,
 };
+use config::config::NodeConfig;
+use crypto::{hash::GENESIS_BLOCK_ID, HashValue};
+use execution_proto::proto::execution::{CommitBlockRequest, ExecuteBlockRequest};
 use execution_service::ExecutionService;
 use futures::{
     future,
@@ -26,12 +26,10 @@ use mempool::{
 use proto_conv::FromProto;
 use std::{
     sync::{Arc, Mutex},
-    thread::{self},
+    thread::self,
     time::{Duration, Instant},
 };
-use storage_client::{
-    StorageRead, StorageWrite,
-};
+use storage_client::{StorageRead, StorageWrite};
 use storage_service::start_storage_service_and_return_service;
 use tokio_timer::Interval;
 use types::{
@@ -39,7 +37,7 @@ use types::{
         ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
         validator_set::ValidatorSet,
     },
-    transaction::{SignedTransaction},
+    transaction::SignedTransaction,
 };
 use vm_validator::vm_validator::VMValidator;
 
@@ -118,11 +116,7 @@ pub fn setup_environment(
 
     let block_hash_vec = Mutex::new(vec![*GENESIS_BLOCK_ID]);
 
-    let shutdown_sender = commit_block(
-        block_hash_vec,
-        mempool_client,
-        execution_service,
-    );
+    let shutdown_sender = commit_block(block_hash_vec, mempool_client, execution_service);
     let star_handle = StarHandle { _storage: storage };
 
     (ac_client, star_handle, shutdown_sender)

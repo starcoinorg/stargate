@@ -1,14 +1,11 @@
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
 use atomic_refcell::AtomicRefCell;
 
 use super::star_chain_client::ChainClient;
 use failure::prelude::*;
 use state_view::StateView;
-use types::{
-    access_path::AccessPath, account_address::AccountAddress,
-    transaction::Version,
-};
+use types::{access_path::AccessPath, account_address::AccountAddress, transaction::Version};
 
 use star_types::account_state::AccountState;
 
