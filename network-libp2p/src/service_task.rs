@@ -1,20 +1,23 @@
-use crate::custom_proto::{CustomMessage, RegisteredProtocol};
 use crate::{
-    behaviour::Behaviour, behaviour::BehaviourOut, transport, NetworkState,
-    NetworkStateNotConnectedPeer, NetworkStatePeer,
+    behaviour::{Behaviour, BehaviourOut},
+    custom_proto::{CustomMessage, RegisteredProtocol},
+    parse_str_addr, transport, NetworkConfiguration, NetworkState, NetworkStateNotConnectedPeer,
+    NetworkStatePeer, NonReservedPeerMode,
 };
-use crate::{parse_str_addr, NetworkConfiguration, NonReservedPeerMode};
 use fnv::FnvHashMap;
 use futures::{prelude::*, Stream};
-use libp2p::core::nodes::ConnectedPoint;
-use libp2p::core::{muxing::StreamMuxerBox, nodes::Substream, transport::boxed::Boxed, Swarm};
-use libp2p::{core::swarm::NetworkBehaviour, Multiaddr, PeerId};
+use libp2p::{
+    core::{
+        muxing::StreamMuxerBox,
+        nodes::{ConnectedPoint, Substream},
+        swarm::NetworkBehaviour,
+        transport::boxed::Boxed,
+        Swarm,
+    },
+    Multiaddr, PeerId,
+};
 use log::{debug, info, warn};
-use std::fs;
-use std::io::Error as IoError;
-use std::path::Path;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{fs, io::Error as IoError, path::Path, sync::Arc, time::Duration};
 
 /// Starts the libp2p service.
 ///

@@ -1,18 +1,22 @@
-use std::collections::{BTreeMap, HashMap};
-use std::convert::TryFrom;
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, HashMap},
+    convert::TryFrom,
+    sync::Arc,
+};
 
 use atomic_refcell::AtomicRefCell;
 use itertools::Itertools;
 
-use failure::prelude::*;
 use crate::account_resource_ext;
-use types::access_path::DataPath;
-use types::account_address::AccountAddress;
-use types::account_config::{account_resource_path, AccountResource};
-use types::account_state_blob::AccountStateBlob;
-use types::proof::SparseMerkleProof;
-use types::transaction::Version;
+use failure::prelude::*;
+use types::{
+    access_path::DataPath,
+    account_address::AccountAddress,
+    account_config::{account_resource_path, AccountResource},
+    account_state_blob::AccountStateBlob,
+    proof::SparseMerkleProof,
+    transaction::Version,
+};
 
 use crate::channel::ChannelState;
 
@@ -36,7 +40,11 @@ impl AccountState {
         self.state.insert(path.to_vec(), value);
     }
 
-    pub fn from_account_state_blob(version: Version, account_state_blob: Vec<u8>, proof: SparseMerkleProof) -> Result<Self> {
+    pub fn from_account_state_blob(
+        version: Version,
+        account_state_blob: Vec<u8>,
+        proof: SparseMerkleProof,
+    ) -> Result<Self> {
         let state = BTreeMap::try_from(&AccountStateBlob::from(account_state_blob))?;
         Ok(Self {
             version,
@@ -79,18 +87,24 @@ impl AccountState {
     }
 
     pub fn filter_channel_state(&self) -> HashMap<AccountAddress, ChannelState> {
-        self.state.iter().map(|(k, v)| {
-            (DataPath::from(k).expect("Parse DataPath should success"), v)
-        }).filter(|(k, v)| k.is_channel_resource()).group_by(|(k, v)| -> AccountAddress{
-            k.participant().expect("Channel Resource must contains participant.")
-        }).into_iter().map(|(participant, group)| {
-            println!("{}", participant);
-            let mut state = BTreeMap::new();
-            for (k, v) in group {
-                state.insert(k.to_vec(), v.clone());
-            }
-            (participant, ChannelState::new(participant, state))
-        }).collect()
+        self.state
+            .iter()
+            .map(|(k, v)| (DataPath::from(k).expect("Parse DataPath should success"), v))
+            .filter(|(k, v)| k.is_channel_resource())
+            .group_by(|(k, v)| -> AccountAddress {
+                k.participant()
+                    .expect("Channel Resource must contains participant.")
+            })
+            .into_iter()
+            .map(|(participant, group)| {
+                println!("{}", participant);
+                let mut state = BTreeMap::new();
+                for (k, v) in group {
+                    state.insert(k.to_vec(), v.clone());
+                }
+                (participant, ChannelState::new(participant, state))
+            })
+            .collect()
     }
 }
 
@@ -121,7 +135,8 @@ impl Into<BTreeMap<Vec<u8>, Vec<u8>>> for &AccountState {
 
 impl Into<AccountStateBlob> for AccountState {
     fn into(self) -> AccountStateBlob {
-        AccountStateBlob::try_from(&Into::<BTreeMap<Vec<u8>, Vec<u8>>>::into(self)).expect("serialize account fail.")
+        AccountStateBlob::try_from(&Into::<BTreeMap<Vec<u8>, Vec<u8>>>::into(self))
+            .expect("serialize account fail.")
     }
 }
 
@@ -133,8 +148,7 @@ impl Into<AccountStateBlob> for &AccountState {
 
 #[cfg(test)]
 mod tests {
-    use types::account_config::AccountResource;
-    use types::channel_account::ChannelAccountResource;
+    use types::{account_config::AccountResource, channel_account::ChannelAccountResource};
 
     use super::*;
 
@@ -142,7 +156,10 @@ mod tests {
     fn test_from_account_state_blob() -> Result<()> {
         let account_resource = AccountResource::default();
         let mut account_state = AccountState::new();
-        account_state.insert(DataPath::account_resource_data_path(), account_resource_ext::to_bytes(&account_resource)?);
+        account_state.insert(
+            DataPath::account_resource_data_path(),
+            account_resource_ext::to_bytes(&account_resource)?,
+        );
         let account_state_blob = account_state.into();
         let proof = SparseMerkleProof::new(None, vec![]);
         let _account_state = AccountState::from_account_state_blob(0, account_state_blob, proof)?;
@@ -153,11 +170,20 @@ mod tests {
     fn test_filter_channel_state() -> Result<()> {
         let account_resource = AccountResource::default();
         let mut account_state = AccountState::new();
-        account_state.insert(DataPath::account_resource_data_path(), account_resource_ext::to_bytes(&account_resource)?);
+        account_state.insert(
+            DataPath::account_resource_data_path(),
+            account_resource_ext::to_bytes(&account_resource)?,
+        );
         let participant0 = AccountAddress::random();
         let participant1 = AccountAddress::random();
-        account_state.insert(DataPath::channel_account_path(participant0), ChannelAccountResource::default().to_bytes());
-        account_state.insert(DataPath::channel_account_path(participant1), ChannelAccountResource::default().to_bytes());
+        account_state.insert(
+            DataPath::channel_account_path(participant0),
+            ChannelAccountResource::default().to_bytes(),
+        );
+        account_state.insert(
+            DataPath::channel_account_path(participant1),
+            ChannelAccountResource::default().to_bytes(),
+        );
         let channel_states = account_state.filter_channel_state();
         assert_eq!(channel_states.len(), 2);
         assert_eq!(channel_states.get(&participant0).unwrap().len(), 1);

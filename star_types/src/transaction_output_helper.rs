@@ -1,14 +1,17 @@
-use types::{transaction::{TransactionStatus},
-            contract_event::ContractEvent,
-            vm_error::{VMStatus},
-            proto::{events::Event}};
-use super::proto::transaction_output::{TransactionOutput as TransactionOutputProto, TransactionStatus as TransactionStatusProto,
-                                       TransactionStatus_oneof_transaction_status};
+use super::proto::transaction_output::{
+    TransactionOutput as TransactionOutputProto, TransactionStatus as TransactionStatusProto,
+    TransactionStatus_oneof_transaction_status,
+};
+use ::protobuf::RepeatedField;
+use canonical_serialization::{SimpleDeserializer, SimpleSerializer};
 use failure::Result;
 use proto_conv::{FromProto, IntoProto};
-use ::protobuf::RepeatedField;
-use types::transaction::TransactionOutput;
-use canonical_serialization::{SimpleDeserializer, SimpleSerializer};
+use types::{
+    contract_event::ContractEvent,
+    proto::events::Event,
+    transaction::{TransactionOutput, TransactionStatus},
+    vm_error::VMStatus,
+};
 
 pub fn from_pb(mut pb: TransactionOutputProto) -> Result<TransactionOutput> {
     let mut from_cs = pb.take_write_set();
@@ -51,15 +54,11 @@ pub fn into_pb(tx_output: TransactionOutput) -> Result<TransactionOutputProto> {
 
 fn from_pb_status(mut pb: TransactionStatusProto) -> Result<TransactionStatus> {
     let from_vm_status = match pb.transaction_status {
-        Some(tmp) => {
-            match tmp {
-                TransactionStatus_oneof_transaction_status::Discard(vm_status) => { vm_status }
-                TransactionStatus_oneof_transaction_status::Keep(vm_status) => { vm_status }
-            }
-        }
-        _ => {
-            panic!("transaction status err")
-        }
+        Some(tmp) => match tmp {
+            TransactionStatus_oneof_transaction_status::Discard(vm_status) => vm_status,
+            TransactionStatus_oneof_transaction_status::Keep(vm_status) => vm_status,
+        },
+        _ => panic!("transaction status err"),
     };
     let to_vm_status = VMStatus::from_proto(from_vm_status)?;
     Ok(TransactionStatus::from(to_vm_status))
@@ -68,12 +67,8 @@ fn from_pb_status(mut pb: TransactionStatusProto) -> Result<TransactionStatus> {
 fn to_pb_status(mut status: TransactionStatus) -> Result<TransactionStatusProto> {
     let mut ts_pb = TransactionStatusProto::new();
     let (should_discard, to_vm_status) = match status {
-        TransactionStatus::Discard(vm_status) => {
-            (true, VMStatus::into_proto(vm_status))
-        }
-        TransactionStatus::Keep(vm_status) => {
-            (false, VMStatus::into_proto(vm_status))
-        }
+        TransactionStatus::Discard(vm_status) => (true, VMStatus::into_proto(vm_status)),
+        TransactionStatus::Keep(vm_status) => (false, VMStatus::into_proto(vm_status)),
     };
 
     if should_discard {

@@ -1,9 +1,14 @@
-use node_proto::{OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, ConnectRequest, ConnectResponse, WithdrawRequest, WithdrawResponse, ChannelBalanceRequest, ChannelBalanceResponse, DepositRequest, DepositResponse, InstallChannelScriptPackageResponse, InstallChannelScriptPackageRequest};
 use failure::{bail, Result};
 use grpcio::{ChannelBuilder, Environment};
+use node_proto::{
+    ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse, DepositRequest,
+    DepositResponse, InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse,
+    OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest,
+    WithdrawResponse,
+};
 use proto_conv::{FromProto, IntoProto};
-use std::sync::Arc;
 use star_types::proto::node_grpc;
+use std::sync::Arc;
 
 pub struct NodeClient {
     client: node_grpc::NodeClient,
@@ -24,7 +29,7 @@ impl NodeClient {
         }
     }
 
-    pub fn pay(&self,request:PayRequest) -> Result<PayResponse> {
+    pub fn pay(&self, request: PayRequest) -> Result<PayResponse> {
         let proto_request = request.into_proto();
         match self.client.pay(&proto_request) {
             Ok(proto_response) => Ok(PayResponse::from_proto(proto_response)?),
@@ -48,7 +53,10 @@ impl NodeClient {
         }
     }
 
-    pub fn channel_balance(&self, request: ChannelBalanceRequest) -> Result<ChannelBalanceResponse> {
+    pub fn channel_balance(
+        &self,
+        request: ChannelBalanceRequest,
+    ) -> Result<ChannelBalanceResponse> {
         let proto_request = request.into_proto();
         match self.client.channel_balance(&proto_request) {
             Ok(proto_response) => Ok(ChannelBalanceResponse::from_proto(proto_response)?),
@@ -64,10 +72,15 @@ impl NodeClient {
         }
     }
 
-    pub fn install_channel_script_package(&self,request:InstallChannelScriptPackageRequest)->Result<InstallChannelScriptPackageResponse>{
+    pub fn install_channel_script_package(
+        &self,
+        request: InstallChannelScriptPackageRequest,
+    ) -> Result<InstallChannelScriptPackageResponse> {
         let proto_request = request.into_proto();
         match self.client.install_channel_script_package(&proto_request) {
-            Ok(proto_response) => Ok(InstallChannelScriptPackageResponse::from_proto(proto_response)?),
+            Ok(proto_response) => Ok(InstallChannelScriptPackageResponse::from_proto(
+                proto_response,
+            )?),
             Err(err) => bail!("GRPC error: {}", err),
         }
     }

@@ -1,13 +1,13 @@
+use cli::{client_proxy::ClientProxy, commands::*};
 use logger::set_default_global_logger;
 use rustyline::{config::CompletionType, error::ReadlineError, Config, Editor};
 use structopt::StructOpt;
-use cli::{commands::*, client_proxy::ClientProxy};
 
 #[derive(Debug, StructOpt)]
 #[structopt(
-name = "Libra Client",
-author = "The Libra Association",
-about = "Libra client to connect to a specific validator"
+    name = "Libra Client",
+    author = "The Libra Association",
+    about = "Libra client to connect to a specific validator"
 )]
 struct Args {
     /// Admission Control port to connect to.
@@ -27,8 +27,12 @@ struct Args {
     /// you and placed in a temporary directory.
     /// To manually generate a keypair, use generate_keypair:
     /// `cargo run -p generate_keypair -- -o <output_file_path>`
-    #[structopt(short = "m", long = "faucet_key_file_path",default_value="wallet/key")]
-    pub faucet_account_file:String,
+    #[structopt(
+        short = "m",
+        long = "faucet_key_file_path",
+        default_value = "wallet/key"
+    )]
+    pub faucet_account_file: String,
 }
 
 fn main() -> std::io::Result<()> {
@@ -46,7 +50,7 @@ fn main() -> std::io::Result<()> {
         args.chain_port,
         &args.faucet_account_file,
     )
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, &format!("{}", e)[..]))?;
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, &format!("{}", e)[..]))?;
 
     let cli_info = format!("Connected to validator at: {}:{}", args.host, args.port);
     print_help(&cli_info, &commands);

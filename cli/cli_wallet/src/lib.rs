@@ -14,4 +14,4 @@ pub mod mnemonic;
 pub mod cli_wallet;
 
 /// Default imports
-pub use crate::{mnemonic::Mnemonic};
+pub use crate::mnemonic::Mnemonic;

@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod tests {
-    use std::{str::FromStr, thread, time::{Instant, Duration}};
     use futures::{
         future::Future,
         stream::Stream,
@@ -9,7 +8,16 @@ mod tests {
     use hex;
     use libp2p::multihash;
     use rand::prelude::*;
-    use tokio::{prelude::Async, runtime::{TaskExecutor, Runtime}, runtime::Builder, timer::{Delay, Interval}};
+    use std::{
+        str::FromStr,
+        thread,
+        time::{Duration, Instant},
+    };
+    use tokio::{
+        prelude::Async,
+        runtime::{Builder, Runtime, TaskExecutor},
+        timer::{Delay, Interval},
+    };
 
     use crypto::{
         ed25519::{compat, Ed25519PrivateKey, Ed25519PublicKey},
@@ -17,16 +25,16 @@ mod tests {
         Uniform,
     };
 
-    use network_libp2p::{CustomMessage, identity, NodeKeyConfig, PeerId, PublicKey, Secret};
+    use network_libp2p::{identity, CustomMessage, NodeKeyConfig, PeerId, PublicKey, Secret};
     use types::account_address::AccountAddress;
 
     use crate::{
-        build_network_service, convert_account_address_to_peer_id, Message, NetworkComponent, NetworkService,
+        build_network_service, convert_account_address_to_peer_id, helper::convert_boot_nodes,
+        Message, NetworkComponent, NetworkService,
     };
-    use crate::helper::convert_boot_nodes;
 
-    use futures::sync::oneshot;
     use crate::message::NetworkMessage;
+    use futures::sync::oneshot;
 
     fn build_test_network_pair() -> (NetworkComponent, NetworkComponent) {
         let mut l = build_test_network_services(2, 50400).into_iter();
@@ -105,7 +113,7 @@ mod tests {
             .map_err(|_e| ())
             .for_each(move |_| {
                 count += 1;
-                let random_bytes: Vec<u8> = (0..10240).map(|_| { rand::random::<u8>() }).collect();
+                let random_bytes: Vec<u8> = (0..10240).map(|_| rand::random::<u8>()).collect();
 
                 match if count % 2 == 0 {
                     tx2.unbounded_send(NetworkMessage {
@@ -147,9 +155,7 @@ mod tests {
         let ((service1, _tx1, rx1, _close_tx1), (mut service2, _tx2, _rx2, _close_tx2)) =
             build_test_network_pair();
         let msg_peer_id = service1.identify();
-        let receive_fut = rx1.for_each(|msg| {
-            Ok(())
-        });
+        let receive_fut = rx1.for_each(|msg| Ok(()));
         executor.clone().spawn(receive_fut);
 
         //wait the network started.
@@ -157,7 +163,7 @@ mod tests {
 
         for _x in 0..1000 {
             service2.is_connected(msg_peer_id);
-            let random_bytes: Vec<u8> = (0..10240).map(|_| { rand::random::<u8>() }).collect();
+            let random_bytes: Vec<u8> = (0..10240).map(|_| rand::random::<u8>()).collect();
             let fut = service2
                 .send_message(msg_peer_id, random_bytes)
                 .map_err(|e| ());
@@ -256,7 +262,7 @@ mod tests {
                 "/ip4/127.0.0.1/tcp/5000/p2p/{:}",
                 generate_account_address()
             )
-                .to_string(),
+            .to_string(),
         );
         boot_nodes.iter().for_each(|x| println!("{}", x));
 

@@ -1,7 +1,6 @@
+use crate::star_chain_client::{faucet_sync, stop_mock_chain, ChainClient, MockChainClient};
+use std::{thread::sleep, time::Duration};
 use types::account_address::AccountAddress;
-use std::thread::sleep;
-use std::time::Duration;
-use crate::star_chain_client::{MockChainClient, ChainClient, faucet_sync, stop_mock_chain};
 
 #[test]
 fn test_mock_chain_client_faucet() {

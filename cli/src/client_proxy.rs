@@ -1,27 +1,32 @@
 use crate::{commands::*, AccountData, AccountStatus};
 
-use failure::prelude::*;
-use node_client::NodeClient;
-use grpcio::EnvBuilder;
 use cli_wallet::cli_wallet::WalletLibrary;
-use types::{
-    account_address::AccountAddress,
-    transaction::{parse_as_transaction_argument, Program, SignedTransaction, Version},
-    transaction_helpers::{create_signed_txn, TransactionSigner},
+use failure::prelude::*;
+use grpcio::EnvBuilder;
+use node_client::NodeClient;
+use node_proto::{
+    ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse, DepositRequest,
+    DepositResponse, OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse,
+    WithdrawRequest, WithdrawResponse,
 };
-use tempfile::{NamedTempFile, TempPath};
-use sgchain::star_chain_client::{StarChainClient, faucet_sync};
-use node_proto::{OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, ConnectRequest, ConnectResponse, WithdrawRequest, WithdrawResponse, ChannelBalanceRequest, ChannelBalanceResponse, DepositRequest, DepositResponse};
+use sgchain::star_chain_client::{faucet_sync, ChainClient, StarChainClient};
 use std::{
-    io::{stdout, Write},
-    sync::Arc,
     fs,
+    io::{stdout, Write},
     process::Command,
+    sync::Arc,
     thread, time,
 };
-use types::transaction::{TransactionPayload, Script};
-use sgchain::star_chain_client::ChainClient;
-use types::proof::SparseMerkleProof;
+use tempfile::{NamedTempFile, TempPath};
+use types::{
+    account_address::AccountAddress,
+    proof::SparseMerkleProof,
+    transaction::{
+        parse_as_transaction_argument, Program, Script, SignedTransaction, TransactionPayload,
+        Version,
+    },
+    transaction_helpers::{create_signed_txn, TransactionSigner},
+};
 
 const GAS_UNIT_PRICE: u64 = 0;
 const MAX_GAS_AMOUNT: u64 = 100_000;
@@ -62,7 +67,11 @@ impl ClientProxy {
         faucet_sync(self.chain_client.clone(), self.wallet.get_address(), amount)
     }
 
-    pub fn open_channel(&mut self, space_delim_strings: &[&str], is_blocking: bool) -> Result<OpenChannelResponse> {
+    pub fn open_channel(
+        &mut self,
+        space_delim_strings: &[&str],
+        is_blocking: bool,
+    ) -> Result<OpenChannelResponse> {
         let response = self.node_client.open_channel(OpenChannelRequest {
             remote_addr: AccountAddress::from_hex_literal(space_delim_strings[1])?,
             local_amount: space_delim_strings[2].parse::<u64>()?,
@@ -71,7 +80,11 @@ impl ClientProxy {
         Ok(response)
     }
 
-    pub fn withdraw(&mut self, space_delim_strings: &[&str], is_blocking: bool) -> Result<WithdrawResponse> {
+    pub fn withdraw(
+        &mut self,
+        space_delim_strings: &[&str],
+        is_blocking: bool,
+    ) -> Result<WithdrawResponse> {
         let response = self.node_client.withdraw(WithdrawRequest {
             remote_addr: AccountAddress::from_hex_literal(space_delim_strings[1])?,
             local_amount: space_delim_strings[2].parse::<u64>()?,
@@ -80,7 +93,11 @@ impl ClientProxy {
         Ok(response)
     }
 
-    pub fn deposit(&mut self, space_delim_strings: &[&str], is_blocking: bool) -> Result<DepositResponse> {
+    pub fn deposit(
+        &mut self,
+        space_delim_strings: &[&str],
+        is_blocking: bool,
+    ) -> Result<DepositResponse> {
         let response = self.node_client.deposit(DepositRequest {
             remote_addr: AccountAddress::from_hex_literal(space_delim_strings[1])?,
             local_amount: space_delim_strings[2].parse::<u64>()?,
@@ -89,7 +106,11 @@ impl ClientProxy {
         Ok(response)
     }
 
-    pub fn off_chain_pay(&mut self, space_delim_strings: &[&str], _is_blocking: bool) -> Result<PayResponse> {
+    pub fn off_chain_pay(
+        &mut self,
+        space_delim_strings: &[&str],
+        _is_blocking: bool,
+    ) -> Result<PayResponse> {
         let response = self.node_client.pay(PayRequest {
             remote_addr: AccountAddress::from_hex_literal(space_delim_strings[1])?,
             amount: space_delim_strings[2].parse::<u64>()?,
@@ -97,7 +118,11 @@ impl ClientProxy {
         Ok(response)
     }
 
-    pub fn connect(&mut self, space_delim_strings: &[&str], is_blocking: bool) -> Result<ConnectResponse> {
+    pub fn connect(
+        &mut self,
+        space_delim_strings: &[&str],
+        is_blocking: bool,
+    ) -> Result<ConnectResponse> {
         let response = self.node_client.connect(ConnectRequest {
             remote_addr: AccountAddress::from_hex_literal(space_delim_strings[1])?,
             remote_ip: space_delim_strings[2].to_string(),
@@ -105,7 +130,11 @@ impl ClientProxy {
         Ok(response)
     }
 
-    pub fn channel_balance(&mut self, space_delim_strings: &[&str], is_blocking: bool) -> Result<ChannelBalanceResponse> {
+    pub fn channel_balance(
+        &mut self,
+        space_delim_strings: &[&str],
+        is_blocking: bool,
+    ) -> Result<ChannelBalanceResponse> {
         let response = self.node_client.channel_balance(ChannelBalanceRequest {
             remote_addr: AccountAddress::from_hex_literal(space_delim_strings[1])?,
         })?;
@@ -113,7 +142,9 @@ impl ClientProxy {
     }
 
     pub fn account_state(&mut self) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)> {
-        Ok(self.chain_client.get_account_state_with_proof(&self.wallet.get_address(), None)?)
+        Ok(self
+            .chain_client
+            .get_account_state_with_proof(&self.wallet.get_address(), None)?)
     }
 
     /// Compile move program
@@ -163,9 +194,16 @@ impl ClientProxy {
         Ok(output_path)
     }
 
-    fn submit_program(&mut self, space_delim_strings: &[&str], program: TransactionPayload) -> Result<()> {
+    fn submit_program(
+        &mut self,
+        space_delim_strings: &[&str],
+        program: TransactionPayload,
+    ) -> Result<()> {
         let addr = self.wallet.get_address();
-        let sequence_number = self.chain_client.account_sequence_number(&addr).expect("should have seq number");
+        let sequence_number = self
+            .chain_client
+            .account_sequence_number(&addr)
+            .expect("should have seq number");
 
         let txn = self.create_submit_transaction(program, sequence_number, None, None)?;
 
@@ -224,9 +262,9 @@ impl ClientProxy {
             stdout().flush().unwrap();
             max_iterations -= 1;
 
-            if let Ok(Some((txn_with_proof))) =
-            self.chain_client.get_transaction_by_seq_num
-            (&account, sequence_number)
+            if let Ok(Some((txn_with_proof))) = self
+                .chain_client
+                .get_transaction_by_seq_num(&account, sequence_number)
             {
                 println!("transaction is stored!");
                 break;

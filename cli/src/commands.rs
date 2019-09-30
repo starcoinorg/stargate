@@ -1,7 +1,9 @@
-use crate::{client_proxy::ClientProxy,account_commands::AccountCommand,node_commands::NodeCommand,dev_commands::DevCommand};
-use std::sync::Arc;
-use std::collections::HashMap;
+use crate::{
+    account_commands::AccountCommand, client_proxy::ClientProxy, dev_commands::DevCommand,
+    node_commands::NodeCommand,
+};
 use failure::prelude::*;
+use std::{collections::HashMap, sync::Arc};
 
 pub fn report_error(msg: &str, e: Error) {
     println!("[ERROR] {}: {}", msg, pretty_format_error(e));
@@ -31,7 +33,7 @@ pub fn get_commands() -> (
     let commands: Vec<Arc<dyn Command>> = vec![
         Arc::new(AccountCommand {}),
         Arc::new(NodeCommand {}),
-        Arc::new(DevCommand{}),
+        Arc::new(DevCommand {}),
     ];
     let mut alias_to_cmd = HashMap::new();
     for command in &commands {

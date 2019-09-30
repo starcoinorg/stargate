@@ -1,21 +1,22 @@
 use std::{convert::TryFrom, fs, sync::Arc};
 
-use sgchain::star_chain_client::{StarChainClient};
-use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
-use crypto::test_utils::KeyPair;
+use crypto::{
+    ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
+    test_utils::KeyPair,
+};
 use failure::*;
-use network::{build_network_service, NetworkService, NetworkMessage};
+use futures_01::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use logger::prelude::*;
+use network::{build_network_service, NetworkMessage, NetworkService};
 use node::client;
 use node_internal::node::Node;
 use node_service::setup_node_service;
 use sg_config::config::{load_from, NodeConfig, WalletConfig};
+use sgchain::star_chain_client::StarChainClient;
 use sgwallet::wallet::*;
 use structopt::StructOpt;
 use tokio::runtime::{Runtime, TaskExecutor};
 use types::account_address::AccountAddress;
-use futures_01::sync::mpsc::{UnboundedReceiver,UnboundedSender};
-use logger::prelude::*;
-
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -71,21 +72,31 @@ fn gen_node(
     executor: TaskExecutor,
     keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
     wallet_config: &WalletConfig,
-    network_service: NetworkService, sender:UnboundedSender<NetworkMessage>, receiver:UnboundedReceiver<NetworkMessage>,
+    network_service: NetworkService,
+    sender: UnboundedSender<NetworkMessage>,
+    receiver: UnboundedReceiver<NetworkMessage>,
     close_tx: futures_01::sync::oneshot::Sender<()>,
 ) -> (Node<StarChainClient>) {
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     let client = StarChainClient::new(
         &wallet_config.chain_address,
-        wallet_config.chain_port as u32
+        wallet_config.chain_port as u32,
     );
 
-    info!("account addr is {:?}",hex::encode(account_address));
+    info!("account addr is {:?}", hex::encode(account_address));
     let wallet =
         Wallet::new_with_client(account_address, keypair.clone(), Arc::new(client)).unwrap();
 
-    info!("account resource is {:?}",wallet.account_resource());
-    Node::new(executor.clone(), wallet, keypair.clone(), network_service,sender,receiver,close_tx)
+    info!("account resource is {:?}", wallet.account_resource());
+    Node::new(
+        executor.clone(),
+        wallet,
+        keypair.clone(),
+        network_service,
+        sender,
+        receiver,
+        close_tx,
+    )
 }
 
 fn main() {
@@ -95,15 +106,23 @@ fn main() {
     let args = Args::from_args();
     let swarm = launch_swarm(&args).unwrap();
 
-    info!("swarm is {:?}",swarm.config);
+    info!("swarm is {:?}", swarm.config);
     let rt = Runtime::new().unwrap();
     let executor = rt.executor();
 
     let keypair = load_from_file(&args.faucet_key_path);
-    let (network_service, tx, rx,close_tx) =
+    let (network_service, tx, rx, close_tx) =
         build_network_service(&swarm.config.net_config, keypair.clone());
 
-    let node = gen_node(executor, keypair, &swarm.config.wallet, network_service,tx,rx, close_tx);
+    let node = gen_node(
+        executor,
+        keypair,
+        &swarm.config.wallet,
+        network_service,
+        tx,
+        rx,
+        close_tx,
+    );
     node.start_server();
 
     let mut node_server = setup_node_service(&swarm.config, Arc::new(node));

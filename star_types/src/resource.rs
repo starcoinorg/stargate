@@ -3,14 +3,21 @@ use std::ops::Deref;
 use itertools::Itertools;
 use protobuf::well_known_types::Struct;
 
-use canonical_serialization::{CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer, SimpleDeserializer, SimpleSerializer};
+use canonical_serialization::{
+    CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
+    SimpleDeserializer, SimpleSerializer,
+};
 use failure::prelude::*;
 use logger::prelude::*;
-use types::access_path::{Access, Accesses};
-use types::account_address::AccountAddress;
-use types::account_config::{account_struct_tag, AccountResource, coin_struct_tag, core_code_address, coin_module_name};
-use types::byte_array::ByteArray;
-use types::language_storage::StructTag;
+use types::{
+    access_path::{Access, Accesses},
+    account_address::AccountAddress,
+    account_config::{
+        account_struct_tag, coin_module_name, coin_struct_tag, core_code_address, AccountResource,
+    },
+    byte_array::ByteArray,
+    language_storage::StructTag,
+};
 
 use crate::{
     resource_type::{resource_def::ResourceDef, resource_types::ResourceType},
@@ -47,10 +54,10 @@ impl Resource {
             ResourceType::String => ResourceValue::String(String::new()),
             ResourceType::Address => ResourceValue::Address(AccountAddress::default()),
             ResourceType::U64 => ResourceValue::U64(0),
-            ResourceType::Resource(struct_tag, struct_def) => {
-                ResourceValue::Resource(Resource::new(struct_tag.clone(), Self::new_fields(struct_def)))
-            }
-            _ => panic!("Unsupported field type: {:?}", field_type)
+            ResourceType::Resource(struct_tag, struct_def) => ResourceValue::Resource(
+                Resource::new(struct_tag.clone(), Self::new_fields(struct_def)),
+            ),
+            _ => panic!("Unsupported field type: {:?}", field_type),
         }
     }
 
@@ -59,7 +66,8 @@ impl Resource {
     #[allow(non_snake_case)]
     #[doc(hidden)]
     pub fn to_resource_def_FOR_TESTING(&self) -> ResourceDef {
-        let fields = self.1
+        let fields = self
+            .1
             .iter()
             .map(|mut_val| {
                 let val = &*mut_val.peek();
@@ -69,7 +77,9 @@ impl Resource {
                     ResourceValue::U64(_) => ResourceType::U64,
                     ResourceValue::String(_) => ResourceType::String,
                     ResourceValue::ByteArray(_) => ResourceType::ByteArray,
-                    ResourceValue::Resource(res) => ResourceType::Resource(res.tag().clone(), res.to_resource_def_FOR_TESTING()),
+                    ResourceValue::Resource(res) => {
+                        ResourceType::Resource(res.tag().clone(), res.to_resource_def_FOR_TESTING())
+                    }
                 }
             })
             .collect();
@@ -85,7 +95,9 @@ impl Resource {
     /// if resource is asset, and return it balance
     pub fn asset_balance(&self) -> Option<u64> {
         if self.is_asset() {
-            self.1.get(0).and_then(|field| Into::<Option<u64>>::into(field.clone()))
+            self.1
+                .get(0)
+                .and_then(|field| Into::<Option<u64>>::into(field.clone()))
         } else {
             None
         }
@@ -130,19 +142,27 @@ impl Resource {
     }
 
     pub fn decode(tag: StructTag, def: ResourceDef, bytes: &[u8]) -> Result<Self> {
-        ResourceValue::simple_deserialize(bytes, tag, def).map_err(|vm_error| format_err!("decode resource fail:{:?}", vm_error))
+        ResourceValue::simple_deserialize(bytes, tag, def)
+            .map_err(|vm_error| format_err!("decode resource fail:{:?}", vm_error))
     }
 
     pub fn encode(&self) -> Vec<u8> {
-        Into::<ResourceValue>::into(self).simple_serialize().expect("serialize should not fail.")
+        Into::<ResourceValue>::into(self)
+            .simple_serialize()
+            .expect("serialize should not fail.")
     }
 
     fn borrow_field(&self, accesses: &Accesses) -> Result<MutResourceVal> {
         //TODO optimize, not use clone.
-        let mut value = self.field(accesses.first().index().unwrap() as usize).map(MutResourceVal::shallow_clone).ok_or(format_err!("Can not find field by access {:?}", accesses))?;
+        let mut value = self
+            .field(accesses.first().index().unwrap() as usize)
+            .map(MutResourceVal::shallow_clone)
+            .ok_or(format_err!("Can not find field by access {:?}", accesses))?;
         for access in accesses.range(1, accesses.len()).iter() {
             if let Access::Index(idx) = access {
-                value = value.borrow_field(*idx as u32).ok_or(format_err!("can not find field by accesses {:?}", accesses))?;
+                value = value
+                    .borrow_field(*idx as u32)
+                    .ok_or(format_err!("can not find field by accesses {:?}", accesses))?;
             } else {
                 bail!("Only support access by index currently")
             }
@@ -181,7 +201,8 @@ pub fn get_account_struct_def() -> ResourceDef {
     let byte_array_type = ResourceType::ByteArray;
     let coin = ResourceType::Resource(coin_struct_tag(), get_coin_struct_def());
 
-    let event_handle = ResourceType::Resource(get_event_handle_struct_tag(), get_event_handle_struct_def());
+    let event_handle =
+        ResourceType::Resource(get_event_handle_struct_tag(), get_event_handle_struct_def());
 
     ResourceDef::new(vec![
         byte_array_type,
@@ -235,10 +256,7 @@ pub fn get_event_handle_struct_tag() -> StructTag {
 }
 
 pub fn get_event_handle_struct_def() -> ResourceDef {
-    ResourceDef::new(vec![
-        ResourceType::U64,
-        ResourceType::ByteArray,
-    ])
+    ResourceDef::new(vec![ResourceType::U64, ResourceType::ByteArray])
 }
 
 pub fn get_event_handle_id_generator_tag() -> StructTag {
@@ -251,9 +269,7 @@ pub fn get_event_handle_id_generator_tag() -> StructTag {
 }
 
 pub fn get_event_handle_id_generator_def() -> ResourceDef {
-    ResourceDef::new(vec![
-        ResourceType::U64,
-    ])
+    ResourceDef::new(vec![ResourceType::U64])
 }
 
 pub fn get_block_module_tag() -> StructTag {
@@ -266,7 +282,5 @@ pub fn get_block_module_tag() -> StructTag {
 }
 
 pub fn get_block_module_def() -> ResourceDef {
-    ResourceDef::new(vec![
-        ResourceType::U64,
-    ])
+    ResourceDef::new(vec![ResourceType::U64])
 }

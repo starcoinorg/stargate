@@ -1,6 +1,6 @@
 #![allow(bare_trait_objects)]
 
-use types::proto::{transaction, events, vm_errors, access_path, proof, account_state_blob};
+use types::proto::{access_path, account_state_blob, events, proof, transaction, vm_errors};
 
 pub mod star_account;
 pub mod channel_transaction;

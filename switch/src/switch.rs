@@ -1,50 +1,35 @@
 use crate::link::ChannelLink;
-use std::collections::HashMap;
-use std::sync::{Mutex,Arc};
-use futures::{
-    io::{AsyncRead, AsyncWrite},
+use futures::io::{AsyncRead, AsyncWrite};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
 };
 
-pub struct Switch<T:AsyncRead+AsyncWrite+Send>{
+pub struct Switch<T: AsyncRead + AsyncWrite + Send> {
     //lock:Arc<Mutex<u32>>,
-    links:HashMap<String,ChannelLink<T>>,
-    pending_links:HashMap<String,ChannelLink<T>>,
+    links: HashMap<String, ChannelLink<T>>,
+    pending_links: HashMap<String, ChannelLink<T>>,
 }
 
-impl<T:AsyncRead+AsyncWrite+Send> Switch<T>{
-
-    pub fn new()->Self{
-        Self{
-            links:HashMap::new(),
-            pending_links:HashMap::new(),
+impl<T: AsyncRead + AsyncWrite + Send> Switch<T> {
+    pub fn new() -> Self {
+        Self {
+            links: HashMap::new(),
+            pending_links: HashMap::new(),
         }
     }
 
-    fn addLink(link:ChannelLink<T>){
+    fn addLink(link: ChannelLink<T>) {}
 
-    }
+    fn addPendingLink(link: ChannelLink<T>) {}
 
-    fn addPendingLink(link:ChannelLink<T>){
+    fn removeLink(id: String) {}
 
-    }
+    fn sendHtlc() {}
 
-    fn removeLink(id:String){
+    fn forward() {}
 
-    }
+    fn route() {}
 
-    fn sendHtlc(){
-
-    }
-
-    fn forward(){
-
-    }
-
-    fn route(){
-
-    }
-
-    fn sendMessage(){
-
-    }
+    fn sendMessage() {}
 }

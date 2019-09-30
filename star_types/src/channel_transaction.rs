@@ -5,28 +5,28 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use protobuf::RepeatedField;
 use serde::{Deserialize, Serialize};
 
-use canonical_serialization::{CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer, SimpleDeserializer, SimpleSerializer};
-use crypto::ed25519::{Ed25519PublicKey, Ed25519Signature};
-use crypto::HashValue;
+use canonical_serialization::{
+    CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
+    SimpleDeserializer, SimpleSerializer,
+};
+use crypto::{
+    ed25519::{Ed25519PublicKey, Ed25519Signature},
+    HashValue,
+};
 use failure::prelude::*;
 use proto_conv::{FromProto, IntoProto};
-use types::account_address::AccountAddress;
-use types::contract_event::ContractEvent;
-use types::transaction::{ChannelScriptPayload, ChannelWriteSetPayload, RawTransaction, SignedTransaction, TransactionOutput, TransactionPayload, TransactionStatus, Version};
-use types::vm_error::VMStatus;
-use types::write_set::WriteSet;
+use types::{
+    account_address::AccountAddress,
+    contract_event::ContractEvent,
+    transaction::{
+        ChannelScriptPayload, ChannelWriteSetPayload, RawTransaction, SignedTransaction,
+        TransactionOutput, TransactionPayload, TransactionStatus, Version,
+    },
+    vm_error::VMStatus,
+    write_set::WriteSet,
+};
 
-#[derive(
-Clone,
-Debug,
-Eq,
-Hash,
-PartialEq,
-PartialOrd,
-Ord,
-Serialize,
-Deserialize,
-)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ChannelOp {
     Open,
     Execute {
@@ -44,7 +44,7 @@ impl ChannelOp {
         }
     }
 
-    pub fn to_string(&self) -> String{
+    pub fn to_string(&self) -> String {
         format!("{}", self)
     }
 }
@@ -55,7 +55,10 @@ impl CanonicalSerialize for ChannelOp {
             ChannelOp::Open => {
                 serializer.encode_u32(ChannelOpType::Open as u32)?;
             }
-            ChannelOp::Execute { package_name, script_name } => {
+            ChannelOp::Execute {
+                package_name,
+                script_name,
+            } => {
                 serializer.encode_u32(ChannelOpType::Execute as u32)?;
                 serializer.encode_string(package_name.as_str())?;
                 serializer.encode_string(script_name.as_str())?;
@@ -69,8 +72,10 @@ impl CanonicalSerialize for ChannelOp {
 }
 
 impl CanonicalDeserialize for ChannelOp {
-    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self> where
-        Self: Sized {
+    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
+    where
+        Self: Sized,
+    {
         let decoded_channel_op_type = deserializer.decode_u32()?;
         let channel_op_type = ChannelOpType::from_u32(decoded_channel_op_type);
         match channel_op_type {
@@ -78,15 +83,16 @@ impl CanonicalDeserialize for ChannelOp {
             Some(ChannelOpType::Execute) => {
                 let package_name = deserializer.decode_string()?;
                 let script_name = deserializer.decode_string()?;
-                Ok(ChannelOp::Execute { package_name, script_name })
+                Ok(ChannelOp::Execute {
+                    package_name,
+                    script_name,
+                })
             }
             Some(ChannelOpType::Close) => Ok(ChannelOp::Close),
-            None => {
-                Err(format_err!(
+            None => Err(format_err!(
                 "ParseError: Unable to decode ChannelOpType, found {}",
                 decoded_channel_op_type
-                ))
-            }
+            )),
         }
     }
 }
@@ -95,7 +101,10 @@ impl Display for ChannelOp {
     fn fmt(&self, f: &mut Formatter) -> ::std::fmt::Result {
         match self {
             ChannelOp::Open => write!(f, "open"),
-            ChannelOp::Execute { package_name, script_name } => write!(f, "{}.{}", package_name, script_name),
+            ChannelOp::Execute {
+                package_name,
+                script_name,
+            } => write!(f, "{}.{}", package_name, script_name),
             ChannelOp::Close => write!(f, "close"),
         }
     }
@@ -121,7 +130,7 @@ impl ChannelOpType {
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Witness {
     /// The witness_payload include txn output's write_set,
-        /// Receiver can build a new txn with this payload, and submit to chain.
+    /// Receiver can build a new txn with this payload, and submit to chain.
     pub witness_payload: ChannelWriteSetPayload,
     pub witness_signature: Ed25519Signature,
 }
@@ -133,7 +142,8 @@ pub enum ChannelTransactionRequestPayload {
         /// The txn output's write_set hash, for receiver to verify the output.
         /// TODO(jole) need hash the whole output?
         txn_write_set_hash: HashValue,
-        /// The txn signature, for receiver can build a SignedTransaction with it and RawTransaction , then submit to chain.
+        /// The txn signature, for receiver can build a SignedTransaction with it and
+        /// RawTransaction , then submit to chain.
         txn_signature: Ed25519Signature,
     },
 }
@@ -146,8 +156,9 @@ pub struct ChannelTransactionRequest {
     version: Version,
     operator: ChannelOp,
     /// The sender raw transaction, this txn has not signature
-    /// if the txn is travel txn, txn signature at payload, so receiver can submit the txn to chain,
-    /// if the txn is offchain txn, receiver can not submit the txn, receiver need to wrap a new txn with witness_payload.
+    /// if the txn is travel txn, txn signature at payload, so receiver can submit the txn to
+    /// chain, if the txn is offchain txn, receiver can not submit the txn, receiver need to
+    /// wrap a new txn with witness_payload.
     txn: RawTransaction,
     /// The request payload, depend on txn type.
     payload: ChannelTransactionRequestPayload,
@@ -155,11 +166,20 @@ pub struct ChannelTransactionRequest {
     public_key: Ed25519PublicKey,
 }
 
-
 impl ChannelTransactionRequest {
-    pub fn new(version: Version, operator: ChannelOp, txn: RawTransaction, payload: ChannelTransactionRequestPayload, public_key: Ed25519PublicKey) -> Self {
+    pub fn new(
+        version: Version,
+        operator: ChannelOp,
+        txn: RawTransaction,
+        payload: ChannelTransactionRequestPayload,
+        public_key: Ed25519PublicKey,
+    ) -> Self {
         let request_id = if let TransactionPayload::ChannelScript(script_payload) = txn.payload() {
-            Self::generate_request_id(txn.sender(), script_payload.receiver, script_payload.channel_sequence_number)
+            Self::generate_request_id(
+                txn.sender(),
+                script_payload.receiver,
+                script_payload.channel_sequence_number,
+            )
         } else {
             panic!("Only support ChannelScript payload.");
         };
@@ -174,7 +194,11 @@ impl ChannelTransactionRequest {
         }
     }
     //TODO(jole) should use sequence_number?
-    fn generate_request_id(sender: AccountAddress, receiver: AccountAddress, channel_sequence_number: u64) -> HashValue {
+    fn generate_request_id(
+        sender: AccountAddress,
+        receiver: AccountAddress,
+        channel_sequence_number: u64,
+    ) -> HashValue {
         let mut bytes = vec![];
         bytes.append(&mut sender.to_vec());
         bytes.append(&mut receiver.to_vec());
@@ -209,14 +233,14 @@ impl ChannelTransactionRequest {
     pub fn txn_payload(&self) -> &ChannelScriptPayload {
         match self.txn.payload() {
             TransactionPayload::ChannelScript(payload) => payload,
-            _ => panic!("Only support ChannelScript payload.")
+            _ => panic!("Only support ChannelScript payload."),
         }
     }
 
     pub fn is_travel_txn(&self) -> bool {
         match &self.payload {
             ChannelTransactionRequestPayload::Travel { .. } => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -241,10 +265,7 @@ pub struct ChannelTransactionRequestAndOutput {
 
 impl ChannelTransactionRequestAndOutput {
     pub fn new(request: ChannelTransactionRequest, output: TransactionOutput) -> Self {
-        Self {
-            request,
-            output,
-        }
+        Self { request, output }
     }
 }
 
@@ -267,7 +288,12 @@ pub struct ChannelTransactionResponse {
 }
 
 impl ChannelTransactionResponse {
-    pub fn new(request_id: HashValue, channel_sequence_number: u64, payload: ChannelTransactionResponsePayload, public_key: Ed25519PublicKey) -> Self {
+    pub fn new(
+        request_id: HashValue,
+        channel_sequence_number: u64,
+        payload: ChannelTransactionResponsePayload,
+        public_key: Ed25519PublicKey,
+    ) -> Self {
         Self {
             request_id,
             channel_sequence_number,
@@ -295,22 +321,25 @@ impl ChannelTransactionResponse {
     pub fn is_travel_txn(&self) -> bool {
         match &self.payload {
             ChannelTransactionResponsePayload::Travel { .. } => true,
-            _ => false
+            _ => false,
         }
     }
 }
 
 impl CanonicalSerialize for Witness {
     fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
-        serializer.encode_struct(&self.witness_payload)?
+        serializer
+            .encode_struct(&self.witness_payload)?
             .encode_bytes(&self.witness_signature.to_bytes())?;
         Ok(())
     }
 }
 
 impl CanonicalDeserialize for Witness {
-    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self> where
-        Self: Sized {
+    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
+    where
+        Self: Sized,
+    {
         let witness_payload = deserializer.decode_struct()?;
         let witness_signature_bytes = deserializer.decode_bytes()?;
         Ok(Self {
@@ -340,11 +369,16 @@ impl CanonicalSerialize for ChannelTransactionRequestPayload {
     fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
         match self {
             ChannelTransactionRequestPayload::Offchain(witness) => {
-                serializer.encode_u32(ChannelTransactionType::Offchain as u32)?
+                serializer
+                    .encode_u32(ChannelTransactionType::Offchain as u32)?
                     .encode_struct(witness)?;
             }
-            ChannelTransactionRequestPayload::Travel { txn_write_set_hash, txn_signature } => {
-                serializer.encode_u32(ChannelTransactionType::Travel as u32)?
+            ChannelTransactionRequestPayload::Travel {
+                txn_write_set_hash,
+                txn_signature,
+            } => {
+                serializer
+                    .encode_u32(ChannelTransactionType::Travel as u32)?
                     .encode_bytes(txn_write_set_hash.as_ref())?
                     .encode_bytes(&txn_signature.to_bytes())?;
             }
@@ -354,8 +388,10 @@ impl CanonicalSerialize for ChannelTransactionRequestPayload {
 }
 
 impl CanonicalDeserialize for ChannelTransactionRequestPayload {
-    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self> where
-        Self: Sized {
+    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
+    where
+        Self: Sized,
+    {
         let decoded_txn_type = deserializer.decode_u32()?;
         let channel_txn_type = ChannelTransactionType::from_u32(decoded_txn_type);
         match channel_txn_type {
@@ -373,19 +409,18 @@ impl CanonicalDeserialize for ChannelTransactionRequestPayload {
                     txn_signature,
                 })
             }
-            None => {
-                Err(format_err!(
+            None => Err(format_err!(
                 "ParseError: Unable to decode ChannelTransactionType, found {}",
                 decoded_txn_type
-                ))
-            }
+            )),
         }
     }
 }
 
 impl CanonicalSerialize for ChannelTransactionRequest {
     fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
-        serializer.encode_bytes(self.request_id.to_vec().as_slice())?
+        serializer
+            .encode_bytes(self.request_id.to_vec().as_slice())?
             .encode_u64(self.version)?
             .encode_struct(&self.operator)?
             .encode_struct(&self.txn)?
@@ -396,8 +431,10 @@ impl CanonicalSerialize for ChannelTransactionRequest {
 }
 
 impl CanonicalDeserialize for ChannelTransactionRequest {
-    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self> where
-        Self: Sized {
+    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
+    where
+        Self: Sized,
+    {
         let request_id = HashValue::from_slice(deserializer.decode_bytes()?.as_slice())?;
         let version = deserializer.decode_u64()?;
         let operator = deserializer.decode_struct()?;
@@ -438,11 +475,15 @@ impl CanonicalSerialize for ChannelTransactionResponsePayload {
     fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
         match self {
             ChannelTransactionResponsePayload::Offchain(witness) => {
-                serializer.encode_u32(ChannelTransactionType::Offchain as u32)?
+                serializer
+                    .encode_u32(ChannelTransactionType::Offchain as u32)?
                     .encode_struct(witness)?;
             }
-            ChannelTransactionResponsePayload::Travel { txn_payload_signature } => {
-                serializer.encode_u32(ChannelTransactionType::Travel as u32)?
+            ChannelTransactionResponsePayload::Travel {
+                txn_payload_signature,
+            } => {
+                serializer
+                    .encode_u32(ChannelTransactionType::Travel as u32)?
                     .encode_bytes(&txn_payload_signature.to_bytes())?;
             }
         }
@@ -451,8 +492,10 @@ impl CanonicalSerialize for ChannelTransactionResponsePayload {
 }
 
 impl CanonicalDeserialize for ChannelTransactionResponsePayload {
-    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self> where
-        Self: Sized {
+    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
+    where
+        Self: Sized,
+    {
         let decoded_txn_type = deserializer.decode_u32()?;
         let channel_txn_type = ChannelTransactionType::from_u32(decoded_txn_type);
         match channel_txn_type {
@@ -467,19 +510,18 @@ impl CanonicalDeserialize for ChannelTransactionResponsePayload {
                     txn_payload_signature,
                 })
             }
-            None => {
-                Err(format_err!(
+            None => Err(format_err!(
                 "ParseError: Unable to decode ChannelTransactionType, found {}",
                 decoded_txn_type
-                ))
-            }
+            )),
         }
     }
 }
 
 impl CanonicalSerialize for ChannelTransactionResponse {
     fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
-        serializer.encode_bytes(self.request_id.to_vec().as_slice())?
+        serializer
+            .encode_bytes(self.request_id.to_vec().as_slice())?
             .encode_u64(self.channel_sequence_number)?
             .encode_struct(&self.payload)?
             .encode_bytes(&self.public_key.to_bytes())?;
@@ -488,8 +530,10 @@ impl CanonicalSerialize for ChannelTransactionResponse {
 }
 
 impl CanonicalDeserialize for ChannelTransactionResponse {
-    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self> where
-        Self: Sized {
+    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
+    where
+        Self: Sized,
+    {
         let request_id = HashValue::from_slice(deserializer.decode_bytes()?.as_slice())?;
         let channel_sequence_number = deserializer.decode_u64()?;
         let payload = deserializer.decode_struct()?;

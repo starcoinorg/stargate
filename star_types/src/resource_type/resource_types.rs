@@ -7,7 +7,6 @@ use canonical_serialization::*;
 use failure::prelude::*;
 use types::language_storage::StructTag;
 
-
 /// Resolved form of runtime types.
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum ResourceType {
@@ -16,7 +15,7 @@ pub enum ResourceType {
     String,
     ByteArray,
     Address,
-    Resource(StructTag,ResourceDef),
+    Resource(StructTag, ResourceDef),
 }
 
 /// This isn't used by any normal code at the moment, but is used by the fuzzer to serialize types
@@ -56,7 +55,10 @@ impl CanonicalDeserialize for ResourceType {
             0x03 => String,
             0x04 => ByteArray,
             0x05 => Address,
-            0x06 => Resource(StructTag::deserialize(deserializer)?,ResourceDef::deserialize(deserializer)?),
+            0x06 => Resource(
+                StructTag::deserialize(deserializer)?,
+                ResourceDef::deserialize(deserializer)?,
+            ),
             other => bail!(
                 "Error while deserializing type: found unexpected tag {:#x}",
                 other

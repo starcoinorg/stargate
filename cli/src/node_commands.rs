@@ -15,9 +15,9 @@ impl Command for NodeCommand {
             Box::new(NodeCommandConnect {}),
             Box::new(NodeCommandOpenChannel {}),
             Box::new(NodeCommandPay {}),
-            Box::new(NodeCommandWithdrawChannel{}),
-            Box::new(NodeCommandChannelBalance{}),
-            Box::new(NodeCommandDepositChannel{}),
+            Box::new(NodeCommandWithdrawChannel {}),
+            Box::new(NodeCommandChannelBalance {}),
+            Box::new(NodeCommandDepositChannel {}),
         ];
 
         subcommand_execute(&params[0], commands, client, &params[1..]);
@@ -34,11 +34,9 @@ impl Command for NodeCommandConnect {
         "connect to  remote addr"
     }
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-        match client.connect(params,true) {
-            Ok(result) => println!(
-                "connect success"),
+        match client.connect(params, true) {
+            Ok(result) => println!("connect success"),
             Err(e) => report_error("Error connect", e),
-
         }
     }
 }
@@ -53,11 +51,9 @@ impl Command for NodeCommandOpenChannel {
         "open channel with remote addr"
     }
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-        match client.open_channel(params,true) {
-            Ok(result) => println!(
-                "open channel success"),
+        match client.open_channel(params, true) {
+            Ok(result) => println!("open channel success"),
             Err(e) => report_error("Error pay account", e),
-
         }
     }
 }
@@ -72,14 +68,12 @@ impl Command for NodeCommandDepositChannel {
         "deposit money to channel"
     }
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-        match client.deposit(params,true) {
-            Ok(result) => println!(
-                "deposit success"),
+        match client.deposit(params, true) {
+            Ok(result) => println!("deposit success"),
             Err(e) => report_error("Error pay account", e),
         }
     }
 }
-
 
 pub struct NodeCommandPay {}
 
@@ -92,11 +86,9 @@ impl Command for NodeCommandPay {
     }
 
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-        match client.off_chain_pay(params,true) {
-            Ok(result) => println!(
-                "pay success"),
+        match client.off_chain_pay(params, true) {
+            Ok(result) => println!("pay success"),
             Err(e) => report_error("Error pay account", e),
-
         }
     }
 }
@@ -111,11 +103,9 @@ impl Command for NodeCommandWithdrawChannel {
         "withdraw money from channel"
     }
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-        match client.withdraw(params,true) {
-            Ok(result) => println!(
-                "withdraw success"),
+        match client.withdraw(params, true) {
+            Ok(result) => println!("withdraw success"),
             Err(e) => report_error("Error pay account", e),
-
         }
     }
 }
@@ -130,11 +120,9 @@ impl Command for NodeCommandChannelBalance {
         "get balance of channel"
     }
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-        match client.channel_balance(params,true) {
-            Ok(result) => println!(
-                "balance is {}",result.balance),
+        match client.channel_balance(params, true) {
+            Ok(result) => println!("balance is {}", result.balance),
             Err(e) => report_error("Error pay account", e),
-
         }
     }
 }

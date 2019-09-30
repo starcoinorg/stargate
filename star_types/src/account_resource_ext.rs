@@ -1,9 +1,7 @@
 use canonical_serialization::{SimpleDeserializer, SimpleSerializer};
 use failure::prelude::*;
 use std::convert::{TryFrom, TryInto};
-use types::account_config::{AccountResource};
-use types::account_address::AccountAddress;
-use types::event::EventHandle;
+use types::{account_address::AccountAddress, account_config::AccountResource, event::EventHandle};
 
 //impl TryFrom<Vec<u8>> for AccountResource{
 //    type Error = failure::Error;
@@ -29,8 +27,14 @@ pub fn from_bytes(value: &Vec<u8>) -> Result<AccountResource> {
     SimpleDeserializer::deserialize(value.as_slice())
 }
 
-pub fn new_account_for_test(account_address: AccountAddress, balance: u64) -> AccountResource{
+pub fn new_account_for_test(account_address: AccountAddress, balance: u64) -> AccountResource {
     let event_handle = EventHandle::new_from_address(&account_address, 0);
-    AccountResource::new(balance, 1, types::byte_array::ByteArray::new(vec![]), false,
-                         event_handle.clone(), event_handle.clone())
+    AccountResource::new(
+        balance,
+        1,
+        types::byte_array::ByteArray::new(vec![]),
+        false,
+        event_handle.clone(),
+        event_handle.clone(),
+    )
 }

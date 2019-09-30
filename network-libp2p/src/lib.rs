@@ -1,7 +1,6 @@
 //! Networking layer of Substrate.
 //!
 //! **Important**: This crate is unstable and the API and usage may change.
-//!
 
 mod behaviour;
 mod config;
@@ -9,14 +8,14 @@ mod custom_proto;
 mod service_task;
 mod transport;
 
-pub use crate::behaviour::Severity;
-pub use crate::config::*;
-pub use crate::config::{NetworkConfiguration, NodeKeyConfig, NonReservedPeerMode, Secret};
-pub use crate::custom_proto::{CustomMessage, RegisteredProtocol};
-pub use crate::service_task::{start_service, Service, ServiceEvent};
+pub use crate::{
+    behaviour::Severity,
+    config::{NetworkConfiguration, NodeKeyConfig, NonReservedPeerMode, Secret, *},
+    custom_proto::{CustomMessage, RegisteredProtocol},
+    service_task::{start_service, Service, ServiceEvent},
+};
 use libp2p::core::nodes::ConnectedPoint;
-pub use libp2p::{build_multiaddr, multiaddr, Multiaddr};
-pub use libp2p::{core::PublicKey, identity, PeerId};
+pub use libp2p::{build_multiaddr, core::PublicKey, identity, multiaddr, Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
@@ -166,8 +165,8 @@ impl From<ConnectedPoint> for NetworkStatePeerEndpoint {
                 listen_addr,
                 send_back_addr,
             } => NetworkStatePeerEndpoint::Listening {
-                listen_addr: listen_addr,
-                send_back_addr: send_back_addr,
+                listen_addr,
+                send_back_addr,
             },
         }
     }

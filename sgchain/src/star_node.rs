@@ -35,7 +35,9 @@ use std::{
     thread,
     time::Instant,
 };
-use storage_client::{StorageRead, StorageWrite, StorageReadServiceClient, StorageWriteServiceClient};
+use storage_client::{
+    StorageRead, StorageReadServiceClient, StorageWrite, StorageWriteServiceClient,
+};
 use storage_service::start_storage_service_and_return_service;
 use tokio::runtime::{Builder, Runtime};
 use types::account_address::AccountAddress as PeerId;
@@ -60,7 +62,10 @@ impl Drop for LibraHandle {
     }
 }
 
-fn setup_ac<R>(config: &NodeConfig, r: Arc<R>) -> (::grpcio::Server, AdmissionControlClient) where R: StorageRead + Clone + 'static {
+fn setup_ac<R>(config: &NodeConfig, r: Arc<R>) -> (::grpcio::Server, AdmissionControlClient)
+where
+    R: StorageRead + Clone + 'static,
+{
     let env = Arc::new(
         EnvBuilder::new()
             .name_prefix("grpc-ac-")
@@ -104,7 +109,11 @@ fn setup_ac<R>(config: &NodeConfig, r: Arc<R>) -> (::grpcio::Server, AdmissionCo
     (server, client)
 }
 
-fn setup_executor<R, W>(config: &NodeConfig, r: Arc<R>, w: Arc<W>) -> ::grpcio::Server where R: StorageRead + 'static, W: StorageWrite + 'static {
+fn setup_executor<R, W>(config: &NodeConfig, r: Arc<R>, w: Arc<W>) -> ::grpcio::Server
+where
+    R: StorageRead + 'static,
+    W: StorageWrite + 'static,
+{
     let client_env = Arc::new(EnvBuilder::new().name_prefix("grpc-exe-sto-").build());
 
     let handle = ExecutionService::new(r, w, config);
@@ -227,7 +236,11 @@ pub fn setup_environment(node_config: &mut NodeConfig) -> (AdmissionControlClien
     );
 
     instant = Instant::now();
-    let execution = ServerHandle::setup(setup_executor(&node_config, Arc::clone(&storage_service), Arc::clone(&storage_service)));
+    let execution = ServerHandle::setup(setup_executor(
+        &node_config,
+        Arc::clone(&storage_service),
+        Arc::clone(&storage_service),
+    ));
     debug!(
         "Execution service started in {} ms",
         instant.elapsed().as_millis()
@@ -255,7 +268,7 @@ pub fn setup_environment(node_config: &mut NodeConfig) -> (AdmissionControlClien
                         .get_network_identity_public()
                         .to_bytes()
                 )
-                    .unwrap()
+                .unwrap()
             );
             // Start the network provider.
             runtime

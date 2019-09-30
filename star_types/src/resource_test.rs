@@ -1,19 +1,27 @@
 use hex;
 
 use canonical_serialization::{CanonicalSerialize, SimpleDeserializer, SimpleSerializer};
-use types::account_config::{account_struct_tag, AccountResource};
-use types::event::EventHandle;
+use types::{
+    account_config::{account_struct_tag, AccountResource},
+    event::EventHandle,
+};
 
 use crate::resource::*;
 
 use super::*;
-use types::account_address::AccountAddress;
 use crate::account_resource_ext::new_account_for_test;
+use types::account_address::AccountAddress;
 
 #[test]
 fn test_resource() {
-    let account_resource = AccountResource::new(100, 1, types::byte_array::ByteArray::new(vec![]), false, EventHandle::random_handle(0),
-                                                EventHandle::random_handle(0));
+    let account_resource = AccountResource::new(
+        100,
+        1,
+        types::byte_array::ByteArray::new(vec![]),
+        false,
+        EventHandle::random_handle(0),
+        EventHandle::random_handle(0),
+    );
 
     let out: Vec<u8> = SimpleSerializer::serialize(&account_resource).unwrap();
     println!("resource hex: {}", hex::encode(&out));

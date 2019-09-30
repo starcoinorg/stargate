@@ -1,8 +1,9 @@
 use futures::prelude::*;
-use libp2p::core::{self, muxing::StreamMuxerBox, transport::boxed::Boxed};
 use libp2p::{
-    bandwidth, dns, identity, mplex, secio, tcp, websocket, yamux, InboundUpgradeExt,
-    OutboundUpgradeExt, PeerId, Transport,
+    bandwidth,
+    core::{self, muxing::StreamMuxerBox, transport::boxed::Boxed},
+    dns, identity, mplex, secio, tcp, websocket, yamux, InboundUpgradeExt, OutboundUpgradeExt,
+    PeerId, Transport,
 };
 use std::{io, sync::Arc, time::Duration, usize};
 

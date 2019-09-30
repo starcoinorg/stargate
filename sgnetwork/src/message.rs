@@ -1,13 +1,11 @@
-use network_libp2p::CustomMessage;
-use parity_codec::{Encode, Decode};
+use crate::helper::get_unix_ts;
 use crypto::{
-    hash::{
-        CryptoHash, CryptoHasher, TestOnlyHasher,
-    },
+    hash::{CryptoHash, CryptoHasher, TestOnlyHasher},
     HashValue,
 };
+use network_libp2p::CustomMessage;
+use parity_codec::{Decode, Encode};
 use types::account_address::AccountAddress;
-use crate::helper::get_unix_ts;
 
 #[derive(Clone, Debug)]
 pub struct InnerMessage {
@@ -38,13 +36,17 @@ pub struct PayloadMsg {
 }
 
 impl CustomMessage for Message
-    where Self: Decode + Encode
+where
+    Self: Decode + Encode,
 {
     fn into_bytes(self) -> Vec<u8> {
         self.encode()
     }
 
-    fn from_bytes(bytes: &[u8]) -> Result<Self, ()> where Self: Sized {
+    fn from_bytes(bytes: &[u8]) -> Result<Self, ()>
+    where
+        Self: Sized,
+    {
         Decode::decode(&mut &bytes[..]).ok_or(())
     }
 }
@@ -56,7 +58,13 @@ impl Message {
 
     pub fn new_payload(data: Vec<u8>) -> (Message, u128) {
         let message_id = get_unix_ts();
-        (Message::Payload(PayloadMsg { id: message_id, data }), message_id)
+        (
+            Message::Payload(PayloadMsg {
+                id: message_id,
+                data,
+            }),
+            message_id,
+        )
     }
     pub fn new_message(data: Vec<u8>) -> Message {
         Message::Payload(PayloadMsg { id: 0, data })
@@ -65,7 +73,7 @@ impl Message {
     pub fn as_payload(self) -> Option<Vec<u8>> {
         match self {
             Message::Payload(p) => Some(p.data),
-            _ => None
+            _ => None,
         }
     }
 }

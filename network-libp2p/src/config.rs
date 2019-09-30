@@ -1,10 +1,13 @@
 //! Libp2p network configuration.
 
-use libp2p::identity::{ed25519, secp256k1, Keypair};
-use libp2p::{multiaddr::Protocol, Multiaddr};
+use libp2p::{
+    identity::{ed25519, secp256k1, Keypair},
+    multiaddr::Protocol,
+    Multiaddr,
+};
 
-use std::error::Error;
 use std::{
+    error::Error,
     fs,
     io::{self, Write},
     iter,
@@ -70,7 +73,8 @@ impl NetworkConfiguration {
         Self::default()
     }
 
-    /// Create new default configuration for localhost-only connection with random port (useful for testing)
+    /// Create new default configuration for localhost-only connection with random port (useful for
+    /// testing)
     pub fn new_local() -> NetworkConfiguration {
         let mut config = NetworkConfiguration::new();
         config.listen_addresses = vec![iter::once(Protocol::Ip4(Ipv4Addr::new(127, 0, 0, 1)))
@@ -138,12 +142,12 @@ impl NodeKeyConfig {
     ///
     ///  * If the secret is configured as input, the corresponding keypair is returned.
     ///
-    ///  * If the secret is configured as a file, it is read from that file, if it exists.
-    ///    Otherwise a new secret is generated and stored. In either case, the
-    ///    keypair obtained from the secret is returned.
+    ///  * If the secret is configured as a file, it is read from that file, if it exists. Otherwise
+    ///    a new secret is generated and stored. In either case, the keypair obtained from the
+    ///    secret is returned.
     ///
-    ///  * If the secret is configured to be new, it is generated and the corresponding
-    ///    keypair is returned.
+    ///  * If the secret is configured to be new, it is generated and the corresponding keypair is
+    ///    returned.
     pub fn into_keypair(self) -> io::Result<Keypair> {
         use NodeKeyConfig::*;
         match self {

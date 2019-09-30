@@ -1,8 +1,8 @@
 #![feature(async_await)]
-#![recursion_limit="512"]
+#![recursion_limit = "512"]
 
-pub mod node;
 mod message_processor;
+pub mod node;
 
 //#[cfg(test)]
 pub mod test_helper;

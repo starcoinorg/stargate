@@ -1,28 +1,29 @@
-use std::collections::{HashMap};
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
-use sgchain::star_chain_client::ChainClient;
 use failure::prelude::*;
 use logger::prelude::*;
-use star_types::message::SgError;
-use star_types::resource::Resource;
+use sgchain::star_chain_client::ChainClient;
+use star_types::{message::SgError, resource::Resource};
 use state_view::StateView;
-use types::access_path::{AccessPath, DataPath};
-use types::account_address::AccountAddress;
-use types::transaction::{ChannelWriteSetPayload, TransactionOutput, Version};
-use types::write_set::{WriteOp, WriteSet};
+use types::{
+    access_path::{AccessPath, DataPath},
+    account_address::AccountAddress,
+    transaction::{ChannelWriteSetPayload, TransactionOutput, Version},
+    write_set::{WriteOp, WriteSet},
+};
 use vm_runtime_types::loaded_data::struct_def::StructDef;
 
 pub use crate::channel_state_view::ChannelStateView;
-use std::thread::sleep;
-use std::time::Duration;
-use star_types::channel::{Channel, WitnessData};
-use star_types::account_state::AccountState;
 use sgchain::client_state_view::ClientStateView;
+use star_types::{
+    account_state::AccountState,
+    channel::{Channel, WitnessData},
+};
+use std::{thread::sleep, time::Duration};
 
 pub struct LocalStateStorage<C>
-    where
-        C: ChainClient,
+where
+    C: ChainClient,
 {
     account: AccountAddress,
     client: Arc<C>,
@@ -30,8 +31,8 @@ pub struct LocalStateStorage<C>
 }
 
 impl<C> LocalStateStorage<C>
-    where
-        C: ChainClient,
+where
+    C: ChainClient,
 {
     pub fn new(account: AccountAddress, client: Arc<C>) -> Result<Self> {
         let mut storage = Self {
@@ -44,14 +45,22 @@ impl<C> LocalStateStorage<C>
     }
 
     fn refresh_channels(&mut self) -> Result<()> {
-        let account_state = self.get_account_state(self.account,None)?;
+        let account_state = self.get_account_state(self.account, None)?;
         let my_channel_states = account_state.filter_channel_state();
         let version = account_state.version();
         for (participant, my_channel_state) in my_channel_states {
             if !self.channels.contains_key(&participant) {
-                let participant_account_state = self.get_account_state(participant, Some(version))?;
-                let mut participant_channel_states = participant_account_state.filter_channel_state();
-                let participant_channel_state = participant_channel_states.remove(&self.account).ok_or(format_err!("Can not find channel {} in {}", self.account, participant))?;
+                let participant_account_state =
+                    self.get_account_state(participant, Some(version))?;
+                let mut participant_channel_states =
+                    participant_account_state.filter_channel_state();
+                let participant_channel_state = participant_channel_states
+                    .remove(&self.account)
+                    .ok_or(format_err!(
+                        "Can not find channel {} in {}",
+                        self.account,
+                        participant
+                    ))?;
                 let channel = Channel::new_with_state(my_channel_state, participant_channel_state);
                 info!("Init new channel with: {}", participant);
                 self.channels.insert(participant, channel);
@@ -60,12 +69,20 @@ impl<C> LocalStateStorage<C>
         Ok(())
     }
 
-    pub fn get_account_state(&self, account: AccountAddress, version: Option<Version>) -> Result<AccountState> {
+    pub fn get_account_state(
+        &self,
+        account: AccountAddress,
+        version: Option<Version>,
+    ) -> Result<AccountState> {
         self.client.get_account_state(account, version)
     }
 
     pub fn get_witness_data(&self, participant: AccountAddress) -> Result<WitnessData> {
-        Ok(self.channels.get(&participant).map(|state| state.witness_data()).unwrap_or(WitnessData::default()))
+        Ok(self
+            .channels
+            .get(&participant)
+            .map(|state| state.witness_data())
+            .unwrap_or(WitnessData::default()))
     }
 
     pub fn exist_channel(&self, participant: &AccountAddress) -> bool {
@@ -78,10 +95,16 @@ impl<C> LocalStateStorage<C>
     }
 
     pub fn get_channel(&self, participant: &AccountAddress) -> Result<&Channel> {
-        self.channels.get(participant).ok_or(SgError::new_channel_not_exist_error(participant).into())
+        self.channels
+            .get(participant)
+            .ok_or(SgError::new_channel_not_exist_error(participant).into())
     }
 
-    pub fn new_channel_view(&self, version: Option<Version>, participant: &AccountAddress) -> Result<ChannelStateView> {
+    pub fn new_channel_view(
+        &self,
+        version: Option<Version>,
+        participant: &AccountAddress,
+    ) -> Result<ChannelStateView> {
         let channel = self.get_channel(participant)?;
         ChannelStateView::new(channel, version, &*self.client)
     }
@@ -93,25 +116,27 @@ impl<C> LocalStateStorage<C>
     pub fn get(&self, path: &DataPath) -> Result<Option<Vec<u8>>> {
         if path.is_channel_resource() {
             let participant = path.participant().expect("participant must exist");
-            Ok(self.channels.get(&participant).and_then(|channel| channel.get(&AccessPath::new_for_data_path(self.account, path.clone()))))
+            Ok(self.channels.get(&participant).and_then(|channel| {
+                channel.get(&AccessPath::new_for_data_path(self.account, path.clone()))
+            }))
         } else {
             let account_state = self.get_account_state(self.account, None)?;
             Ok(account_state.get(&path.to_vec()))
         }
     }
     //TODO(jole) supported generic resource
-//    pub fn get_resource(&self, path: &DataPath) -> Result<Option<Resource>> {
-//        let state = self.get(path)?;
-//        let state_view = self.new_state_view(None)?;
-//        match state {
-//            None => Ok(None),
-//            Some(state) => {
-//                let tag = path.resource_tag().ok_or(format_err!("path {:?} is not a resource path.", path))?;
-//                let def = self.struct_cache.find_struct(&tag, &state_view)?;
-//                Ok(Some(Resource::decode(tag.clone(), def, state.as_slice())?))
-//            }
-//        }
-//    }
+    //    pub fn get_resource(&self, path: &DataPath) -> Result<Option<Resource>> {
+    //        let state = self.get(path)?;
+    //        let state_view = self.new_state_view(None)?;
+    //        match state {
+    //            None => Ok(None),
+    //            Some(state) => {
+    //                let tag = path.resource_tag().ok_or(format_err!("path {:?} is not a resource
+    // path.", path))?;                let def = self.struct_cache.find_struct(&tag,
+    // &state_view)?;                Ok(Some(Resource::decode(tag.clone(), def,
+    // state.as_slice())?))            }
+    //        }
+    //    }
 }
 
 mod channel_state_view;

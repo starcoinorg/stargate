@@ -1,6 +1,11 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::{
+    resource::Resource,
+    resource_type::{resource_def::ResourceDef, resource_types::ResourceType},
+};
+use failure::prelude::*;
 use std::{
     cell::{Ref, RefCell},
     ops::Add,
@@ -11,11 +16,8 @@ use types::{
     account_address::{AccountAddress, ADDRESS_LENGTH},
     byte_array::ByteArray,
     contract_event::ContractEvent,
+    language_storage::StructTag,
 };
-use failure::prelude::*;
-use crate::resource_type::{resource_types::ResourceType, resource_def::ResourceDef};
-use types::language_storage::StructTag;
-use crate::resource::Resource;
 
 #[derive(Debug, Clone)]
 pub enum ResourceValue {
@@ -28,7 +30,6 @@ pub enum ResourceValue {
 }
 
 impl ResourceValue {
-
     /// Normal code should always know what type this value has. This is made available only for
     /// tests.
     #[allow(non_snake_case)]
@@ -98,49 +99,47 @@ impl ResourceValue {
     }
 
     pub fn is_u64(&self) -> bool {
-        match self{
+        match self {
             ResourceValue::U64(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
     pub fn is_bool(&self) -> bool {
-        match self{
+        match self {
             ResourceValue::Bool(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
     pub fn is_address(&self) -> bool {
-        match self{
+        match self {
             ResourceValue::Address(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
     pub fn is_byte_array(&self) -> bool {
-        match self{
+        match self {
             ResourceValue::ByteArray(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
     pub fn is_string(&self) -> bool {
-        match self{
+        match self {
             ResourceValue::String(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
     pub fn is_resource(&self) -> bool {
-        match self{
+        match self {
             ResourceValue::Resource(_) => true,
-            _ => false
+            _ => false,
         }
     }
-
 }
-
 
 #[derive(Debug)]
 pub struct MutResourceVal(pub Rc<RefCell<ResourceValue>>);
@@ -210,50 +209,52 @@ impl MutResourceVal {
     }
 
     pub fn is_u64(&self) -> bool {
-        match &*self.peek(){
+        match &*self.peek() {
             ResourceValue::U64(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
     pub fn is_bool(&self) -> bool {
-        match &*self.peek(){
+        match &*self.peek() {
             ResourceValue::Bool(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
     pub fn is_address(&self) -> bool {
-        match &*self.peek(){
+        match &*self.peek() {
             ResourceValue::Address(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
     pub fn is_byte_array(&self) -> bool {
-        match &*self.peek(){
+        match &*self.peek() {
             ResourceValue::ByteArray(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
     pub fn is_string(&self) -> bool {
-        match &*self.peek(){
+        match &*self.peek() {
             ResourceValue::String(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
     pub fn is_resource(&self) -> bool {
-        match &*self.peek(){
+        match &*self.peek() {
             ResourceValue::Resource(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
     pub fn borrow_field(&self, idx: u32) -> Option<Self> {
         match &*self.peek() {
-            ResourceValue::Resource(res) => res.field(idx as usize).map(MutResourceVal::shallow_clone),
+            ResourceValue::Resource(res) => {
+                res.field(idx as usize).map(MutResourceVal::shallow_clone)
+            }
             _ => None,
         }
     }

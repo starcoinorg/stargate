@@ -9,8 +9,7 @@ use std::sync::Arc;
 use types::language_storage::StructTag;
 
 /// resolve ResourceDef by StructTag.
-pub trait StructDefResolve{
-
+pub trait StructDefResolve {
     fn resolve(&self, tag: &StructTag) -> Result<ResourceDef>;
 }
 

@@ -1,23 +1,39 @@
-use crate::{convert_account_address_to_peer_id, convert_peer_id_to_account_address, helper::convert_boot_nodes};
+use crate::{
+    convert_account_address_to_peer_id, convert_peer_id_to_account_address,
+    helper::convert_boot_nodes,
+};
 use crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
 };
 
-use futures::{future, stream::Stream, sync::mpsc, Async, Future, sync::oneshot, stream, try_ready};
-use network_libp2p::{identity, start_service, NetworkConfiguration, NodeKeyConfig, Secret, Service as Libp2pService, ServiceEvent, CustomMessage};
+use crate::{
+    helper::get_unix_ts,
+    message::{
+        Message::{self, Payload},
+        NetworkMessage, PayloadMsg,
+    },
+};
+use crypto::hash::CryptoHash;
+use futures::{
+    future,
+    stream::{self, Stream},
+    sync::{
+        mpsc,
+        oneshot::{self, Canceled, Sender},
+    },
+    try_ready, Async, Future,
+};
+use logger::prelude::*;
+use network_libp2p::{
+    identity, start_service, CustomMessage, NetworkConfiguration, NodeKeyConfig, Secret,
+    Service as Libp2pService, ServiceEvent,
+};
 use parking_lot::Mutex;
 use sg_config::config::NetworkConfig;
-use std::{io, sync::Arc, thread};
-use types::account_address::AccountAddress;
-use logger::prelude::*;
-use crate::message::{Message, NetworkMessage, PayloadMsg};
-use futures::sync::oneshot::{Canceled, Sender};
-use std::collections::HashMap;
-use crate::helper::get_unix_ts;
-use crypto::hash::CryptoHash;
+use std::{collections::HashMap, io, sync::Arc, thread};
 use tokio::prelude::task::AtomicTask;
-use crate::message::Message::Payload;
+use types::account_address::AccountAddress;
 
 #[derive(Clone)]
 pub struct NetworkService {
@@ -64,7 +80,7 @@ fn run_network(
 ) -> (
     mpsc::UnboundedSender<NetworkMessage>,
     mpsc::UnboundedReceiver<NetworkMessage>,
-    impl Future<Item=(), Error=std::io::Error>,
+    impl Future<Item = (), Error = std::io::Error>,
 ) {
     let (mut _tx, net_rx) = mpsc::unbounded();
     let (net_tx, mut _rx) = mpsc::unbounded::<NetworkMessage>();
@@ -72,13 +88,17 @@ fn run_network(
     let connected_fut = future::poll_fn(move || {
         match try_ready!(net_srv_1.lock().poll()) {
             Some(ServiceEvent::OpenedCustomProtocol { peer_id, .. }) => {
-                debug!("Connected peer: {}", convert_peer_id_to_account_address(&peer_id).unwrap());
+                debug!(
+                    "Connected peer: {}",
+                    convert_peer_id_to_account_address(&peer_id).unwrap()
+                );
             }
-            _ => { debug!("Connected checked"); }
+            _ => {
+                debug!("Connected checked");
+            }
         }
         Ok(Async::Ready(()))
     });
-
 
     let net_srv_2 = net_srv.clone();
 
@@ -89,49 +109,67 @@ fn run_network(
     let network_fut = stream::poll_fn(move || {
         notify.register();
         net_srv_2.lock().poll()
-    }).for_each(
-        move |event| {
-            match event {
-                ServiceEvent::CustomMessage { peer_id, message } => {
-                    match message {
-                        Message::Payload(payload) => {
-                            //receive message
-                            info!("Receive message with peer_id:{:?}", &peer_id);
-                            let address = convert_peer_id_to_account_address(&peer_id).unwrap();
-                            let user_msg = NetworkMessage { peer_id: address, data: payload.data };
-                            let _ = _tx.unbounded_send(user_msg);
-                            if payload.id != 0 {
-                                ack_sender.lock().send_custom_message(&peer_id, Message::ACK(payload.id));
-                            }
+    })
+    .for_each(move |event| {
+        match event {
+            ServiceEvent::CustomMessage { peer_id, message } => {
+                match message {
+                    Message::Payload(payload) => {
+                        //receive message
+                        info!("Receive message with peer_id:{:?}", &peer_id);
+                        let address = convert_peer_id_to_account_address(&peer_id).unwrap();
+                        let user_msg = NetworkMessage {
+                            peer_id: address,
+                            data: payload.data,
+                        };
+                        let _ = _tx.unbounded_send(user_msg);
+                        if payload.id != 0 {
+                            ack_sender
+                                .lock()
+                                .send_custom_message(&peer_id, Message::ACK(payload.id));
                         }
-                        Message::ACK(message_id) => {
-                            info!("Receive message ack");
-                            if let Some(tx) = acks.lock().remove(&message_id) {
-                                let _ = tx.send(());
-                            } else {
-                                error!("Receive a invalid ack, message id:{}, peer id:{}", message_id, peer_id);
-                            }
+                    }
+                    Message::ACK(message_id) => {
+                        info!("Receive message ack");
+                        if let Some(tx) = acks.lock().remove(&message_id) {
+                            let _ = tx.send(());
+                        } else {
+                            error!(
+                                "Receive a invalid ack, message id:{}, peer id:{}",
+                                message_id, peer_id
+                            );
                         }
                     }
                 }
-                ServiceEvent::OpenedCustomProtocol { peer_id, version: _, debug_info: _ } => {
-                    info!(
-                        "Connected peer {:?}",
-                        convert_peer_id_to_account_address(&peer_id).unwrap()
-                    );
-                }
-                ServiceEvent::ClosedCustomProtocol { peer_id: _, debug_info: _ } => { debug!("Network close custom protol") }
-                ServiceEvent::Clogged { peer_id: _, messages: _ } => { debug!("Network clogged") }
-            };
-            Ok(())
-        }
-    ).then(|_| {
+            }
+            ServiceEvent::OpenedCustomProtocol {
+                peer_id,
+                version: _,
+                debug_info: _,
+            } => {
+                info!(
+                    "Connected peer {:?}",
+                    convert_peer_id_to_account_address(&peer_id).unwrap()
+                );
+            }
+            ServiceEvent::ClosedCustomProtocol {
+                peer_id: _,
+                debug_info: _,
+            } => debug!("Network close custom protol"),
+            ServiceEvent::Clogged {
+                peer_id: _,
+                messages: _,
+            } => debug!("Network clogged"),
+        };
+        Ok(())
+    })
+    .then(|_| {
         debug!("Finish network poll");
         Ok(())
     });
 
-    let protocol_fut = stream::poll_fn(move || _rx.poll()).for_each(
-        move |message| {
+    let protocol_fut = stream::poll_fn(move || _rx.poll())
+        .for_each(move |message| {
             let account_address = message.peer_id.clone();
             let peer_id = convert_account_address_to_peer_id(message.peer_id).unwrap();
             net_srv
@@ -139,21 +177,24 @@ fn run_network(
                 .send_custom_message(&peer_id, Message::new_message(message.data));
             task_notify.notify();
             if net_srv.lock().is_open(&peer_id) == false {
-                error!("Message send to peer :{} is not connected", convert_peer_id_to_account_address(&peer_id).unwrap());
+                error!(
+                    "Message send to peer :{} is not connected",
+                    convert_peer_id_to_account_address(&peer_id).unwrap()
+                );
             }
             info!("Already send message {:?}", &peer_id);
             Ok(())
-        }
-    ).then(|res| {
-        match res {
-            Ok(()) => {
-                debug!("Finish prototol poll");
-            }
-            Err(_) => error!("protocol disconnected"),
-        };
-        Ok(())
-    });
-    let futures: Vec<Box<dyn Future<Item=(), Error=io::Error> + Send>> = vec![
+        })
+        .then(|res| {
+            match res {
+                Ok(()) => {
+                    debug!("Finish prototol poll");
+                }
+                Err(_) => error!("protocol disconnected"),
+            };
+            Ok(())
+        });
+    let futures: Vec<Box<dyn Future<Item = (), Error = io::Error> + Send>> = vec![
         Box::new(network_fut) as Box<_>,
         Box::new(protocol_fut) as Box<_>,
     ];
@@ -186,10 +227,15 @@ fn spawn_network(
         }))
         .map(|(val, _)| val)
         .map_err(|(_err, _)| ());
-    let mut runtime = tokio::runtime::Builder::new().name_prefix("libp2p-").build().unwrap();
-    let _thread = thread::Builder::new().name("network".to_string()).spawn(move || {
-        let _ = runtime.block_on(fut);
-    });
+    let mut runtime = tokio::runtime::Builder::new()
+        .name_prefix("libp2p-")
+        .build()
+        .unwrap();
+    let _thread = thread::Builder::new()
+        .name("network".to_string())
+        .spawn(move || {
+            let _ = runtime.block_on(fut);
+        });
     (network_sender, network_receiver)
 }
 
@@ -224,19 +270,28 @@ impl NetworkService {
     }
 
     pub fn is_connected(&self, address: AccountAddress) -> bool {
-        self.libp2p_service.lock().is_open(&convert_account_address_to_peer_id(address).unwrap())
+        self.libp2p_service
+            .lock()
+            .is_open(&convert_account_address_to_peer_id(address).unwrap())
     }
 
     pub fn identify(&self) -> AccountAddress {
         convert_peer_id_to_account_address(self.libp2p_service.lock().peer_id()).unwrap()
     }
 
-    pub fn send_message(&mut self, account_address: AccountAddress, message: Vec<u8>) -> impl Future<Item=(), Error=Canceled> {
+    pub fn send_message(
+        &mut self,
+        account_address: AccountAddress,
+        message: Vec<u8>,
+    ) -> impl Future<Item = (), Error = Canceled> {
         let (tx, rx) = oneshot::channel::<()>();
         let (protocol_msg, message_id) = Message::new_payload(message);
-        let peer_id = convert_account_address_to_peer_id(account_address).expect("Invalid account address");
+        let peer_id =
+            convert_account_address_to_peer_id(account_address).expect("Invalid account address");
 
-        self.libp2p_service.lock().send_custom_message(&peer_id, protocol_msg);
+        self.libp2p_service
+            .lock()
+            .send_custom_message(&peer_id, protocol_msg);
         debug!("Send message with ack");
         self.acks.lock().insert(message_id, tx);
         rx

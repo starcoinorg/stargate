@@ -1,14 +1,16 @@
-use crypto::test_utils::KeyPair;
+use crypto::{
+    ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
+    test_utils::KeyPair,
+    ValidKeyStringExt,
+};
 use serde::{Deserialize, Serialize};
 use types::account_address::AccountAddress;
-use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
-use crypto::ValidKeyStringExt;
 
-pub mod commands;
-pub mod client_proxy;
-mod node_commands;
 mod account_commands;
+pub mod client_proxy;
+pub mod commands;
 mod dev_commands;
+mod node_commands;
 
 /// Struct used to store data for each created account.  We track the sequence number
 /// so we can create new transactions easily

@@ -1,7 +1,7 @@
 #![feature(async_await)]
 
-pub mod wallet;
 pub mod scripts;
+pub mod wallet;
 
 #[cfg(test)]
 mod wallet_test;

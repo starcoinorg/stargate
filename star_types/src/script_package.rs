@@ -2,7 +2,10 @@ use std::fmt::{Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 
-use canonical_serialization::{CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer, SimpleDeserializer, SimpleSerializer};
+use canonical_serialization::{
+    CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
+    SimpleDeserializer, SimpleSerializer,
+};
 use failure::prelude::*;
 use proto_conv::{FromProto, IntoProto};
 use types::transaction::{Script, TransactionArgument};
@@ -42,7 +45,8 @@ impl ScriptCode {
 
 impl CanonicalSerialize for ScriptCode {
     fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
-        serializer.encode_string(self.name.as_str())?
+        serializer
+            .encode_string(self.name.as_str())?
             .encode_string(self.source_code.as_str())?
             .encode_bytes(self.byte_code.as_slice())?;
         Ok(())
@@ -50,8 +54,10 @@ impl CanonicalSerialize for ScriptCode {
 }
 
 impl CanonicalDeserialize for ScriptCode {
-    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self> where
-        Self: Sized {
+    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
+    where
+        Self: Sized,
+    {
         let name = deserializer.decode_string()?;
         let source_code = deserializer.decode_string()?;
         let byte_code = deserializer.decode_bytes()?;
@@ -82,7 +88,9 @@ impl ChannelScriptPackage {
     }
 
     pub fn get_script(&self, name: &str) -> Option<&ScriptCode> {
-        self.scripts.iter().find(|script| script.name.as_str() == name)
+        self.scripts
+            .iter()
+            .find(|script| script.name.as_str() == name)
     }
 }
 
@@ -102,15 +110,18 @@ impl Display for ChannelScriptPackage {
 
 impl CanonicalSerialize for ChannelScriptPackage {
     fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
-        serializer.encode_string(self.package_name.as_str())?
+        serializer
+            .encode_string(self.package_name.as_str())?
             .encode_vec(&self.scripts)?;
         Ok(())
     }
 }
 
 impl CanonicalDeserialize for ChannelScriptPackage {
-    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self> where
-        Self: Sized {
+    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
+    where
+        Self: Sized,
+    {
         let package_name = deserializer.decode_string()?;
         let scripts = deserializer.decode_vec()?;
         Ok(Self {

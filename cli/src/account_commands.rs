@@ -35,10 +35,7 @@ impl Command for AccountCommandCreate {
     fn execute(&self, client: &mut ClientProxy, _params: &[&str]) {
         println!(">> Creating/retrieving next account from wallet");
         match client.get_account() {
-            Ok(addr) => println!(
-                "Created/retrieved address {}",
-                hex::encode(addr)
-            ),
+            Ok(addr) => println!("Created/retrieved address {}", hex::encode(addr)),
             Err(e) => report_error("Error creating account", e),
         }
     }
@@ -61,10 +58,8 @@ impl Command for AccountCommandMint {
             println!("Invalid number of arguments for mint");
         }
         match client.faucet(params[1].parse::<u64>().unwrap()) {
-            Ok(result) => println!(
-                "mint success"),
+            Ok(result) => println!("mint success"),
             Err(e) => report_error("Error mint account", e),
-
         }
     }
 }
@@ -73,7 +68,7 @@ pub struct AccountCommandState {}
 
 impl Command for AccountCommandState {
     fn get_aliases(&self) -> Vec<&'static str> {
-        vec!["state", "s",]
+        vec!["state", "s"]
     }
     fn get_params_help(&self) -> &'static str {
         ""
@@ -85,27 +80,27 @@ impl Command for AccountCommandState {
         if params.len() != 1 {
             println!("Invalid number of arguments for state");
         }
-        match client.account_state(){
-            Ok((version, result, proof)) => {
-                match result{
-                    Some(data) => {
-                        let account_resource=AccountState::from_account_state_blob(version, data, proof).unwrap().get_account_resource();
-                        match account_resource {
-                            Some(resource) => {
-                                println!("account state is {:?}",resource);
-                            },
-                            None=>{
-                                println!("no such account state ");
-                            },
+        match client.account_state() {
+            Ok((version, result, proof)) => match result {
+                Some(data) => {
+                    let account_resource =
+                        AccountState::from_account_state_blob(version, data, proof)
+                            .unwrap()
+                            .get_account_resource();
+                    match account_resource {
+                        Some(resource) => {
+                            println!("account state is {:?}", resource);
                         }
-                    },
-                    None=>{
-                        println!("no such account state ");
-                    },
+                        None => {
+                            println!("no such account state ");
+                        }
+                    }
+                }
+                None => {
+                    println!("no such account state ");
                 }
             },
             Err(e) => report_error("Error mint account", e),
-
         }
     }
 }

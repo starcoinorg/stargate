@@ -1,24 +1,24 @@
 #![feature(custom_attribute)]
 
 pub mod account_resource_ext;
-pub mod message;
 pub mod channel_transaction;
 #[cfg(test)]
 mod channel_transaction_test;
+pub mod message;
 pub mod proto;
 pub mod resource;
-pub mod system_event;
 pub mod sg_error;
+pub mod system_event;
 
-#[cfg(test)]
-mod resource_test;
-pub mod transaction_output_helper;
-pub mod resource_value;
-pub mod resource_value_serializer;
-pub mod resource_type;
-pub mod script_package;
 pub mod account_state;
 pub mod channel;
+#[cfg(test)]
+mod resource_test;
+pub mod resource_type;
+pub mod resource_value;
+pub mod resource_value_serializer;
+pub mod script_package;
+pub mod transaction_output_helper;
 
 #[cfg(test)]
 mod tests {

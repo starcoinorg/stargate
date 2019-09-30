@@ -1,13 +1,12 @@
 use crate::{
-    resource_value::{MutResourceVal, ResourceValue},
+    resource::Resource,
     resource_type::{resource_def::ResourceDef, resource_types::ResourceType},
+    resource_value::{MutResourceVal, ResourceValue},
 };
 use canonical_serialization::*;
 use failure::prelude::*;
 use std::convert::TryFrom;
-use types::{account_address::AccountAddress, byte_array::ByteArray};
-use types::language_storage::StructTag;
-use crate::resource::Resource;
+use types::{account_address::AccountAddress, byte_array::ByteArray, language_storage::StructTag};
 
 impl ResourceValue {
     /// Serialize this value using `SimpleSerializer`.
@@ -16,9 +15,13 @@ impl ResourceValue {
     }
 
     /// Deserialize this value using `SimpleDeserializer` and a provided struct definition.
-    pub fn simple_deserialize(blob: &[u8], struct_tag: StructTag, resource: ResourceDef) -> Result<Resource> {
+    pub fn simple_deserialize(
+        blob: &[u8],
+        struct_tag: StructTag,
+        resource: ResourceDef,
+    ) -> Result<Resource> {
         let mut deserializer = SimpleDeserializer::new(blob);
-        deserialize_struct(&mut deserializer, struct_tag,&resource)
+        deserialize_struct(&mut deserializer, struct_tag, &resource)
     }
 }
 
@@ -56,7 +59,9 @@ fn deserialize_struct(
             }
             ResourceType::ByteArray => {
                 if let Ok(bytes) = deserializer.decode_bytes() {
-                    s_vals.push(MutResourceVal::new(ResourceValue::ByteArray(ByteArray::new(bytes))));
+                    s_vals.push(MutResourceVal::new(ResourceValue::ByteArray(
+                        ByteArray::new(bytes),
+                    )));
                     continue;
                 }
                 bail!("DataFormatError");
@@ -71,7 +76,7 @@ fn deserialize_struct(
                 bail!("DataFormatError");
             }
             ResourceType::Resource(tag, s_fields) => {
-                if let Ok(s) = deserialize_struct(deserializer, tag.clone(),s_fields) {
+                if let Ok(s) = deserialize_struct(deserializer, tag.clone(), s_fields) {
                     s_vals.push(MutResourceVal::new(ResourceValue::Resource(s)));
                 } else {
                     bail!("DataFormatError");

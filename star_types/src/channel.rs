@@ -1,16 +1,24 @@
 use std::collections::BTreeMap;
 
+use crate::{
+    channel_transaction::{
+        ChannelOp, ChannelTransactionRequest, ChannelTransactionRequestAndOutput,
+        ChannelTransactionRequestPayload, ChannelTransactionResponse,
+        ChannelTransactionResponsePayload,
+    },
+    message::SgError,
+    sg_error::SgErrorCode,
+};
+use atomic_refcell::AtomicRefCell;
 use crypto::ed25519::Ed25519Signature;
 use failure::prelude::*;
-use crate::channel_transaction::{ChannelTransactionRequest, ChannelTransactionResponse, ChannelTransactionResponsePayload, ChannelTransactionRequestPayload, ChannelOp, ChannelTransactionRequestAndOutput};
-use crate::message::SgError;
-use crate::sg_error::SgErrorCode;
-use types::access_path::{AccessPath, DataPath};
-use types::account_address::AccountAddress;
-use types::channel_account::ChannelAccountResource;
-use types::transaction::{ChannelWriteSetPayload, TransactionOutput, Version};
-use types::write_set::{WriteOp, WriteSet};
-use atomic_refcell::AtomicRefCell;
+use types::{
+    access_path::{AccessPath, DataPath},
+    account_address::AccountAddress,
+    channel_account::ChannelAccountResource,
+    transaction::{ChannelWriteSetPayload, TransactionOutput, Version},
+    write_set::{WriteOp, WriteSet},
+};
 
 //TODO (jole) need maintain network state?
 #[derive(Clone, Debug, Copy)]
@@ -45,7 +53,7 @@ impl ChannelState {
         }
     }
 
-    pub fn address(&self) -> AccountAddress{
+    pub fn address(&self) -> AccountAddress {
         self.address
     }
 
@@ -65,7 +73,7 @@ impl ChannelState {
         self.state.borrow_mut().insert(path, value)
     }
 
-    pub fn update_state(&self, state: BTreeMap<Vec<u8>,Vec<u8>>){
+    pub fn update_state(&self, state: BTreeMap<Vec<u8>, Vec<u8>>) {
         *self.state.borrow_mut() = state;
     }
 }
@@ -78,7 +86,11 @@ pub struct WitnessData {
 }
 
 impl WitnessData {
-    pub fn new(channel_sequence_number: u64, write_set: WriteSet, signature: Ed25519Signature) -> Self {
+    pub fn new(
+        channel_sequence_number: u64,
+        write_set: WriteSet,
+        signature: Ed25519Signature,
+    ) -> Self {
         Self {
             channel_sequence_number,
             write_set,
@@ -120,8 +132,7 @@ impl Channel {
         }
     }
 
-    pub fn new_with_state(account: ChannelState,
-                          participant: ChannelState) -> Self {
+    pub fn new_with_state(account: ChannelState, participant: ChannelState) -> Self {
         Self {
             stage: AtomicRefCell::new(ChannelStage::Idle),
             account,
@@ -131,7 +142,7 @@ impl Channel {
         }
     }
 
-    pub fn stage(&self) -> ChannelStage{
+    pub fn stage(&self) -> ChannelStage {
         *self.stage.borrow()
     }
 
@@ -139,28 +150,46 @@ impl Channel {
         &self.account
     }
 
-    pub fn participant(&self) -> &ChannelState{
+    pub fn participant(&self) -> &ChannelState {
         &self.participant
     }
 
     pub fn get(&self, access_path: &AccessPath) -> Option<Vec<u8>> {
-        match self.witness_data.borrow().as_ref().and_then(|witness_data| witness_data.write_set.get(access_path)) {
+        match self
+            .witness_data
+            .borrow()
+            .as_ref()
+            .and_then(|witness_data| witness_data.write_set.get(access_path))
+        {
             Some(op) => match op {
                 WriteOp::Value(value) => Some(value.clone()),
-                WriteOp::Deletion => None
-            }
-            None => if access_path.address == self.participant.address {
-                self.participant.get(&access_path.path)
-            } else if access_path.address == self.account.address {
-                self.account.get(&access_path.path)
-            } else {
-                panic!("Unexpect access_path: {} for this channel: {:?}", access_path, self)
+                WriteOp::Deletion => None,
+            },
+            None => {
+                if access_path.address == self.participant.address {
+                    self.participant.get(&access_path.path)
+                } else if access_path.address == self.account.address {
+                    self.account.get(&access_path.path)
+                } else {
+                    panic!(
+                        "Unexpect access_path: {} for this channel: {:?}",
+                        access_path, self
+                    )
+                }
             }
         }
     }
 
-    fn update_witness_data(&self, witness_payload: ChannelWriteSetPayload, signature: Ed25519Signature) {
-        let ChannelWriteSetPayload { channel_sequence_number, write_set, receiver } = witness_payload;
+    fn update_witness_data(
+        &self,
+        witness_payload: ChannelWriteSetPayload,
+        signature: Ed25519Signature,
+    ) {
+        let ChannelWriteSetPayload {
+            channel_sequence_number,
+            write_set,
+            receiver,
+        } = witness_payload;
         let mut witness_data = self.witness_data.borrow_mut();
         *witness_data = Some(WitnessData {
             channel_sequence_number,
@@ -177,26 +206,39 @@ impl Channel {
         *self.pending_txn_request.borrow_mut() = None
     }
 
-    pub fn apply_witness(&self, witness_payload: ChannelWriteSetPayload, signature: Ed25519Signature) -> Result<()> {
+    pub fn apply_witness(
+        &self,
+        witness_payload: ChannelWriteSetPayload,
+        signature: Ed25519Signature,
+    ) -> Result<()> {
         self.update_witness_data(witness_payload, signature);
         self.reset_pending_txn_request();
         *self.stage.borrow_mut() = ChannelStage::Idle;
         Ok(())
     }
 
-    pub fn apply_state(&self, account: ChannelState, participant: ChannelState) -> Result<()>{
-        let pending_txn = self.pending_txn_request.borrow().as_ref().expect("must exist");
+    pub fn apply_state(&self, account: ChannelState, participant: ChannelState) -> Result<()> {
+        let pending_txn = self
+            .pending_txn_request
+            .borrow()
+            .as_ref()
+            .expect("must exist");
         self.account.update_state(account.state.borrow().clone());
-        self.participant.update_state(participant.state.borrow().clone());
+        self.participant
+            .update_state(participant.state.borrow().clone());
         self.reset_witness_data();
         self.reset_pending_txn_request();
         *self.stage.borrow_mut() = ChannelStage::Idle;
         Ok(())
     }
 
-    pub fn apply_output(&self, output: TransactionOutput) -> Result<()>{
+    pub fn apply_output(&self, output: TransactionOutput) -> Result<()> {
         //TODO
-        let pending_txn = self.pending_txn_request.borrow().as_ref().expect("must exist");
+        let pending_txn = self
+            .pending_txn_request
+            .borrow()
+            .as_ref()
+            .expect("must exist");
         for (ap, op) in output.write_set() {
             if ap.is_channel_resource() {
                 let state = if ap.address == self.account.address {
@@ -204,11 +246,15 @@ impl Channel {
                 } else if ap.address == self.participant.address {
                     &self.participant
                 } else {
-                    bail!("Unexpect witness_payload access_path {:?} apply to channel state {:?}", ap, self.participant);
+                    bail!(
+                        "Unexpect witness_payload access_path {:?} apply to channel state {:?}",
+                        ap,
+                        self.participant
+                    );
                 };
                 match op {
                     WriteOp::Value(value) => state.insert(ap.path.clone(), value.clone()),
-                    WriteOp::Deletion => state.remove(&ap.path)
+                    WriteOp::Deletion => state.remove(&ap.path),
                 };
             }
         }
@@ -221,22 +267,31 @@ impl Channel {
     pub fn witness_data(&self) -> WitnessData {
         match &*self.stage.borrow() {
             ChannelStage::Opening => WitnessData::default(),
-            _ => self.witness_data.borrow().as_ref().cloned().unwrap_or(WitnessData::new_with_sequence_number(self.channel_sequence_number()))
+            _ => self.witness_data.borrow().as_ref().cloned().unwrap_or(
+                WitnessData::new_with_sequence_number(self.channel_sequence_number()),
+            ),
         }
     }
 
     fn get_channel_account_resource(&self, access_path: &AccessPath) -> ChannelAccountResource {
         self.get(access_path)
-            .and_then(|value| ChannelAccountResource::make_from(value).ok()).expect("channel must contains ChannelAccountResource")
+            .and_then(|value| ChannelAccountResource::make_from(value).ok())
+            .expect("channel must contains ChannelAccountResource")
     }
 
     pub fn account_resource(&self) -> ChannelAccountResource {
-        let access_path = AccessPath::new_for_data_path(self.account.address, DataPath::channel_account_path(self.participant.address));
+        let access_path = AccessPath::new_for_data_path(
+            self.account.address,
+            DataPath::channel_account_path(self.participant.address),
+        );
         self.get_channel_account_resource(&access_path)
     }
 
     pub fn participant_account_resource(&self) -> ChannelAccountResource {
-        let access_path = AccessPath::new_for_data_path(self.participant.address, DataPath::channel_account_path(self.account.address));
+        let access_path = AccessPath::new_for_data_path(
+            self.participant.address,
+            DataPath::channel_account_path(self.account.address),
+        );
         self.get_channel_account_resource(&access_path)
     }
 
@@ -258,13 +313,20 @@ impl Channel {
     }
 
     fn invalid_channel_stage_error(&self) -> Error {
-        SgError::new(SgErrorCode::INVALID_CHANNEL_STAGE, format!("Channel at stage: {:?}, unsupported this operator.", self.stage)).into()
+        SgError::new(
+            SgErrorCode::INVALID_CHANNEL_STAGE,
+            format!(
+                "Channel at stage: {:?}, unsupported this operator.",
+                self.stage
+            ),
+        )
+        .into()
     }
 
     pub fn channel_sequence_number(&self) -> u64 {
-        match &*self.stage.borrow(){
+        match &*self.stage.borrow() {
             ChannelStage::Opening => 0,
-            _ => self.account_resource().channel_sequence_number()
+            _ => self.account_resource().channel_sequence_number(),
         }
     }
 }
