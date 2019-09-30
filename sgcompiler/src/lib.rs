@@ -4,12 +4,16 @@ use bytecode_verifier::VerifiedModule;
 use failure::prelude::*;
 use ir_to_bytecode::{
     compiler::compile_program,
-    parser::{parse_module, parse_program, parse_script},
+    parser::{
+        ast::{ImportDefinition, ModuleIdent},
+        parse_module, parse_program, parse_script,
+    },
 };
 use logger::prelude::*;
 use sgchain::{client_state_view::ClientStateView, star_chain_client::ChainClient};
 use star_types::script_package::{ChannelScriptPackage, ScriptCode};
 use state_view::StateView;
+use std::collections::HashSet;
 use stdlib::stdlib_modules;
 use types::{access_path::AccessPath, account_address::AccountAddress, language_storage::ModuleId};
 use vm::{
@@ -131,6 +135,7 @@ impl<'a> Compiler<'a> {
     }
 
     pub fn load_deps(&self, dep_ids: Vec<ModuleId>) -> Result<Vec<VerifiedModule>> {
+        info!("load deps: {:?}", dep_ids);
         let deps: Result<Vec<VerifiedModule>> = dep_ids
             .iter()
             .map(|module_id| {
@@ -143,9 +148,26 @@ impl<'a> Compiler<'a> {
         Ok(deps?)
     }
 
+    // tread import transaction.Module as external deps
+    fn get_deps(&self, imports: &[ImportDefinition]) -> Vec<ModuleId> {
+        let mut deps = HashSet::new();
+        for dep in imports.iter() {
+            let module_id = match &dep.ident {
+                ModuleIdent::Transaction(module_name) => {
+                    ModuleId::new(self.address, module_name.clone().into_inner())
+                }
+                ModuleIdent::Qualified(ident) => {
+                    ModuleId::new(ident.address, ident.name.clone().into_inner())
+                }
+            };
+            deps.insert(module_id);
+        }
+        deps.into_iter().collect()
+    }
+
     pub fn compile_script(&self, script_str: &str) -> Result<Vec<u8>> {
         let ast_script = parse_script(script_str)?;
-        let deps = self.load_deps(ast_script.get_external_deps())?;
+        let deps = self.load_deps(self.get_deps(ast_script.imports.as_slice()))?;
         let compiled_script =
             ir_to_bytecode::compiler::compile_script(self.address, ast_script, &deps)?;
         let mut byte_code = vec![];
@@ -237,10 +259,11 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use logger::init_for_e2e_testing;
+    use types::identifier::{IdentStr, Identifier};
+
+    use crate::mock_module_loader::MockModuleLoader;
 
     use super::*;
-    use crate::mock_module_loader::MockModuleLoader;
-    use types::identifier::{IdentStr, Identifier};
 
     fn get_test_package(package_name: &str) -> PathBuf {
         let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -261,13 +284,11 @@ mod tests {
     #[test]
     fn test_with_module_loader() -> Result<()> {
         init_for_e2e_testing();
-        let module_loader = MockModuleLoader::new();
-        let module_id = ModuleId::new(
-            AccountAddress::default(),
-            Identifier::from(IdentStr::new("Mock")?),
-        );
-        module_loader.mock_empty_module(&module_id)?;
         let address = AccountAddress::random();
+        let module_loader = MockModuleLoader::new();
+        let module_id = ModuleId::new(address, Identifier::from(IdentStr::new("Mock")?));
+        module_loader.mock_empty_module(&module_id)?;
+
         let compiler = Compiler::new_with_module_loader(address, &module_loader);
 
         let package_path = get_test_package("package_with_custom_module");

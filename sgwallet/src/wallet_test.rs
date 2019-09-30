@@ -314,7 +314,6 @@ fn deploy_custom_module_and_script<C>(wallet: Arc<Wallet<C>>, test_case: &str) -
 where
     C: ChainClient + Send + Sync + 'static,
 {
-    let mut rt = Runtime::new()?;
     let path = get_test_case_path(test_case);
     let module_source = std::fs::read_to_string(path.join("module.mvir")).unwrap();
 
@@ -329,7 +328,7 @@ where
         wallet_clone.deploy_module(module_byte_code).await.unwrap();
     };
     rt.block_on(f.boxed().unit_error().compat()).unwrap();
-
+    sleep(Duration::from_millis(1000));
     let package = compiler.compile_package(path.join("scripts"))?;
     wallet.install_package(package)?;
     Ok(())
@@ -337,6 +336,7 @@ where
 
 #[test]
 fn test_deploy_and_use_custom_module() -> Result<()> {
+    ::logger::init_for_e2e_testing();
     let init_balance = 1000000;
 
     let (mock_chain_service, handle) = MockChainClient::new();
@@ -348,7 +348,7 @@ fn test_deploy_and_use_custom_module() -> Result<()> {
 
     open_channel(alice.clone(), bob.clone(), 100000, 100000)?;
 
-    execute_script(alice.clone(), bob.clone(), "script", "do_nothing", vec![])?;
+    execute_script(alice.clone(), bob.clone(), "scripts", "do_nothing", vec![])?;
 
     Ok(())
 }

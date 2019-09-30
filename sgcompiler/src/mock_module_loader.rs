@@ -5,7 +5,9 @@ use ir_to_bytecode::{compiler::compile_module, parser::parse_module};
 
 use super::*;
 
-static EMPTY_MODULE_TPL: &'static str = "module $name {}";
+static EMPTY_MODULE_TPL: &'static str = "module $name {public do_nothing(){
+        return;
+    }}";
 
 pub struct MockModuleLoader {
     modules: RefCell<HashMap<ModuleId, Vec<u8>>>,
@@ -25,7 +27,7 @@ impl MockModuleLoader {
     pub fn mock_empty_module(&self, module_id: &ModuleId) -> Result<()> {
         let src = EMPTY_MODULE_TPL.replace("$name", module_id.name().as_str());
         let module = parse_module(src.as_str())?;
-        let compiled_module = compile_module(AccountAddress::default(), module, stdlib_modules())?;
+        let compiled_module = compile_module(*module_id.address(), module, stdlib_modules())?;
         let mut byte_code = vec![];
         compiled_module.serialize(&mut byte_code)?;
         self.register_module(module_id.clone(), byte_code);
