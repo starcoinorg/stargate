@@ -39,7 +39,6 @@ use star_types::{
     },
     message::{ErrorMessage, SgError},
     resource::Resource,
-    resource_type::resource_def::StructDefResolve,
     script_package::{ChannelScriptPackage, ScriptCode},
     sg_error::SgErrorCode,
     transaction_output_helper,

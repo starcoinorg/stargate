@@ -7,7 +7,6 @@ use logger::prelude::*;
 use sgchain::star_chain_client::ChainClient;
 use star_types::{
     channel::Channel,
-    resource_type::resource_def::{ResourceDef, StructDefResolve},
 };
 use state_view::StateView;
 use types::{
