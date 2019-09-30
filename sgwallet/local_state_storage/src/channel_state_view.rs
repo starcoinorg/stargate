@@ -5,9 +5,7 @@ use atomic_refcell::AtomicRefCell;
 use failure::prelude::*;
 use logger::prelude::*;
 use sgchain::star_chain_client::ChainClient;
-use star_types::{
-    channel::Channel,
-};
+use star_types::channel::Channel;
 use state_view::StateView;
 use types::{
     access_path::AccessPath, account_address::AccountAddress, language_storage::StructTag,

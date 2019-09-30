@@ -26,7 +26,7 @@ use mempool::{
 use proto_conv::FromProto;
 use std::{
     sync::{Arc, Mutex},
-    thread::self,
+    thread,
     time::{Duration, Instant},
 };
 use storage_client::{StorageRead, StorageWrite};

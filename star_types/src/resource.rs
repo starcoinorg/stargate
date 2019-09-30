@@ -12,15 +12,16 @@ use types::{
     access_path::{Access, Accesses},
     account_address::AccountAddress,
     account_config::{
-        account_struct_tag, AccountResource, coin_module_name, coin_struct_tag, core_code_address,
+        account_struct_tag, coin_module_name, coin_struct_tag, core_code_address, AccountResource,
     },
     byte_array::ByteArray,
+    identifier::Identifier,
     language_storage::StructTag,
 };
-use types::identifier::Identifier;
-use vm_runtime_types::loaded_data::struct_def::StructDef;
-use vm_runtime_types::loaded_data::types::Type;
-use vm_runtime_types::value::{Struct, Value};
+use vm_runtime_types::{
+    loaded_data::{struct_def::StructDef, types::Type},
+    value::{Struct, Value},
+};
 
 /// resolve StructDef by StructTag.
 pub trait StructDefResolve {
@@ -47,7 +48,12 @@ impl Resource {
 
     pub fn decode(tag: StructTag, def: StructDef, bytes: &[u8]) -> Result<Self> {
         let struct_value = Value::simple_deserialize(bytes, def)
-            .map_err(|vm_error| format_err!("decode resource fail:{:?}", vm_error)).and_then(|value| value.value_as().ok_or(format_err!("value is not struct type")))?;
+            .map_err(|vm_error| format_err!("decode resource fail:{:?}", vm_error))
+            .and_then(|value| {
+                value
+                    .value_as()
+                    .ok_or(format_err!("value is not struct type"))
+            })?;
         Ok(Self::new(tag, struct_value))
     }
 
@@ -88,8 +94,7 @@ pub fn get_account_struct_def() -> StructDef {
     let byte_array_type = Type::ByteArray;
     let coin = Type::Struct(get_coin_struct_def());
 
-    let event_handle =
-        Type::Struct(get_event_handle_struct_def());
+    let event_handle = Type::Struct(get_event_handle_struct_def());
 
     StructDef::new(vec![
         byte_array_type,
