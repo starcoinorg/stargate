@@ -10,12 +10,11 @@ use core::borrow::Borrow;
 use proto_conv::{IntoProto, FromProto, IntoProtoBytes};
 use vm_genesis::{encode_genesis_transaction, encode_transfer_script, encode_create_account_script, GENESIS_KEYPAIR};
 use grpcio::{EnvBuilder, ChannelBuilder};
-use config::trusted_peers::ConfigHelpers;
+use config::{trusted_peers::ConfigHelpers, config::NodeConfigHelpers};
 use executable_helpers::helpers::{
     setup_executable, ARG_CONFIG_PATH, ARG_DISABLE_LOGGING, ARG_PEER_ID, load_configs_from_args,
 };
 use super::mock_star_node::{setup_environment, StarHandle};
-use clap::ArgMatches;
 use mempool::core_mempool_client::CoreMemPoolClient;
 use vm_validator::vm_validator::VMValidator;
 use admission_control_service::admission_control_client::AdmissionControlClient as MockAdmissionControlClient;
@@ -32,7 +31,9 @@ use tokio::runtime::Runtime;
 use tokio_timer::Delay;
 use star_types::account_state::AccountState;
 use futures::sync::mpsc::UnboundedSender;
+use async_trait::async_trait;
 
+#[async_trait]
 pub trait ChainClient {
 
     fn submit_transaction(&self, req: &SubmitTransactionRequest) -> ::grpcio::Result<SubmitTransactionResponse>;
@@ -51,7 +52,31 @@ pub trait ChainClient {
         self.get_account_state_with_proof_inner(account_address, version)
     }
 
-    fn faucet(&self, receiver: AccountAddress, amount: u64) -> Result<()>;
+    async fn faucet(&self, receiver: AccountAddress, amount: u64) -> Result<()> {
+        let exist_flag = self.account_exist(&receiver, None);
+        let script = if !exist_flag {
+            encode_create_account_script(&receiver, amount)
+        } else {
+            encode_transfer_script(&receiver, amount)
+        };
+
+        let sender = association_address();
+        let s_n = self.account_sequence_number(&sender).expect("seq num is none.");
+        let signed_tx = RawTransaction::new_script(
+            sender.clone(),
+            s_n,
+            script,
+            1000_000 as u64,
+            1 as u64,
+            Duration::from_secs(u64::max_value()),
+        ).sign(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone())
+            .unwrap()
+            .into_inner();
+
+        self.submit_signed_transaction(signed_tx).expect("commit signed txn err.");
+        self.watch_transaction(&sender, s_n).await.unwrap();
+        Ok(())
+    }
 
     fn submit_signed_transaction(&self, signed_transaction: SignedTransaction) -> Result<()> {
         let mut req = SubmitTransactionRequest::new();
@@ -60,8 +85,27 @@ pub trait ChainClient {
         Ok(())
     }
 
-    fn watch_transaction(&self, address: &AccountAddress, seq: u64) -> Result<Option<SignedTransactionWithProof>> {
-        unimplemented!()
+    async fn watch_transaction(&self, address: &AccountAddress, seq: u64) -> Result<Option<SignedTransactionWithProof>> {
+        let end_time = Instant::now() + Duration::from_millis(10_000);
+        loop {
+            let timeout_time = Instant::now() + Duration::from_millis(1000);
+            if let Ok(_) = Delay::new(timeout_time).compat().await {
+                debug!("watch address : {:?}, seq number : {}", address, seq);
+                let result = self.get_transaction_by_seq_num(address, seq)?;
+                let flag = timeout_time >= end_time;
+                match result {
+                    None => {
+                        if flag {
+                            return Ok(None);
+                        }
+                        continue;
+                    }
+                    Some(t) => {
+                        return Ok(Some(t));
+                    }
+                }
+            }
+        }
     }
 
     fn get_transaction_by_seq_num(&self, account_address: &AccountAddress, seq_num: u64) -> Result<Option<SignedTransactionWithProof>> {
@@ -131,30 +175,6 @@ impl StarChainClient {
 }
 
 impl ChainClient for StarChainClient {
-    fn faucet(&self, receiver: AccountAddress, amount: u64) -> Result<()> {
-        let exist_flag = self.account_exist(&receiver, None);
-        let script = if !exist_flag {
-            encode_create_account_script(&receiver, amount)
-        } else {
-            encode_transfer_script(&receiver, amount)
-        };
-
-        let sender = association_address();
-        let s_n = self.account_sequence_number(&sender).expect("seq num is none.");
-        let signed_tx = RawTransaction::new_script(
-            sender.clone(),
-            s_n,
-            script,
-            1000_000 as u64,
-            1 as u64,
-            Duration::from_secs(u64::max_value()),
-        ).sign(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone())
-            .unwrap()
-            .into_inner();
-
-        self.submit_signed_transaction(signed_tx).expect("commit signed txn err.");
-        Ok(())
-    }
 
     fn submit_transaction(&self, req: &SubmitTransactionRequest) -> ::grpcio::Result<SubmitTransactionResponse> {
         self.ac_client.submit_transaction(req)
@@ -173,41 +193,15 @@ pub struct MockChainClient {
 
 impl MockChainClient {
     pub fn new() -> (Self, StarHandle) {
-        let args = ArgMatches::default();
-        let mut config = load_configs_from_args(&args);
+        let mut config = NodeConfigHelpers::get_single_node_test_config(false /* random ports */);
         if config.consensus.get_consensus_peers().len() == 0 {
             let (_, single_peer_consensus_config) = ConfigHelpers::get_test_consensus_config(1, None);
             config.consensus.consensus_peers = single_peer_consensus_config;
-            let genesis_path = genesis_blob();
-            config.execution.genesis_file_location = genesis_path;
+            genesis_blob(&config.execution.genesis_file_location);
         }
 
         let (ac_client, _handle, shutdown_sender) = setup_environment(&mut config);
         (MockChainClient { ac_client: Arc::new(ac_client), shutdown_sender:Arc::new(shutdown_sender) }, _handle)
-    }
-
-    async fn watch_inner(ac_client: &MockChainClient, address: &AccountAddress, seq: u64) -> Result<Option<SignedTransactionWithProof>> {
-        let end_time = Instant::now() + Duration::from_millis(10_000);
-        loop {
-            let timeout_time = Instant::now() + Duration::from_millis(1000);
-            if let Ok(_) = Delay::new(timeout_time).compat().await {
-                println!("seq number is {}", seq);
-                let result = ac_client.get_transaction_by_seq_num(address, seq)?;
-                println!("result is {:?}", result);
-                let flag = timeout_time >= end_time;
-                match result {
-                    None => {
-                        if flag {
-                            return Ok(None);
-                        }
-                        continue;
-                    }
-                    Some(t) => {
-                        return Ok(Some(t));
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -216,38 +210,6 @@ pub fn stop_mock_chain(client:&MockChainClient) {
 }
 
 impl ChainClient for MockChainClient {
-
-    fn faucet(&self, receiver: AccountAddress, amount: u64) -> Result<()> {
-        let exist_flag = self.account_exist(&receiver, None);
-        let script = if !exist_flag {
-            encode_create_account_script(&receiver, amount)
-        } else {
-            encode_transfer_script(&receiver, amount)
-        };
-
-        let sender = association_address();
-        let s_n = self.account_sequence_number(&sender).expect("seq num is none.");
-        let signed_tx = RawTransaction::new_script(
-            sender.clone(),
-            s_n,
-            script,
-            1000_000 as u64,
-            1 as u64,
-            Duration::from_secs(u64::max_value()),
-        ).sign(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone())
-            .unwrap()
-            .into_inner();
-
-        self.submit_signed_transaction(signed_tx).expect("commit signed txn err.");
-        let mut rt = Runtime::new()?;
-        let tmp = self.clone();
-        let f = async move {
-            let faucet_watch = Self::watch_inner(&tmp, &sender, s_n);
-            faucet_watch.await.unwrap().expect("proof is none, faucet fail.");
-        };
-        rt.block_on(f.boxed().unit_error().compat()).unwrap();
-        Ok(())
-    }
 
     fn submit_transaction(&self, req: &SubmitTransactionRequest) -> ::grpcio::Result<SubmitTransactionResponse> {
         self.ac_client.submit_transaction(req)
@@ -271,25 +233,22 @@ fn build_request(req: RequestItem, ver: Option<Version>) -> UpdateToLatestLedger
     req
 }
 
+pub fn faucet_sync<C>(client:C, receiver: AccountAddress, amount: u64) -> Result<()> where C:'static + ChainClient + Sync + Send {
+    let mut rt = Runtime::new().expect("faucet runtime err.");
+    let f = async move {
+        client.faucet(receiver, amount).await
+    };
+    rt.block_on(f.boxed().unit_error().compat()).unwrap()
+}
+
 fn parse_response(resp: UpdateToLatestLedgerResponse) -> ResponseItem {
     resp.get_response_items().get(0).expect("response item is none.").clone()
 }
 
-pub fn genesis_blob() -> String {
+pub fn genesis_blob(file:&String) {
     let genesis_checked_txn = encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
     let genesis_txn = genesis_checked_txn.into_inner();
-//    let tmp_dir = TempPath::new();
-//    tmp_dir.create_as_dir().unwrap();
-//    let path = tmp_dir.path().display();
-    let path = "/tmp/data";
-    let blob_path = Path::new(&path);
-    if !blob_path.exists() {
-        create_dir_all(blob_path).unwrap();
-    }
-    let file = format!("{}/{}", path, "genesis.blob");
-    let mut genesis_file = File::create(Path::new(&file)).expect("open genesis file err.");
+    let mut genesis_file = File::create(Path::new(file)).expect("open genesis file err.");
     genesis_file.write_all(genesis_txn.into_proto_bytes().expect("genesis_txn to bytes err.").as_slice()).expect("write genesis file err.");
-    genesis_file.flush().expect("======err=====");
-    info!("genesis blob path: {}", file);
-    file
+    genesis_file.flush().expect("flush genesis file err.");
 }

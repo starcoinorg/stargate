@@ -1,5 +1,5 @@
 use super::*;
-use sgchain::star_chain_client::{MockChainClient};
+use sgchain::star_chain_client::{MockChainClient, faucet_sync};
 use types::account_config::account_resource_path;
 use logger::init_for_e2e_testing;
 
@@ -7,9 +7,9 @@ use logger::init_for_e2e_testing;
 fn test_local_state_storage() -> Result<()> {
     init_for_e2e_testing();
     let (mock_chain_service, _handle)  = MockChainClient::new();
-    let client = Arc::new(mock_chain_service);
+    let client = Arc::new(mock_chain_service.clone());
     let account_address = AccountAddress::random();
-    client.faucet(account_address, 1_000_000)?;
+    faucet_sync(mock_chain_service,account_address, 1_000_000)?;
     debug!("faucet finish");
     let storage = LocalStateStorage::new(account_address, client)?;
     let state_view = storage.new_state_view(None)?;

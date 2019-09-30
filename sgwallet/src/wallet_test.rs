@@ -19,7 +19,7 @@ use failure::_core::time::Duration;
 use failure::prelude::*;
 use logger::prelude::*;
 use sgchain::client_state_view::ClientStateView;
-use sgchain::star_chain_client::{ChainClient, MockChainClient};
+use sgchain::star_chain_client::{ChainClient, faucet_sync, MockChainClient};
 use sgcompiler::{Compiler, StateViewModuleLoader};
 use star_types::script_package::ChannelScriptPackage;
 use types::account_address::AccountAddress;
@@ -28,14 +28,14 @@ use types::transaction::TransactionArgument;
 use super::wallet::*;
 
 pub fn setup_wallet<C>(client: Arc<C>, init_balance: u64) -> Result<Wallet<C>> where
-    C: ChainClient + Send + Sync + 'static {
+    C: ChainClient + Clone + Send + Sync + 'static {
     let mut seed_rng = rand::rngs::OsRng::new().expect("can't access OsRng");
     let seed_buf: [u8; 32] = seed_rng.gen();
     let mut rng0: StdRng = SeedableRng::from_seed(seed_buf);
     let account_keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey> = KeyPair::generate_for_testing(&mut rng0);
 
     let account = AccountAddress::from_public_key(&account_keypair.public_key);
-    client.faucet(account, init_balance)?;
+    faucet_sync(client.as_ref().clone(), account, init_balance)?;
     let wallet = Wallet::new_with_client(account, account_keypair, client)?;
     assert_eq!(init_balance, wallet.balance()?);
     Ok(wallet)

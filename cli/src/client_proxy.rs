@@ -10,7 +10,7 @@ use types::{
     transaction_helpers::{create_signed_txn, TransactionSigner},
 };
 use tempfile::{NamedTempFile, TempPath};
-use sgchain::star_chain_client::StarChainClient;
+use sgchain::star_chain_client::{StarChainClient, faucet_sync};
 use node_proto::{OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, ConnectRequest, ConnectResponse, WithdrawRequest, WithdrawResponse, ChannelBalanceRequest, ChannelBalanceResponse, DepositRequest, DepositResponse};
 use std::{
     io::{stdout, Write},
@@ -58,7 +58,7 @@ impl ClientProxy {
     }
 
     pub fn faucet(&mut self, amount: u64) -> Result<()> {
-        self.chain_client.faucet(self.wallet.get_address(), amount)
+        faucet_sync(self.chain_client.clone(), self.wallet.get_address(), amount)
     }
 
     pub fn open_channel(&mut self, space_delim_strings: &[&str], is_blocking: bool) -> Result<OpenChannelResponse> {
