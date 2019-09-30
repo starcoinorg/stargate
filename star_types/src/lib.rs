@@ -8,7 +8,6 @@ mod channel_transaction_test;
 pub mod proto;
 pub mod resource;
 pub mod system_event;
-pub mod watch_tx_data;
 pub mod sg_error;
 
 #[cfg(test)]
