@@ -23,7 +23,6 @@ local_state_storage = { path = "./local_state_storage"}
 sgchain = { path = "../sgchain" }
 vm_genesis = { path = "../libra/language/vm/vm_genesis" }
 logger = { path = "../libra/common/logger"}
-state_store = { path = "../storage/state_store"}
 tokio = "0.1.22"
 futures = { package = "futures", version = "0.1.28" }
 proto_conv = { path = "../libra/common/proto_conv", features = ["derive"] }

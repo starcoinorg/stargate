@@ -26,7 +26,6 @@ sgwallet = { path="../../sgwallet"}
 sgchain = { path = "../../sgchain"}
 types = { path = "../../libra/types" }
 star_types = { path = "../../star_types" }
-state_cache = { path = "../../storage/state_cache" }
 
 crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }
 proto_conv = { path = "../../libra/common/proto_conv", features = ["derive"] }

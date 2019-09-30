@@ -21,6 +21,7 @@ use std::{
 };
 use types::transaction::{TransactionPayload, Script};
 use sgchain::star_chain_client::ChainClient;
+use types::proof::SparseMerkleProof;
 
 const GAS_UNIT_PRICE: u64 = 0;
 const MAX_GAS_AMOUNT: u64 = 100_000;
@@ -111,8 +112,8 @@ impl ClientProxy {
         Ok(response)
     }
 
-    pub fn account_state(&mut self) -> Result<Option<Vec<u8>>> {
-        Ok(self.chain_client.get_account_state_with_proof(&self.wallet.get_address(), None)?.1)
+    pub fn account_state(&mut self) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)> {
+        Ok(self.chain_client.get_account_state_with_proof(&self.wallet.get_address(), None)?)
     }
 
     /// Compile move program

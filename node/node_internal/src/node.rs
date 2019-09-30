@@ -32,7 +32,6 @@ use sgwallet::wallet::Wallet;
 use star_types::channel_transaction::{ChannelTransactionRequest, ChannelTransactionResponse};
 use star_types::message::{*};
 use star_types::system_event::Event;
-use state_cache::state_cache::AccountState;
 use types::account_address::AccountAddress;
 use types::account_config::AccountResource;
 

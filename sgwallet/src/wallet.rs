@@ -33,7 +33,6 @@ use star_types::resource::Resource;
 use star_types::resource_type::resource_def::StructDefResolve;
 use star_types::script_package::{ChannelScriptPackage, ScriptCode};
 use star_types::sg_error::SgErrorCode;
-use state_store::{StateStore, StateViewPlus};
 use state_view::StateView;
 use types::access_path::{AccessPath, DataPath};
 use types::account_address::AccountAddress;
@@ -388,31 +387,8 @@ impl<C> Wallet<C>
         self.account_resource().map(|r| r.balance())
     }
 
-    fn get_resource(&self, path: &DataPath) -> Result<Option<Resource>> {
-        let storage = self.storage.borrow();
-        storage.get_resource(path)
-    }
-
-    fn get_channel_resource(&self, participant: AccountAddress, resource_tag: StructTag) -> Result<Option<Resource>> {
-        let data_path = DataPath::channel_resource_path(participant, resource_tag);
-        self.get_resource(&data_path)
-    }
-
     pub fn channel_balance(&self, participant: AccountAddress) -> Result<u64> {
         Ok(self.channel_account_resource(participant)?.map(|account| account.balance()).unwrap_or(0))
-    }
-
-    pub fn channel_balance_by_tag(&self, participant: AccountAddress, asset_tag: StructTag) -> Result<u64> {
-        if asset_tag == Self::default_asset() {
-            self.channel_balance(participant)
-        } else {
-            self.get_channel_resource(participant, asset_tag.clone())
-                .and_then(|resource| match resource {
-                    Some(resource) => resource.asset_balance().ok_or(format_err!("resource {:?} not asset.", asset_tag)),
-                    //if channel or resource not exist, take default value 0
-                    None => Ok(0)
-                })
-        }
     }
 
     /// Craft a transaction request.

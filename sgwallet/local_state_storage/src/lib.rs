@@ -7,7 +7,6 @@ use logger::prelude::*;
 use star_types::message::SgError;
 use star_types::resource::Resource;
 use state_view::StateView;
-use struct_cache::StructCache;
 use types::access_path::{AccessPath, DataPath};
 use types::account_address::AccountAddress;
 use types::transaction::{ChannelWriteSetPayload, TransactionOutput, Version};
@@ -28,7 +27,6 @@ pub struct LocalStateStorage<C>
     account: AccountAddress,
     client: Arc<C>,
     channels: HashMap<AccountAddress, Channel>,
-    struct_cache: StructCache,
 }
 
 impl<C> LocalStateStorage<C>
@@ -40,7 +38,6 @@ impl<C> LocalStateStorage<C>
             account,
             client,
             channels: HashMap::new(),
-            struct_cache: StructCache::new(),
         };
         storage.refresh_channels()?;
         Ok(storage)
@@ -102,19 +99,19 @@ impl<C> LocalStateStorage<C>
             Ok(account_state.get(&path.to_vec()))
         }
     }
-
-    pub fn get_resource(&self, path: &DataPath) -> Result<Option<Resource>> {
-        let state = self.get(path)?;
-        let state_view = self.new_state_view(None)?;
-        match state {
-            None => Ok(None),
-            Some(state) => {
-                let tag = path.resource_tag().ok_or(format_err!("path {:?} is not a resource path.", path))?;
-                let def = self.struct_cache.find_struct(&tag, &state_view)?;
-                Ok(Some(Resource::decode(tag.clone(), def, state.as_slice())?))
-            }
-        }
-    }
+    //TODO(jole) supported generic resource
+//    pub fn get_resource(&self, path: &DataPath) -> Result<Option<Resource>> {
+//        let state = self.get(path)?;
+//        let state_view = self.new_state_view(None)?;
+//        match state {
+//            None => Ok(None),
+//            Some(state) => {
+//                let tag = path.resource_tag().ok_or(format_err!("path {:?} is not a resource path.", path))?;
+//                let def = self.struct_cache.find_struct(&tag, &state_view)?;
+//                Ok(Some(Resource::decode(tag.clone(), def, state.as_slice())?))
+//            }
+//        }
+//    }
 }
 
 mod channel_state_view;

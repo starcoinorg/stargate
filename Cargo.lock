@@ -610,7 +610,7 @@ dependencies = [
  "serde 1.0.101 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "sgchain 0.1.0",
- "state_cache 0.1.0",
+ "star_types 0.1.0",
  "structopt 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "tempfile 3.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio 0.1.22 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2543,10 +2543,7 @@ dependencies = [
  "logger 0.1.0",
  "sgchain 0.1.0",
  "star_types 0.1.0",
- "state_cache 0.1.0",
- "state_store 0.1.0",
  "state_view 0.1.0",
- "struct_cache 0.1.0",
  "tokio 0.1.22 (registry+https://github.com/rust-lang/crates.io-index)",
  "types 0.1.0",
  "vm_runtime_types 0.1.0",
@@ -2990,7 +2987,6 @@ dependencies = [
  "sgnetwork 0.1.0",
  "sgwallet 0.1.0",
  "star_types 0.1.0",
- "state_cache 0.1.0",
  "structopt 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "switch 0.1.0",
  "tokio 0.1.22 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -4471,7 +4467,6 @@ dependencies = [
  "sgchain 0.1.0",
  "sgcompiler 0.1.0",
  "star_types 0.1.0",
- "state_store 0.1.0",
  "state_view 0.1.0",
  "stdlib 0.1.0",
  "tokio 0.1.22 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -4715,36 +4710,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "state_cache"
-version = "0.1.0"
-dependencies = [
- "atomic_refcell 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "crypto 0.1.0",
- "failure_ext 0.1.0",
- "jellyfish_merkle 0.1.0",
- "libradb 0.1.0",
- "logger 0.1.0",
- "scratchpad 0.1.0",
- "star_types 0.1.0",
- "state_store 0.1.0",
- "state_view 0.1.0",
- "struct_cache 0.1.0",
- "types 0.1.0",
-]
-
-[[package]]
-name = "state_store"
-version = "0.1.0"
-dependencies = [
- "crypto 0.1.0",
- "failure_ext 0.1.0",
- "logger 0.1.0",
- "star_types 0.1.0",
- "state_view 0.1.0",
- "types 0.1.0",
-]
-
-[[package]]
 name = "state_synchronizer"
 version = "0.1.0"
 dependencies = [
@@ -4958,27 +4923,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "strsim"
 version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "struct_cache"
-version = "0.1.0"
-dependencies = [
- "atomic_refcell 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "bytecode_verifier 0.1.0",
- "compiler 0.1.0",
- "crypto 0.1.0",
- "failure_ext 0.1.0",
- "itertools 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "logger 0.1.0",
- "star_types 0.1.0",
- "state_view 0.1.0",
- "stdlib 0.1.0",
- "types 0.1.0",
- "vm 0.1.0",
- "vm_runtime 0.1.0",
- "vm_runtime_types 0.1.0",
-]
 
 [[package]]
 name = "structopt"

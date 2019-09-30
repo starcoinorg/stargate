@@ -36,10 +36,10 @@ vm_genesis = { path = "../libra/language/vm/vm_genesis" }
 node_client = { path = "../node/node_client"}
 cli_wallet = { path = "./cli_wallet" }
 node_proto = { path = "../node/node_proto" }
-state_cache = { path = "../storage/state_cache" }
 admission_control_service = { path = "../libra/admission_control/admission_control_service" }
 admission_control_proto = { path = "../libra/admission_control/admission_control_proto" }
 sgchain = { path = "../sgchain" }
+star_types = { path = "../star_types" }
 
 [dev-dependencies]
 crypto = { path = "../libra/crypto/crypto", features = ["testing"] }

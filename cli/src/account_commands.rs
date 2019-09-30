@@ -1,5 +1,5 @@
 use crate::{client_proxy::ClientProxy, commands::*};
-use state_cache::state_cache::AccountState;
+use star_types::account_state::AccountState;
 
 /// Major command for account related operations.
 pub struct AccountCommand {}
@@ -86,10 +86,10 @@ impl Command for AccountCommandState {
             println!("Invalid number of arguments for state");
         }
         match client.account_state(){
-            Ok(result) => {
+            Ok((version, result, proof)) => {
                 match result{
                     Some(data) => {
-                        let account_resource=AccountState::from_account_state_blob(data).unwrap().get_account_resource();
+                        let account_resource=AccountState::from_account_state_blob(version, data, proof).unwrap().get_account_resource();
                         match account_resource {
                             Some(resource) => {
                                 println!("account state is {:?}",resource);
