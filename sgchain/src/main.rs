@@ -10,6 +10,7 @@ use std::sync::{
     Arc,
 };
 use config::trusted_peers::ConfigHelpers;
+use logger::prelude::*;
 
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
@@ -37,12 +38,11 @@ fn main() {
         "Star single node".to_string(),
         vec![ARG_PEER_ID, ARG_CONFIG_PATH, ARG_DISABLE_LOGGING],
     );
-    println!("config is {:?}",config);
+    debug!("config : {:?}",config);
     if config.consensus.get_consensus_peers().len() == 0 {
         let (_, single_peer_consensus_config) = ConfigHelpers::get_test_consensus_config(1, None);
         config.consensus.consensus_peers = single_peer_consensus_config;
-        let genesis_path = sgchain::star_chain_client::genesis_blob();
-        config.execution.genesis_file_location = genesis_path;
+        sgchain::star_chain_client::genesis_blob(&config.execution.genesis_file_location);
     }
 
     let (_ac_handle, _node_handle) = sgchain::setup_environment(&mut config);

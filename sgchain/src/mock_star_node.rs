@@ -10,7 +10,7 @@ use execution_proto::proto::execution_grpc;
 use execution_service::ExecutionService;
 use futures03::future::{FutureExt, TryFutureExt};
 use grpc_helpers::ServerHandle;
-use grpcio::{ChannelBuilder, EnvBuilder, ServerBuilder};
+use grpcio::{ChannelBuilder, ServerBuilder};
 use grpcio_sys;
 use logger::prelude::*;
 use mempool::{core_mempool_client::CoreMemPoolClient, proto::{mempool_grpc::MempoolClient, mempool::{TransactionExclusion, GetBlockRequest}}, MempoolRuntime};
@@ -52,13 +52,6 @@ lazy_static! {
 }
 
 fn setup_ac<R>(config: &NodeConfig, r: Arc<R>) -> (AdmissionControlClient<CoreMemPoolClient, VMValidator>, CoreMemPoolClient) where R: StorageRead + Clone + 'static {
-    let env = Arc::new(
-        EnvBuilder::new()
-            .name_prefix("grpc-ac-")
-            .cq_count(unsafe { min(grpcio_sys::gpr_cpu_num_cores() as usize * 2, 32) })
-            .build(),
-    );
-    let port = config.admission_control.admission_control_service_port;
     let mempool = CoreMemPoolClient::new(&config);
     let mempool_client = Some(Arc::new(mempool.clone()));
 
@@ -79,7 +72,6 @@ fn setup_ac<R>(config: &NodeConfig, r: Arc<R>) -> (AdmissionControlClient<CoreMe
 }
 
 fn setup_executor<R, W>(config: &NodeConfig, r: Arc<R>, w: Arc<W>) -> ExecutionService where R: StorageRead + 'static, W: StorageWrite + 'static {
-    let client_env = Arc::new(EnvBuilder::new().name_prefix("grpc-exe-sto-").build());
     ExecutionService::new(r, w, config)
 }
 
@@ -130,15 +122,14 @@ fn commit_block(ac_client: AdmissionControlClient<CoreMemPoolClient, VMValidator
                 _ => {}
             }
             return future::ok(true);
-        })
-        .for_each(move |_| {
+        }).for_each(move |_| {
             let mut block_req = GetBlockRequest::new();
             block_req.set_max_block_size(1);
             let block_resp = mempool_client.get_block(&block_req).expect("get_block err.");
             let block = block_resp.get_block();
             let mut txns = block.get_transactions();
 
-            info!("txn size: {:?} of current block.", txns.len());
+            debug!("txn size: {:?} of current block.", txns.len());
 
             if txns.len() > 0 {
                 let mut tmp_txn_vec = vec![];
@@ -162,13 +153,10 @@ fn commit_block(ac_client: AdmissionControlClient<CoreMemPoolClient, VMValidator
                 exe_req.set_transactions(repeated);
 
                 let len = LATEST_BLOCK_HASH.lock().unwrap().len();
-                info!("block height: {:?}", len);
                 let latest_hash = LATEST_BLOCK_HASH.lock().unwrap().get(len - 1).unwrap().clone();
-
-                info!("new block hash: {:?}", latest_hash);
+                debug!("block height: {:?}, new block hash: {:?}", len, latest_hash);
 
                 exe_req.set_parent_block_id(latest_hash.to_vec());
-
 
                 exe_req.set_block_id(block_id.to_vec());
                 let exe_resp = execution_service.execute_block_inner(exe_req.clone());
@@ -201,7 +189,7 @@ fn commit_block(ac_client: AdmissionControlClient<CoreMemPoolClient, VMValidator
                 mempool_client.remove_txn(&remove_req);
             }
             Ok(())
-        }).map_err(|e| { println!("interval errored; err={:?}", e) });
+        }).map_err(|e| { warn!("interval errored; err={:?}", e) });
 
     thread::spawn(move || {
 //        let mut rt = tokio::runtime::Runtime::new().unwrap();

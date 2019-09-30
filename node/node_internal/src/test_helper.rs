@@ -3,7 +3,7 @@ use std::io::Result;
 
 use rand::prelude::*;
 
-use sgchain::star_chain_client::{ChainClient, MockChainClient};
+use sgchain::star_chain_client::{ChainClient, faucet_sync, MockChainClient};
 use crypto::test_utils::KeyPair;
 use crypto::Uniform;
 use types::account_address::AccountAddress;
@@ -25,6 +25,7 @@ use sg_config::config::NetworkConfig;
 use tokio::runtime::{Runtime, TaskExecutor};
 use crate::node::Node;
 use std::convert::identity;
+use core::borrow::Borrow;
 
 pub fn gen_node(executor: TaskExecutor, config: &NetworkConfig, client: Arc<MockChainClient>) -> (Node<MockChainClient>, AccountAddress, KeyPair<Ed25519PrivateKey, Ed25519PublicKey>) {
     let amount: u64 = 10_000_000;
@@ -32,7 +33,7 @@ pub fn gen_node(executor: TaskExecutor, config: &NetworkConfig, client: Arc<Mock
     let keypair = KeyPair::generate_for_testing(&mut rng);
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     println!("account_address: {}", account_address);
-    client.faucet(account_address, amount).unwrap();
+    faucet_sync(client.as_ref().clone(), account_address, amount);
     let mut wallet = Wallet::new_with_client(account_address, keypair.clone(), client).unwrap();
     let (network, tx, rx,close_tx) = build_network_service(config, keypair.clone());
     let identify = network.identify();
