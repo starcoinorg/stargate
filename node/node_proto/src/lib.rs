@@ -7,6 +7,7 @@ use proptest_derive::Arbitrary;
 use proto_conv::{FromProto, IntoProto};
 use star_types::script_package::ChannelScriptPackage;
 use types::account_address::AccountAddress;
+use protobuf::RepeatedField;
 
 #[derive(Clone, Debug, Eq, PartialEq, FromProto, IntoProto)]
 #[ProtoType(star_types::proto::node::OpenChannelRequest)]
@@ -257,4 +258,46 @@ impl DeployModuleResponse {
     pub fn new() -> Self {
         Self {}
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExecuteScriptRequest{
+    pub remote_addr:AccountAddress,
+    pub package_name:String,
+    pub script_name:String,
+    pub args:Vec<Vec<u8>>,
+}
+
+impl FromProto for ExecuteScriptRequest {
+    type ProtoType = star_types::proto::node::ExecuteScriptRequest;
+
+    fn from_proto(mut object: Self::ProtoType) -> Result<Self> {
+        Ok(ExecuteScriptRequest{
+            remote_addr:AccountAddress::from_proto(object.take_remote_addr())?,
+            package_name:object.take_package_name(),
+            script_name:object.take_script_name(),
+            args:object.args.to_vec(),
+        })
+    }
+}
+
+impl IntoProto for ExecuteScriptRequest {
+    type ProtoType = star_types::proto::node::ExecuteScriptRequest;
+
+    fn into_proto(self) -> Self::ProtoType {
+        let mut out = Self::ProtoType::new();
+        out.set_remote_addr(self.remote_addr.to_vec());
+        out.set_package_name(self.package_name);
+        out.set_script_name(self.script_name);
+        out.set_args(RepeatedField::from_vec(self.args));
+        out
+    }
+}
+
+
+#[derive(Clone, Debug, Eq, PartialEq, FromProto, IntoProto)]
+#[ProtoType(star_types::proto::node::ExecuteScriptResponse)]
+#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
+pub struct ExecuteScriptResponse{
+
 }

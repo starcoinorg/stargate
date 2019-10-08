@@ -29,7 +29,7 @@ use crypto::{
 use failure::prelude::*;
 use logger::prelude::*;
 use network::{Message, NetworkMessage, NetworkService};
-use node_proto::{ChannelBalanceResponse, ConnectResponse, DepositResponse, OpenChannelResponse, PayResponse, WithdrawResponse, DeployModuleResponse};
+use node_proto::{ChannelBalanceResponse, ConnectResponse, DepositResponse, OpenChannelResponse, PayResponse, WithdrawResponse, DeployModuleResponse, ExecuteScriptResponse};
 use proto_conv::{FromProto, FromProtoBytes, IntoProtoBytes};
 use sgchain::star_chain_client::ChainClient;
 use sgwallet::wallet::Wallet;
@@ -42,6 +42,8 @@ use types::{account_address::AccountAddress, account_config::AccountResource};
 
 use crate::message_processor::{MessageFuture, MessageProcessor};
 use star_types::script_package::ChannelScriptPackage;
+use types::transaction::TransactionArgument;
+
 
 pub struct Node<C: ChainClient + Send + Sync + 'static> {
     executor: TaskExecutor,
@@ -456,6 +458,53 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         resp_receiver
     }
 
+    pub fn execute_script_oneshot(
+        &self,
+        receiver_address: AccountAddress,
+        package_name: String,
+        script_name:String,
+        transaction_args:Vec<Vec<u8>>
+    ) -> futures::channel::oneshot::Receiver<Result<ExecuteScriptResponse>> {
+        let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
+
+        let f: MessageFuture;
+        match self.execute_script_async(receiver_address, package_name,script_name,transaction_args) {
+            Ok(msg_future) => {
+                f = msg_future;
+            }
+            Err(e) => {
+                resp_sender
+                    .send(Err(failure::Error::from(e)))
+                    .expect("Failed to send error message.");
+                return resp_receiver;
+            }
+        };
+
+        let f_to_channel = async {
+            match f.compat().await {
+                Ok(sender) => resp_sender
+                    .send(Ok(ExecuteScriptResponse {}))
+                    .expect("Did open channel processor thread panic?"),
+                Err(e) => resp_sender
+                    .send(Err(failure::Error::from(e)))
+                    .expect("Failed to send error message."),
+            }
+        };
+        self.executor
+            .spawn(f_to_channel.boxed().unit_error().compat());
+        resp_receiver
+    }
+
+    pub fn execute_script_async(
+        &self,
+        receiver_address: AccountAddress,
+        package_name: String,
+        script_name:String,
+        transaction_args:Vec<Vec<u8>>
+    ) -> Result<MessageFuture> {
+        unimplemented!()
+    }
+
     async fn start(
         node_inner: Arc<Mutex<NodeInner<C>>>,
         mut receiver: UnboundedReceiver<NetworkMessage>,
@@ -675,6 +724,10 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         amount: u64,
     ) -> Result<MessageFuture> {
         let off_chain_pay_tx = self.wallet.transfer(receiver_address, amount)?;
+        self.send_channel_request(receiver_address, off_chain_pay_tx)
+    }
+
+    fn send_channel_request(&mut self, receiver_address: AccountAddress, off_chain_pay_tx: ChannelTransactionRequest) -> Result<MessageFuture> {
         let sender = self.sender.clone();
         let hash_value = off_chain_pay_tx.request_id();
         let off_chain_pay_msg = ChannelTransactionRequestMessage {
@@ -684,7 +737,6 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             off_chain_pay_msg.into_proto_bytes().unwrap(),
             MessageType::ChannelTransactionRequestMessage,
         );
-
         self.sender.unbounded_send(NetworkMessage {
             peer_id: receiver_address,
             data: msg.to_vec(),
@@ -694,8 +746,18 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         self.message_processor
             .add_future(hash_value.clone(), tx.clone());
         self.future_timeout(hash_value, self.default_future_timeout);
-
         Ok(message_future)
+    }
+
+    fn execute_script(
+        &mut self,
+        receiver_address: AccountAddress,
+        package_name: String,
+        script_name:String,
+        transaction_args:Vec<TransactionArgument>
+    ) -> Result<MessageFuture> {
+        let script_transaction=self.wallet.execute_script(receiver_address,&package_name,&script_name,transaction_args)?;
+        self.send_channel_request(receiver_address, script_transaction)
     }
 
     fn install_package(&self, channel_script_package: ChannelScriptPackage) -> Result<()> {

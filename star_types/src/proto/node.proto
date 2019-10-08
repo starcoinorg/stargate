@@ -22,6 +22,8 @@ service Node {
     rpc InstallChannelScriptPackage(InstallChannelScriptPackageRequest) returns (InstallChannelScriptPackageResponse) {}
 
     rpc DeployModule(DeployModuleRequest) returns (DeployModuleResponse){}
+
+    rpc ExecuteScript(ExecuteScriptRequest) returns (ExecuteScriptResponse) {}
 }
   
 message OpenChannelRequest {
@@ -101,4 +103,15 @@ message DeployModuleRequest{
 }
 
 message DeployModuleResponse{
+}
+
+message ExecuteScriptRequest{
+    bytes remote_addr=1;
+    string package_name=2;
+    string script_name=3;
+    repeated bytes args=4;
+}
+
+message ExecuteScriptResponse{
+
 }

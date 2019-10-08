@@ -10,12 +10,7 @@ use grpc_helpers::{
 };
 use grpcio::{EnvBuilder, RpcStatus, RpcStatusCode};
 use node_internal::node::Node as Node_Internal;
-use node_proto::{
-    ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse, DepositRequest,
-    DepositResponse, InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse,
-    OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest,
-    WithdrawResponse,DeployModuleRequest,DeployModuleResponse
-};
+use node_proto::{ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse, DepositRequest, DepositResponse, InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse, OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest, WithdrawResponse, DeployModuleRequest, DeployModuleResponse, ExecuteScriptRequest};
 use proto_conv::{FromProto, IntoProto};
 use sg_config::config::NodeConfig;
 use sgchain::star_chain_client::ChainClient;
@@ -170,6 +165,15 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> star_types::proto::node_grp
                      sink: ::grpcio::UnarySink<star_types::proto::node::DeployModuleResponse>){
         let request = DeployModuleRequest::from_proto(req).unwrap();
         let rx = self.node.deploy_package_oneshot(request.module_bytes);
+        let fut = process_response(rx, sink);
+        ctx.spawn(fut.boxed().unit_error().compat());
+    }
+
+    fn execute_script(&mut self, ctx: ::grpcio::RpcContext,
+                      req: star_types::proto::node::ExecuteScriptRequest,
+                      sink: ::grpcio::UnarySink<star_types::proto::node::ExecuteScriptResponse>) {
+        let request = ExecuteScriptRequest::from_proto(req).unwrap();
+        let rx = self.node.execute_script_oneshot(request.remote_addr,request.package_name,request.script_name,request.args);
         let fut = process_response(rx, sink);
         ctx.spawn(fut.boxed().unit_error().compat());
     }
