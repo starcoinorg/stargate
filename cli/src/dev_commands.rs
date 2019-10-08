@@ -114,7 +114,7 @@ impl Command for DevCommandPackageDeploy {
         vec!["package deploy", "pd"]
     }
     fn get_params_help(&self) -> &'static str {
-        "<file_path>"
+        "<dir_path> <module_file_name> <scripts_dir_name>"
     }
     fn get_description(&self) -> &'static str {
         "Deploy move package"
