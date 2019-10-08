@@ -4,11 +4,7 @@ use cli_wallet::cli_wallet::WalletLibrary;
 use failure::prelude::*;
 use grpcio::EnvBuilder;
 use node_client::NodeClient;
-use node_proto::{
-    ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse, DepositRequest,
-    DepositResponse, OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse,
-    WithdrawRequest, WithdrawResponse,
-};
+use node_proto::{ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse, DepositRequest, DepositResponse, OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest, WithdrawResponse, DeployModuleRequest, InstallChannelScriptPackageRequest};
 use sgchain::star_chain_client::{faucet_sync, ChainClient, StarChainClient};
 use std::{
     fs,
@@ -27,6 +23,12 @@ use types::{
     },
     transaction_helpers::{create_signed_txn, TransactionSigner},
 };
+use sgcompiler::{Compiler, StateViewModuleLoader};
+use star_types::script_package::ChannelScriptPackage;
+use sgchain::{
+    client_state_view::ClientStateView,
+};
+use std::path::Path;
 
 const GAS_UNIT_PRICE: u64 = 0;
 const MAX_GAS_AMOUNT: u64 = 100_000;
@@ -232,6 +234,27 @@ impl ClientProxy {
             space_delim_strings,
             TransactionPayload::Script(Script::new(script_bytes, arguments)),
         )
+    }
+
+    pub fn deploy_package(&mut self, space_delim_strings: &[&str]) -> Result<()> {
+        let dir_path = space_delim_strings[1];
+        let module_name = space_delim_strings[2];
+        let scripts_dir = space_delim_strings[3];
+
+        let path =  Path::new(dir_path);
+        let module_source = std::fs::read_to_string(path.join(module_name)).unwrap();
+
+        let account=self.get_account().unwrap().clone();
+        let client_state_view = ClientStateView::new(None, &self.chain_client);
+        let module_loader = StateViewModuleLoader::new(&client_state_view);
+        let compiler = Compiler::new_with_module_loader(account, &module_loader);
+        let module_byte_code = compiler.compile_module(module_source.as_str())?;
+
+        let _response=self.node_client.deploy_module(DeployModuleRequest::new(module_byte_code))?;
+
+        let package = compiler.compile_package(path.join(scripts_dir))?;
+        self.node_client.install_channel_script_package(InstallChannelScriptPackageRequest::new(package))?;
+        Ok(())
     }
 
     /// Craft a transaction request.

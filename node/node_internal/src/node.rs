@@ -29,10 +29,7 @@ use crypto::{
 use failure::prelude::*;
 use logger::prelude::*;
 use network::{Message, NetworkMessage, NetworkService};
-use node_proto::{
-    ChannelBalanceResponse, ConnectResponse, DepositResponse, OpenChannelResponse, PayResponse,
-    WithdrawResponse,
-};
+use node_proto::{ChannelBalanceResponse, ConnectResponse, DepositResponse, OpenChannelResponse, PayResponse, WithdrawResponse, DeployModuleResponse};
 use proto_conv::{FromProto, FromProtoBytes, IntoProtoBytes};
 use sgchain::star_chain_client::ChainClient;
 use sgwallet::wallet::Wallet;
@@ -442,6 +439,19 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             .lock()
             .unwrap()
             .install_package(channel_script_package)
+    }
+
+    pub fn deploy_package_oneshot(
+        &self,
+        module_code:Vec<u8>,
+    ) -> futures::channel::oneshot::Receiver<Result<DeployModuleResponse>> {
+        let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
+        let wallet=self.node_inner.clone().lock().unwrap().wallet.clone();
+        let f= async {
+            let proof=wallet.deploy_module(module_code).await.unwrap();
+            resp_sender.send(Ok(DeployModuleResponse::new()));
+        };
+        resp_receiver
     }
 
     async fn start(

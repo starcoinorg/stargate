@@ -40,6 +40,8 @@ admission_control_service = { path = "../libra/admission_control/admission_contr
 admission_control_proto = { path = "../libra/admission_control/admission_control_proto" }
 sgchain = { path = "../sgchain" }
 star_types = { path = "../star_types" }
+sgcompiler = { path = "../sgcompiler" }
+
 
 [dev-dependencies]
 crypto = { path = "../libra/crypto/crypto", features = ["testing"] }

@@ -1,11 +1,6 @@
 use failure::{bail, Result};
 use grpcio::{ChannelBuilder, Environment};
-use node_proto::{
-    ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse, DepositRequest,
-    DepositResponse, InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse,
-    OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest,
-    WithdrawResponse,
-};
+use node_proto::{ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse, DepositRequest, DepositResponse, InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse, OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest, WithdrawResponse, DeployModuleRequest, DeployModuleResponse};
 use proto_conv::{FromProto, IntoProto};
 use star_types::proto::node_grpc;
 use std::sync::Arc;
@@ -84,4 +79,18 @@ impl NodeClient {
             Err(err) => bail!("GRPC error: {}", err),
         }
     }
+
+    pub fn deploy_module(
+        &self,
+        request: DeployModuleRequest,
+    ) -> Result<DeployModuleResponse> {
+        let proto_request = request.into_proto();
+        match self.client.deploy_module(&proto_request) {
+            Ok(proto_response) => Ok(DeployModuleResponse::from_proto(
+                proto_response,
+            )?),
+            Err(err) => bail!("GRPC error: {}", err),
+        }
+    }
+
 }

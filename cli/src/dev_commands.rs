@@ -18,6 +18,7 @@ impl Command for DevCommand {
             Box::new(DevCommandCompile {}),
             Box::new(DevCommandPublish {}),
             Box::new(DevCommandExecute {}),
+            Box::new(DevCommandPackageDeploy{}),
         ];
         subcommand_execute(&params[0], commands, client, &params[1..]);
     }
@@ -100,6 +101,32 @@ impl Command for DevCommandExecute {
         }
         match client.execute_script(params) {
             Ok(_) => println!("Successfully finished execution"),
+            Err(e) => println!("{}", e),
+        }
+    }
+}
+
+/// Sub command to compile move program
+pub struct DevCommandPackageDeploy {}
+
+impl Command for DevCommandPackageDeploy {
+    fn get_aliases(&self) -> Vec<&'static str> {
+        vec!["package deploy", "pd"]
+    }
+    fn get_params_help(&self) -> &'static str {
+        "<file_path>"
+    }
+    fn get_description(&self) -> &'static str {
+        "Deploy move package"
+    }
+    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+        if params.len() < 2 {
+            println!("Invalid number of arguments for compilation");
+            return;
+        }
+        println!(">> Deploy program");
+        match client.deploy_package(params) {
+            Ok(path) => println!("Successfully compiled a program "),
             Err(e) => println!("{}", e),
         }
     }

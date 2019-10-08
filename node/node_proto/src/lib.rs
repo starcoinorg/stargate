@@ -218,12 +218,42 @@ pub struct InstallChannelScriptPackageRequest {
     pub channel_script_package: ChannelScriptPackage,
 }
 
+impl InstallChannelScriptPackageRequest{
+    pub fn new(channel_script_package: ChannelScriptPackage) -> Self {
+        Self {channel_script_package}
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, FromProto, IntoProto)]
 #[ProtoType(star_types::proto::node::InstallChannelScriptPackageResponse)]
 #[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct InstallChannelScriptPackageResponse {}
 
 impl InstallChannelScriptPackageResponse {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, FromProto, IntoProto)]
+#[ProtoType(star_types::proto::node::DeployModuleRequest)]
+pub struct DeployModuleRequest {
+    pub module_bytes: Vec<u8>,
+}
+
+impl DeployModuleRequest{
+    pub fn new(module_bytes: Vec<u8>) -> Self {
+        Self {module_bytes}
+    }
+}
+
+
+#[derive(Clone, Debug, Eq, PartialEq, FromProto, IntoProto)]
+#[ProtoType(star_types::proto::node::DeployModuleResponse)]
+#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
+pub struct DeployModuleResponse {}
+
+impl DeployModuleResponse {
     pub fn new() -> Self {
         Self {}
     }

@@ -20,6 +20,8 @@ service Node {
     rpc ChannelBalance(ChannelBalanceRequest) returns (ChannelBalanceResponse) {}
 
     rpc InstallChannelScriptPackage(InstallChannelScriptPackageRequest) returns (InstallChannelScriptPackageResponse) {}
+
+    rpc DeployModule(DeployModuleRequest) returns (DeployModuleResponse){}
 }
   
 message OpenChannelRequest {
@@ -92,4 +94,11 @@ message InstallChannelScriptPackageRequest{
 
 message InstallChannelScriptPackageResponse{
 
+}
+
+message DeployModuleRequest{
+    bytes module_bytes=1;
+}
+
+message DeployModuleResponse{
 }

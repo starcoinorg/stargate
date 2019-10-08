@@ -14,7 +14,7 @@ use node_proto::{
     ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse, DepositRequest,
     DepositResponse, InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse,
     OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest,
-    WithdrawResponse,
+    WithdrawResponse,DeployModuleRequest,DeployModuleResponse
 };
 use proto_conv::{FromProto, IntoProto};
 use sg_config::config::NodeConfig;
@@ -163,6 +163,17 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> star_types::proto::node_grp
         let resp = InstallChannelScriptPackageResponse::new().into_proto();
         provide_grpc_response(Ok(resp), ctx, sink);
     }
+
+    fn deploy_module(&mut self,
+                     ctx: ::grpcio::RpcContext,
+                     req: star_types::proto::node::DeployModuleRequest,
+                     sink: ::grpcio::UnarySink<star_types::proto::node::DeployModuleResponse>){
+        let request = DeployModuleRequest::from_proto(req).unwrap();
+        let rx = self.node.deploy_package_oneshot(request.module_bytes);
+        let fut = process_response(rx, sink);
+        ctx.spawn(fut.boxed().unit_error().compat());
+    }
+
 }
 
 async fn process_response<T>(
