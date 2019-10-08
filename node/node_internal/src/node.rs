@@ -447,10 +447,12 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
     ) -> futures::channel::oneshot::Receiver<Result<DeployModuleResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
         let wallet=self.node_inner.clone().lock().unwrap().wallet.clone();
-        let f= async {
+        let f= async move{
             let proof=wallet.deploy_module(module_code).await.unwrap();
             resp_sender.send(Ok(DeployModuleResponse::new()));
         };
+        self.executor
+            .spawn(f.boxed().unit_error().compat());
         resp_receiver
     }
 

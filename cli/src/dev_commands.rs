@@ -126,7 +126,7 @@ impl Command for DevCommandPackageDeploy {
         }
         println!(">> Deploy program");
         match client.deploy_package(params) {
-            Ok(path) => println!("Successfully compiled a program "),
+            Ok(path) => println!("Successfully deployed package "),
             Err(e) => println!("{}", e),
         }
     }
