@@ -56,7 +56,9 @@ impl Command for AccountCommandMint {
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
         if params.len() < 2 {
             println!("Invalid number of arguments for mint");
+            return;
         }
+
         match client.faucet(params[1].parse::<u64>().unwrap()) {
             Ok(result) => println!("mint success"),
             Err(e) => report_error("Error mint account", e),

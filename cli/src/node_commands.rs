@@ -47,13 +47,16 @@ impl Command for NodeCommandOpenChannel {
     fn get_aliases(&self) -> Vec<&'static str> {
         vec!["open channel ", "oc"]
     }
+    fn get_params_help(&self) -> &'static str {
+        "<remote_addr> <local_amount> <remote_amount>"
+    }
     fn get_description(&self) -> &'static str {
         "open channel with remote addr"
     }
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
         match client.open_channel(params, true) {
             Ok(result) => println!("open channel success"),
-            Err(e) => report_error("Error pay account", e),
+            Err(e) => report_error("Error open channel", e),
         }
     }
 }
