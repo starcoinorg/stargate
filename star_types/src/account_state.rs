@@ -86,7 +86,11 @@ impl AccountState {
         self.state
     }
 
-    pub fn filter_channel_state(&self) -> HashMap<AccountAddress, ChannelState> {
+    // filter out channel state, pass in sender's account_address
+    pub fn filter_channel_state(
+        &self,
+        account_address: AccountAddress,
+    ) -> HashMap<AccountAddress, ChannelState> {
         self.state
             .iter()
             .map(|(k, v)| (DataPath::from(k).expect("Parse DataPath should success"), v))
@@ -102,7 +106,7 @@ impl AccountState {
                 for (k, v) in group {
                     state.insert(k.to_vec(), v.clone());
                 }
-                (participant, ChannelState::new(participant, state))
+                (participant, ChannelState::new(account_address, state))
             })
             .collect()
     }
@@ -184,7 +188,7 @@ mod tests {
             DataPath::channel_account_path(participant1),
             ChannelAccountResource::default().to_bytes(),
         );
-        let channel_states = account_state.filter_channel_state();
+        let channel_states = account_state.filter_channel_state(AccountAddress::random());
         assert_eq!(channel_states.len(), 2);
         assert_eq!(channel_states.get(&participant0).unwrap().len(), 1);
         assert_eq!(channel_states.get(&participant1).unwrap().len(), 1);

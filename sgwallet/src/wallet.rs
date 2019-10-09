@@ -474,6 +474,7 @@ where
                     let watch_future = self
                         .client
                         .watch_transaction(sender, signed_txn.sequence_number());
+                    // FIXME: should not panic here, handle timeout situation.
                     watch_future.await?.expect("proof is none.")
                 };
                 //self.check_output(&output)?;
@@ -511,6 +512,7 @@ where
             }
             _ => bail!("ChannelTransaction request and response type not match."),
         };
+        info!("success apply txn: {}", raw_txn_hash);
         Ok(gas)
     }
 

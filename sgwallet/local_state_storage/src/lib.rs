@@ -46,14 +46,14 @@ where
 
     fn refresh_channels(&mut self) -> Result<()> {
         let account_state = self.get_account_state(self.account, None)?;
-        let my_channel_states = account_state.filter_channel_state();
+        let my_channel_states = account_state.filter_channel_state(self.account);
         let version = account_state.version();
         for (participant, my_channel_state) in my_channel_states {
             if !self.channels.contains_key(&participant) {
                 let participant_account_state =
                     self.get_account_state(participant, Some(version))?;
                 let mut participant_channel_states =
-                    participant_account_state.filter_channel_state();
+                    participant_account_state.filter_channel_state(participant);
                 let participant_channel_state = participant_channel_states
                     .remove(&self.account)
                     .ok_or(format_err!(

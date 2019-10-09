@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use crate::{
     channel_transaction::{
         ChannelOp, ChannelTransactionRequest, ChannelTransactionRequestAndOutput,
@@ -12,6 +10,7 @@ use crate::{
 use atomic_refcell::AtomicRefCell;
 use crypto::ed25519::Ed25519Signature;
 use failure::prelude::*;
+use std::collections::{BTreeMap, HashSet};
 use types::{
     access_path::{AccessPath, DataPath},
     account_address::AccountAddress,
@@ -51,6 +50,22 @@ impl ChannelState {
             address,
             state: AtomicRefCell::new(state),
         }
+    }
+
+    pub fn paths(&self) -> Result<HashSet<DataPath>> {
+        let paths = self
+            .state
+            .borrow()
+            .keys()
+            .map(|k| DataPath::from(k))
+            .try_fold(HashSet::new(), |mut s, e| {
+                e.map(|dp| {
+                    s.insert(dp);
+                    s
+                })
+            });
+
+        paths
     }
 
     pub fn address(&self) -> AccountAddress {
