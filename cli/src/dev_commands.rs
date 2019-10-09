@@ -19,6 +19,7 @@ impl Command for DevCommand {
             Box::new(DevCommandPublish {}),
             Box::new(DevCommandExecute {}),
             Box::new(DevCommandPackageDeploy{}),
+            Box::new(DevCommandExecuteInstalledScript{}),
         ];
         subcommand_execute(&params[0], commands, client, &params[1..]);
     }
