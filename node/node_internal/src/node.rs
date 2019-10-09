@@ -454,7 +454,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         let wallet=self.node_inner.clone().lock().unwrap().wallet.clone();
         let f= async move{
             let proof=wallet.deploy_module(module_code).await.unwrap();
-            resp_sender.send(Ok(DeployModuleResponse::new()));
+            resp_sender.send(Ok(DeployModuleResponse::new(proof)));
         };
         self.executor
             .spawn(f.boxed().unit_error().compat());

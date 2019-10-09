@@ -18,7 +18,8 @@ impl Command for DevCommand {
             Box::new(DevCommandCompile {}),
             Box::new(DevCommandPublish {}),
             Box::new(DevCommandExecute {}),
-            Box::new(DevCommandPackageDeploy{}),
+            Box::new(DevCommandDeployModule{}),
+            Box::new(DevCommandInstallPackage{}),
             Box::new(DevCommandExecuteInstalledScript{}),
         ];
         subcommand_execute(&params[0], commands, client, &params[1..]);
@@ -108,14 +109,14 @@ impl Command for DevCommandExecute {
 }
 
 /// Sub command to compile move program
-pub struct DevCommandPackageDeploy {}
+pub struct DevCommandDeployModule {}
 
-impl Command for DevCommandPackageDeploy {
+impl Command for DevCommandDeployModule {
     fn get_aliases(&self) -> Vec<&'static str> {
-        vec!["package deploy", "pd"]
+        vec!["deploy module", "dm"]
     }
     fn get_params_help(&self) -> &'static str {
-        "<dir_path> <module_file_name> <scripts_dir_name>"
+        "<module_path> "
     }
     fn get_description(&self) -> &'static str {
         "Deploy move package"
@@ -125,8 +126,33 @@ impl Command for DevCommandPackageDeploy {
             println!("Invalid number of arguments for compilation");
             return;
         }
-        println!(">> Deploy program");
-        match client.deploy_package(params) {
+        println!(">> Deploy module");
+        match client.deploy_module(params) {
+            Ok(resp) => println!("Successfully deployed package {:?}",resp),
+            Err(e) => println!("{}", e),
+        }
+    }
+}
+
+pub struct DevCommandInstallPackage {}
+
+impl Command for DevCommandInstallPackage {
+    fn get_aliases(&self) -> Vec<&'static str> {
+        vec!["install package", "ip"]
+    }
+    fn get_params_help(&self) -> &'static str {
+        "<dir_path>"
+    }
+    fn get_description(&self) -> &'static str {
+        "Install move package"
+    }
+    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+        if params.len() < 2 {
+            println!("Invalid number of arguments for compilation");
+            return;
+        }
+        println!(">> Install script");
+        match client.install_script(params) {
             Ok(path) => println!("Successfully deployed package "),
             Err(e) => println!("{}", e),
         }
@@ -151,9 +177,9 @@ impl Command for DevCommandExecuteInstalledScript {
             println!("Invalid number of arguments for compilation");
             return;
         }
-        println!(">> Deploy program");
+        println!(">> Execute script");
         match client.execute_installed_script(params) {
-            Ok(path) => println!("Successfully deployed package "),
+            Ok(path) => println!("Successfully execute script "),
             Err(e) => println!("{}", e),
         }
     }

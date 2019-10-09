@@ -8,6 +8,7 @@ use proto_conv::{FromProto, IntoProto};
 use star_types::script_package::ChannelScriptPackage;
 use types::account_address::AccountAddress;
 use protobuf::RepeatedField;
+use types::transaction::SignedTransactionWithProof;
 
 #[derive(Clone, Debug, Eq, PartialEq, FromProto, IntoProto)]
 #[ProtoType(star_types::proto::node::OpenChannelRequest)]
@@ -252,11 +253,13 @@ impl DeployModuleRequest{
 #[derive(Clone, Debug, Eq, PartialEq, FromProto, IntoProto)]
 #[ProtoType(star_types::proto::node::DeployModuleResponse)]
 #[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
-pub struct DeployModuleResponse {}
+pub struct DeployModuleResponse {
+    pub transaction_with_proof :SignedTransactionWithProof,
+}
 
 impl DeployModuleResponse {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new( transaction_with_proof :SignedTransactionWithProof) -> Self {
+        Self {transaction_with_proof}
     }
 }
 
