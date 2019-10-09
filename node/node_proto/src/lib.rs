@@ -268,6 +268,17 @@ pub struct ExecuteScriptRequest{
     pub args:Vec<Vec<u8>>,
 }
 
+impl ExecuteScriptRequest {
+    pub fn new(remote_addr:AccountAddress,package_name:String, script_name:String, args:Vec<Vec<u8>>)->Self{
+        Self{
+            remote_addr,
+            package_name,
+            script_name,
+            args,
+        }
+    }
+}
+
 impl FromProto for ExecuteScriptRequest {
     type ProtoType = star_types::proto::node::ExecuteScriptRequest;
 

@@ -131,3 +131,29 @@ impl Command for DevCommandPackageDeploy {
         }
     }
 }
+
+/// Sub command to compile move program
+pub struct DevCommandExecuteInstalledScript {}
+
+impl Command for DevCommandExecuteInstalledScript {
+    fn get_aliases(&self) -> Vec<&'static str> {
+        vec!["package execute", "pe"]
+    }
+    fn get_params_help(&self) -> &'static str {
+        "remote_address package_name script_name args..."
+    }
+    fn get_description(&self) -> &'static str {
+        "Deploy move package"
+    }
+    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+        if params.len() < 3 {
+            println!("Invalid number of arguments for compilation");
+            return;
+        }
+        println!(">> Deploy program");
+        match client.execute_installed_script(params) {
+            Ok(path) => println!("Successfully deployed package "),
+            Err(e) => println!("{}", e),
+        }
+    }
+}

@@ -41,7 +41,7 @@ admission_control_proto = { path = "../libra/admission_control/admission_control
 sgchain = { path = "../sgchain" }
 star_types = { path = "../star_types" }
 sgcompiler = { path = "../sgcompiler" }
-
+canonical_serialization = { path = "../libra/common/canonical_serialization" }
 
 [dev-dependencies]
 crypto = { path = "../libra/crypto/crypto", features = ["testing"] }

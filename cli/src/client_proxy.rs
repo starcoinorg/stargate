@@ -8,7 +8,7 @@ use node_proto::{
     ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse,
     DeployModuleRequest, DepositRequest, DepositResponse, InstallChannelScriptPackageRequest,
     OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest,
-    WithdrawResponse,
+    WithdrawResponse, ExecuteScriptRequest,
 };
 use sgchain::{
     client_state_view::ClientStateView,
@@ -34,6 +34,7 @@ use types::{
     },
     transaction_helpers::{create_signed_txn, TransactionSigner},
 };
+use canonical_serialization::{CanonicalSerialize, CanonicalSerializer, SimpleSerializer};
 
 const GAS_UNIT_PRICE: u64 = 0;
 const MAX_GAS_AMOUNT: u64 = 100_000;
@@ -266,6 +267,26 @@ impl ClientProxy {
         let package = compiler.compile_package(path.join(scripts_dir))?;
         self.node_client
             .install_channel_script_package(InstallChannelScriptPackageRequest::new(package))?;
+        Ok(())
+    }
+
+    pub fn execute_installed_script(&mut self, space_delim_strings: &[&str])->Result<()>{
+        let remote_addr=AccountAddress::from_hex_literal(space_delim_strings[1])?;
+        let package_name = space_delim_strings[2];
+        let script_name = space_delim_strings[3];
+
+        let arguments: Vec<_> = space_delim_strings[4..]
+            .iter()
+            .filter_map( |arg| {
+                let mut serializer = SimpleSerializer::<Vec<u8>>::new();
+                let arg=parse_as_transaction_argument(arg).ok().unwrap();
+                arg.serialize(&mut serializer).unwrap();
+                Some(serializer.get_output())
+            })
+            .collect();
+
+        let execute_request=ExecuteScriptRequest::new(remote_addr,package_name.to_string(),script_name.to_string(),arguments);
+        let _response=self.node_client.execute_script(execute_request)?;
         Ok(())
     }
 

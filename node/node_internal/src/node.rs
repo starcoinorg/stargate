@@ -43,6 +43,9 @@ use types::{account_address::AccountAddress, account_config::AccountResource};
 use crate::message_processor::{MessageFuture, MessageProcessor};
 use star_types::script_package::ChannelScriptPackage;
 use types::transaction::TransactionArgument;
+use canonical_serialization::{
+    CanonicalDeserialize, CanonicalDeserializer,SimpleDeserializer
+};
 
 
 pub struct Node<C: ChainClient + Send + Sync + 'static> {
@@ -502,7 +505,19 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         script_name:String,
         transaction_args:Vec<Vec<u8>>
     ) -> Result<MessageFuture> {
-        unimplemented!()
+        let mut trans_args = Vec::new();
+        for arg in transaction_args {
+            let mut deserializer = SimpleDeserializer::new(&arg);
+            let transaction_arg=deserializer.decode_struct::<TransactionArgument>()?;
+            trans_args.push(transaction_arg);
+        }
+        let f = self
+            .node_inner
+            .clone()
+            .lock()
+            .unwrap()
+            .execute_script(receiver_address, package_name,script_name,trans_args);
+        f
     }
 
     async fn start(
