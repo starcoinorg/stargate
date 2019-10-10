@@ -1,10 +1,16 @@
 use crate::{commands::*, AccountData, AccountStatus};
 
+use canonical_serialization::{CanonicalSerialize, CanonicalSerializer, SimpleSerializer};
 use cli_wallet::cli_wallet::WalletLibrary;
 use failure::prelude::*;
 use grpcio::EnvBuilder;
 use node_client::NodeClient;
-use node_proto::{ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse, DeployModuleRequest, DepositRequest, DepositResponse, InstallChannelScriptPackageRequest, OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest, WithdrawResponse, ExecuteScriptRequest, DeployModuleResponse};
+use node_proto::{
+    ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse,
+    DeployModuleRequest, DeployModuleResponse, DepositRequest, DepositResponse,
+    ExecuteScriptRequest, InstallChannelScriptPackageRequest, OpenChannelRequest,
+    OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest, WithdrawResponse,
+};
 use sgchain::{
     client_state_view::ClientStateView,
     star_chain_client::{faucet_sync, ChainClient, StarChainClient},
@@ -29,7 +35,6 @@ use types::{
     },
     transaction_helpers::{create_signed_txn, TransactionSigner},
 };
-use canonical_serialization::{CanonicalSerialize, CanonicalSerializer, SimpleSerializer};
 
 const GAS_UNIT_PRICE: u64 = 0;
 const MAX_GAS_AMOUNT: u64 = 100_000;
@@ -92,6 +97,10 @@ impl ClientProxy {
         space_delim_strings: &[&str],
         is_blocking: bool,
     ) -> Result<WithdrawResponse> {
+        ensure!(
+            space_delim_strings.len() == 4,
+            "Invalid number of arguments for withdraw"
+        );
         let response = self.node_client.withdraw(WithdrawRequest {
             remote_addr: AccountAddress::from_hex_literal(space_delim_strings[1])?,
             local_amount: space_delim_strings[2].parse::<u64>()?,
@@ -105,6 +114,10 @@ impl ClientProxy {
         space_delim_strings: &[&str],
         is_blocking: bool,
     ) -> Result<DepositResponse> {
+        ensure!(
+            space_delim_strings.len() == 4,
+            "Invalid number of arguments for deposit"
+        );
         let response = self.node_client.deposit(DepositRequest {
             remote_addr: AccountAddress::from_hex_literal(space_delim_strings[1])?,
             local_amount: space_delim_strings[2].parse::<u64>()?,
@@ -118,6 +131,10 @@ impl ClientProxy {
         space_delim_strings: &[&str],
         _is_blocking: bool,
     ) -> Result<PayResponse> {
+        ensure!(
+            space_delim_strings.len() == 3,
+            "Invalid number of arguments for offchain pay"
+        );
         let response = self.node_client.pay(PayRequest {
             remote_addr: AccountAddress::from_hex_literal(space_delim_strings[1])?,
             amount: space_delim_strings[2].parse::<u64>()?,
@@ -130,6 +147,10 @@ impl ClientProxy {
         space_delim_strings: &[&str],
         is_blocking: bool,
     ) -> Result<ConnectResponse> {
+        ensure!(
+            space_delim_strings.len() == 3,
+            "Invalid number of arguments for connect"
+        );
         let response = self.node_client.connect(ConnectRequest {
             remote_addr: AccountAddress::from_hex_literal(space_delim_strings[1])?,
             remote_ip: space_delim_strings[2].to_string(),
@@ -142,6 +163,10 @@ impl ClientProxy {
         space_delim_strings: &[&str],
         is_blocking: bool,
     ) -> Result<ChannelBalanceResponse> {
+        ensure!(
+            space_delim_strings.len() == 2,
+            "Invalid number of arguments for channel balance"
+        );
         let response = self.node_client.channel_balance(ChannelBalanceRequest {
             remote_addr: AccountAddress::from_hex_literal(space_delim_strings[1])?,
         })?;
@@ -275,23 +300,28 @@ impl ClientProxy {
         Ok(())
     }
 
-    pub fn execute_installed_script(&mut self, space_delim_strings: &[&str])->Result<()>{
-        let remote_addr=AccountAddress::from_hex_literal(space_delim_strings[1])?;
+    pub fn execute_installed_script(&mut self, space_delim_strings: &[&str]) -> Result<()> {
+        let remote_addr = AccountAddress::from_hex_literal(space_delim_strings[1])?;
         let package_name = space_delim_strings[2];
         let script_name = space_delim_strings[3];
 
         let arguments: Vec<_> = space_delim_strings[4..]
             .iter()
-            .filter_map( |arg| {
+            .filter_map(|arg| {
                 let mut serializer = SimpleSerializer::<Vec<u8>>::new();
-                let arg=parse_as_transaction_argument(arg).ok().unwrap();
+                let arg = parse_as_transaction_argument(arg).ok().unwrap();
                 arg.serialize(&mut serializer).unwrap();
                 Some(serializer.get_output())
             })
             .collect();
 
-        let execute_request=ExecuteScriptRequest::new(remote_addr,package_name.to_string(),script_name.to_string(),arguments);
-        let _response=self.node_client.execute_script(execute_request)?;
+        let execute_request = ExecuteScriptRequest::new(
+            remote_addr,
+            package_name.to_string(),
+            script_name.to_string(),
+            arguments,
+        );
+        let _response = self.node_client.execute_script(execute_request)?;
         Ok(())
     }
 

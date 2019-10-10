@@ -30,6 +30,10 @@ impl Command for NodeCommandConnect {
     fn get_aliases(&self) -> Vec<&'static str> {
         vec!["connect", "c"]
     }
+    fn get_params_help(&self) -> &'static str {
+        "<remote_addr> <remote_ip>"
+    }
+
     fn get_description(&self) -> &'static str {
         "connect to  remote addr"
     }
@@ -67,6 +71,9 @@ impl Command for NodeCommandDepositChannel {
     fn get_aliases(&self) -> Vec<&'static str> {
         vec!["deposit", "d"]
     }
+    fn get_params_help(&self) -> &'static str {
+        "<remote_addr> <local_amount> <remote_amount>"
+    }
     fn get_description(&self) -> &'static str {
         "deposit money to channel"
     }
@@ -87,7 +94,9 @@ impl Command for NodeCommandPay {
     fn get_description(&self) -> &'static str {
         "off chain pay"
     }
-
+    fn get_params_help(&self) -> &'static str {
+        "<remote_addr> <amount>"
+    }
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
         match client.off_chain_pay(params, true) {
             Ok(result) => println!("pay success"),
@@ -101,6 +110,9 @@ pub struct NodeCommandWithdrawChannel {}
 impl Command for NodeCommandWithdrawChannel {
     fn get_aliases(&self) -> Vec<&'static str> {
         vec!["withdraw", "wd"]
+    }
+    fn get_params_help(&self) -> &'static str {
+        "<remote_addr> <local_amount> <remote_amount>"
     }
     fn get_description(&self) -> &'static str {
         "withdraw money from channel"
@@ -121,6 +133,9 @@ impl Command for NodeCommandChannelBalance {
     }
     fn get_description(&self) -> &'static str {
         "get balance of channel"
+    }
+    fn get_params_help(&self) -> &'static str {
+        "<remote_addr>"
     }
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
         match client.channel_balance(params, true) {
