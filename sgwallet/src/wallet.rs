@@ -680,21 +680,34 @@ where
         }
     }
 
-    pub fn find_offchain_txn(&self,hash:HashValue,count:u32)->Result<Vec<(HashValue,u8)>>{
+    pub fn find_offchain_txn(&self,hash:Option<HashValue>,count:u32)->Result<Vec<(HashValue,u8)>>{
         let tnxs=self.offchain_transactions.borrow();
         let mut count_num = count;
         let mut find_data = false;
         let mut data=Vec::new();
-        for (hash_item,res) in tnxs.iter(){
-            if(hash.eq(hash_item)){
-                find_data=true;
-                continue;
-            }
-            if(find_data&&count_num>0){
-                data.push((*hash_item,*res));
-                count_num=count_num-1;
-                if(count_num==0){
-                    break;
+        match hash{
+            Some(hash)=>{
+                for (hash_item,res) in tnxs.iter(){
+                    if(hash.eq(hash_item)){
+                        find_data=true;
+                        continue;
+                    }
+                    if(find_data&&count_num>0){
+                        data.push((*hash_item,*res));
+                        count_num=count_num-1;
+                        if(count_num==0){
+                            break;
+                        }
+                    }
+                }
+            },
+            None=>{
+                for (hash_item,res) in tnxs.iter() {
+                    data.push((*hash_item,*res));
+                    count_num=count_num-1;
+                    if(count_num==0){
+                        break;
+                    }
                 }
             }
         }
