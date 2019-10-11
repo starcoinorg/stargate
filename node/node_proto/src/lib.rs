@@ -9,6 +9,7 @@ use star_types::script_package::ChannelScriptPackage;
 use types::account_address::AccountAddress;
 use protobuf::RepeatedField;
 use types::transaction::SignedTransactionWithProof;
+use crypto::HashValue;
 
 #[derive(Clone, Debug, Eq, PartialEq, FromProto, IntoProto)]
 #[ProtoType(star_types::proto::node::OpenChannelRequest)]
@@ -313,5 +314,11 @@ impl IntoProto for ExecuteScriptRequest {
 #[ProtoType(star_types::proto::node::ExecuteScriptResponse)]
 #[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct ExecuteScriptResponse{
+    pub hash_value:HashValue,
+}
 
+impl ExecuteScriptResponse{
+    pub fn new(hash_value:HashValue)->Self{
+        Self{hash_value}
+    }
 }

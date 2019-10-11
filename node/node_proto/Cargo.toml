@@ -18,6 +18,4 @@ failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
 proptest_helpers = { path = "../../libra/common/proptest_helpers" }
 types = { package = "types", path = "../../libra/types"}
 star_types = { path = "../../star_types" }
-
-[dev-dependencies]
 crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }

@@ -115,5 +115,5 @@ message ExecuteScriptRequest{
 }
 
 message ExecuteScriptResponse{
-
+    bytes hash_value= 1;
 }

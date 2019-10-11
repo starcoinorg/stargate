@@ -83,6 +83,7 @@ where
     storage: Arc<AtomicRefCell<LocalStateStorage<C>>>,
     script_registry: PackageRegistry,
     lock: futures_locks::Mutex<u64>,
+    offchain_transactions:Arc<AtomicRefCell<Vec<(HashValue,u8)>>>,
 }
 
 impl<C> Wallet<C>
@@ -122,6 +123,7 @@ where
             storage,
             script_registry,
             lock: futures_locks::Mutex::new(1),
+            offchain_transactions: Arc::new(AtomicRefCell::new(Vec::new())),
         })
     }
 
@@ -508,6 +510,7 @@ where
                         sender_witness.witness_signature.clone(),
                     )?;
                 }
+                self.offchain_transactions.borrow_mut().push((response.request_id(),1));
                 0
             }
             _ => bail!("ChannelTransaction request and response type not match."),
@@ -675,6 +678,27 @@ where
                 seq_number
             )),
         }
+    }
+
+    pub fn find_offchain_txn(&self,hash:HashValue,count:u32)->Result<Vec<(HashValue,u8)>>{
+        let tnxs=self.offchain_transactions.borrow();
+        let mut count_num = count;
+        let mut find_data = false;
+        let mut data=Vec::new();
+        for (hash_item,res) in tnxs.iter(){
+            if(hash.eq(hash_item)){
+                find_data=true;
+                continue;
+            }
+            if(find_data&&count_num>0){
+                data.push((*hash_item,*res));
+                count_num=count_num-1;
+                if(count_num==0){
+                    break;
+                }
+            }
+        }
+        Ok(data)
     }
 }
 

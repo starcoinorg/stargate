@@ -21,20 +21,20 @@ use star_types::{
 use tokio::runtime::TaskExecutor;
 
 pub struct MessageFuture {
-    rx: Receiver<Result<()>>,
+    rx: Receiver<Result<HashValue>>,
 }
 
 impl MessageFuture {
-    pub fn new(rx: Receiver<Result<()>>) -> Self {
+    pub fn new(rx: Receiver<Result<HashValue>>) -> Self {
         Self { rx }
     }
 }
 
 impl Future for MessageFuture {
-    type Item = ();
+    type Item = HashValue;
     type Error = SgError;
 
-    fn poll(&mut self) -> Poll<(), Self::Error> {
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         while let Async::Ready(v) = self.rx.poll().unwrap() {
             match v {
                 Some(v) => match v {
@@ -60,7 +60,7 @@ impl Future for MessageFuture {
 
 #[derive(Clone)]
 pub struct MessageProcessor {
-    tx_map: Arc<Mutex<HashMap<HashValue, Sender<Result<()>>>>>,
+    tx_map: Arc<Mutex<HashMap<HashValue, Sender<Result<HashValue>>>>>,
 }
 
 impl MessageProcessor {
@@ -70,7 +70,7 @@ impl MessageProcessor {
         }
     }
 
-    pub fn add_future(&self, hash: HashValue, mut sender: Sender<Result<()>>) {
+    pub fn add_future(&self, hash: HashValue, mut sender: Sender<Result<HashValue>>) {
         self.tx_map
             .lock()
             .unwrap()
@@ -82,7 +82,7 @@ impl MessageProcessor {
         let mut tx_map = self.tx_map.lock().unwrap();
         match tx_map.get(&hash) {
             Some(tx) => {
-                match tx.clone().send(Ok(())).wait() {
+                match tx.clone().send(Ok(hash)).wait() {
                     Ok(_new_tx) => {
                         info!("send message succ");
                         tx_map.remove(&hash);

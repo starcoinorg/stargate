@@ -485,8 +485,8 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
 
         let f_to_channel = async {
             match f.compat().await {
-                Ok(sender) => resp_sender
-                    .send(Ok(ExecuteScriptResponse {}))
+                Ok(id) => resp_sender
+                    .send(Ok(ExecuteScriptResponse::new(id)))
                     .expect("Did open channel processor thread panic?"),
                 Err(e) => resp_sender
                     .send(Err(failure::Error::from(e)))
@@ -791,6 +791,10 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             })
             .map_err(|e| panic!("delay errored; err={:?}", e));
         self.executor.spawn(task);
+    }
+
+    pub fn find_offchain_txn(&self,hash:HashValue,count:u32)->Result<Vec<(HashValue,u8)>> {
+        self.wallet.find_offchain_txn(hash,count)
     }
 }
 
