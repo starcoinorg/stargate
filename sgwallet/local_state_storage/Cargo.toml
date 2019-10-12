@@ -10,7 +10,7 @@ edition = "2018"
 failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
 itertools = "0.8.0"
 crypto = { path = "../../libra/crypto/crypto" }
-types = { path = "../../libra/types"}
+libra-types = { path = "../../libra/types"}
 star_types = { path = "../../star_types" }
 sgchain = { path = "../../sgchain" }
 state_view = {path = "../../libra/storage/state_view"}

@@ -17,15 +17,15 @@ tempfile = "3.1.0"
 toml = "0.4"
 
 crypto = { path = "../libra/crypto/crypto" }
-proto_conv = { path = "../libra/common/proto_conv" }
+prost = "0.5.0"
 logger = { path = "../libra/common/logger" }
 failure = { path = "../libra/common/failure_ext", package = "failure_ext" }
-types = { path = "../libra/types" }
+libra-types = { path = "../libra/types" }
 
 [dev-dependencies]
-types = { path = "../libra/types", features = ["testing"] }
+libra-types = { path = "../libra/types", features = ["testing"] }
 crypto = { path = "../libra/crypto/crypto", features = ["testing"] }
 
 [features]
 default = []
-testing = ["crypto/testing", "types/testing"]
+testing = ["crypto/testing", "libra-types/testing"]

@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 grpcio = "0.4.4"
 futures01 = { package = "futures", version = "0.1.26" }
-futures03 = { package = "futures-preview", version = "=0.3.0-alpha.17", features = ["compat"] }
+futures03 = { package = "futures-preview", version = "=0.3.0-alpha.19", features = ["compat"] }
 serde = { version = "1.0.96", features = ["derive"] }
 rand = "0.6.5"
 tokio = "0.1.22"
@@ -18,10 +18,10 @@ node_proto = { path = "../node_proto" }
 node_internal = { path = "../node_internal" }
 failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
 star_types = { path = "../../star_types" }
-proto_conv = { path = "../../libra/common/proto_conv" }
+prost = "0.5.0"
 grpc_helpers = { path = "../../libra/common/grpc_helpers" }
 node_client = { path = "../node_client" }
 crypto = { path = "../../libra/crypto/crypto" }
-types = { package = "types", path = "../../libra/types"}
+libra-types = { path = "../../libra/types"}
 sg_config = {path="../../sgconfig"}
 sgchain = { path = "../../sgchain"}

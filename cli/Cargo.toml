@@ -7,7 +7,7 @@ publish = false
 edition = "2018"
 
 [dependencies]
-futures = { version = "0.3.0-alpha.16", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }
+futures = { version = "=0.3.0-alpha.19", package = "futures-preview", features = ["async-await", "io-compat", "compat"] }
 
 bincode = "1.1.1"
 grpcio = "0.4.3"
@@ -30,19 +30,19 @@ failure = { package = "failure_ext", path = "../libra/common/failure_ext" }
 libc = "0.2.60"
 logger =  { path = "../libra/common/logger" }
 metrics = { path = "../libra/common/metrics" }
-proto_conv = { path = "../libra/common/proto_conv" }
-types = { path = "../libra/types" }
+prost = "0.5.0"
+libra-types = { path = "../libra/types" }
 vm_genesis = { path = "../libra/language/vm/vm_genesis" }
 node_client = { path = "../node/node_client"}
 cli_wallet = { path = "./cli_wallet" }
 node_proto = { path = "../node/node_proto" }
-admission_control_service = { path = "../libra/admission_control/admission_control_service" }
-admission_control_proto = { path = "../libra/admission_control/admission_control_proto" }
+admission-control-service = { path = "../libra/admission_control/admission-control-service" }
+admission-control-proto = { path = "../libra/admission_control/admission-control-proto" }
 sgchain = { path = "../sgchain" }
 star_types = { path = "../star_types" }
 sgcompiler = { path = "../sgcompiler" }
-canonical_serialization = { path = "../libra/common/canonical_serialization" }
+canonical-serialization = { path = "../libra/common/canonical-serialization" }
 
 [dev-dependencies]
 crypto = { path = "../libra/crypto/crypto", features = ["testing"] }
-types = { path = "../libra/types" }
+libra-types = { path = "../libra/types" }

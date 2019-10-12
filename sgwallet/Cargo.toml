@@ -15,7 +15,7 @@ load_file = "1.0.0"
 lazy_static = "1.3.0"
 include_dir = "0.2.1"
 failure = { path = "../libra/common/failure_ext", package = "failure_ext" }
-types = { path = "../libra/types" }
+libra-types = { path = "../libra/types" }
 star_types = { path = "../star_types" }
 crypto = { path = "../libra/crypto/crypto" }
 
@@ -25,16 +25,16 @@ vm_genesis = { path = "../libra/language/vm/vm_genesis" }
 logger = { path = "../libra/common/logger"}
 tokio = "0.1.22"
 futures = { package = "futures", version = "0.1.28" }
-proto_conv = { path = "../libra/common/proto_conv", features = ["derive"] }
+prost = "0.5.0"
 stdlib = { path = "../libra/language/stdlib" }
 ir_to_bytecode = { path = "../libra/language/compiler/ir_to_bytecode" }
-futures_03 = { version = "0.3.0-alpha.17", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }
+futures_03 = { version = "=0.3.0-alpha.19", package = "futures-preview", features = ["async-await", "io-compat", "compat"] }
 futures_locks = { version = "=0.3.0", package = "futures-locks", features=["tokio"]}
 vm_runtime = {path="../libra/language/vm/vm_runtime"}
 vm_cache_map = {path="../libra/language/vm/vm_runtime/vm_cache_map"}
 state_view = { path = "../libra/storage/state_view"}
 config = { path = "../libra/config"}
-canonical_serialization = { path = "../libra/common/canonical_serialization"}
+canonical-serialization = { path = "../libra/common/canonical-serialization"}
 sgcompiler = { path = "../sgcompiler"}
 
 [dev-dependencies]

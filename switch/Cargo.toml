@@ -7,6 +7,6 @@ publish = false
 edition = "2018"
 
 [dependencies]
-star_types = { package = "star_types", path = "../star_types" }
-types = { package = "types", path = "../libra/types"}
-futures = { version = "0.3.0-alpha.17", package = "futures-preview", features = ["async-await", "nightly", "io-compat", "compat"] }
+star_types = { path = "../star_types" }
+libra-types = { path = "../libra/types"}
+futures = { version = "=0.3.0-alpha.19", package = "futures-preview", features = ["async-await", "io-compat", "compat"] }
