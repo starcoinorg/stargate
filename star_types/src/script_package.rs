@@ -1,4 +1,7 @@
-use std::fmt::{Display, Formatter};
+use std::{
+    convert::{TryFrom, TryInto},
+    fmt::{Display, Formatter}
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -7,8 +10,7 @@ use canonical_serialization::{
     SimpleDeserializer, SimpleSerializer,
 };
 use failure::prelude::*;
-use proto_conv::{FromProto, IntoProto};
-use types::transaction::{Script, TransactionArgument};
+use libra_types::transaction::{Script, TransactionArgument};
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ScriptCode {
@@ -131,21 +133,18 @@ impl CanonicalDeserialize for ChannelScriptPackage {
     }
 }
 
-impl FromProto for ChannelScriptPackage {
-    type ProtoType = crate::proto::script_package::ChannelScriptPackage;
-
-    fn from_proto(mut object: Self::ProtoType) -> Result<Self> {
-        let bytes = object.take_payload();
-        Ok(SimpleDeserializer::deserialize(bytes.as_slice())?)
+impl TryFrom<crate::proto::star_types::ChannelScriptPackage> for ChannelScriptPackage{
+    type Error = Error;
+    fn try_from(value: crate::proto::star_types::ChannelScriptPackage) -> Result<Self> {
+        SimpleDeserializer::deserialize(value.payload.as_slice())
     }
 }
 
-impl IntoProto for ChannelScriptPackage {
-    type ProtoType = crate::proto::script_package::ChannelScriptPackage;
+impl From<ChannelScriptPackage> for crate::proto::star_types::ChannelScriptPackage{
 
-    fn into_proto(self) -> Self::ProtoType {
-        let mut out = Self::ProtoType::new();
-        out.set_payload(SimpleSerializer::serialize(&self).expect("serialize must success."));
-        out
+    fn from(value: ChannelScriptPackage) -> Self {
+        Self{
+            payload: SimpleSerializer::serialize(&value).expect("serialize must success.")
+        }
     }
 }

@@ -1,5 +1,7 @@
-use core::convert::TryFrom;
-use std::fmt::{Display, Formatter};
+use std::{
+    convert::{TryFrom, TryInto},
+    fmt::{Display, Formatter},
+};
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use protobuf::RepeatedField;
@@ -14,8 +16,7 @@ use crypto::{
     HashValue,
 };
 use failure::prelude::*;
-use proto_conv::{FromProto, IntoProto};
-use types::{
+use libra_types::{
     account_address::AccountAddress,
     contract_event::ContractEvent,
     transaction::{
@@ -452,22 +453,21 @@ impl CanonicalDeserialize for ChannelTransactionRequest {
     }
 }
 
-impl FromProto for ChannelTransactionRequest {
-    type ProtoType = crate::proto::channel_transaction::ChannelTransactionRequest;
+impl TryFrom<crate::proto::star_types::ChannelTransactionRequest> for ChannelTransactionRequest {
 
-    fn from_proto(mut object: Self::ProtoType) -> Result<Self> {
-        let bytes = object.take_payload();
-        Ok(SimpleDeserializer::deserialize(bytes.as_slice())?)
+    type Error = Error;
+
+    fn try_from(value: crate::proto::star_types::ChannelTransactionRequest) -> Result<Self> {
+        SimpleDeserializer::deserialize(value.payload.as_slice())
     }
 }
 
-impl IntoProto for ChannelTransactionRequest {
-    type ProtoType = crate::proto::channel_transaction::ChannelTransactionRequest;
+impl From<ChannelTransactionRequest> for crate::proto::star_types::ChannelTransactionRequest {
 
-    fn into_proto(self) -> Self::ProtoType {
-        let mut out = Self::ProtoType::new();
-        out.set_payload(SimpleSerializer::serialize(&self).expect("serialize must success."));
-        out
+    fn from(value: ChannelTransactionRequest) -> Self {
+        Self{
+            payload: SimpleSerializer::serialize(&value).expect("Serialization should not fail.")
+        }
     }
 }
 
@@ -548,21 +548,20 @@ impl CanonicalDeserialize for ChannelTransactionResponse {
     }
 }
 
-impl FromProto for ChannelTransactionResponse {
-    type ProtoType = crate::proto::channel_transaction::ChannelTransactionResponse;
+impl TryFrom<crate::proto::star_types::ChannelTransactionResponse> for ChannelTransactionResponse {
 
-    fn from_proto(mut object: Self::ProtoType) -> Result<Self> {
-        let bytes = object.take_payload();
-        Ok(SimpleDeserializer::deserialize(bytes.as_slice())?)
+    type Error = Error;
+
+    fn try_from(value: crate::proto::star_types::ChannelTransactionResponse) -> Result<Self> {
+        SimpleDeserializer::deserialize(value.payload.as_slice())
     }
 }
 
-impl IntoProto for ChannelTransactionResponse {
-    type ProtoType = crate::proto::channel_transaction::ChannelTransactionResponse;
+impl From<ChannelTransactionResponse> for crate::proto::star_types::ChannelTransactionResponse {
 
-    fn into_proto(self) -> Self::ProtoType {
-        let mut out = Self::ProtoType::new();
-        out.set_payload(SimpleSerializer::serialize(&self).expect("serialize must success."));
-        out
+    fn from(value: ChannelTransactionResponse) -> Self {
+        Self{
+            payload: SimpleSerializer::serialize(&value).expect("Serialization should not fail.")
+        }
     }
 }

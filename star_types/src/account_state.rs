@@ -9,7 +9,7 @@ use itertools::Itertools;
 
 use crate::account_resource_ext;
 use failure::prelude::*;
-use types::{
+use libra_types::{
     access_path::DataPath,
     account_address::AccountAddress,
     account_config::{account_resource_path, AccountResource},
@@ -152,7 +152,7 @@ impl Into<AccountStateBlob> for &AccountState {
 
 #[cfg(test)]
 mod tests {
-    use types::{account_config::AccountResource, channel_account::ChannelAccountResource};
+    use libra_types::{account_config::AccountResource, channel_account::ChannelAccountResource};
 
     use super::*;
 

@@ -1,5 +1,3 @@
-#![feature(custom_attribute)]
-
 pub mod account_resource_ext;
 pub mod channel_transaction;
 #[cfg(test)]
@@ -15,7 +13,6 @@ pub mod channel;
 #[cfg(test)]
 mod resource_test;
 pub mod script_package;
-pub mod transaction_output_helper;
 
 #[cfg(test)]
 mod tests {

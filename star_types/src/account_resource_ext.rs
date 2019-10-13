@@ -1,6 +1,6 @@
 use canonical_serialization::{SimpleDeserializer, SimpleSerializer};
 use failure::prelude::*;
-use types::{account_address::AccountAddress, account_config::AccountResource, event::EventHandle};
+use libra_types::{account_address::AccountAddress, account_config::AccountResource, event::EventHandle};
 
 //impl TryFrom<Vec<u8>> for AccountResource{
 //    type Error = failure::Error;
@@ -31,7 +31,8 @@ pub fn new_account_for_test(account_address: AccountAddress, balance: u64) -> Ac
     AccountResource::new(
         balance,
         1,
-        types::byte_array::ByteArray::new(vec![]),
+        libra_types::byte_array::ByteArray::new(vec![]),
+        false,
         false,
         event_handle.clone(),
         event_handle.clone(),

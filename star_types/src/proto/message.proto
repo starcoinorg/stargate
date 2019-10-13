@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package star_types;
 
-import "transaction.proto";
 import "channel_transaction.proto";
 
 message RawNegotiateMessage {
@@ -16,7 +15,7 @@ message RawNegotiateMessage {
 message OpenChannelNodeNegotiateMessage {
     RawNegotiateMessage raw_message = 1;
     bytes sender_sign = 2 ;
-    ReceiveSignMessage receiver_sign = 3 ;
+    bytes receiver_sign = 3 ;
 }
 
 message ChannelTransactionRequestMessage {
@@ -30,10 +29,6 @@ message ChannelTransactionResponseMessage {
 message AddressMessage {
     bytes addr = 1;
     bytes ip_addr = 2;
-}
-
-message ReceiveSignMessage {
-    bytes receiver_sign = 1 ;
 }
 
 message StructTag {

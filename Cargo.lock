@@ -4736,6 +4736,7 @@ name = "star_types"
 version = "0.1.0"
 dependencies = [
  "atomic_refcell 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bytes 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "canonical-serialization 0.1.0",
  "crypto 0.1.0",
  "failure_ext 0.1.0",

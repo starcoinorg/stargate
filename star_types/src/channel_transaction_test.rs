@@ -8,7 +8,7 @@ use crypto::{
 };
 use failure::_core::time::Duration;
 use rand::prelude::*;
-use types::{
+use libra_types::{
     account_address::AccountAddress,
     transaction::{ChannelScriptPayload, ChannelWriteSetPayload, RawTransaction, Script},
     transaction_helpers::ChannelPayloadSigner,

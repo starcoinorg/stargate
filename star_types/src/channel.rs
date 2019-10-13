@@ -11,7 +11,7 @@ use atomic_refcell::AtomicRefCell;
 use crypto::ed25519::Ed25519Signature;
 use failure::prelude::*;
 use std::collections::{BTreeMap, HashSet};
-use types::{
+use libra_types::{
     access_path::{AccessPath, DataPath},
     account_address::AccountAddress,
     channel_account::ChannelAccountResource,

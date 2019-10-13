@@ -8,7 +8,7 @@ use canonical_serialization::{
 };
 use failure::prelude::*;
 use logger::prelude::*;
-use types::{
+use libra_types::{
     access_path::{Access, Accesses},
     account_address::AccountAddress,
     account_config::{

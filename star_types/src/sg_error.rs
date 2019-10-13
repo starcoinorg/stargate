@@ -1,6 +1,5 @@
 use failure::prelude::*;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use proto_conv::{FromProto, IntoProto};
 use serde::{Deserialize, Serialize};
 use std::{
     convert::TryFrom,
@@ -37,22 +36,5 @@ pub enum SgErrorCode {
 impl std::fmt::Display for SgErrorCode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", Into::<u32>::into(*self))
-    }
-}
-
-impl IntoProto for SgErrorCode {
-    type ProtoType = u32;
-    fn into_proto(self) -> Self::ProtoType {
-        self.into()
-    }
-}
-
-impl FromProto for SgErrorCode {
-    type ProtoType = u32;
-    fn from_proto(proto_code: Self::ProtoType) -> Result<Self> {
-        match SgErrorCode::try_from(proto_code) {
-            Ok(status) => Ok(status),
-            Err(_) => Ok(SgErrorCode::UNKNOWN),
-        }
     }
 }
