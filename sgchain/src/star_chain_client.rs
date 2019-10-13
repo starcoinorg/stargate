@@ -312,7 +312,7 @@ where
 {
     let mut rt = Runtime::new().expect("faucet runtime err.");
     let f = async move { client.faucet(receiver, amount).await };
-    block_on(f)
+    rt.block_on(f)
 }
 
 fn parse_response(mut resp: UpdateToLatestLedgerResponse) -> ResponseItem {
@@ -324,7 +324,7 @@ fn parse_response(mut resp: UpdateToLatestLedgerResponse) -> ResponseItem {
 }
 
 pub fn genesis_blob(config: &NodeConfig) {
-    let path = config.base.data_dir_path.join(config.execution.genesis_file_location.as_str());
+    let path = config.get_genesis_transaction_file();
     info!("Write genesis_blob to {}", path.as_path().to_string_lossy());
     let genesis_checked_txn =
         encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
