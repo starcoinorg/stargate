@@ -476,7 +476,7 @@ where
                         .client
                         .watch_transaction(sender, signed_txn.sequence_number());
                     // FIXME: should not panic here, handle timeout situation.
-                    watch_future.await?.expect("proof is none.")
+                    watch_future.await?.expect("proof is none.").0
                 };
                 //self.check_output(&output)?;
                 let gas = txn_with_proof.proof.transaction_info().gas_used();
@@ -498,6 +498,9 @@ where
                 ChannelTransactionRequestPayload::Offchain(sender_witness),
                 ChannelTransactionResponsePayload::Offchain(receiver_witness),
             ) => {
+                // FIXME(lerencao): should apply my own witness payload.
+                // or either payload,
+                // as the two payload should have the same writeset and channel seq number
                 if request.sender() == self.account {
                     channel.apply_witness(
                         receiver_witness.witness_payload.clone(),
@@ -672,7 +675,7 @@ where
         let _resp = self.client.submit_signed_transaction(signed_transaction)?;
         let watch_future = self.client.watch_transaction(sender, seq_number);
         match watch_future.await? {
-            Some(proof) => Ok(proof),
+            Some((proof, _)) => Ok(proof),
             None => Err(format_err!(
                 "proof not found by address {:?} and seq num {} .",
                 sender,

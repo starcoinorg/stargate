@@ -32,7 +32,7 @@ use tokio_timer::Delay;
 use types::{
     account_address::AccountAddress,
     account_config::{association_address, AccountResource},
-    account_state_blob::AccountStateBlob,
+    account_state_blob::{AccountStateBlob, AccountStateWithProof},
     get_with_proof::RequestItem,
     proof::SparseMerkleProof,
     proto::get_with_proof::{
@@ -124,7 +124,7 @@ pub trait ChainClient: Send + Sync {
         &self,
         address: &AccountAddress,
         seq: u64,
-    ) -> Result<Option<SignedTransactionWithProof>> {
+    ) -> Result<Option<(SignedTransactionWithProof, AccountStateWithProof)>> {
         let end_time = Instant::now() + Duration::from_millis(10_000);
         loop {
             let timeout_time = Instant::now() + Duration::from_millis(1000);
@@ -151,20 +151,23 @@ pub trait ChainClient: Send + Sync {
         &self,
         account_address: &AccountAddress,
         seq_num: u64,
-    ) -> Result<Option<SignedTransactionWithProof>> {
+    ) -> Result<Option<(SignedTransactionWithProof, AccountStateWithProof)>> {
         let req = RequestItem::GetAccountTransactionBySequenceNumber {
             account: account_address.clone(),
             sequence_number: seq_num,
             fetch_events: false,
         };
         let mut resp = parse_response(self.do_request(&build_request(req, None)));
-        let mut tmp = resp.take_get_account_transaction_by_sequence_number_response();
-        if tmp.has_signed_transaction_with_proof() {
-            let proof = tmp.take_signed_transaction_with_proof();
-            Ok(Some(
-                SignedTransactionWithProof::from_proto(proof)
-                    .expect("SignedTransaction parse from proto err."),
-            ))
+        let mut response = resp.take_get_account_transaction_by_sequence_number_response();
+        if response.has_signed_transaction_with_proof() {
+            let proof = response.take_signed_transaction_with_proof();
+            let proof = SignedTransactionWithProof::from_proto(proof)
+                .expect("SignedTransaction parse from proto err.");
+            let account_state_with_proof = response.take_proof_of_current_sequence_number();
+            let account_state_with_proof =
+                AccountStateWithProof::from_proto(account_state_with_proof)
+                    .expect("AccountStateWithProof parse from proto error");
+            Ok(Some((proof, account_state_with_proof)))
         } else {
             Ok(None)
         }
