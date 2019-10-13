@@ -6,7 +6,7 @@ use std::{
 
 use futures::future::Future;
 use rand::prelude::*;
-use tokio::runtime::{current_thread::block_on_all, Runtime, TaskExecutor};
+use tokio::runtime::{Runtime, TaskExecutor};
 
 use crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
@@ -71,7 +71,7 @@ where
         receiver_future.await.unwrap();
         gas_used
     };
-    rt.block_on(f.boxed().unit_error().compat()).unwrap();
+    rt.block_on(f);
     Ok(())
 }
 
@@ -102,7 +102,7 @@ where
         receiver_future.await.unwrap();
         gas_used
     };
-    rt.block_on(f.boxed().unit_error().compat()).unwrap();
+    rt.block_on(f);
     Ok(())
 }
 
@@ -273,7 +273,7 @@ fn test_wallet() -> Result<()> {
         debug!("finish");
     };
 
-    rt.block_on(f.boxed().unit_error().compat()).unwrap();
+    rt.block_on(f);
     Ok(())
 }
 
@@ -327,7 +327,7 @@ where
     let f = async move {
         wallet_clone.deploy_module(module_byte_code).await.unwrap();
     };
-    rt.block_on(f.boxed().unit_error().compat()).unwrap();
+    rt.block_on(f);
     sleep(Duration::from_millis(1000));
     let package = compiler.compile_package(path.join("scripts"))?;
     wallet.install_package(package)?;

@@ -1,5 +1,3 @@
-#![feature(async_await)]
-
 pub mod scripts;
 pub mod wallet;
 

@@ -23,7 +23,7 @@ local_state_storage = { path = "./local_state_storage"}
 sgchain = { path = "../sgchain" }
 vm_genesis = { path = "../libra/language/vm/vm_genesis" }
 logger = { path = "../libra/common/logger"}
-tokio = "0.1.22"
+tokio = "=0.2.0-alpha.6"
 futures = { package = "futures", version = "0.1.28" }
 prost = "0.5.0"
 stdlib = { path = "../libra/language/stdlib" }

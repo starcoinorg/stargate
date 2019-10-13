@@ -4521,7 +4521,7 @@ dependencies = [
  "star_types 0.1.0",
  "state_view 0.1.0",
  "stdlib 0.1.0",
- "tokio 0.1.22 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tokio 0.2.0-alpha.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "vm_cache_map 0.1.0",
  "vm_genesis 0.1.0",
  "vm_runtime 0.1.0",

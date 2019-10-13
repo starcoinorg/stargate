@@ -41,7 +41,6 @@ use star_types::{
     resource::Resource,
     script_package::{ChannelScriptPackage, ScriptCode},
     sg_error::SgErrorCode,
-    transaction_output_helper,
 };
 use state_view::StateView;
 use libra_types::{
@@ -636,7 +635,7 @@ where
             receiver,
             script,
         );
-        let txn = types::transaction_helpers::create_unsigned_payload_txn(
+        let txn = libra_types::transaction_helpers::create_unsigned_payload_txn(
             TransactionPayload::ChannelScript(channel_script),
             self.account,
             self.sequence_number()?,

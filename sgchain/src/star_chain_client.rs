@@ -45,6 +45,7 @@ use atomic_refcell::AtomicRefCell;
 use tokio::timer::delay;
 use admission_control_service::admission_control_mock_client::AdmissionControlMockClient;
 use prost_ext::MessageExt;
+use config::config::NodeConfig;
 
 #[async_trait]
 pub trait ChainClient: Send + Sync {
@@ -258,12 +259,14 @@ impl MockChainClient {
     pub fn new() -> (Self, StarHandle) {
         let mut config =
             NodeConfigHelpers::get_single_node_test_config(false /* random ports */);
-        if config.consensus.consensus_peers.peers.len() == 0 {
-            let (_, single_peer_consensus_config,_) =
-                ConfigHelpers::gen_validator_nodes(1, None);
-            config.consensus.consensus_peers = single_peer_consensus_config;
-            genesis_blob(&config.execution.genesis_file_location);
-        }
+        info!("MockChainClient config: {:?} ", config);
+//        if config.consensus.consensus_peers.peers.len() == 0 {
+//            let (_, single_peer_consensus_config,_) =
+//                ConfigHelpers::gen_validator_nodes(1, None);
+//            config.consensus.consensus_peers = single_peer_consensus_config;
+//            genesis_blob(&config.execution.genesis_file_location);
+//        }
+        genesis_blob(&config);
 
         let (_handle, shutdown_sender,ac) = setup_environment(&mut config);
         (
@@ -320,11 +323,13 @@ fn parse_response(mut resp: UpdateToLatestLedgerResponse) -> ResponseItem {
         .try_into().unwrap()
 }
 
-pub fn genesis_blob(file: &String) {
+pub fn genesis_blob(config: &NodeConfig) {
+    let path = config.base.data_dir_path.join(config.execution.genesis_file_location.as_str());
+    info!("Write genesis_blob to {}", path.as_path().to_string_lossy());
     let genesis_checked_txn =
         encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
     let genesis_txn = genesis_checked_txn.into_inner();
-    let mut genesis_file = File::create(Path::new(file)).expect("open genesis file err.");
+    let mut genesis_file = File::create(path).expect("open genesis file err.");
     genesis_file
         .write_all(
                 Into::<libra_types::proto::types::SignedTransaction>::into(genesis_txn)
