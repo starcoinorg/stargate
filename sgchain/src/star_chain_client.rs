@@ -1,23 +1,18 @@
 use super::mock_star_node::{setup_environment, StarHandle};
 use admission_control_proto::proto::{
-    admission_control::{SubmitTransactionRequest, SubmitTransactionResponse},
-    admission_control_client::AdmissionControlClientTrait,
-    admission_control_grpc::AdmissionControlClient,
+    admission_control::{SubmitTransactionRequest, SubmitTransactionResponse, AdmissionControlClient, AdmissionControl},
 };
-use admission_control_service::admission_control_client::AdmissionControlClient as MockAdmissionControlClient;
 use async_trait::async_trait;
 use config::{config::NodeConfigHelpers, trusted_peers::ConfigHelpers};
 use core::borrow::Borrow;
 use failure::prelude::*;
-use futures::sync::mpsc::UnboundedSender;
-use futures03::{
+use futures::{
     compat::Future01CompatExt,
     future::{FutureExt, TryFutureExt},
 };
 use grpcio::{ChannelBuilder, EnvBuilder};
 use logger::prelude::*;
-use mempool::core_mempool_client::CoreMemPoolClient;
-use proto_conv::{FromProto, IntoProto, IntoProtoBytes};
+use libra_mempool::core_mempool_client::CoreMemPoolClient;
 use star_types::account_state::AccountState;
 use std::{
     convert::TryInto,
@@ -28,23 +23,28 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::runtime::Runtime;
-use tokio_timer::Delay;
-use types::{
+use libra_types::{
     account_address::AccountAddress,
     account_config::{association_address, AccountResource},
     account_state_blob::AccountStateBlob,
     get_with_proof::RequestItem,
     proof::SparseMerkleProof,
-    proto::get_with_proof::{
-        ResponseItem, UpdateToLatestLedgerRequest, UpdateToLatestLedgerResponse,
+    proto::types::{
+        UpdateToLatestLedgerRequest, UpdateToLatestLedgerResponse,
     },
     transaction::{RawTransaction, SignedTransaction, SignedTransactionWithProof, Version},
 };
-use vm_genesis::{
-    encode_create_account_script, encode_genesis_transaction, encode_transfer_script,
-    GENESIS_KEYPAIR,
-};
+use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR,};
+use transaction_builder::{encode_create_account_script, encode_transfer_script, };
 use vm_validator::vm_validator::VMValidator;
+use futures::channel::mpsc::UnboundedSender;
+use admission_control_service::admission_control_service::AdmissionControlService;
+use futures::executor::block_on;
+use libra_types::get_with_proof::{ResponseItem};
+use atomic_refcell::AtomicRefCell;
+use tokio::timer::delay;
+use admission_control_service::admission_control_mock_client::AdmissionControlMockClient;
+use prost_ext::MessageExt;
 
 #[async_trait]
 pub trait ChainClient: Send + Sync {
@@ -114,8 +114,8 @@ pub trait ChainClient: Send + Sync {
     }
 
     fn submit_signed_transaction(&self, signed_transaction: SignedTransaction) -> Result<()> {
-        let mut req = SubmitTransactionRequest::new();
-        req.set_signed_txn(signed_transaction.into_proto());
+        let mut req = SubmitTransactionRequest::default();
+        req.signed_txn = Some(signed_transaction.into());
         self.submit_transaction(&req).expect("submit txn err.");
         Ok(())
     }
@@ -128,7 +128,7 @@ pub trait ChainClient: Send + Sync {
         let end_time = Instant::now() + Duration::from_millis(10_000);
         loop {
             let timeout_time = Instant::now() + Duration::from_millis(1000);
-            if let Ok(_) = Delay::new(timeout_time).compat().await {
+            delay(timeout_time).await;
                 debug!("watch address : {:?}, seq number : {}", address, seq);
                 let result = self.get_transaction_by_seq_num(address, seq)?;
                 let flag = timeout_time >= end_time;
@@ -143,7 +143,7 @@ pub trait ChainClient: Send + Sync {
                         return Ok(Some(t));
                     }
                 }
-            }
+
         }
     }
 
@@ -158,16 +158,8 @@ pub trait ChainClient: Send + Sync {
             fetch_events: false,
         };
         let mut resp = parse_response(self.do_request(&build_request(req, None)));
-        let mut tmp = resp.take_get_account_transaction_by_sequence_number_response();
-        if tmp.has_signed_transaction_with_proof() {
-            let proof = tmp.take_signed_transaction_with_proof();
-            Ok(Some(
-                SignedTransactionWithProof::from_proto(proof)
-                    .expect("SignedTransaction parse from proto err."),
-            ))
-        } else {
-            Ok(None)
-        }
+        let (signed_txn_with_proof, _) = resp.into_get_account_txn_by_seq_num_response()?;
+        Ok(signed_txn_with_proof)
     }
 
     fn do_request(&self, req: &UpdateToLatestLedgerRequest) -> UpdateToLatestLedgerResponse {
@@ -183,25 +175,14 @@ pub trait ChainClient: Send + Sync {
         let req = RequestItem::GetAccountState {
             address: account_address.clone(),
         };
-        let resp = parse_response(self.do_request(&build_request(req, version)));
-        let proof = resp
-            .get_get_account_state_response()
-            .get_account_state_with_proof();
-        let blob = if proof.has_blob() {
-            Some(proof.get_blob().get_blob().to_vec())
-        } else {
-            None
-        };
+        let resp = parse_response(self.do_request(&build_request(req, version))).into_get_account_state_response()?;
+        let proof = resp.proof;
+        let blob = resp.blob.map(|blob|blob.into());
+        //TODO should return whole proof.
         Ok((
-            proof.version,
+            resp.version,
             blob,
-            SparseMerkleProof::from_proto(
-                proof
-                    .get_proof()
-                    .get_transaction_info_to_account_proof()
-                    .clone(),
-            )
-            .expect("SparseMerkleProof parse from proto err."),
+            proof.transaction_info_to_account_proof().clone(),
         ))
     }
 
@@ -269,7 +250,7 @@ impl ChainClient for StarChainClient {
 
 #[derive(Clone)]
 pub struct MockChainClient {
-    ac_client: Arc<MockAdmissionControlClient<CoreMemPoolClient, VMValidator>>,
+    ac_client: Arc<AdmissionControlMockClient>,
     pub shutdown_sender: Arc<UnboundedSender<()>>,
 }
 
@@ -277,17 +258,17 @@ impl MockChainClient {
     pub fn new() -> (Self, StarHandle) {
         let mut config =
             NodeConfigHelpers::get_single_node_test_config(false /* random ports */);
-        if config.consensus.get_consensus_peers().len() == 0 {
-            let (_, single_peer_consensus_config) =
-                ConfigHelpers::get_test_consensus_config(1, None);
+        if config.consensus.consensus_peers.peers.len() == 0 {
+            let (_, single_peer_consensus_config,_) =
+                ConfigHelpers::gen_validator_nodes(1, None);
             config.consensus.consensus_peers = single_peer_consensus_config;
             genesis_blob(&config.execution.genesis_file_location);
         }
 
-        let (ac_client, _handle, shutdown_sender) = setup_environment(&mut config);
+        let (_handle, shutdown_sender,ac) = setup_environment(&mut config);
         (
             MockChainClient {
-                ac_client: Arc::new(ac_client),
+                ac_client: Arc::new(AdmissionControlMockClient::new(ac)),
                 shutdown_sender: Arc::new(shutdown_sender),
             },
             _handle,
@@ -319,16 +300,7 @@ impl ChainClient for MockChainClient {
 }
 
 fn build_request(req: RequestItem, ver: Option<Version>) -> UpdateToLatestLedgerRequest {
-    let mut repeated = ::protobuf::RepeatedField::new();
-    repeated.push(req.into_proto());
-    let mut req = UpdateToLatestLedgerRequest::new();
-    req.set_requested_items(repeated);
-    match ver {
-        Some(v) => req.set_client_known_version(v),
-        None => {}
-    }
-
-    req
+    libra_types::get_with_proof::UpdateToLatestLedgerRequest::new(ver.unwrap_or(0), vec![req]).into()
 }
 
 pub fn faucet_sync<C>(client: C, receiver: AccountAddress, amount: u64) -> Result<()>
@@ -337,14 +309,15 @@ where
 {
     let mut rt = Runtime::new().expect("faucet runtime err.");
     let f = async move { client.faucet(receiver, amount).await };
-    rt.block_on(f.boxed().unit_error().compat()).unwrap()
+    block_on(f)
 }
 
-fn parse_response(resp: UpdateToLatestLedgerResponse) -> ResponseItem {
-    resp.get_response_items()
-        .get(0)
-        .expect("response item is none.")
-        .clone()
+fn parse_response(mut resp: UpdateToLatestLedgerResponse) -> ResponseItem {
+    //TODO fix unwrap
+    //.expect("response item is none.")
+    resp.response_items
+        .remove(0)
+        .try_into().unwrap()
 }
 
 pub fn genesis_blob(file: &String) {
@@ -354,10 +327,8 @@ pub fn genesis_blob(file: &String) {
     let mut genesis_file = File::create(Path::new(file)).expect("open genesis file err.");
     genesis_file
         .write_all(
-            genesis_txn
-                .into_proto_bytes()
-                .expect("genesis_txn to bytes err.")
-                .as_slice(),
+                Into::<libra_types::proto::types::SignedTransaction>::into(genesis_txn)
+                .to_vec().unwrap().as_slice(),
         )
         .expect("write genesis file err.");
     genesis_file.flush().expect("flush genesis file err.");

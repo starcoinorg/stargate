@@ -8,7 +8,7 @@ use node_proto::{OpenChannelRequest, OpenChannelResponse};
 use sg_config::config::get_test_config;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
-use types::account_address::AccountAddress;
+use libra_types::account_address::AccountAddress;
 
 #[test]
 fn test_node_service_basic() {

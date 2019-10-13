@@ -16,7 +16,7 @@ use star_types::{
     script_package::{ChannelScriptPackage, ScriptCode},
 };
 use stdlib::stdlib_modules;
-use types::{
+use libra_types::{
     account_address::AccountAddress,
     account_config::coin_struct_tag,
     language_storage::StructTag,

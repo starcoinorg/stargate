@@ -7,12 +7,13 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-grpcio = "0.4.4"
+grpcio = { version = "=0.5.0-alpha.4", default-features = false }
 prost = "0.5.0"
+prost-ext = { path = "../libra/common/prost-ext" }
 protobuf = "2.7"
 grpc_helpers = { path = "../libra/common/grpc_helpers" }
 libra-types = { path = "../libra/types" }
-futures = "0.1.28"
+futures = { version = "=0.3.0-alpha.19", package = "futures-preview", features = ["async-await", "io-compat", "compat"] }
 star_types = { path = "../star_types" }
 crypto = { path = "../libra/crypto/crypto" }
 failure = { path = "../libra/common/failure_ext", package = "failure_ext" }
@@ -20,6 +21,7 @@ admission-control-proto = { path = "../libra/admission_control/admission-control
 admission-control-service = { path = "../libra/admission_control/admission-control-service" }
 vm_genesis = { path = "../libra/language/vm/vm_genesis" }
 executable-helpers = { path = "../libra/common/executable-helpers" }
+executor = { path = "../libra/execution/executor" }
 config = { path = "../libra/config"}
 
 crash-handler = { path = "../libra/common/crash-handler" }
@@ -27,24 +29,24 @@ grpcio-sys = "0.4.4"
 rayon = "1.2.0"
 libra-mempool = { path = "../libra/mempool" }
 logger = { path = "../libra/common/logger"}
-futures03 = { package = "futures-preview", version = "=0.3.0-alpha.19", features = ["async-await", "io-compat", "compat"] }
 metrics = { path = "../libra/common/metrics" }
 storage_client = { path = "../libra/storage/storage_client" }
 storage-service = { path = "../libra/storage/storage-service" }
+vm_runtime = { path = "../libra/language/vm/vm_runtime" }
 vm_validator = { path = "../libra/vm_validator" }
-tokio = "0.1.22"
+tokio = "=0.2.0-alpha.6"
 clap = "2.32"
 consensus = { path = "../libra/consensus" }
 debug-interface = { path = "../libra/common/debug-interface" }
 network = { path = "../libra/network" }
 state_synchronizer = { path = "../libra/state_synchronizer" }
 tools = { path = "../libra/common/tools" }
-tokio-timer = "0.2.11"
 atomic_refcell = "0.1.3"
 state_view = {path = "../libra/storage/state_view"}
 signal-hook = "0.1.10"
 jemallocator = { version = "0.3.2", features = ["profiling", "unprefixed_malloc_on_supported_platforms"] }
 async-trait = "0.1.13"
+transaction_builder = { path = "../libra/language/transaction_builder"}
 
 [dev-dependencies]
 crypto = { path = "../libra/crypto/crypto", features = ["testing"] }

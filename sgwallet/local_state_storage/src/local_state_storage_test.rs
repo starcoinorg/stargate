@@ -1,7 +1,7 @@
 use super::*;
 use logger::init_for_e2e_testing;
 use sgchain::star_chain_client::{faucet_sync, MockChainClient};
-use types::account_config::account_resource_path;
+use libra_types::account_config::account_resource_path;
 
 #[test]
 fn test_local_state_storage() -> Result<()> {

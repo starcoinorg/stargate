@@ -4,7 +4,7 @@ use crypto::{
     ValidKeyStringExt,
 };
 use serde::{Deserialize, Serialize};
-use types::account_address::AccountAddress;
+use libra_types::account_address::AccountAddress;
 
 mod account_commands;
 pub mod client_proxy;

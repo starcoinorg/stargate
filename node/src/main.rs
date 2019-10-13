@@ -16,7 +16,7 @@ use sgchain::star_chain_client::StarChainClient;
 use sgwallet::wallet::*;
 use structopt::StructOpt;
 use tokio::runtime::{Runtime, TaskExecutor};
-use types::account_address::AccountAddress;
+use libra_types::account_address::AccountAddress;
 
 #[derive(Debug, StructOpt)]
 #[structopt(

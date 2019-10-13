@@ -5,7 +5,7 @@ use logger::prelude::*;
 use sgchain::star_chain_client::ChainClient;
 use star_types::{message::SgError, resource::Resource};
 use state_view::StateView;
-use types::{
+use libra_types::{
     access_path::{AccessPath, DataPath},
     account_address::AccountAddress,
     transaction::{ChannelWriteSetPayload, TransactionOutput, Version},

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use sha3::Sha3_256;
 use std::{convert::TryFrom, ops::AddAssign};
 use tiny_keccak::Keccak;
-use types::account_address::AccountAddress;
+use libra_types::account_address::AccountAddress;
 
 use crate::{error::Result, mnemonic::Mnemonic};
 

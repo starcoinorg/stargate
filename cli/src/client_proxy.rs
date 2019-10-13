@@ -26,7 +26,7 @@ use std::{
     thread, time,
 };
 use tempfile::{NamedTempFile, TempPath};
-use types::{
+use libra_types::{
     account_address::AccountAddress,
     proof::SparseMerkleProof,
     transaction::{

@@ -2,28 +2,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use admission_control_service::{
-    admission_control_client::AdmissionControlClient,
     admission_control_service::AdmissionControlService,
 };
+use admission_control_proto::proto::admission_control::{AdmissionControl};
 use config::config::NodeConfig;
 use crypto::{hash::GENESIS_BLOCK_ID, HashValue};
-use execution_proto::proto::execution::{CommitBlockRequest, ExecuteBlockRequest};
-use execution_service::ExecutionService;
-use futures::{
-    future,
-    sync::mpsc::{unbounded, UnboundedSender},
-    Future, Stream,
-};
 use grpc_helpers::ServerHandle;
 use logger::prelude::*;
-use mempool::{
+use libra_mempool::{
     core_mempool_client::CoreMemPoolClient,
     proto::{
         mempool::{GetBlockRequest, TransactionExclusion},
         mempool_client::MempoolClientTrait,
     },
 };
-use proto_conv::FromProto;
 use std::{
     sync::{Arc, Mutex},
     thread,
@@ -31,15 +23,20 @@ use std::{
 };
 use storage_client::{StorageRead, StorageWrite};
 use storage_service::start_storage_service_and_return_service;
-use tokio_timer::Interval;
-use types::{
-    proto::{
-        ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
-        validator_set::ValidatorSet,
-    },
+use libra_types::{
     transaction::SignedTransaction,
 };
 use vm_validator::vm_validator::VMValidator;
+use executor::Executor;
+use vm_runtime::MoveVM;
+use libra_types::crypto_proxies::LedgerInfoWithSignatures;
+use std::collections::{BTreeMap, HashSet};
+use libra_types::ledger_info::LedgerInfo;
+use futures::executor::block_on;
+use futures::channel::mpsc::{unbounded, UnboundedSender};
+use futures::stream::Stream;
+use futures::{future, StreamExt};
+use tokio::timer::Interval;
 
 pub struct StarHandle {
     _storage: ServerHandle,
@@ -49,8 +46,8 @@ fn setup_ac<R>(
     config: &NodeConfig,
     r: Arc<R>,
 ) -> (
-    AdmissionControlClient<CoreMemPoolClient, VMValidator>,
     CoreMemPoolClient,
+    AdmissionControlService<CoreMemPoolClient, VMValidator>,
 )
 where
     R: StorageRead + Clone + 'static,
@@ -71,23 +68,28 @@ where
             .need_to_check_mempool_before_validation,
     );
 
-    (AdmissionControlClient::new(handle), mempool)
+    (mempool, handle)
 }
 
-fn setup_executor<R, W>(config: &NodeConfig, r: Arc<R>, w: Arc<W>) -> ExecutionService
-where
-    R: StorageRead + 'static,
-    W: StorageWrite + 'static,
+fn setup_executor<R, W>(config: &NodeConfig, r: Arc<R>, w: Arc<W>) -> Arc<Executor<MoveVM>>
+    where
+        R: StorageRead + 'static,
+        W: StorageWrite + 'static,
 {
-    ExecutionService::new(r, w, config)
+    Arc::new(Executor::new(
+        r,
+        w,
+        config,
+    ))
 }
+
 
 pub fn setup_environment(
     node_config: &mut NodeConfig,
 ) -> (
-    AdmissionControlClient<CoreMemPoolClient, VMValidator>,
     StarHandle,
     UnboundedSender<()>,
+    AdmissionControlService<CoreMemPoolClient, VMValidator>,
 ) {
     crash_handler::setup_panic_handler();
 
@@ -99,7 +101,7 @@ pub fn setup_environment(
     );
 
     instant = Instant::now();
-    let execution_service = setup_executor(
+    let executor = setup_executor(
         &node_config,
         Arc::clone(&storage_service),
         Arc::clone(&storage_service),
@@ -111,108 +113,62 @@ pub fn setup_environment(
 
     // Initialize and start AC.
     instant = Instant::now();
-    let (ac_client, mempool_client) = setup_ac(&node_config, Arc::clone(&storage_service));
+    let (mempool_client,ac) = setup_ac(&node_config, Arc::clone(&storage_service));
     debug!("AC started in {} ms", instant.elapsed().as_millis());
 
     let block_hash_vec = Mutex::new(vec![*GENESIS_BLOCK_ID]);
 
-    let shutdown_sender = commit_block(block_hash_vec, mempool_client, execution_service);
+    let shutdown_sender = commit_block(block_hash_vec, mempool_client, executor);
     let star_handle = StarHandle { _storage: storage };
 
-    (ac_client, star_handle, shutdown_sender)
+    (star_handle, shutdown_sender, ac)
 }
 
 fn commit_block(
     block_hash_vec: Mutex<Vec<HashValue>>,
     mempool_client: CoreMemPoolClient,
-    execution_service: ExecutionService,
+    executor: Arc<Executor<MoveVM>>,
 ) -> UnboundedSender<()> {
     let (shutdown_sender, mut shutdown_receiver) = unbounded();
 
     let task = Interval::new(Instant::now(), Duration::from_secs(3))
         .take_while(move |_| {
-            match shutdown_receiver.poll() {
-                Ok(opt) => match opt {
-                    futures::Async::Ready(_shutdown) => {
-                        info!("Build block task exit.");
-                        return future::ok(false);
-                    }
-                    _ => {}
+            match shutdown_receiver.try_next() {
+                Ok(Some(_)) => {
+                    info!("Build block task exit.");
+                    return future::ready(false);
                 },
                 _ => {}
             }
-            return future::ok(true);
+            return future::ready(true);
         })
         .for_each(move |_| {
-            let mut block_req = GetBlockRequest::new();
-            block_req.set_max_block_size(1);
-            let block_resp = mempool_client
-                .get_block(&block_req)
-                .expect("get_block err.");
-            let block = block_resp.get_block();
-            let txns = block.get_transactions();
+            let txns = mempool_client.get_block(1, HashSet::new());
 
             debug!("txn size: {:?} of current block.", txns.len());
 
             if txns.len() > 0 {
-                let mut tmp_txn_vec = vec![];
-                let mut txn_exc_vec = vec![];
-                txns.clone().iter().for_each(|txn| {
-                    let tmp = SignedTransaction::from_proto(txn.clone()).expect("from pb err.");
-
-                    let mut txn_exc = TransactionExclusion::new();
-                    txn_exc.set_sender(tmp.sender().to_vec());
-                    txn_exc.set_sequence_number(tmp.sequence_number());
-                    txn_exc_vec.push(txn_exc);
-
-                    tmp_txn_vec.push(tmp);
-                });
-
-                // exe
-                let repeated = ::protobuf::RepeatedField::from_vec(txns.to_vec());
-                let mut exe_req = ExecuteBlockRequest::new();
                 let block_id = HashValue::random();
-                exe_req.set_transactions(repeated);
 
                 let len = block_hash_vec.lock().unwrap().len();
                 let latest_hash = block_hash_vec.lock().unwrap().get(len - 1).unwrap().clone();
                 debug!("block height: {:?}, new block hash: {:?}", len, latest_hash);
-
-                exe_req.set_parent_block_id(latest_hash.to_vec());
-
-                exe_req.set_block_id(block_id.to_vec());
-                let exe_resp = execution_service.execute_block_inner(exe_req.clone());
+                let exclude_transactions = txns.iter().map(|txn|(txn.sender(), txn.sequence_number())).collect();
+                let resp = block_on(executor.execute_block(txns, latest_hash, block_id)).unwrap().unwrap();
 
                 block_hash_vec.lock().unwrap().push(block_id);
 
                 // commit
-                let mut info = LedgerInfo::new();
-                info.set_version(exe_resp.get_version());
-                info.set_consensus_block_id(exe_req.get_block_id().to_vec());
-                info.set_consensus_data_hash(HashValue::random().to_vec());
-                info.set_epoch_num(0);
-                info.set_next_validator_set(ValidatorSet::default());
-                info.set_timestamp_usecs(u64::max_value());
-                info.set_transaction_accumulator_hash(exe_resp.get_root_hash().to_vec());
-                let mut info_sign = LedgerInfoWithSignatures::new();
-                //        exe_resp.get_validators()
-                //        info.set_signatures()
-                info_sign.set_ledger_info(info);
-                let mut req = CommitBlockRequest::new();
-                req.set_ledger_info_with_sigs(info_sign.clone());
-                execution_service.commit_block_inner(req);
+                let info = LedgerInfo::new(resp.version(), resp.root_hash(), HashValue::random(), block_id, 0, u64::max_value(), None);
+                let info_sign = LedgerInfoWithSignatures::new(info, BTreeMap::new());
+
+                block_on(executor.commit_block(info_sign)).unwrap();
 
                 // remove from mem pool
-                let mut remove_req = GetBlockRequest::new();
-
-                let repeated_txn_exc = ::protobuf::RepeatedField::from_vec(txn_exc_vec);
-                remove_req.set_transactions(repeated_txn_exc);
-
-                mempool_client.remove_txn(&remove_req);
+                mempool_client.remove_txn(exclude_transactions);
             }
-            Ok(())
-        })
-        .map_err(|e| warn!("interval errored; err={:?}", e));
+            future::ready(())
+        });
 
     thread::spawn(move || {
         //        let mut rt = tokio::runtime::Runtime::new().unwrap();
@@ -220,7 +176,7 @@ fn commit_block(
         //        executor.spawn(task);
         //        rt.shutdown_on_idle().wait().unwrap();
 
-        tokio::run(task)
+        tokio::spawn(task)
     });
 
     shutdown_sender

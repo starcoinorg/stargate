@@ -1,4 +1,3 @@
-#![feature(async_await)]
 
 mod mock_star_node;
 mod star_node;

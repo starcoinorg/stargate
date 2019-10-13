@@ -37,7 +37,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tokio::timer::Delay;
-use types::account_address::AccountAddress;
+use libra_types::account_address::AccountAddress;
 
 #[test]
 fn node_test() -> Result<()> {

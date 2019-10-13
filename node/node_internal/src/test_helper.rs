@@ -26,7 +26,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::runtime::{Runtime, TaskExecutor};
-use types::{account_address::AccountAddress, account_config::coin_struct_tag};
+use libra_types::{account_address::AccountAddress, account_config::coin_struct_tag};
 
 pub fn gen_node(
     executor: TaskExecutor,

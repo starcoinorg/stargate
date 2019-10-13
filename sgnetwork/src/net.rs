@@ -33,7 +33,7 @@ use parking_lot::Mutex;
 use sg_config::config::NetworkConfig;
 use std::{collections::HashMap, io, sync::Arc, thread};
 use tokio::prelude::task::AtomicTask;
-use types::account_address::AccountAddress;
+use libra_types::account_address::AccountAddress;
 
 #[derive(Clone)]
 pub struct NetworkService {

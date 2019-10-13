@@ -5,7 +5,7 @@ use std::{
     str::FromStr,
     time::{SystemTime, UNIX_EPOCH},
 };
-use types::account_address::AccountAddress;
+use libra_types::account_address::AccountAddress;
 
 pub fn convert_peer_id_to_account_address(peer_id: &PeerId) -> Result<AccountAddress> {
     let peer_id_bytes = &peer_id.as_bytes()[2..];

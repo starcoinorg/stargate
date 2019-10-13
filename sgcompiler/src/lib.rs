@@ -15,7 +15,7 @@ use star_types::script_package::{ChannelScriptPackage, ScriptCode};
 use state_view::StateView;
 use std::collections::HashSet;
 use stdlib::stdlib_modules;
-use types::{access_path::AccessPath, account_address::AccountAddress, language_storage::ModuleId};
+use libra_types::{access_path::AccessPath, account_address::AccountAddress, language_storage::ModuleId};
 use vm::{
     access::{ModuleAccess, ScriptAccess},
     file_format::{CompiledModule, CompiledScript},
@@ -259,7 +259,7 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use logger::init_for_e2e_testing;
-    use types::identifier::{IdentStr, Identifier};
+    use libra_types::identifier::{IdentStr, Identifier};
 
     use crate::mock_module_loader::MockModuleLoader;
 

@@ -6,9 +6,9 @@ use failure::prelude::*;
 use proptest_derive::Arbitrary;
 use proto_conv::{FromProto, IntoProto};
 use star_types::script_package::ChannelScriptPackage;
-use types::account_address::AccountAddress;
+use libra_types::account_address::AccountAddress;
 use protobuf::RepeatedField;
-use types::transaction::SignedTransactionWithProof;
+use libra_types::transaction::SignedTransactionWithProof;
 use crypto::HashValue;
 
 #[derive(Clone, Debug, Eq, PartialEq, FromProto, IntoProto)]

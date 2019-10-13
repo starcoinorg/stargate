@@ -1,5 +1,5 @@
 use futures::io::{AsyncRead, AsyncWrite};
-use types::account_address::AccountAddress;
+use libra_types::account_address::AccountAddress;
 
 pub struct SgChannel {
     local_addr: AccountAddress,

@@ -3,7 +3,7 @@ use std::{
     thread::{sleep, spawn},
     time::Duration,
 };
-use types::account_address::AccountAddress;
+use libra_types::account_address::AccountAddress;
 
 #[test]
 fn test_mock_chain_client_faucet() {

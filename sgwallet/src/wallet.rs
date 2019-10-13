@@ -44,7 +44,7 @@ use star_types::{
     transaction_output_helper,
 };
 use state_view::StateView;
-use types::{
+use libra_types::{
     access_path::{AccessPath, DataPath},
     account_address::AccountAddress,
     account_config::{account_resource_path, coin_struct_tag, AccountResource},

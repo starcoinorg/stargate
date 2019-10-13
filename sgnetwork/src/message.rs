@@ -5,7 +5,7 @@ use crypto::{
 };
 use network_libp2p::CustomMessage;
 use parity_codec::{Decode, Encode};
-use types::account_address::AccountAddress;
+use libra_types::account_address::AccountAddress;
 
 #[derive(Clone, Debug)]
 pub struct InnerMessage {

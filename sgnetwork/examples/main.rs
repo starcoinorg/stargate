@@ -16,7 +16,7 @@ use tokio::{
     runtime::{Runtime, TaskExecutor},
     timer::Interval,
 };
-use types::account_address::AccountAddress;
+use libra_types::account_address::AccountAddress;
 fn main() {
     env_logger::init();
     ::logger::init_for_e2e_testing();

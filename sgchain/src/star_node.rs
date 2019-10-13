@@ -1,22 +1,20 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use admission_control_proto::proto::admission_control_grpc::{
+use admission_control_proto::proto::admission_control::{
     create_admission_control, AdmissionControlClient,
 };
 use admission_control_service::admission_control_service::AdmissionControlService;
 use config::config::{NetworkConfig, NodeConfig, RoleType};
 use consensus::consensus_provider::{make_consensus_provider, ConsensusProvider};
 use crypto::{ed25519::*, ValidKey};
-use debug_interface::{node_debug_service::NodeDebugService, proto::node_debug_interface_grpc};
-use execution_proto::proto::execution_grpc;
-use execution_service::ExecutionService;
-use futures03::future::{FutureExt, TryFutureExt};
+use debug_interface::{node_debug_service::NodeDebugService, proto::create_node_debug_interface};
+use futures::future::{FutureExt, TryFutureExt};
 use grpc_helpers::ServerHandle;
 use grpcio::{ChannelBuilder, EnvBuilder, ServerBuilder};
 use grpcio_sys;
 use logger::prelude::*;
-use mempool::{proto::mempool_grpc::MempoolClient, MempoolRuntime};
+use libra_mempool::{proto::mempool::MempoolClient, MempoolRuntime};
 use metrics::metric_server;
 use network::{
     validator_network::{
@@ -38,8 +36,10 @@ use std::{
 use storage_client::{StorageRead, StorageWrite};
 use storage_service::start_storage_service_and_return_service;
 use tokio::runtime::{Builder, Runtime};
-use types::account_address::AccountAddress as PeerId;
+use libra_types::account_address::AccountAddress as PeerId;
 use vm_validator::vm_validator::VMValidator;
+use executor::Executor;
+use vm_runtime::MoveVM;
 
 pub struct LibraHandle {
     _ac: ServerHandle,
@@ -47,7 +47,6 @@ pub struct LibraHandle {
     _state_synchronizer: StateSynchronizer,
     _network_runtimes: Vec<Runtime>,
     consensus: Option<Box<dyn ConsensusProvider>>,
-    _execution: ServerHandle,
     _storage: ServerHandle,
     _debug: ServerHandle,
 }
@@ -107,25 +106,23 @@ where
     (server, client)
 }
 
-fn setup_executor<R, W>(config: &NodeConfig, r: Arc<R>, w: Arc<W>) -> ::grpcio::Server
-where
-    R: StorageRead + 'static,
-    W: StorageWrite + 'static,
+fn setup_executor<R, W>(config: &NodeConfig, r: Arc<R>, w: Arc<W>) -> Arc<Executor<MoveVM>>
+    where
+        R: StorageRead + 'static,
+        W: StorageWrite + 'static,
 {
-    let handle = ExecutionService::new(r, w, config);
-    let service = execution_grpc::create_execution(handle);
-    ::grpcio::ServerBuilder::new(Arc::new(EnvBuilder::new().name_prefix("grpc-exe-").build()))
-        .register_service(service)
-        .bind(config.execution.address.clone(), config.execution.port)
-        .build()
-        .expect("Unable to create grpc server")
+    Arc::new(Executor::new(
+        r,
+        w,
+        config,
+    ))
 }
+
 
 fn setup_debug_interface(config: &NodeConfig) -> ::grpcio::Server {
     let env = Arc::new(EnvBuilder::new().name_prefix("grpc-debug-").build());
     // Start Debug interface
-    let debug_service =
-        node_debug_interface_grpc::create_node_debug_interface(NodeDebugService::new());
+    let debug_service = create_node_debug_interface(NodeDebugService::new());
     ::grpcio::ServerBuilder::new(env)
         .register_service(debug_service)
         .bind(
@@ -232,11 +229,11 @@ pub fn setup_environment(node_config: &mut NodeConfig) -> (AdmissionControlClien
     );
 
     instant = Instant::now();
-    let execution = ServerHandle::setup(setup_executor(
+    let executor = setup_executor(
         &node_config,
         Arc::clone(&storage_service),
         Arc::clone(&storage_service),
-    ));
+    );
     debug!(
         "Execution service started in {} ms",
         instant.elapsed().as_millis()
@@ -269,7 +266,7 @@ pub fn setup_environment(node_config: &mut NodeConfig) -> (AdmissionControlClien
             // Start the network provider.
             runtime
                 .executor()
-                .spawn(network_provider.start().unit_error().compat());
+                .spawn(network_provider.start());
             network_runtimes.push(runtime);
             debug!("Network started for peer_id: {}", peer_id);
         }
@@ -281,7 +278,7 @@ pub fn setup_environment(node_config: &mut NodeConfig) -> (AdmissionControlClien
     let metric_host = node_config.debug_interface.address.clone();
     thread::spawn(move || metric_server::start_server((metric_host.as_str(), metrics_port)));
 
-    let state_synchronizer = StateSynchronizer::bootstrap(state_sync_network_handles, &node_config);
+    let state_synchronizer = StateSynchronizer::bootstrap(state_sync_network_handles, executor.clone(), &node_config);
 
     let mut mempool = None;
     let mut consensus = None;
@@ -304,7 +301,7 @@ pub fn setup_environment(node_config: &mut NodeConfig) -> (AdmissionControlClien
             ]);
         runtime
             .executor()
-            .spawn(network_provider.start().unit_error().compat());
+            .spawn(network_provider.start());
         network_runtimes.push(runtime);
         debug!("Network started for peer_id: {}", peer_id);
 
@@ -323,6 +320,7 @@ pub fn setup_environment(node_config: &mut NodeConfig) -> (AdmissionControlClien
             node_config,
             consensus_network_sender,
             consensus_network_events,
+            executor,
             state_synchronizer.create_client(),
         );
         consensus_provider
@@ -344,7 +342,6 @@ pub fn setup_environment(node_config: &mut NodeConfig) -> (AdmissionControlClien
         _mempool: mempool,
         _state_synchronizer: state_synchronizer,
         consensus,
-        _execution: execution,
         _storage: storage,
         _debug: debug_if,
     };

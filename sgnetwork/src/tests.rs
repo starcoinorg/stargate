@@ -26,7 +26,7 @@ mod tests {
     };
 
     use network_libp2p::{identity, CustomMessage, NodeKeyConfig, PeerId, PublicKey, Secret};
-    use types::account_address::AccountAddress;
+    use libra_types::account_address::AccountAddress;
 
     use crate::{
         build_network_service, convert_account_address_to_peer_id, helper::convert_boot_nodes,

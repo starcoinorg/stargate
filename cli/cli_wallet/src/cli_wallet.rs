@@ -21,7 +21,7 @@ use std::{
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
-use types::{
+use libra_types::{
     account_address::AccountAddress,
     proto::transaction::SignedTransaction as ProtoSignedTransaction,
     transaction::{RawTransaction, SignedTransaction},

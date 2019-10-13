@@ -22,7 +22,7 @@ use sgchain::{
 };
 use sgcompiler::{Compiler, StateViewModuleLoader};
 use star_types::script_package::ChannelScriptPackage;
-use types::{account_address::AccountAddress, transaction::TransactionArgument};
+use libra_types::{account_address::AccountAddress, transaction::TransactionArgument};
 
 use super::wallet::*;
 
