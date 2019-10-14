@@ -783,13 +783,13 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             return;
         }
         let processor = self.message_processor.clone();
-//        let task = tokio::timer::delay(Instant::now() + Duration::from_millis(timeout))
-//            .and_then(|_| async move {
-//                processor.remove_future(hash);
-//                Ok(())
-//            })
-//            .map_err(|e| panic!("delay errored; err={:?}", e));
-//        self.executor.spawn(task);
+        let task = tokio::timer::delay(Instant::now() + Duration::from_millis(timeout))
+            .and_then(|_| async move {
+                processor.remove_future(hash);
+                Ok(())
+            })
+            .map_err(|e| panic!("delay errored; err={:?}", e));
+        self.executor.spawn(task);
     }
 
     pub fn find_offchain_txn(&self, hash: Option<HashValue>, count: u32) -> Result<Vec<(HashValue, u8)>> {
