@@ -82,7 +82,7 @@ where
     storage: Arc<AtomicRefCell<LocalStateStorage<C>>>,
     script_registry: PackageRegistry,
     lock: futures_locks::Mutex<u64>,
-    offchain_transactions:Arc<AtomicRefCell<Vec<(HashValue,u8)>>>,
+    offchain_transactions: Arc<AtomicRefCell<Vec<(HashValue, u8)>>>,
 }
 
 impl<C> Wallet<C>
@@ -139,7 +139,6 @@ where
     }
 
     fn execute_transaction(
-        &self,
         state_view: &dyn StateView,
         transaction: SignedTransaction,
     ) -> Result<TransactionOutput> {
@@ -194,7 +193,7 @@ where
         let txn = self.create_signed_script_txn(channel, receiver, script)?;
         let storage = self.storage.borrow();
         let state_view = storage.new_channel_view(None, &receiver)?;
-        let output = self.execute_transaction(&state_view, txn.clone())?;
+        let output = Self::execute_transaction(&state_view, txn.clone())?;
 
         let payload = if output.is_travel_txn() {
             let write_set_bytes: Vec<u8> = SimpleSerializer::serialize(output.write_set())?;
@@ -264,7 +263,7 @@ where
         let txn_payload_signature = signed_txn
             .receiver_signature()
             .expect("signature must exist.");
-        let output = self.execute_transaction(&state_view, signed_txn)?;
+        let output = Self::execute_transaction(&state_view, signed_txn)?;
         //TODO verify output.
         channel.append_txn_request(ChannelTransactionRequestAndOutput::new(
             txn_request.clone(),
@@ -476,7 +475,7 @@ where
                         .client
                         .watch_transaction(sender, signed_txn.sequence_number());
                     // FIXME: should not panic here, handle timeout situation.
-                    watch_future.await?.expect("proof is none.")
+                    watch_future.await?.expect("proof is none.").0
                 };
                 //self.check_output(&output)?;
                 let gas = txn_with_proof.proof.transaction_info().gas_used();
@@ -498,6 +497,7 @@ where
                 ChannelTransactionRequestPayload::Offchain(sender_witness),
                 ChannelTransactionResponsePayload::Offchain(receiver_witness),
             ) => {
+                // apply the other's witness payload to use his signature.
                 if request.sender() == self.account {
                     channel.apply_witness(
                         receiver_witness.witness_payload.clone(),
@@ -509,7 +509,9 @@ where
                         sender_witness.witness_signature.clone(),
                     )?;
                 }
-                self.offchain_transactions.borrow_mut().push((response.request_id(),1));
+                self.offchain_transactions
+                    .borrow_mut()
+                    .push((response.request_id(), 1));
                 0
             }
             _ => bail!("ChannelTransaction request and response type not match."),
@@ -670,7 +672,7 @@ where
         let _resp = self.client.submit_signed_transaction(signed_transaction)?;
         let watch_future = self.client.watch_transaction(sender, seq_number);
         match watch_future.await? {
-            Some(proof) => Ok(proof),
+            Some((proof, _)) => Ok(proof),
             None => Err(format_err!(
                 "proof not found by address {:?} and seq num {} .",
                 sender,
@@ -679,32 +681,36 @@ where
         }
     }
 
-    pub fn find_offchain_txn(&self,hash:Option<HashValue>,count:u32)->Result<Vec<(HashValue,u8)>>{
-        let tnxs=self.offchain_transactions.borrow();
+    pub fn find_offchain_txn(
+        &self,
+        hash: Option<HashValue>,
+        count: u32,
+    ) -> Result<Vec<(HashValue, u8)>> {
+        let tnxs = self.offchain_transactions.borrow();
         let mut count_num = count;
         let mut find_data = false;
-        let mut data=Vec::new();
-        match hash{
-            Some(hash)=>{
-                for (hash_item,res) in tnxs.iter(){
-                    if(hash.eq(hash_item)){
-                        find_data=true;
+        let mut data = Vec::new();
+        match hash {
+            Some(hash) => {
+                for (hash_item, res) in tnxs.iter() {
+                    if (hash.eq(hash_item)) {
+                        find_data = true;
                         continue;
                     }
-                    if(find_data&&count_num>0){
-                        data.push((*hash_item,*res));
-                        count_num=count_num-1;
-                        if(count_num==0){
+                    if (find_data && count_num > 0) {
+                        data.push((*hash_item, *res));
+                        count_num = count_num - 1;
+                        if (count_num == 0) {
                             break;
                         }
                     }
                 }
-            },
-            None=>{
-                for (hash_item,res) in tnxs.iter() {
-                    data.push((*hash_item,*res));
-                    count_num=count_num-1;
-                    if(count_num==0){
+            }
+            None => {
+                for (hash_item, res) in tnxs.iter() {
+                    data.push((*hash_item, *res));
+                    count_num = count_num - 1;
+                    if (count_num == 0) {
                         break;
                     }
                 }
