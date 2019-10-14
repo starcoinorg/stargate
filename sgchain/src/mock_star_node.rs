@@ -165,7 +165,7 @@ fn commit_block(
                 let info = LedgerInfo::new(resp.version(), resp.root_hash(), HashValue::random(), block_id, 0, u64::max_value(), None);
                 let info_sign = LedgerInfoWithSignatures::new(info, BTreeMap::new());
 
-                block_on(executor.commit_block(info_sign)).unwrap();
+                block_on(executor.commit_block(info_sign)).unwrap().unwrap();
 
                 // remove from mem pool
                 mempool_client.remove_txn(exclude_transactions);

@@ -475,7 +475,7 @@ where
                         .client
                         .watch_transaction(sender, signed_txn.sequence_number());
                     // FIXME: should not panic here, handle timeout situation.
-                    watch_future.await?.expect("proof is none.").0
+                    watch_future.await?.0.expect("proof is none.")
                 };
                 //self.check_output(&output)?;
                 let gas = txn_with_proof.proof.transaction_info().gas_used();
@@ -671,8 +671,9 @@ where
         let sender = &signed_transaction.sender();
         let _resp = self.client.submit_signed_transaction(signed_transaction)?;
         let watch_future = self.client.watch_transaction(sender, seq_number);
-        match watch_future.await? {
-            Some((proof, _)) => Ok(proof),
+        let (tx_proof, account_proof) = watch_future.await?;
+        match  tx_proof {
+            Some(proof) => Ok(proof),
             None => Err(format_err!(
                 "proof not found by address {:?} and seq num {} .",
                 sender,

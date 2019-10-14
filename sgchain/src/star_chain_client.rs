@@ -126,23 +126,23 @@ pub trait ChainClient: Send + Sync {
         &self,
         address: &AccountAddress,
         seq: u64,
-    ) -> Result<Option<(SignedTransactionWithProof, AccountStateWithProof)>> {
+    ) -> Result<(Option<SignedTransactionWithProof>, Option<AccountStateWithProof>)> {
         let end_time = Instant::now() + Duration::from_millis(10_000);
         loop {
             let timeout_time = Instant::now() + Duration::from_millis(1000);
             delay(timeout_time).await;
                 debug!("watch address : {:?}, seq number : {}", address, seq);
-                let result = self.get_transaction_by_seq_num(address, seq)?;
+                let (tx_proof,account_proof)  = self.get_transaction_by_seq_num(address, seq)?;
                 let flag = timeout_time >= end_time;
-                match result {
+                match tx_proof {
                     None => {
                         if flag {
-                            return Ok(None);
+                            return Ok((None,account_proof));
                         }
                         continue;
                     }
                     Some(t) => {
-                        return Ok(Some(t));
+                        return Ok((Some(t), account_proof));
                     }
                 }
 
@@ -153,28 +153,14 @@ pub trait ChainClient: Send + Sync {
         &self,
         account_address: &AccountAddress,
         seq_num: u64,
-    ) -> Result<Option<(SignedTransactionWithProof, AccountStateWithProof)>> {
+    ) -> Result<(Option<SignedTransactionWithProof>, Option<AccountStateWithProof>)> {
         let req = RequestItem::GetAccountTransactionBySequenceNumber {
             account: account_address.clone(),
             sequence_number: seq_num,
             fetch_events: false,
         };
         let mut resp = parse_response(self.do_request(&build_request(req, None)));
-        let mut response = resp.take_get_account_transaction_by_sequence_number_response();
-        if response.has_signed_transaction_with_proof() {
-            let proof = response.take_signed_transaction_with_proof();
-            let proof = SignedTransactionWithProof::from_proto(proof)
-                .expect("SignedTransaction parse from proto err.");
-            let account_state_with_proof = response.take_proof_of_current_sequence_number();
-            let account_state_with_proof =
-                AccountStateWithProof::from_proto(account_state_with_proof)
-                    .expect("AccountStateWithProof parse from proto error");
-            Ok(Some((proof, account_state_with_proof)))
-        } else {
-            Ok(None)
-        }
-        let (signed_txn_with_proof, _) = resp.into_get_account_txn_by_seq_num_response()?;
-        Ok(signed_txn_with_proof)
+        resp.into_get_account_txn_by_seq_num_response()
     }
 
     fn do_request(&self, req: &UpdateToLatestLedgerRequest) -> UpdateToLatestLedgerResponse {

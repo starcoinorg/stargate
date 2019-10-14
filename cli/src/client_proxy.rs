@@ -353,7 +353,7 @@ impl ClientProxy {
             stdout().flush().unwrap();
             max_iterations -= 1;
 
-            if let Ok(Some(_)) = self
+            if let Ok((Some(_),_)) = self
                 .chain_client
                 .get_transaction_by_seq_num(&account, sequence_number)
             {
