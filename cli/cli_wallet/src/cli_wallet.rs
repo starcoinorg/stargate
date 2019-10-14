@@ -22,7 +22,6 @@ use std::{
 };
 use libra_types::{
     account_address::AccountAddress,
-    proto::transaction::SignedTransaction as ProtoSignedTransaction,
     transaction::{RawTransaction, SignedTransaction},
     transaction_helpers::TransactionSigner,
 };

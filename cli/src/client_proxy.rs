@@ -5,7 +5,7 @@ use cli_wallet::cli_wallet::WalletLibrary;
 use failure::prelude::*;
 use grpcio::EnvBuilder;
 use node_client::NodeClient;
-use node_proto::{
+use star_types::node::{
     ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse,
     DeployModuleRequest, DeployModuleResponse, DepositRequest, DepositResponse,
     ExecuteScriptRequest, InstallChannelScriptPackageRequest, OpenChannelRequest,
