@@ -9,7 +9,6 @@ use libra_crypto::{
     test_utils::KeyPair,
     traits::{SigningKey, Uniform},
 };
-use proto_conv::{FromProto, IntoProto};
 use protobuf::Message;
 use rand::{prelude::*, rngs::EntropyRng, Rng};
 use serde;
