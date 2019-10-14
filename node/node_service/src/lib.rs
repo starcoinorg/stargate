@@ -10,7 +10,8 @@ use node_internal::node::Node as Node_Internal;
 use node_proto::{ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse, DepositRequest, DepositResponse, InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse, OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest, WithdrawResponse, DeployModuleRequest, DeployModuleResponse, ExecuteScriptRequest};
 use sg_config::config::NodeConfig;
 use sgchain::star_chain_client::ChainClient;
-use star_types::{proto::star_types::create_node, script_package::ChannelScriptPackage};
+use node_proto::proto::node::create_node;
+use star_types::{script_package::ChannelScriptPackage};
 use std::sync::Arc;
 use std::convert::TryFrom;
 
@@ -42,14 +43,14 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> NodeService<C> {
     }
 }
 
-impl<C: ChainClient + Clone + Send + Sync + 'static> star_types::proto::star_types::Node
+impl<C: ChainClient + Clone + Send + Sync + 'static> node_proto::proto::node::Node
     for NodeService<C>
 {
     fn open_channel(
         &mut self,
         ctx: ::grpcio::RpcContext,
-        req: star_types::proto::star_types::OpenChannelRequest,
-        sink: ::grpcio::UnarySink<star_types::proto::star_types::OpenChannelResponse>,
+        req: node_proto::proto::node::OpenChannelRequest,
+        sink: ::grpcio::UnarySink<node_proto::proto::node::OpenChannelResponse>,
     ) {
         let request = OpenChannelRequest::try_from(req).unwrap();
         let rx = self.node.open_channel_oneshot(
@@ -66,8 +67,8 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> star_types::proto::star_typ
     fn pay(
         &mut self,
         ctx: ::grpcio::RpcContext,
-        req: star_types::proto::star_types::PayRequest,
-        sink: ::grpcio::UnarySink<star_types::proto::star_types::PayResponse>,
+        req: node_proto::proto::node::PayRequest,
+        sink: ::grpcio::UnarySink<node_proto::proto::node::PayResponse>,
     ) {
         let request = PayRequest::try_from(req).unwrap();
         let rx = self
@@ -80,8 +81,8 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> star_types::proto::star_typ
     fn send_off_line_tx(
         &mut self,
         ctx: ::grpcio::RpcContext,
-        req: star_types::proto::star_types::SendOffLineTxRequest,
-        sink: ::grpcio::UnarySink<star_types::proto::star_types::SendOffLineTxResponse>,
+        req: node_proto::proto::node::SendOffLineTxRequest,
+        sink: ::grpcio::UnarySink<node_proto::proto::node::SendOffLineTxResponse>,
     ) {
         println!("send off line tx");
     }
@@ -89,8 +90,8 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> star_types::proto::star_typ
     fn connect(
         &mut self,
         ctx: ::grpcio::RpcContext,
-        req: star_types::proto::star_types::ConnectRequest,
-        sink: ::grpcio::UnarySink<star_types::proto::star_types::ConnectResponse>,
+        req: node_proto::proto::node::ConnectRequest,
+        sink: ::grpcio::UnarySink<node_proto::proto::node::ConnectResponse>,
     ) {
         let connect_req = ConnectRequest::try_from(req).unwrap();
         //self.node.connect(connect_req.remote_ip.parse().unwrap(),connect_req.remote_addr);
@@ -101,8 +102,8 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> star_types::proto::star_typ
     fn deposit(
         &mut self,
         ctx: ::grpcio::RpcContext,
-        req: star_types::proto::star_types::DepositRequest,
-        sink: ::grpcio::UnarySink<star_types::proto::star_types::DepositResponse>,
+        req: node_proto::proto::node::DepositRequest,
+        sink: ::grpcio::UnarySink<node_proto::proto::node::DepositResponse>,
     ) {
         let request = DepositRequest::try_from(req).unwrap();
         let rx = self.node.deposit_oneshot(
@@ -117,8 +118,8 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> star_types::proto::star_typ
     fn withdraw(
         &mut self,
         ctx: ::grpcio::RpcContext,
-        req: star_types::proto::star_types::WithdrawRequest,
-        sink: ::grpcio::UnarySink<star_types::proto::star_types::WithdrawResponse>,
+        req: node_proto::proto::node::WithdrawRequest,
+        sink: ::grpcio::UnarySink<node_proto::proto::node::WithdrawResponse>,
     ) {
         let request = WithdrawRequest::try_from(req).unwrap();
         let rx = self.node.withdraw_oneshot(
@@ -133,8 +134,8 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> star_types::proto::star_typ
     fn channel_balance(
         &mut self,
         ctx: ::grpcio::RpcContext,
-        req: star_types::proto::star_types::ChannelBalanceRequest,
-        sink: ::grpcio::UnarySink<star_types::proto::star_types::ChannelBalanceResponse>,
+        req: node_proto::proto::node::ChannelBalanceRequest,
+        sink: ::grpcio::UnarySink<node_proto::proto::node::ChannelBalanceResponse>,
     ) {
         let request = ChannelBalanceRequest::try_from(req).unwrap();
         let balance = self.node.channel_balance(request.remote_addr).unwrap();
@@ -145,8 +146,8 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> star_types::proto::star_typ
     fn install_channel_script_package(
         &mut self,
         ctx: ::grpcio::RpcContext,
-        req: star_types::proto::star_types::InstallChannelScriptPackageRequest,
-        sink: ::grpcio::UnarySink<star_types::proto::star_types::InstallChannelScriptPackageResponse>,
+        req: node_proto::proto::node::InstallChannelScriptPackageRequest,
+        sink: ::grpcio::UnarySink<node_proto::proto::node::InstallChannelScriptPackageResponse>,
     ) {
         let request = InstallChannelScriptPackageRequest::try_from(req).unwrap();
         self.node
@@ -158,8 +159,8 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> star_types::proto::star_typ
 
     fn deploy_module(&mut self,
                      ctx: ::grpcio::RpcContext,
-                     req: star_types::proto::star_types::DeployModuleRequest,
-                     sink: ::grpcio::UnarySink<star_types::proto::star_types::DeployModuleResponse>){
+                     req: node_proto::proto::node::DeployModuleRequest,
+                     sink: ::grpcio::UnarySink<node_proto::proto::node::DeployModuleResponse>){
         let request = DeployModuleRequest::try_from(req).unwrap();
         let rx = self.node.deploy_package_oneshot(request.module_bytes);
         let fut = process_response(rx, sink);
@@ -167,8 +168,8 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> star_types::proto::star_typ
     }
 
     fn execute_script(&mut self, ctx: ::grpcio::RpcContext,
-                      req: star_types::proto::star_types::ExecuteScriptRequest,
-                      sink: ::grpcio::UnarySink<star_types::proto::star_types::ExecuteScriptResponse>) {
+                      req: node_proto::proto::node::ExecuteScriptRequest,
+                      sink: ::grpcio::UnarySink<node_proto::proto::node::ExecuteScriptResponse>) {
         let request = ExecuteScriptRequest::try_from(req).unwrap();
         let rx = self.node.execute_script_oneshot(request.remote_addr,request.package_name,request.script_name,request.args);
         let fut = process_response(rx, sink);
