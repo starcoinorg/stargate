@@ -498,9 +498,7 @@ where
                 ChannelTransactionRequestPayload::Offchain(sender_witness),
                 ChannelTransactionResponsePayload::Offchain(receiver_witness),
             ) => {
-                // FIXME(lerencao): should apply my own witness payload.
-                // or either payload,
-                // as the two payload should have the same writeset and channel seq number
+                // apply the other's witness payload to use his signature.
                 if request.sender() == self.account {
                     channel.apply_witness(
                         receiver_witness.witness_payload.clone(),
