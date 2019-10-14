@@ -18,7 +18,7 @@ use crypto::hash::CryptoHash;
 use futures::{
     future,
     stream::{self, Stream},
-    channel::{
+    sync::{
         mpsc,
         oneshot::{self, Canceled, Sender},
     },

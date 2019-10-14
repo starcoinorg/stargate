@@ -39,8 +39,14 @@ use star_types::{
 use star_types::script_package::ChannelScriptPackage;
 
 use crate::message_processor::{MessageFuture, MessageProcessor};
-use futures::channel::oneshot;
-use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, channel};
+
+use futures_01::{
+    future::Future,
+    sync::{
+        mpsc::{channel, UnboundedReceiver, UnboundedSender},
+        oneshot,
+    },
+};
 
 pub struct Node<C: ChainClient + Send + Sync + 'static> {
     executor: TaskExecutor,
@@ -73,7 +79,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         net_close_tx: oneshot::Sender<()>,
     ) -> Self {
         let executor_clone = executor.clone();
-        let (event_sender, event_receiver) = futures::channel::mpsc::unbounded();
+        let (event_sender, event_receiver) = futures_01::sync::mpsc::unbounded();
 
         let node_inner = NodeInner {
             executor: executor_clone,
@@ -525,8 +531,8 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         mut event_receiver: UnboundedReceiver<Event>,
     ) {
         info!("start receive message");
-        let mut receiver = receiver.fuse();
-        let mut event_receiver = event_receiver.fuse();
+        let mut receiver = receiver.compat().fuse();
+        let mut event_receiver = event_receiver.compat().fuse();
         let net_close_tx = node_inner
             .clone()
             .lock()
@@ -539,6 +545,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
                 message = receiver.select_next_some() => {
                     info!("receive message ");
                     match message {
+                    Ok(msg)=>{
                     let peer_id = msg.peer_id;
                     let data = bytes::Bytes::from(msg.data);
                     let msg_type=parse_message_type(&data);
@@ -550,6 +557,10 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
                         MessageType::ErrorMessage => node_inner.clone().lock().unwrap().handle_error_message(data[2..].to_vec()),
                         _=>warn!("message type not found {:?}",msg_type),
                     };
+                    },
+                    Err(e)=>{
+
+                    }
                     }
                 },
                 _ = event_receiver.select_next_some() => {
