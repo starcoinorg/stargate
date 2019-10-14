@@ -11,8 +11,8 @@ use futures::{
     prelude::*,
     stream::{Fuse, Stream, StreamExt},
 };
-
-use tokio::{runtime::TaskExecutor, timer::Delay};
+use futures_timer::Delay;
+use tokio::{runtime::TaskExecutor};
 
 use canonical_serialization::{
     CanonicalDeserialize, CanonicalDeserializer, SimpleDeserializer,
@@ -73,7 +73,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         net_close_tx: oneshot::Sender<()>,
     ) -> Self {
         let executor_clone = executor.clone();
-        let (event_sender, event_receiver) = futures_01::sync::mpsc::unbounded();
+        let (event_sender, event_receiver) = futures::channel::mpsc::unbounded();
 
         let node_inner = NodeInner {
             executor: executor_clone,
@@ -539,7 +539,6 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
                 message = receiver.select_next_some() => {
                     info!("receive message ");
                     match message {
-                    Ok(msg)=>{
                     let peer_id = msg.peer_id;
                     let data = bytes::Bytes::from(msg.data);
                     let msg_type=parse_message_type(&data);
@@ -551,10 +550,6 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
                         MessageType::ErrorMessage => node_inner.clone().lock().unwrap().handle_error_message(data[2..].to_vec()),
                         _=>warn!("message type not found {:?}",msg_type),
                     };
-                    },
-                    Err(e)=>{
-
-                    }
                     }
                 },
                 _ = event_receiver.select_next_some() => {
@@ -724,7 +719,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             peer_id: addr,
             data: msg.to_vec(),
         });
-        let (tx, rx) = channel(1);
+        let (tx, rx) = futures_01::sync::mpsc::channel(1);
         let message_future = MessageFuture::new(rx);
         self.message_processor.add_future(hash_value.clone(), tx);
         self.future_timeout(hash_value, self.default_future_timeout);
@@ -755,7 +750,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             peer_id: receiver_address,
             data: msg.to_vec(),
         });
-        let (tx, rx) = channel(1);
+        let (tx, rx) = futures_01::sync::mpsc::channel(1);
         let message_future = MessageFuture::new(rx);
         self.message_processor
             .add_future(hash_value.clone(), tx.clone());
@@ -783,12 +778,10 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             return;
         }
         let processor = self.message_processor.clone();
-        let task = tokio::timer::delay(Instant::now() + Duration::from_millis(timeout))
-            .and_then(|_| async move {
-                processor.remove_future(hash);
-                Ok(())
-            })
-            .map_err(|e| panic!("delay errored; err={:?}", e));
+        let task = async move {
+            Delay::new(Duration::from_millis(timeout)).await;
+            processor.remove_future(hash);
+        };
         self.executor.spawn(task);
     }
 
@@ -839,13 +832,17 @@ mod tests{
     use super::*;
     use tokio::runtime::Runtime;
 
+    use futures::prelude::*;
+    use futures_timer::Delay;
+
     #[test]
     fn test_delay(){
         let rt = Runtime::new().unwrap();
-        let task = tokio::timer::delay(Instant::now() + Duration::from_millis(1000)).and_then(|x|async move{
-            println!("it works");
-            Ok(())
-        });
+
+        let task = async {
+            Delay::new(Duration::from_millis(1000)).await;
+            println!("ok");
+        };
         rt.spawn(task);
         rt.shutdown_on_idle();
     }
