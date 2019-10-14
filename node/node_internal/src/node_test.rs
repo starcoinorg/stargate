@@ -29,7 +29,7 @@ use futures_01::future::Future as Future01;
 use logger::prelude::*;
 use proto_conv::{FromProto, FromProtoBytes, IntoProto, IntoProtoBytes};
 use sg_config::config::NetworkConfig;
-use sgchain::star_chain_client::{stop_mock_chain, MockChainClient};
+use sgchain::star_chain_client::{MockChainClient};
 use sgwallet::wallet::*;
 use star_types::message::*;
 use std::{
@@ -138,8 +138,6 @@ fn node_test() -> Result<()> {
         node2.shutdown();
     };
     rt.block_on(f.boxed().unit_error().compat()).unwrap();
-
-    stop_mock_chain(&client);
 
     debug!("here");
     //rt.shutdown_on_idle().wait().unwrap();

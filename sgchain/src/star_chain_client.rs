@@ -46,6 +46,7 @@ use tokio::timer::delay;
 use admission_control_service::admission_control_mock_client::AdmissionControlMockClient;
 use prost_ext::MessageExt;
 use config::config::NodeConfig;
+use futures::channel::oneshot::Sender;
 
 #[async_trait]
 pub trait ChainClient: Send + Sync {
@@ -252,7 +253,8 @@ impl ChainClient for StarChainClient {
 #[derive(Clone)]
 pub struct MockChainClient {
     ac_client: Arc<AdmissionControlMockClient>,
-    pub shutdown_sender: Arc<UnboundedSender<()>>,
+    // just wait client to be drop.
+    _shutdown_sender: Arc<Sender<()>>,
 }
 
 impl MockChainClient {
@@ -272,18 +274,11 @@ impl MockChainClient {
         (
             MockChainClient {
                 ac_client: Arc::new(AdmissionControlMockClient::new(ac)),
-                shutdown_sender: Arc::new(shutdown_sender),
+                _shutdown_sender: Arc::new(shutdown_sender),
             },
             _handle,
         )
     }
-}
-
-pub fn stop_mock_chain(client: &MockChainClient) {
-    client
-        .shutdown_sender
-        .unbounded_send(())
-        .expect("send shutdown msg err.")
 }
 
 impl ChainClient for MockChainClient {
@@ -310,7 +305,7 @@ pub fn faucet_sync<C>(client: C, receiver: AccountAddress, amount: u64) -> Resul
 where
     C: 'static + ChainClient,
 {
-    let mut rt = Runtime::new().expect("faucet runtime err.");
+    let rt = Runtime::new().expect("faucet runtime err.");
     let f = async move { client.faucet(receiver, amount).await };
     rt.block_on(f)
 }

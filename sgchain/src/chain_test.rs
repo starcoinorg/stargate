@@ -1,4 +1,4 @@
-use crate::star_chain_client::{faucet_sync, stop_mock_chain, ChainClient, MockChainClient};
+use crate::star_chain_client::{faucet_sync, ChainClient, MockChainClient};
 use std::{
     thread::{sleep, spawn},
     time::Duration,
@@ -16,7 +16,6 @@ fn test_mock_chain_client_faucet() {
         faucet_sync(client.clone(), addr, 1000).unwrap();
         assert_eq!(client.account_exist(&addr, None), true);
     }
-    stop_mock_chain(&client);
     drop(client);
 }
 
@@ -32,7 +31,6 @@ fn test_multi_mock_chain_client() {
                 faucet_sync(client.clone(), addr, 1000).unwrap();
                 assert_eq!(client.account_exist(&addr, None), true);
             }
-            stop_mock_chain(&client);
             drop(client);
         });
     }

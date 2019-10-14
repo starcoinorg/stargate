@@ -1,14 +1,27 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use std::{
+    sync::{Arc, Mutex},
+    thread,
+    time::{Duration, Instant},
+};
+use std::collections::{BTreeMap, HashSet};
+
+use futures::{future, StreamExt};
+use futures::channel::mpsc::{unbounded, UnboundedSender};
+use futures::executor::block_on;
+use futures::stream::Stream;
+use tokio::timer::Interval;
+
+use admission_control_proto::proto::admission_control::AdmissionControl;
 use admission_control_service::{
     admission_control_service::AdmissionControlService,
 };
-use admission_control_proto::proto::admission_control::{AdmissionControl};
 use config::config::NodeConfig;
 use crypto::{hash::GENESIS_BLOCK_ID, HashValue};
+use executor::Executor;
 use grpc_helpers::ServerHandle;
-use logger::prelude::*;
 use libra_mempool::{
     core_mempool_client::CoreMemPoolClient,
     proto::{
@@ -16,27 +29,18 @@ use libra_mempool::{
         mempool_client::MempoolClientTrait,
     },
 };
-use std::{
-    sync::{Arc, Mutex},
-    thread,
-    time::{Duration, Instant},
-};
-use storage_client::{StorageRead, StorageWrite};
-use storage_service::start_storage_service_and_return_service;
 use libra_types::{
     transaction::SignedTransaction,
 };
-use vm_validator::vm_validator::VMValidator;
-use executor::Executor;
-use vm_runtime::MoveVM;
 use libra_types::crypto_proxies::LedgerInfoWithSignatures;
-use std::collections::{BTreeMap, HashSet};
 use libra_types::ledger_info::LedgerInfo;
-use futures::executor::block_on;
-use futures::channel::mpsc::{unbounded, UnboundedSender};
-use futures::stream::Stream;
-use futures::{future, StreamExt};
-use tokio::timer::Interval;
+use logger::prelude::*;
+use storage_client::{StorageRead, StorageWrite};
+use storage_service::start_storage_service_and_return_service;
+use vm_runtime::MoveVM;
+use vm_validator::vm_validator::VMValidator;
+use futures::channel::oneshot;
+use futures::channel::oneshot::Sender;
 
 pub struct StarHandle {
     _storage: ServerHandle,
@@ -49,8 +53,8 @@ fn setup_ac<R>(
     CoreMemPoolClient,
     AdmissionControlService<CoreMemPoolClient, VMValidator>,
 )
-where
-    R: StorageRead + Clone + 'static,
+    where
+        R: StorageRead + Clone + 'static,
 {
     let mempool = CoreMemPoolClient::new(&config);
     let mempool_client = Some(Arc::new(mempool.clone()));
@@ -88,7 +92,7 @@ pub fn setup_environment(
     node_config: &mut NodeConfig,
 ) -> (
     StarHandle,
-    UnboundedSender<()>,
+    Sender<()>,
     AdmissionControlService<CoreMemPoolClient, VMValidator>,
 ) {
     crash_handler::setup_panic_handler();
@@ -113,7 +117,7 @@ pub fn setup_environment(
 
     // Initialize and start AC.
     instant = Instant::now();
-    let (mempool_client,ac) = setup_ac(&node_config, Arc::clone(&storage_service));
+    let (mempool_client, ac) = setup_ac(&node_config, Arc::clone(&storage_service));
     debug!("AC started in {} ms", instant.elapsed().as_millis());
 
     let block_hash_vec = Mutex::new(vec![*GENESIS_BLOCK_ID]);
@@ -128,23 +132,22 @@ fn commit_block(
     block_hash_vec: Mutex<Vec<HashValue>>,
     mempool_client: CoreMemPoolClient,
     executor: Arc<Executor<MoveVM>>,
-) -> UnboundedSender<()> {
-    let (shutdown_sender, mut shutdown_receiver) = unbounded();
+) -> Sender<()> {
+    let (shutdown_sender, mut shutdown_receiver) = oneshot::channel::<()>();
 
     let task = Interval::new(Instant::now(), Duration::from_secs(3))
         .take_while(move |_| {
-            match shutdown_receiver.try_next() {
-                Ok(Some(_)) => {
+            match shutdown_receiver.try_recv() {
+                Err(_)| Ok(Some(_)) => {
                     info!("Build block task exit.");
-                    return future::ready(false);
-                },
-                _ => {}
+                    future::ready(false)
+                }
+                _ => future::ready(true)
             }
-            return future::ready(true);
         })
         .for_each(move |_| {
             let txns = mempool_client.get_block(1, HashSet::new());
-
+            //debug!("for_each");
             debug!("txn size: {:?} of current block.", txns.len());
 
             if txns.len() > 0 {
@@ -153,7 +156,7 @@ fn commit_block(
                 let len = block_hash_vec.lock().unwrap().len();
                 let latest_hash = block_hash_vec.lock().unwrap().get(len - 1).unwrap().clone();
                 debug!("block height: {:?}, new block hash: {:?}", len, latest_hash);
-                let exclude_transactions = txns.iter().map(|txn|(txn.sender(), txn.sequence_number())).collect();
+                let exclude_transactions = txns.iter().map(|txn| (txn.sender(), txn.sequence_number())).collect();
                 let resp = block_on(executor.execute_block(txns, latest_hash, block_id)).unwrap().unwrap();
 
                 block_hash_vec.lock().unwrap().push(block_id);
@@ -171,12 +174,9 @@ fn commit_block(
         });
 
     thread::spawn(move || {
-        //        let mut rt = tokio::runtime::Runtime::new().unwrap();
-        //        let executor = rt.executor();
-        //        executor.spawn(task);
-        //        rt.shutdown_on_idle().wait().unwrap();
-
-        tokio::spawn(task)
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.spawn(task);
+        rt.shutdown_on_idle();
     });
 
     shutdown_sender
