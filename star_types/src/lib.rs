@@ -3,6 +3,7 @@ pub mod channel_transaction;
 #[cfg(test)]
 mod channel_transaction_test;
 pub mod message;
+pub mod node;
 pub mod proto;
 pub mod resource;
 pub mod sg_error;

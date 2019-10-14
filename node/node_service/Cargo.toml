@@ -14,7 +14,6 @@ serde = { version = "1.0.96", features = ["derive"] }
 rand = "0.6.5"
 tokio = "0.1.22"
 
-node_proto = { path = "../node_proto" }
 node_internal = { path = "../node_internal" }
 failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
 star_types = { path = "../../star_types" }

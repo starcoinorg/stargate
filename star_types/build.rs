@@ -15,5 +15,11 @@ fn main() {
         "src/proto",
     ];
 
-    prost_build::compile_protos(&proto_files, &includes).unwrap();
+    //prost_build::compile_protos(&proto_files, &includes).unwrap();
+    grpcio_compiler::prost_codegen::compile_protos(
+        &proto_files,
+        &includes,
+        &std::env::var("OUT_DIR").unwrap(),
+    )
+        .unwrap();
 }

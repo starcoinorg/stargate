@@ -1,9 +1,10 @@
 syntax = "proto3";
 
-package node;
+package star_types;
 
 import "script_package.proto";
 import "transaction.proto";
+import "get_with_proof.proto";
 
 service Node {
     rpc OpenChannel(OpenChannelRequest) returns (OpenChannelResponse) {}

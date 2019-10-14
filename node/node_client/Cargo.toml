@@ -9,7 +9,6 @@ edition = "2018"
 [dependencies]
 grpcio = { version = "=0.5.0-alpha.4", default-features = false }
 
-node_proto = { path = "../node_proto" }
 failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
 star_types = { path = "../../star_types" }
 prost = "0.5.0"
