@@ -23,6 +23,7 @@ vm_genesis = { path = "../libra/language/vm/vm_genesis" }
 executable-helpers = { path = "../libra/common/executable-helpers" }
 executor = { path = "../libra/execution/executor" }
 config = { path = "../libra/config"}
+structopt = "0.3.2"
 
 crash-handler = { path = "../libra/common/crash-handler" }
 grpcio-sys = "0.4.4"

@@ -4463,6 +4463,7 @@ dependencies = [
  "state_view 0.1.0",
  "storage-service 0.1.0",
  "storage_client 0.1.0",
+ "structopt 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio 0.2.0-alpha.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "tools 0.1.0",
  "transaction_builder 0.1.0",
