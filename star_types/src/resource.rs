@@ -100,6 +100,7 @@ pub fn get_account_struct_def() -> StructDef {
         byte_array_type,
         coin,
         Type::Bool,
+        Type::Bool,
         event_handle.clone(),
         event_handle.clone(),
         int_type.clone(),
@@ -111,68 +112,7 @@ pub fn get_coin_struct_def() -> StructDef {
     StructDef::new(vec![int_type.clone()])
 }
 
-pub fn get_market_cap_struct_tag() -> StructTag {
-    StructTag {
-        module: coin_module_name().to_owned(),
-        name: Identifier::new("MarketCap").unwrap(),
-        address: core_code_address(),
-        type_params: vec![],
-    }
-}
-
-pub fn get_market_cap_struct_def() -> StructDef {
-    let int_type = Type::U64;
-    StructDef::new(vec![int_type.clone()])
-}
-
-pub fn get_mint_capability_struct_tag() -> StructTag {
-    StructTag {
-        module: coin_module_name().to_owned(),
-        name: Identifier::new("MintCapability").unwrap(),
-        address: core_code_address(),
-        type_params: vec![],
-    }
-}
-
-pub fn get_mint_capability_struct_def() -> StructDef {
-    StructDef::new(vec![])
-}
-
-pub fn get_event_handle_struct_tag() -> StructTag {
-    StructTag {
-        module: Identifier::new("Event").unwrap(),
-        name: Identifier::new("Handle").unwrap(),
-        address: core_code_address(),
-        type_params: vec![],
-    }
-}
-
 pub fn get_event_handle_struct_def() -> StructDef {
     StructDef::new(vec![Type::U64, Type::ByteArray])
 }
 
-pub fn get_event_handle_id_generator_tag() -> StructTag {
-    StructTag {
-        module: Identifier::new("Event").unwrap(),
-        name: Identifier::new("HandleIdGenerator").unwrap(),
-        address: core_code_address(),
-        type_params: vec![],
-    }
-}
-
-pub fn get_event_handle_id_generator_def() -> StructDef {
-    StructDef::new(vec![Type::U64])
-}
-
-pub fn get_block_module_tag() -> StructTag {
-    StructTag {
-        module: Identifier::new("Block").unwrap(),
-        name: Identifier::new("T").unwrap(),
-        address: core_code_address(),
-        type_params: vec![],
-    }
-}
-
-pub fn get_block_module_def() -> StructDef {
-    StructDef::new(vec![Type::U64])
-}

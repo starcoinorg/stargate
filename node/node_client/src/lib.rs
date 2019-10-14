@@ -1,10 +1,10 @@
 use failure::{bail, Result};
 use grpcio::{ChannelBuilder, Environment};
-use star_types::node::{ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse,
+use node_proto::{ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse,
                        DepositRequest, DepositResponse, InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse,
                        OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest, WithdrawResponse,
                        DeployModuleRequest, DeployModuleResponse, ExecuteScriptRequest, ExecuteScriptResponse};
-use star_types::proto::star_types::NodeClient as GrpcNodeClient;
+use node_proto::proto::node::NodeClient as GrpcNodeClient;
 use std::sync::Arc;
 use std::convert::TryFrom;
 

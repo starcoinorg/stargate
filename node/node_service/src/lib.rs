@@ -7,7 +7,7 @@ use grpc_helpers::{
 };
 use grpcio::{EnvBuilder, RpcStatus, RpcStatusCode};
 use node_internal::node::Node as Node_Internal;
-use star_types::node::{ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse, DepositRequest, DepositResponse, InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse, OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest, WithdrawResponse, DeployModuleRequest, DeployModuleResponse, ExecuteScriptRequest};
+use node_proto::{ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse, DepositRequest, DepositResponse, InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse, OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest, WithdrawResponse, DeployModuleRequest, DeployModuleResponse, ExecuteScriptRequest};
 use sg_config::config::NodeConfig;
 use sgchain::star_chain_client::ChainClient;
 use star_types::{proto::star_types::create_node, script_package::ChannelScriptPackage};

@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package star_types;
+package node;
 
 import "script_package.proto";
 import "transaction.proto";

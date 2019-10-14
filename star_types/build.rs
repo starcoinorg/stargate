@@ -5,7 +5,6 @@ fn main() {
     let proto_files = [
         "src/proto/channel_transaction.proto",
         "src/proto/message.proto",
-        "src/proto/node.proto",
         "src/proto/script_package.proto",
         "src/proto/star_account.proto",
     ];
@@ -15,11 +14,5 @@ fn main() {
         "src/proto",
     ];
 
-    //prost_build::compile_protos(&proto_files, &includes).unwrap();
-    grpcio_compiler::prost_codegen::compile_protos(
-        &proto_files,
-        &includes,
-        &std::env::var("OUT_DIR").unwrap(),
-    )
-        .unwrap();
+    prost_build::compile_protos(&proto_files, &includes).unwrap();
 }

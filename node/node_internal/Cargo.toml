@@ -27,6 +27,7 @@ sgwallet = { path="../../sgwallet"}
 sgchain = { path = "../../sgchain"}
 libra-types = { path = "../../libra/types" }
 star_types = { path = "../../star_types" }
+node_proto = { path = "../node_proto"}
 
 crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }
 prost = "0.5.0"

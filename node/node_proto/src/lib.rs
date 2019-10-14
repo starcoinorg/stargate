@@ -4,12 +4,14 @@
 use failure::prelude::*;
 #[cfg(any(test, feature = "testing"))]
 use proptest_derive::Arbitrary;
-use crate::script_package::ChannelScriptPackage;
+use star_types::script_package::ChannelScriptPackage;
 use libra_types::account_address::AccountAddress;
 use protobuf::RepeatedField;
 use libra_types::transaction::SignedTransactionWithProof;
 use crypto::HashValue;
 use std::convert::{TryFrom,TryInto};
+
+pub mod proto;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
@@ -29,10 +31,10 @@ impl OpenChannelRequest {
     }
 }
 
-impl TryFrom<crate::proto::star_types::OpenChannelRequest> for OpenChannelRequest{
+impl TryFrom<crate::proto::node::OpenChannelRequest> for OpenChannelRequest{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::OpenChannelRequest) -> Result<Self> {
+    fn try_from(value: crate::proto::node::OpenChannelRequest) -> Result<Self> {
         Ok(Self{
             remote_addr: value.remote_addr.try_into()?,
             local_amount: value.local_amount,
@@ -41,7 +43,7 @@ impl TryFrom<crate::proto::star_types::OpenChannelRequest> for OpenChannelReques
     }
 }
 
-impl From<OpenChannelRequest> for crate::proto::star_types::OpenChannelRequest{
+impl From<OpenChannelRequest> for crate::proto::node::OpenChannelRequest{
 
     fn from(value: OpenChannelRequest) -> Self {
         Self{
@@ -62,15 +64,15 @@ impl OpenChannelResponse {
     }
 }
 
-impl TryFrom<crate::proto::star_types::OpenChannelResponse> for OpenChannelResponse{
+impl TryFrom<crate::proto::node::OpenChannelResponse> for OpenChannelResponse{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::OpenChannelResponse) -> Result<Self> {
+    fn try_from(value: crate::proto::node::OpenChannelResponse) -> Result<Self> {
         Ok(Self::new())
     }
 }
 
-impl From<OpenChannelResponse> for crate::proto::star_types::OpenChannelResponse{
+impl From<OpenChannelResponse> for crate::proto::node::OpenChannelResponse{
 
     fn from(value: OpenChannelResponse) -> Self {
         Self::default()
@@ -93,10 +95,10 @@ impl PayRequest {
     }
 }
 
-impl TryFrom<crate::proto::star_types::PayRequest> for PayRequest{
+impl TryFrom<crate::proto::node::PayRequest> for PayRequest{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::PayRequest) -> Result<Self> {
+    fn try_from(value: crate::proto::node::PayRequest) -> Result<Self> {
         Ok(Self{
             remote_addr: value.remote_addr.try_into()?,
             amount: value.amount,
@@ -104,7 +106,7 @@ impl TryFrom<crate::proto::star_types::PayRequest> for PayRequest{
     }
 }
 
-impl From<PayRequest> for crate::proto::star_types::PayRequest{
+impl From<PayRequest> for crate::proto::node::PayRequest{
 
     fn from(value: PayRequest) -> Self {
         Self{
@@ -125,15 +127,15 @@ impl PayResponse {
 }
 
 
-impl TryFrom<crate::proto::star_types::PayResponse> for PayResponse{
+impl TryFrom<crate::proto::node::PayResponse> for PayResponse{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::PayResponse) -> Result<Self> {
+    fn try_from(value: crate::proto::node::PayResponse) -> Result<Self> {
         Ok(Self::new())
     }
 }
 
-impl From<PayResponse> for crate::proto::star_types::PayResponse{
+impl From<PayResponse> for crate::proto::node::PayResponse{
 
     fn from(value: PayResponse) -> Self {
         Self::default()
@@ -156,10 +158,10 @@ impl ConnectRequest {
     }
 }
 
-impl TryFrom<crate::proto::star_types::ConnectRequest> for ConnectRequest{
+impl TryFrom<crate::proto::node::ConnectRequest> for ConnectRequest{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::ConnectRequest) -> Result<Self> {
+    fn try_from(value: crate::proto::node::ConnectRequest) -> Result<Self> {
         Ok(Self{
             remote_addr: value.remote_addr.try_into()?,
             remote_ip: value.remote_ip,
@@ -167,7 +169,7 @@ impl TryFrom<crate::proto::star_types::ConnectRequest> for ConnectRequest{
     }
 }
 
-impl From<ConnectRequest> for crate::proto::star_types::ConnectRequest{
+impl From<ConnectRequest> for crate::proto::node::ConnectRequest{
 
     fn from(value: ConnectRequest) -> Self {
         Self{
@@ -187,15 +189,15 @@ impl ConnectResponse {
     }
 }
 
-impl TryFrom<crate::proto::star_types::ConnectResponse> for ConnectResponse{
+impl TryFrom<crate::proto::node::ConnectResponse> for ConnectResponse{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::ConnectResponse) -> Result<Self> {
+    fn try_from(value: crate::proto::node::ConnectResponse) -> Result<Self> {
         Ok(Self::new())
     }
 }
 
-impl From<ConnectResponse> for crate::proto::star_types::ConnectResponse{
+impl From<ConnectResponse> for crate::proto::node::ConnectResponse{
 
     fn from(value: ConnectResponse) -> Self {
         Self::default()
@@ -220,10 +222,10 @@ impl DepositRequest {
     }
 }
 
-impl TryFrom<crate::proto::star_types::DepositRequest> for DepositRequest{
+impl TryFrom<crate::proto::node::DepositRequest> for DepositRequest{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::DepositRequest) -> Result<Self> {
+    fn try_from(value: crate::proto::node::DepositRequest) -> Result<Self> {
         Ok(Self{
             remote_addr: value.remote_addr.try_into()?,
             local_amount: value.local_amount,
@@ -232,7 +234,7 @@ impl TryFrom<crate::proto::star_types::DepositRequest> for DepositRequest{
     }
 }
 
-impl From<DepositRequest> for crate::proto::star_types::DepositRequest{
+impl From<DepositRequest> for crate::proto::node::DepositRequest{
 
     fn from(value: DepositRequest) -> Self {
         Self{
@@ -253,15 +255,15 @@ impl DepositResponse {
     }
 }
 
-impl TryFrom<crate::proto::star_types::DepositResponse> for DepositResponse{
+impl TryFrom<crate::proto::node::DepositResponse> for DepositResponse{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::DepositResponse) -> Result<Self> {
+    fn try_from(value: crate::proto::node::DepositResponse) -> Result<Self> {
         Ok(Self::new())
     }
 }
 
-impl From<DepositResponse> for crate::proto::star_types::DepositResponse{
+impl From<DepositResponse> for crate::proto::node::DepositResponse{
 
     fn from(value: DepositResponse) -> Self {
         Self::default()
@@ -286,10 +288,10 @@ impl WithdrawRequest {
     }
 }
 
-impl TryFrom<crate::proto::star_types::WithdrawRequest> for WithdrawRequest{
+impl TryFrom<crate::proto::node::WithdrawRequest> for WithdrawRequest{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::WithdrawRequest) -> Result<Self> {
+    fn try_from(value: crate::proto::node::WithdrawRequest) -> Result<Self> {
         Ok(Self{
             remote_addr: value.remote_addr.try_into()?,
             local_amount: value.local_amount,
@@ -298,7 +300,7 @@ impl TryFrom<crate::proto::star_types::WithdrawRequest> for WithdrawRequest{
     }
 }
 
-impl From<WithdrawRequest> for crate::proto::star_types::WithdrawRequest{
+impl From<WithdrawRequest> for crate::proto::node::WithdrawRequest{
 
     fn from(value: WithdrawRequest) -> Self {
         Self{
@@ -319,15 +321,15 @@ impl WithdrawResponse {
     }
 }
 
-impl TryFrom<crate::proto::star_types::WithdrawResponse> for WithdrawResponse{
+impl TryFrom<crate::proto::node::WithdrawResponse> for WithdrawResponse{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::WithdrawResponse) -> Result<Self> {
+    fn try_from(value: crate::proto::node::WithdrawResponse) -> Result<Self> {
         Ok(Self::new())
     }
 }
 
-impl From<WithdrawResponse> for crate::proto::star_types::WithdrawResponse{
+impl From<WithdrawResponse> for crate::proto::node::WithdrawResponse{
 
     fn from(value: WithdrawResponse) -> Self {
         Self::default()
@@ -346,17 +348,17 @@ impl ChannelBalanceRequest {
     }
 }
 
-impl TryFrom<crate::proto::star_types::ChannelBalanceRequest> for ChannelBalanceRequest{
+impl TryFrom<crate::proto::node::ChannelBalanceRequest> for ChannelBalanceRequest{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::ChannelBalanceRequest) -> Result<Self> {
+    fn try_from(value: crate::proto::node::ChannelBalanceRequest) -> Result<Self> {
         Ok(Self{
             remote_addr: value.remote_addr.try_into()?,
         })
     }
 }
 
-impl From<ChannelBalanceRequest> for crate::proto::star_types::ChannelBalanceRequest{
+impl From<ChannelBalanceRequest> for crate::proto::node::ChannelBalanceRequest{
 
     fn from(value: ChannelBalanceRequest) -> Self {
         Self{
@@ -378,17 +380,17 @@ impl ChannelBalanceResponse {
     }
 }
 
-impl TryFrom<crate::proto::star_types::ChannelBalanceResponse> for ChannelBalanceResponse{
+impl TryFrom<crate::proto::node::ChannelBalanceResponse> for ChannelBalanceResponse{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::ChannelBalanceResponse) -> Result<Self> {
+    fn try_from(value: crate::proto::node::ChannelBalanceResponse) -> Result<Self> {
         Ok(Self{
             balance: value.balance,
         })
     }
 }
 
-impl From<ChannelBalanceResponse> for crate::proto::star_types::ChannelBalanceResponse{
+impl From<ChannelBalanceResponse> for crate::proto::node::ChannelBalanceResponse{
 
     fn from(value: ChannelBalanceResponse) -> Self {
         Self{
@@ -408,17 +410,17 @@ impl InstallChannelScriptPackageRequest{
     }
 }
 
-impl TryFrom<crate::proto::star_types::InstallChannelScriptPackageRequest> for InstallChannelScriptPackageRequest{
+impl TryFrom<crate::proto::node::InstallChannelScriptPackageRequest> for InstallChannelScriptPackageRequest{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::InstallChannelScriptPackageRequest) -> Result<Self> {
+    fn try_from(value: crate::proto::node::InstallChannelScriptPackageRequest) -> Result<Self> {
         Ok(Self{
             channel_script_package: value.channel_script_package.ok_or_else(|| format_err!("Missing channel_script_package"))?.try_into()?,
         })
     }
 }
 
-impl From<InstallChannelScriptPackageRequest> for crate::proto::star_types::InstallChannelScriptPackageRequest{
+impl From<InstallChannelScriptPackageRequest> for crate::proto::node::InstallChannelScriptPackageRequest{
 
     fn from(value: InstallChannelScriptPackageRequest) -> Self {
         Self{
@@ -437,15 +439,15 @@ impl InstallChannelScriptPackageResponse {
     }
 }
 
-impl TryFrom<crate::proto::star_types::InstallChannelScriptPackageResponse> for InstallChannelScriptPackageResponse{
+impl TryFrom<crate::proto::node::InstallChannelScriptPackageResponse> for InstallChannelScriptPackageResponse{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::InstallChannelScriptPackageResponse) -> Result<Self> {
+    fn try_from(value: crate::proto::node::InstallChannelScriptPackageResponse) -> Result<Self> {
         Ok(Self::new())
     }
 }
 
-impl From<InstallChannelScriptPackageResponse> for crate::proto::star_types::InstallChannelScriptPackageResponse{
+impl From<InstallChannelScriptPackageResponse> for crate::proto::node::InstallChannelScriptPackageResponse{
 
     fn from(value: InstallChannelScriptPackageResponse) -> Self {
         Self::default()
@@ -463,17 +465,17 @@ impl DeployModuleRequest{
     }
 }
 
-impl TryFrom<crate::proto::star_types::DeployModuleRequest> for DeployModuleRequest{
+impl TryFrom<crate::proto::node::DeployModuleRequest> for DeployModuleRequest{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::DeployModuleRequest) -> Result<Self> {
+    fn try_from(value: crate::proto::node::DeployModuleRequest) -> Result<Self> {
         Ok(Self{
             module_bytes: value.module_bytes,
         })
     }
 }
 
-impl From<DeployModuleRequest> for crate::proto::star_types::DeployModuleRequest{
+impl From<DeployModuleRequest> for crate::proto::node::DeployModuleRequest{
 
     fn from(value: DeployModuleRequest) -> Self {
         Self{
@@ -494,17 +496,17 @@ impl DeployModuleResponse {
     }
 }
 
-impl TryFrom<crate::proto::star_types::DeployModuleResponse> for DeployModuleResponse{
+impl TryFrom<crate::proto::node::DeployModuleResponse> for DeployModuleResponse{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::DeployModuleResponse) -> Result<Self> {
+    fn try_from(value: crate::proto::node::DeployModuleResponse) -> Result<Self> {
         Ok(Self{
             transaction_with_proof: value.transaction_with_proof.ok_or_else(|| format_err!("Missing transaction_with_proof"))?.try_into()?,
         })
     }
 }
 
-impl From<DeployModuleResponse> for crate::proto::star_types::DeployModuleResponse{
+impl From<DeployModuleResponse> for crate::proto::node::DeployModuleResponse{
 
     fn from(value: DeployModuleResponse) -> Self {
         Self{
@@ -533,10 +535,10 @@ impl ExecuteScriptRequest {
 }
 
 
-impl TryFrom<crate::proto::star_types::ExecuteScriptRequest> for ExecuteScriptRequest{
+impl TryFrom<crate::proto::node::ExecuteScriptRequest> for ExecuteScriptRequest{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::ExecuteScriptRequest) -> Result<Self> {
+    fn try_from(value: crate::proto::node::ExecuteScriptRequest) -> Result<Self> {
         Ok(Self{
             remote_addr:value.remote_addr.try_into()?,
             package_name:value.package_name,
@@ -546,7 +548,7 @@ impl TryFrom<crate::proto::star_types::ExecuteScriptRequest> for ExecuteScriptRe
     }
 }
 
-impl From<ExecuteScriptRequest> for crate::proto::star_types::ExecuteScriptRequest{
+impl From<ExecuteScriptRequest> for crate::proto::node::ExecuteScriptRequest{
 
     fn from(value: ExecuteScriptRequest) -> Self {
         Self{
@@ -570,15 +572,15 @@ impl ExecuteScriptResponse{
     }
 }
 
-impl TryFrom<crate::proto::star_types::ExecuteScriptResponse> for ExecuteScriptResponse{
+impl TryFrom<crate::proto::node::ExecuteScriptResponse> for ExecuteScriptResponse{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::ExecuteScriptResponse) -> Result<Self> {
+    fn try_from(value: crate::proto::node::ExecuteScriptResponse) -> Result<Self> {
         Ok(Self::new(HashValue::from_slice(value.hash_value.as_slice())?))
     }
 }
 
-impl From<ExecuteScriptResponse> for crate::proto::star_types::ExecuteScriptResponse{
+impl From<ExecuteScriptResponse> for crate::proto::node::ExecuteScriptResponse{
 
     fn from(value: ExecuteScriptResponse) -> Self {
         Self{

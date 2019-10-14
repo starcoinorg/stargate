@@ -19,6 +19,7 @@ failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
 star_types = { path = "../../star_types" }
 prost = "0.5.0"
 grpc_helpers = { path = "../../libra/common/grpc_helpers" }
+node_proto = { path = "../node_proto"}
 node_client = { path = "../node_client" }
 crypto = { path = "../../libra/crypto/crypto" }
 libra-types = { path = "../../libra/types"}

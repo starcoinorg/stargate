@@ -33,6 +33,7 @@ metrics = { path = "../libra/common/metrics" }
 prost = "0.5.0"
 libra-types = { path = "../libra/types" }
 vm_genesis = { path = "../libra/language/vm/vm_genesis" }
+node_proto = { path = "../node/node_proto"}
 node_client = { path = "../node/node_client"}
 cli_wallet = { path = "./cli_wallet" }
 admission-control-service = { path = "../libra/admission_control/admission-control-service" }

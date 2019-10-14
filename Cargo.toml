@@ -48,6 +48,7 @@ members = [
     "sgwallet/local_state_storage",
     "switch",
     "node",
+    "node/node_proto",
     "node/node_client",
     "node/node_service",
     "node/node_internal",
