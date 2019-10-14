@@ -31,13 +31,13 @@ vm_runtime_types = { path = "../libra/language/vm/vm_runtime/vm_runtime_types"}
 futures = "0.1.28"
 parity-multiaddr = "0.4.0"
 num_enum = "0.4.1"
+prost-ext = { path = "../libra/common/prost-ext" }
 
 [build-dependencies]
 prost-build = "0.5.0"
 grpcio-compiler = { version = "0.5.0-alpha.2", default-features = false, features = ["prost-codec"] }
 
 [dev-dependencies]
-prost-ext = { path = "../libra/common/prost-ext" }
 serde_json = "1.0.40"
 crypto = { path = "../libra/crypto/crypto", features = ["testing"] }
 

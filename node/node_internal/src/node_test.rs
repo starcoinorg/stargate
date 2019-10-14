@@ -27,7 +27,6 @@ use crypto::{
 use futures::compat::Future01CompatExt;
 use futures_01::future::Future as Future01;
 use logger::prelude::*;
-use proto_conv::{FromProto, FromProtoBytes, IntoProto, IntoProtoBytes};
 use sg_config::config::NetworkConfig;
 use sgchain::star_chain_client::{MockChainClient};
 use sgwallet::wallet::*;
@@ -137,7 +136,7 @@ fn node_test() -> Result<()> {
         node1.shutdown();
         node2.shutdown();
     };
-    rt.block_on(f.boxed().unit_error().compat()).unwrap();
+    rt.block_on(f);
 
     debug!("here");
     //rt.shutdown_on_idle().wait().unwrap();
@@ -146,7 +145,7 @@ fn node_test() -> Result<()> {
 
 async fn delay(duration: Duration) {
     let timeout_time = Instant::now() + duration;
-    Delay::new(timeout_time).compat().await.unwrap();
+    tokio::timer::delay(timeout_time).await;
 }
 
 #[test]

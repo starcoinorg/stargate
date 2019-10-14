@@ -7,46 +7,40 @@ use std::{
 use futures::{
     compat::{Compat01As03, Future01CompatExt, Stream01CompatExt},
     executor::block_on,
-    future::{err, FutureExt},
+    future::{err, FutureExt, TryFutureExt},
     prelude::*,
     stream::{Fuse, Stream, StreamExt},
 };
-use futures_01::{
-    future::Future,
-    sync::{
-        mpsc::{channel, UnboundedReceiver, UnboundedSender},
-        oneshot,
-    },
-};
+
 use tokio::{runtime::TaskExecutor, timer::Delay};
 
+use canonical_serialization::{
+    CanonicalDeserialize, CanonicalDeserializer, SimpleDeserializer,
+};
 use crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     hash::CryptoHash,
-    test_utils::KeyPair,
-    HashValue, SigningKey,
+    HashValue,
+    SigningKey, test_utils::KeyPair,
 };
 use failure::prelude::*;
+use libra_types::{account_address::AccountAddress, account_config::AccountResource};
+use libra_types::transaction::TransactionArgument;
 use logger::prelude::*;
 use network::{Message, NetworkMessage, NetworkService};
-use node_proto::{ChannelBalanceResponse, ConnectResponse, DepositResponse, OpenChannelResponse, PayResponse, WithdrawResponse, DeployModuleResponse, ExecuteScriptResponse};
-use proto_conv::{FromProto, FromProtoBytes, IntoProtoBytes};
 use sgchain::star_chain_client::ChainClient;
 use sgwallet::wallet::Wallet;
 use star_types::{
     channel_transaction::{ChannelTransactionRequest, ChannelTransactionResponse},
     message::*,
+    node::{ChannelBalanceResponse, ConnectResponse, DeployModuleResponse, DepositResponse, ExecuteScriptResponse, OpenChannelResponse, PayResponse, WithdrawResponse},
     system_event::Event,
 };
-use libra_types::{account_address::AccountAddress, account_config::AccountResource};
+use star_types::script_package::ChannelScriptPackage;
 
 use crate::message_processor::{MessageFuture, MessageProcessor};
-use star_types::script_package::ChannelScriptPackage;
-use libra_types::transaction::TransactionArgument;
-use canonical_serialization::{
-    CanonicalDeserialize, CanonicalDeserializer,SimpleDeserializer
-};
-
+use futures::channel::oneshot;
+use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, channel};
 
 pub struct Node<C: ChainClient + Send + Sync + 'static> {
     executor: TaskExecutor,
@@ -143,7 +137,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             }
         };
         self.executor
-            .spawn(f_to_channel.boxed().unit_error().compat());
+            .spawn(f_to_channel);
         resp_receiver
     }
 
@@ -214,7 +208,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             }
         };
         self.executor
-            .spawn(f_to_channel.boxed().unit_error().compat());
+            .spawn(f_to_channel);
         resp_receiver
     }
 
@@ -284,7 +278,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             }
         };
         self.executor
-            .spawn(f_to_channel.boxed().unit_error().compat());
+            .spawn(f_to_channel);
         resp_receiver
     }
 
@@ -356,7 +350,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             }
         };
         self.executor
-            .spawn(f_to_channel.boxed().unit_error().compat());
+            .spawn(f_to_channel);
         resp_receiver
     }
 
@@ -401,9 +395,6 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             .expect("receiver already taken");
         self.executor.spawn(
             Self::start(self.node_inner.clone(), receiver, event_receiver)
-                .boxed()
-                .unit_error()
-                .compat(),
         );
     }
 
@@ -448,16 +439,16 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
 
     pub fn deploy_package_oneshot(
         &self,
-        module_code:Vec<u8>,
+        module_code: Vec<u8>,
     ) -> futures::channel::oneshot::Receiver<Result<DeployModuleResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
-        let wallet=self.node_inner.clone().lock().unwrap().wallet.clone();
-        let f= async move{
-            let proof=wallet.deploy_module(module_code).await.unwrap();
+        let wallet = self.node_inner.clone().lock().unwrap().wallet.clone();
+        let f = async move {
+            let proof = wallet.deploy_module(module_code).await.unwrap();
             resp_sender.send(Ok(DeployModuleResponse::new(proof)));
         };
         self.executor
-            .spawn(f.boxed().unit_error().compat());
+            .spawn(f);
         resp_receiver
     }
 
@@ -465,13 +456,13 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         &self,
         receiver_address: AccountAddress,
         package_name: String,
-        script_name:String,
-        transaction_args:Vec<Vec<u8>>
+        script_name: String,
+        transaction_args: Vec<Vec<u8>>,
     ) -> futures::channel::oneshot::Receiver<Result<ExecuteScriptResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
 
         let f: MessageFuture;
-        match self.execute_script_async(receiver_address, package_name,script_name,transaction_args) {
+        match self.execute_script_async(receiver_address, package_name, script_name, transaction_args) {
             Ok(msg_future) => {
                 f = msg_future;
             }
@@ -494,7 +485,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             }
         };
         self.executor
-            .spawn(f_to_channel.boxed().unit_error().compat());
+            .spawn(f_to_channel);
         resp_receiver
     }
 
@@ -502,13 +493,13 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         &self,
         receiver_address: AccountAddress,
         package_name: String,
-        script_name:String,
-        transaction_args:Vec<Vec<u8>>
+        script_name: String,
+        transaction_args: Vec<Vec<u8>>,
     ) -> Result<MessageFuture> {
         let mut trans_args = Vec::new();
         for arg in transaction_args {
             let mut deserializer = SimpleDeserializer::new(&arg);
-            let transaction_arg=deserializer.decode_struct::<TransactionArgument>()?;
+            let transaction_arg = deserializer.decode_struct::<TransactionArgument>()?;
             trans_args.push(transaction_arg);
         }
         let f = self
@@ -516,16 +507,16 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             .clone()
             .lock()
             .unwrap()
-            .execute_script(receiver_address, package_name,script_name,trans_args);
+            .execute_script(receiver_address, package_name, script_name, trans_args);
         f
     }
 
-    pub fn find_offchain_txn(&self,hash:Option<HashValue>,count:u32)->Result<Vec<(HashValue,u8)>> {
+    pub fn find_offchain_txn(&self, hash: Option<HashValue>, count: u32) -> Result<Vec<(HashValue, u8)>> {
         self
             .node_inner
             .clone()
             .lock()
-            .unwrap().find_offchain_txn(hash,count)
+            .unwrap().find_offchain_txn(hash, count)
     }
 
     async fn start(
@@ -534,8 +525,8 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         mut event_receiver: UnboundedReceiver<Event>,
     ) {
         info!("start receive message");
-        let mut receiver = receiver.compat().fuse();
-        let mut event_receiver = event_receiver.compat().fuse();
+        let mut receiver = receiver.fuse();
+        let mut event_receiver = event_receiver.fuse();
         let net_close_tx = node_inner
             .clone()
             .lock()
@@ -603,7 +594,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         debug!("receive channel");
         let open_channel_message: ChannelTransactionRequestMessage;
 
-        match ChannelTransactionRequestMessage::from_proto_bytes(&data) {
+        match ChannelTransactionRequestMessage::from_proto_bytes(data) {
             Ok(msg) => {
                 open_channel_message = msg;
             }
@@ -656,7 +647,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
                     }
                 };
             };
-            self.executor.spawn(f.boxed().unit_error().compat());
+            self.executor.spawn(f);
         }
     }
 
@@ -687,7 +678,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             };
             message_processor.send_response(txn_response.request_id());
         };
-        self.executor.spawn(f.boxed().unit_error().compat());
+        self.executor.spawn(f);
     }
 
     fn handle_error_message(&mut self, data: Vec<u8>) {
@@ -776,10 +767,10 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         &mut self,
         receiver_address: AccountAddress,
         package_name: String,
-        script_name:String,
-        transaction_args:Vec<TransactionArgument>
+        script_name: String,
+        transaction_args: Vec<TransactionArgument>,
     ) -> Result<MessageFuture> {
-        let script_transaction=self.wallet.execute_script(receiver_address,&package_name,&script_name,transaction_args)?;
+        let script_transaction = self.wallet.execute_script(receiver_address, &package_name, &script_name, transaction_args)?;
         self.send_channel_request(receiver_address, script_transaction)
     }
 
@@ -792,17 +783,17 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             return;
         }
         let processor = self.message_processor.clone();
-        let task = Delay::new(Instant::now() + Duration::from_millis(timeout))
-            .and_then(move |_| {
-                processor.remove_future(hash);
-                Ok(())
-            })
-            .map_err(|e| panic!("delay errored; err={:?}", e));
-        self.executor.spawn(task);
+//        let task = tokio::timer::delay(Instant::now() + Duration::from_millis(timeout))
+//            .and_then(|_| async move {
+//                processor.remove_future(hash);
+//                Ok(())
+//            })
+//            .map_err(|e| panic!("delay errored; err={:?}", e));
+//        self.executor.spawn(task);
     }
 
-    pub fn find_offchain_txn(&self,hash:Option<HashValue>,count:u32)->Result<Vec<(HashValue,u8)>> {
-        self.wallet.find_offchain_txn(hash,count)
+    pub fn find_offchain_txn(&self, hash: Option<HashValue>, count: u32) -> Result<Vec<(HashValue, u8)>> {
+        self.wallet.find_offchain_txn(hash, count)
     }
 }
 
@@ -840,4 +831,22 @@ fn error_message(e: Error, hash_value: HashValue) -> bytes::Bytes {
         MessageType::ErrorMessage,
     );
     msg
+}
+
+#[cfg(test)]
+mod tests{
+
+    use super::*;
+    use tokio::runtime::Runtime;
+
+    #[test]
+    fn test_delay(){
+        let rt = Runtime::new().unwrap();
+        let task = tokio::timer::delay(Instant::now() + Duration::from_millis(1000)).and_then(|x|async move{
+            println!("it works");
+            Ok(())
+        });
+        rt.spawn(task);
+        rt.shutdown_on_idle();
+    }
 }

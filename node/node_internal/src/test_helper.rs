@@ -14,7 +14,6 @@ use crypto::{
 };
 use futures_01::future::Future as Future01;
 use logger::prelude::*;
-use proto_conv::{FromProto, FromProtoBytes, IntoProto, IntoProtoBytes};
 use sg_config::config::NetworkConfig;
 use sgchain::star_chain_client::{faucet_sync, ChainClient, MockChainClient};
 use sgwallet::wallet::*;

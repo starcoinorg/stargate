@@ -11,6 +11,9 @@ use proptest_derive::Arbitrary;
 use protobuf::ProtobufEnum;
 use std::{convert::{TryFrom, TryInto}, fmt};
 use libra_types::account_address::AccountAddress;
+use bytes::IntoBuf;
+use prost::Message;
+use prost_ext::MessageExt;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OpenChannelNodeNegotiateMessage {
@@ -44,6 +47,17 @@ impl RawNegotiateMessage {
             receiver_amount,
         }
     }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+        where B: IntoBuf,
+    {
+        crate::proto::star_types::RawNegotiateMessage::decode(buf)?.try_into()
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(TryInto::<crate::proto::star_types::RawNegotiateMessage>::try_into(self)?.to_vec()?)
+    }
+
 }
 
 impl TryFrom<crate::proto::star_types::RawNegotiateMessage> for RawNegotiateMessage{
@@ -79,6 +93,16 @@ impl OpenChannelNodeNegotiateMessage {
             sender_sign,
             receiver_sign,
         }
+    }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+        where B: IntoBuf,
+    {
+        crate::proto::star_types::OpenChannelNodeNegotiateMessage::decode(buf)?.try_into()
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(TryInto::<crate::proto::star_types::OpenChannelNodeNegotiateMessage>::try_into(self)?.to_vec()?)
     }
 }
 
@@ -168,6 +192,16 @@ impl ChannelTransactionRequestMessage {
     pub fn new(txn_request: ChannelTransactionRequest) -> Self {
         Self { txn_request }
     }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+    where B: IntoBuf,
+    {
+        crate::proto::star_types::ChannelTransactionRequestMessage::decode(buf)?.try_into()
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(TryInto::<crate::proto::star_types::ChannelTransactionRequestMessage>::try_into(self)?.to_vec()?)
+    }
 }
 
 impl TryFrom<crate::proto::star_types::ChannelTransactionRequestMessage> for ChannelTransactionRequestMessage{
@@ -197,6 +231,16 @@ pub struct ChannelTransactionResponseMessage {
 impl ChannelTransactionResponseMessage {
     pub fn new(txn_response: ChannelTransactionResponse) -> Self {
         Self { txn_response }
+    }
+    //TODO generate by derive
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+        where B: IntoBuf,
+    {
+        crate::proto::star_types::ChannelTransactionResponseMessage::decode(buf)?.try_into()
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(TryInto::<crate::proto::star_types::ChannelTransactionResponseMessage>::try_into(self)?.to_vec()?)
     }
 }
 
@@ -236,7 +280,7 @@ impl TryFrom<crate::proto::star_types::AddressMessage> for AddressMessage {
     type Error = Error;
 
     fn try_from(value: crate::proto::star_types::AddressMessage) -> Result<Self> {
-        Ok(AddressMessage::new(value.addr.try_into()?, value.ip_addr.to_vec().try_into()?))
+        Ok(AddressMessage::new(value.addr.try_into()?, value.ip_addr.to_vec()?.try_into()?))
     }
 }
 
@@ -288,6 +332,16 @@ impl ErrorMessage {
             raw_transaction_hash,
             error,
         }
+    }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+        where B: IntoBuf,
+    {
+        crate::proto::star_types::ErrorMessage::decode(buf)?.try_into()
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(TryInto::<crate::proto::star_types::ErrorMessage>::try_into(self)?.to_vec()?)
     }
 }
 
@@ -347,5 +401,14 @@ impl MessageType {
             4 => Ok(MessageType::ErrorMessage),
             _ => bail!("no such type"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests{
+
+    #[test]
+    fn test_compile(){
+        println!("it work");
     }
 }
