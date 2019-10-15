@@ -33,7 +33,7 @@ impl WalletLibrary {
             addr: None,
             key_pair: None,
         };
-        if (path_exists(faucet_account_file)) {
+        if path_exists(faucet_account_file) {
             result.load_from_file(faucet_account_file);
         } else {
             result.gen_new_address();
@@ -110,7 +110,7 @@ impl WalletLibrary {
                 "Well, that address is nowhere to be found... This is awkward".to_string(),
             )),
             Some(addr) => {
-                if (addr == txn.sender()) {
+                if addr == txn.sender() {
                     let child_key = self.key_pair.as_ref().expect("should have keypair");
                     match txn.sign(&child_key.private_key, child_key.public_key.clone()) {
                         Ok(signed_txn) => Ok(signed_txn.into_inner()),
