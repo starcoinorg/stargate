@@ -25,3 +25,7 @@ crypto = { path = "../../libra/crypto/crypto" }
 libra-types = { path = "../../libra/types"}
 sg_config = {path="../../sgconfig"}
 sgchain = { path = "../../sgchain"}
+logger = { path = "../../libra/common/logger" }
+
+env_logger = { version = "0.6" }
+
