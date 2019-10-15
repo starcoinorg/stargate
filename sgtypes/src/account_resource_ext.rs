@@ -1,6 +1,8 @@
 use canonical_serialization::{SimpleDeserializer, SimpleSerializer};
 use failure::prelude::*;
-use libra_types::{account_address::AccountAddress, account_config::AccountResource, event::EventHandle};
+use libra_types::{
+    account_address::AccountAddress, account_config::AccountResource, event::EventHandle,
+};
 
 //impl TryFrom<Vec<u8>> for AccountResource{
 //    type Error = failure::Error;

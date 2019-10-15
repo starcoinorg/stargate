@@ -7,13 +7,13 @@ use crypto::{
     Uniform,
 };
 use failure::_core::time::Duration;
-use rand::prelude::*;
 use libra_types::{
     account_address::AccountAddress,
     transaction::{ChannelScriptPayload, ChannelWriteSetPayload, RawTransaction, Script},
     transaction_helpers::ChannelPayloadSigner,
     write_set::WriteSet,
 };
+use rand::prelude::*;
 
 use crate::channel_transaction::{
     ChannelOp, ChannelTransactionRequest, ChannelTransactionRequestPayload, Witness,

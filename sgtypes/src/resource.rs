@@ -1,9 +1,7 @@
 use canonical_serialization::SimpleSerializer;
 use failure::prelude::*;
 use libra_types::{
-    account_config::{
-        account_struct_tag, AccountResource,
-    },
+    account_config::{account_struct_tag, AccountResource},
     language_storage::StructTag,
 };
 use vm_runtime_types::{
@@ -103,4 +101,3 @@ pub fn get_coin_struct_def() -> StructDef {
 pub fn get_event_handle_struct_def() -> StructDef {
     StructDef::new(vec![Type::U64, Type::ByteArray])
 }
-

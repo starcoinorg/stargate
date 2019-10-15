@@ -1,8 +1,3 @@
-use std::{
-    convert::{TryFrom},
-    fmt::{Display, Formatter},
-};
-use serde::{Deserialize, Serialize};
 use canonical_serialization::{
     CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
     SimpleDeserializer, SimpleSerializer,
@@ -15,9 +10,14 @@ use failure::prelude::*;
 use libra_types::{
     account_address::AccountAddress,
     transaction::{
-        ChannelScriptPayload, ChannelWriteSetPayload, RawTransaction,
-        TransactionOutput, TransactionPayload, Version,
+        ChannelScriptPayload, ChannelWriteSetPayload, RawTransaction, TransactionOutput,
+        TransactionPayload, Version,
     },
+};
+use serde::{Deserialize, Serialize};
+use std::{
+    convert::TryFrom,
+    fmt::{Display, Formatter},
 };
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -447,7 +447,6 @@ impl CanonicalDeserialize for ChannelTransactionRequest {
 }
 
 impl TryFrom<crate::proto::sgtypes::ChannelTransactionRequest> for ChannelTransactionRequest {
-
     type Error = Error;
 
     fn try_from(value: crate::proto::sgtypes::ChannelTransactionRequest) -> Result<Self> {
@@ -456,10 +455,9 @@ impl TryFrom<crate::proto::sgtypes::ChannelTransactionRequest> for ChannelTransa
 }
 
 impl From<ChannelTransactionRequest> for crate::proto::sgtypes::ChannelTransactionRequest {
-
     fn from(value: ChannelTransactionRequest) -> Self {
-        Self{
-            payload: SimpleSerializer::serialize(&value).expect("Serialization should not fail.")
+        Self {
+            payload: SimpleSerializer::serialize(&value).expect("Serialization should not fail."),
         }
     }
 }
@@ -542,7 +540,6 @@ impl CanonicalDeserialize for ChannelTransactionResponse {
 }
 
 impl TryFrom<crate::proto::sgtypes::ChannelTransactionResponse> for ChannelTransactionResponse {
-
     type Error = Error;
 
     fn try_from(value: crate::proto::sgtypes::ChannelTransactionResponse) -> Result<Self> {
@@ -551,10 +548,9 @@ impl TryFrom<crate::proto::sgtypes::ChannelTransactionResponse> for ChannelTrans
 }
 
 impl From<ChannelTransactionResponse> for crate::proto::sgtypes::ChannelTransactionResponse {
-
     fn from(value: ChannelTransactionResponse) -> Self {
-        Self{
-            payload: SimpleSerializer::serialize(&value).expect("Serialization should not fail.")
+        Self {
+            payload: SimpleSerializer::serialize(&value).expect("Serialization should not fail."),
         }
     }
 }

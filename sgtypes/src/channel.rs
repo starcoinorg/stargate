@@ -1,13 +1,10 @@
 use crate::{
-    channel_transaction::{
-        ChannelOp, ChannelTransactionRequestAndOutput,
-    },
-    sg_error::{SgError},
+    channel_transaction::{ChannelOp, ChannelTransactionRequestAndOutput},
+    sg_error::SgError,
 };
 use atomic_refcell::AtomicRefCell;
 use crypto::ed25519::Ed25519Signature;
 use failure::prelude::*;
-use std::collections::{BTreeMap, HashSet};
 use libra_types::{
     access_path::{AccessPath, DataPath},
     account_address::AccountAddress,
@@ -15,6 +12,7 @@ use libra_types::{
     transaction::{ChannelWriteSetPayload, TransactionOutput},
     write_set::{WriteOp, WriteSet},
 };
+use std::collections::{BTreeMap, HashSet};
 
 //TODO (jole) need maintain network state?
 #[derive(Clone, Debug, Copy, Ord, PartialOrd, Eq, PartialEq)]
@@ -158,10 +156,10 @@ impl Channel {
         *self.stage.borrow()
     }
 
-    fn check_stage(&self, expect_stages: Vec<ChannelStage>) -> Result<()>{
+    fn check_stage(&self, expect_stages: Vec<ChannelStage>) -> Result<()> {
         let current_stage = self.stage();
         if !expect_stages.contains(&current_stage) {
-            return Err(SgError::new_invalid_channel_stage_error(current_stage).into())
+            return Err(SgError::new_invalid_channel_stage_error(current_stage).into());
         }
         Ok(())
     }

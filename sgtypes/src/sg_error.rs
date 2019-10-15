@@ -8,18 +8,18 @@ use crate::channel::ChannelStage;
 
 #[allow(non_camel_case_types)]
 #[derive(
-Clone,
-Copy,
-Debug,
-Eq,
-Hash,
-PartialEq,
-PartialOrd,
-Ord,
-IntoPrimitive,
-TryFromPrimitive,
-Serialize,
-Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    IntoPrimitive,
+    TryFromPrimitive,
+    Serialize,
+    Deserialize,
 )]
 #[repr(u32)]
 /// We don't derive Arbitrary on this enum because it is too large and breaks proptest. It is
@@ -41,8 +41,8 @@ impl std::fmt::Display for SgErrorCode {
 
 #[derive(Clone, Debug, Eq, PartialEq, Fail)]
 #[fail(
-display = "error code is  {}, error message is {}",
-error_code, error_message
+    display = "error code is  {}, error message is {}",
+    error_code, error_message
 )]
 pub struct SgError {
     pub error_code: SgErrorCode,
@@ -67,10 +67,7 @@ impl SgError {
     pub fn new_invalid_channel_stage_error(stage: ChannelStage) -> Self {
         Self::new(
             SgErrorCode::INVALID_CHANNEL_STAGE,
-            format!(
-                "Channel at stage: {:?}, unsupported this operator.",
-                stage
-            ),
+            format!("Channel at stage: {:?}, unsupported this operator.", stage),
         )
     }
 }

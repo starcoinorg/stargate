@@ -1,11 +1,8 @@
 use hex;
 
-use canonical_serialization::{SimpleSerializer};
-use libra_types::{
-    account_config::{AccountResource},
-    event::EventHandle,
-};
 use crate::resource::*;
+use canonical_serialization::SimpleSerializer;
+use libra_types::{account_config::AccountResource, event::EventHandle};
 
 #[test]
 fn test_resource() {

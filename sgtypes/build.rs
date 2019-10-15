@@ -9,10 +9,7 @@ fn main() {
         "src/proto/star_account.proto",
     ];
 
-    let includes = [
-        "../libra/types/src/proto",
-        "src/proto",
-    ];
+    let includes = ["../libra/types/src/proto", "src/proto"];
 
     prost_build::compile_protos(&proto_files, &includes).unwrap();
 }

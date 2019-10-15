@@ -1,8 +1,8 @@
+use itertools::Itertools;
 use std::{
     collections::{BTreeMap, HashMap},
     convert::TryFrom,
 };
-use itertools::Itertools;
 
 use crate::account_resource_ext;
 use failure::prelude::*;
@@ -25,7 +25,6 @@ pub struct AccountState {
 }
 
 impl AccountState {
-
     #[allow(dead_code)]
     fn new() -> Self {
         Self {
