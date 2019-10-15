@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
-    thread,
 };
 
 use futures_01::{
@@ -10,16 +9,13 @@ use futures_01::{
     Async, Future, Poll, Stream,
 };
 
-use crypto::{hash::CryptoHash, HashValue};
+use crypto::HashValue;
 use failure::prelude::*;
-use futures::future::err;
 use logger::prelude::*;
 use sgtypes::{
-    channel_transaction::ChannelTransactionRequest,
     sg_error::SgError,
     message::{ErrorMessage},
 };
-use tokio::runtime::TaskExecutor;
 
 pub struct MessageFuture {
     rx: Receiver<Result<HashValue>>,
@@ -71,7 +67,7 @@ impl MessageProcessor {
         }
     }
 
-    pub fn add_future(&self, hash: HashValue, mut sender: Sender<Result<HashValue>>) {
+    pub fn add_future(&self, hash: HashValue, sender: Sender<Result<HashValue>>) {
         self.tx_map
             .lock()
             .unwrap()
@@ -79,7 +75,7 @@ impl MessageProcessor {
             .or_insert(sender.clone());
     }
 
-    pub fn send_response(&mut self, mut hash: HashValue) -> Result<()> {
+    pub fn send_response(&mut self, hash: HashValue) -> Result<()> {
         let mut tx_map = self.tx_map.lock().unwrap();
         match tx_map.get(&hash) {
             Some(tx) => {
@@ -99,7 +95,7 @@ impl MessageProcessor {
     pub fn remove_future(&self, hash: HashValue) {
         let mut tx_map = self.tx_map.lock().unwrap();
         match tx_map.get(&hash) {
-            Some(tx) => {
+            Some(_tx) => {
                 info!("future time out,hash is {:?}", hash);
                 tx_map.remove(&hash);
             }
@@ -107,11 +103,11 @@ impl MessageProcessor {
         }
     }
 
-    pub fn future_error(&self, error_msg: ErrorMessage) {
+    pub fn future_error(&self, error_msg: ErrorMessage)->Result<()> {
         let mut tx_map = self.tx_map.lock().unwrap();
         match tx_map.get(&error_msg.raw_transaction_hash) {
             Some(tx) => {
-                tx.clone().send(Err(error_msg.error.into())).wait();
+                tx.clone().send(Err(error_msg.error.into())).wait()?;
                 tx_map.remove(&error_msg.raw_transaction_hash);
             }
             _ => info!(
@@ -119,11 +115,11 @@ impl MessageProcessor {
                 error_msg.raw_transaction_hash
             ),
         }
+        Ok(())
     }
 }
 
 fn error_translate(e: Error) -> SgError {
-    let error_message: ErrorMessage;
     if let Some(err) = e.downcast_ref::<SgError>() {
         info!("this is a sg error");
         err.clone()

@@ -2,7 +2,7 @@ use crypto::{ed25519::*, traits::Uniform};
 use grpcio::{EnvBuilder, ServerBuilder};
 use node_service::NodeService;
 use rand::{rngs::StdRng, SeedableRng};
-use sgtypes::proto::node_grpc::create_node;
+use node_proto::proto::node::create_node;
 
 use node_internal::test_helper::*;
 use tokio::runtime::TaskExecutor;
@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 pub fn create_and_start_server(config: &NodeConfig, executor: TaskExecutor) -> (grpcio::Server) {
     let _client_env = Arc::new(EnvBuilder::new().build());
-    let (mock_chain_service, handle) = MockChainClient::new();
+    let (mock_chain_service, _handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
 
     let (node, _addr, _keypair) = gen_node(executor, &config.net_config, client);
@@ -28,7 +28,7 @@ pub fn create_and_start_server(config: &NodeConfig, executor: TaskExecutor) -> (
     (node_server)
 }
 
-pub fn create_keypair() -> (Ed25519PublicKey, Ed25519PrivateKey) {
+pub fn _create_keypair() -> (Ed25519PublicKey, Ed25519PrivateKey) {
     let mut rng: StdRng = SeedableRng::from_seed([0; 32]);
     let private_key = Ed25519PrivateKey::generate_for_testing(&mut rng);
     let public_key: Ed25519PublicKey = (&private_key).into();

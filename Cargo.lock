@@ -3125,7 +3125,7 @@ dependencies = [
  "sg_config 0.1.0",
  "sgchain 0.1.0",
  "sgtypes 0.1.0",
- "tokio 0.1.22 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tokio 0.2.0-alpha.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -4190,14 +4190,6 @@ dependencies = [
  "crc 1.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.62 (registry+https://github.com/rust-lang/crates.io-index)",
  "librocksdb_sys 0.1.0 (git+https://github.com/pingcap/rust-rocksdb.git?rev=3cd18c44d160a3cdba586d6502d51b7cc67efc59)",
-]
-
-[[package]]
-name = "routin"
-version = "0.1.0"
-dependencies = [
- "crypto 0.1.0",
- "sgtypes 0.1.0",
 ]
 
 [[package]]
