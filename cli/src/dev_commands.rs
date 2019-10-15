@@ -159,7 +159,7 @@ impl Command for DevCommandInstallPackage {
         }
         println!(">> Install script");
         match client.install_script(params) {
-            Ok(path) => println!("Successfully deployed package "),
+            Ok(_path) => println!("Successfully deployed package "),
             Err(e) => println!("{}", e),
         }
     }
@@ -188,7 +188,7 @@ impl Command for DevCommandExecuteInstalledScript {
         }
         println!(">> Execute script");
         match client.execute_installed_script(params) {
-            Ok(path) => println!("Successfully execute script "),
+            Ok(_path) => println!("Successfully execute script "),
             Err(e) => println!("{}", e),
         }
     }

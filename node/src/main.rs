@@ -37,14 +37,14 @@ struct Args {
 
 pub struct Swarm {
     pub config: NodeConfig,
-    tee_logs: bool,
+    _tee_logs: bool,
 }
 
 fn launch_swarm(args: &Args) -> Result<Swarm> {
     let node_config = load_from(&(args.config_dir.to_string() + "/node.toml"))?;
     Ok(Swarm {
         config: node_config,
-        tee_logs: true,
+        _tee_logs: true,
     })
 }
 

@@ -46,7 +46,7 @@ impl Command for NodeCommandOpenChannel {
         }
 
         match client.open_channel(params, true) {
-            Ok(result) => println!("open channel success"),
+            Ok(_result) => println!("open channel success"),
             Err(e) => report_error("Error open channel", e),
         }
     }
@@ -75,7 +75,7 @@ impl Command for NodeCommandDepositChannel {
         }
 
         match client.deposit(params, true) {
-            Ok(result) => println!("deposit success"),
+            Ok(_result) => println!("deposit success"),
             Err(e) => report_error("Error pay account", e),
         }
     }
@@ -104,7 +104,7 @@ impl Command for NodeCommandPay {
         }
 
         match client.off_chain_pay(params, true) {
-            Ok(result) => println!("pay success"),
+            Ok(_result) => println!("pay success"),
             Err(e) => report_error("Error pay account", e),
         }
     }
@@ -133,7 +133,7 @@ impl Command for NodeCommandWithdrawChannel {
         }
 
         match client.withdraw(params, true) {
-            Ok(result) => println!("withdraw success"),
+            Ok(_result) => println!("withdraw success"),
             Err(e) => report_error("Error pay account", e),
         }
     }

@@ -1,17 +1,16 @@
 use failure::Result;
-use futures01::future::Future;
 use futures03::{channel::oneshot, FutureExt, TryFutureExt};
 use grpc_helpers::{
-    default_reply_error_logger, provide_grpc_response, spawn_service_thread_with_drop_closure,
-    ServerHandle,
+    provide_grpc_response,
 };
 use grpcio::{EnvBuilder, RpcStatus, RpcStatusCode};
 use node_internal::node::Node as Node_Internal;
-use node_proto::{ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse, DepositRequest, DepositResponse, InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse, OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest, WithdrawResponse, DeployModuleRequest, DeployModuleResponse, ExecuteScriptRequest};
+use node_proto::{ChannelBalanceRequest, ChannelBalanceResponse, DepositRequest,
+                 InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse, OpenChannelRequest, PayRequest,
+                 WithdrawRequest, DeployModuleRequest, ExecuteScriptRequest};
 use sg_config::config::NodeConfig;
 use sgchain::star_chain_client::ChainClient;
 use node_proto::proto::node::create_node;
-use sgtypes::{script_package::ChannelScriptPackage};
 use std::sync::Arc;
 use std::convert::TryFrom;
 
@@ -19,8 +18,6 @@ pub fn setup_node_service<C>(config: &NodeConfig, node: Arc<Node_Internal<C>>) -
 where
     C: ChainClient + Clone + Send + Sync + 'static,
 {
-    let client_env = Arc::new(EnvBuilder::new().name_prefix("grpc-node-").build());
-
     let handle = NodeService::new(node);
     let service = create_node(handle);
     ::grpcio::ServerBuilder::new(Arc::new(
@@ -76,27 +73,6 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> node_proto::proto::node::No
             .off_chain_pay_oneshot(request.remote_addr, request.amount);
         let fut = process_response(rx, sink);
         ctx.spawn(fut.boxed().unit_error().compat());
-    }
-
-    fn send_off_line_tx(
-        &mut self,
-        ctx: ::grpcio::RpcContext,
-        req: node_proto::proto::node::SendOffLineTxRequest,
-        sink: ::grpcio::UnarySink<node_proto::proto::node::SendOffLineTxResponse>,
-    ) {
-        println!("send off line tx");
-    }
-
-    fn connect(
-        &mut self,
-        ctx: ::grpcio::RpcContext,
-        req: node_proto::proto::node::ConnectRequest,
-        sink: ::grpcio::UnarySink<node_proto::proto::node::ConnectResponse>,
-    ) {
-        let connect_req = ConnectRequest::try_from(req).unwrap();
-        //self.node.connect(connect_req.remote_ip.parse().unwrap(),connect_req.remote_addr);
-        let resp = ConnectResponse {}.into();
-        provide_grpc_response(Ok(resp), ctx, sink);
     }
 
     fn deposit(
@@ -201,18 +177,6 @@ async fn process_response<T,S>(
             );
         }
     }
-}
-
-fn process_conversion_error<T>(
-    err: failure::Error,
-    sink: grpcio::UnarySink<T>,
-) -> impl Future<Item = (), Error = ()> {
-    set_failure_message(
-        RpcStatusCode::INVALID_ARGUMENT,
-        format!("Failed to convert request from Protobuf: {}", err),
-        sink,
-    )
-    .map_err(default_reply_error_logger)
 }
 
 fn set_failure_message<T>(

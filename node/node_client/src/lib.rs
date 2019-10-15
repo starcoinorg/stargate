@@ -1,6 +1,6 @@
 use failure::{bail, Result};
 use grpcio::{ChannelBuilder, Environment};
-use node_proto::{ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse,
+use node_proto::{ChannelBalanceRequest, ChannelBalanceResponse,
                        DepositRequest, DepositResponse, InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse,
                        OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest, WithdrawResponse,
                        DeployModuleRequest, DeployModuleResponse, ExecuteScriptRequest, ExecuteScriptResponse};
@@ -31,14 +31,6 @@ impl NodeClient {
         let proto_request = request.into();
         match self.client.pay(&proto_request) {
             Ok(proto_response) => Ok(PayResponse::try_from(proto_response)?),
-            Err(err) => bail!("GRPC error: {}", err),
-        }
-    }
-
-    pub fn connect(&self, request: ConnectRequest) -> Result<ConnectResponse> {
-        let proto_request = request.into();
-        match self.client.connect(&proto_request) {
-            Ok(proto_response) => Ok(ConnectResponse::try_from(proto_response)?),
             Err(err) => bail!("GRPC error: {}", err),
         }
     }

@@ -3021,7 +3021,6 @@ dependencies = [
  "sgtypes 0.1.0",
  "sgwallet 0.1.0",
  "structopt 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
- "switch 0.1.0",
  "tokio 0.2.0-alpha.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -3064,7 +3063,6 @@ dependencies = [
  "sgtypes 0.1.0",
  "sgwallet 0.1.0",
  "structopt 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
- "switch 0.1.0",
  "tokio 0.2.0-alpha.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -5067,15 +5065,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "subtle"
 version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "switch"
-version = "0.1.0"
-dependencies = [
- "futures-preview 0.3.0-alpha.19 (registry+https://github.com/rust-lang/crates.io-index)",
- "libra-types 0.1.0",
- "sgtypes 0.1.0",
-]
 
 [[package]]
 name = "syn"

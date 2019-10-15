@@ -10,7 +10,6 @@ use failure::prelude::*;
 use tokio::runtime::{Runtime, TaskExecutor};
 
 use bytes::Bytes;
-use switch::switch::Switch;
 use tokio::codec::{Framed, LengthDelimitedCodec};
 
 use rand::prelude::*;

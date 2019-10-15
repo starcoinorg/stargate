@@ -4,20 +4,16 @@ use crate::{
     mnemonic::Mnemonic,
 };
 use libra_crypto::{
-    ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature},
-    hash::CryptoHash,
+    ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
-    traits::{SigningKey, Uniform},
+    traits::{ Uniform},
 };
 use protobuf::Message;
 use rand::{prelude::*, rngs::EntropyRng, Rng};
 use serde;
 use std::{
-    collections::HashMap,
     convert::TryFrom,
     fs,
-    path::Path,
-    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 use libra_types::{
@@ -138,7 +134,7 @@ fn get_unix_ts() -> u64 {
     let start = SystemTime::now();
     let since_the_epoch = start
         .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");;  
+        .expect("Time went backwards");
     since_the_epoch.as_millis() as u64
 }
 

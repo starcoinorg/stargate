@@ -6,7 +6,6 @@ use failure::prelude::*;
 use proptest_derive::Arbitrary;
 use sgtypes::script_package::ChannelScriptPackage;
 use libra_types::account_address::AccountAddress;
-use protobuf::RepeatedField;
 use libra_types::transaction::SignedTransactionWithProof;
 use crypto::HashValue;
 use std::convert::{TryFrom,TryInto};
@@ -67,14 +66,14 @@ impl OpenChannelResponse {
 impl TryFrom<crate::proto::node::OpenChannelResponse> for OpenChannelResponse{
     type Error = Error;
 
-    fn try_from(value: crate::proto::node::OpenChannelResponse) -> Result<Self> {
+    fn try_from(_value: crate::proto::node::OpenChannelResponse) -> Result<Self> {
         Ok(Self::new())
     }
 }
 
 impl From<OpenChannelResponse> for crate::proto::node::OpenChannelResponse{
 
-    fn from(value: OpenChannelResponse) -> Self {
+    fn from(_value: OpenChannelResponse) -> Self {
         Self::default()
     }
 }
@@ -130,76 +129,14 @@ impl PayResponse {
 impl TryFrom<crate::proto::node::PayResponse> for PayResponse{
     type Error = Error;
 
-    fn try_from(value: crate::proto::node::PayResponse) -> Result<Self> {
+    fn try_from(_value: crate::proto::node::PayResponse) -> Result<Self> {
         Ok(Self::new())
     }
 }
 
 impl From<PayResponse> for crate::proto::node::PayResponse{
 
-    fn from(value: PayResponse) -> Self {
-        Self::default()
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
-pub struct ConnectRequest {
-    pub remote_addr: AccountAddress,
-    pub remote_ip: String,
-}
-
-impl ConnectRequest {
-    pub fn new(remote_addr: AccountAddress, remote_ip: String) -> Self {
-        Self {
-            remote_addr,
-            remote_ip,
-        }
-    }
-}
-
-impl TryFrom<crate::proto::node::ConnectRequest> for ConnectRequest{
-    type Error = Error;
-
-    fn try_from(value: crate::proto::node::ConnectRequest) -> Result<Self> {
-        Ok(Self{
-            remote_addr: value.remote_addr.try_into()?,
-            remote_ip: value.remote_ip,
-        })
-    }
-}
-
-impl From<ConnectRequest> for crate::proto::node::ConnectRequest{
-
-    fn from(value: ConnectRequest) -> Self {
-        Self{
-            remote_addr: value.remote_addr.into(),
-            remote_ip: value.remote_ip,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
-pub struct ConnectResponse {}
-
-impl ConnectResponse {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl TryFrom<crate::proto::node::ConnectResponse> for ConnectResponse{
-    type Error = Error;
-
-    fn try_from(value: crate::proto::node::ConnectResponse) -> Result<Self> {
-        Ok(Self::new())
-    }
-}
-
-impl From<ConnectResponse> for crate::proto::node::ConnectResponse{
-
-    fn from(value: ConnectResponse) -> Self {
+    fn from(_value: PayResponse) -> Self {
         Self::default()
     }
 }
@@ -258,14 +195,14 @@ impl DepositResponse {
 impl TryFrom<crate::proto::node::DepositResponse> for DepositResponse{
     type Error = Error;
 
-    fn try_from(value: crate::proto::node::DepositResponse) -> Result<Self> {
+    fn try_from(_value: crate::proto::node::DepositResponse) -> Result<Self> {
         Ok(Self::new())
     }
 }
 
 impl From<DepositResponse> for crate::proto::node::DepositResponse{
 
-    fn from(value: DepositResponse) -> Self {
+    fn from(_value: DepositResponse) -> Self {
         Self::default()
     }
 }
@@ -324,14 +261,14 @@ impl WithdrawResponse {
 impl TryFrom<crate::proto::node::WithdrawResponse> for WithdrawResponse{
     type Error = Error;
 
-    fn try_from(value: crate::proto::node::WithdrawResponse) -> Result<Self> {
+    fn try_from(_value: crate::proto::node::WithdrawResponse) -> Result<Self> {
         Ok(Self::new())
     }
 }
 
 impl From<WithdrawResponse> for crate::proto::node::WithdrawResponse{
 
-    fn from(value: WithdrawResponse) -> Self {
+    fn from(_value: WithdrawResponse) -> Self {
         Self::default()
     }
 }
@@ -442,14 +379,14 @@ impl InstallChannelScriptPackageResponse {
 impl TryFrom<crate::proto::node::InstallChannelScriptPackageResponse> for InstallChannelScriptPackageResponse{
     type Error = Error;
 
-    fn try_from(value: crate::proto::node::InstallChannelScriptPackageResponse) -> Result<Self> {
+    fn try_from(_value: crate::proto::node::InstallChannelScriptPackageResponse) -> Result<Self> {
         Ok(Self::new())
     }
 }
 
 impl From<InstallChannelScriptPackageResponse> for crate::proto::node::InstallChannelScriptPackageResponse{
 
-    fn from(value: InstallChannelScriptPackageResponse) -> Self {
+    fn from(_value: InstallChannelScriptPackageResponse) -> Self {
         Self::default()
     }
 }

@@ -46,7 +46,6 @@ members = [
     "network-libp2p/peerset",
     "sgwallet",
     "sgwallet/local_state_storage",
-    "switch",
     "node",
     "node/node_proto",
     "node/node_client",

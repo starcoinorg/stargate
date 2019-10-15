@@ -60,7 +60,7 @@ impl Command for AccountCommandMint {
         }
 
         match client.faucet(params[1].parse::<u64>().unwrap()) {
-            Ok(result) => println!("mint success"),
+            Ok(_result) => println!("mint success"),
             Err(e) => report_error("Error mint account", e),
         }
     }

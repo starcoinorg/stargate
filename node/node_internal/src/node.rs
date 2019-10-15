@@ -30,7 +30,8 @@ use logger::prelude::*;
 use network::{Message, NetworkMessage, NetworkService};
 use sgchain::star_chain_client::ChainClient;
 use sgwallet::wallet::Wallet;
-use node_proto::{ChannelBalanceResponse, ConnectResponse, DeployModuleResponse, DepositResponse, ExecuteScriptResponse, OpenChannelResponse, PayResponse, WithdrawResponse};
+use node_proto::{ChannelBalanceResponse, DeployModuleResponse, DepositResponse,
+                 ExecuteScriptResponse, OpenChannelResponse, PayResponse, WithdrawResponse};
 use sgtypes::{
     channel_transaction::{ChannelTransactionRequest, ChannelTransactionResponse},
     message::*,

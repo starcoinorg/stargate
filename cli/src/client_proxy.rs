@@ -1,12 +1,10 @@
-use crate::{commands::*, AccountData, AccountStatus};
-
-use canonical_serialization::{CanonicalSerialize, CanonicalSerializer, SimpleSerializer};
+use canonical_serialization::{CanonicalSerialize, SimpleSerializer};
 use cli_wallet::cli_wallet::WalletLibrary;
 use failure::prelude::*;
 use grpcio::EnvBuilder;
 use node_client::NodeClient;
 use node_proto::{
-    ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, ConnectResponse,
+    ChannelBalanceRequest, ChannelBalanceResponse,
     DeployModuleRequest, DeployModuleResponse, DepositRequest, DepositResponse,
     ExecuteScriptRequest, InstallChannelScriptPackageRequest, OpenChannelRequest,
     OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest, WithdrawResponse,
@@ -16,7 +14,6 @@ use sgchain::{
     star_chain_client::{faucet_sync, ChainClient, StarChainClient},
 };
 use sgcompiler::{Compiler, StateViewModuleLoader};
-use sgtypes::script_package::ChannelScriptPackage;
 use std::{
     fs,
     io::{stdout, Write},
@@ -30,10 +27,10 @@ use libra_types::{
     account_address::AccountAddress,
     proof::SparseMerkleProof,
     transaction::{
-        parse_as_transaction_argument, Program, Script, SignedTransaction, TransactionPayload,
+        parse_as_transaction_argument, Script, SignedTransaction, TransactionPayload,
         Version,
     },
-    transaction_helpers::{create_signed_txn, TransactionSigner},
+    transaction_helpers::{create_signed_txn},
 };
 
 const GAS_UNIT_PRICE: u64 = 0;
@@ -78,7 +75,7 @@ impl ClientProxy {
     pub fn open_channel(
         &mut self,
         space_delim_strings: &[&str],
-        is_blocking: bool,
+        _is_blocking: bool,
     ) -> Result<OpenChannelResponse> {
         ensure!(
             space_delim_strings.len() == 4,
@@ -95,7 +92,7 @@ impl ClientProxy {
     pub fn withdraw(
         &mut self,
         space_delim_strings: &[&str],
-        is_blocking: bool,
+        _is_blocking: bool,
     ) -> Result<WithdrawResponse> {
         ensure!(
             space_delim_strings.len() == 4,
@@ -112,7 +109,7 @@ impl ClientProxy {
     pub fn deposit(
         &mut self,
         space_delim_strings: &[&str],
-        is_blocking: bool,
+        _is_blocking: bool,
     ) -> Result<DepositResponse> {
         ensure!(
             space_delim_strings.len() == 4,
@@ -142,26 +139,10 @@ impl ClientProxy {
         Ok(response)
     }
 
-    pub fn connect(
-        &mut self,
-        space_delim_strings: &[&str],
-        is_blocking: bool,
-    ) -> Result<ConnectResponse> {
-        ensure!(
-            space_delim_strings.len() == 3,
-            "Invalid number of arguments for connect"
-        );
-        let response = self.node_client.connect(ConnectRequest {
-            remote_addr: AccountAddress::from_hex_literal(space_delim_strings[1])?,
-            remote_ip: space_delim_strings[2].to_string(),
-        })?;
-        Ok(response)
-    }
-
     pub fn channel_balance(
         &mut self,
         space_delim_strings: &[&str],
-        is_blocking: bool,
+        _is_blocking: bool,
     ) -> Result<ChannelBalanceResponse> {
         ensure!(
             space_delim_strings.len() == 2,
@@ -207,7 +188,7 @@ impl ClientProxy {
         code = code.replace("{{sender}}", &format!("0x{}", self.wallet.get_address()));
         writeln!(tmp_source_file, "{}", code)?;
 
-        let mut args = format!(
+        let args = format!(
             "run -p compiler -- {} -a {} -o {}{}",
             tmp_source_path.path().display(),
             self.wallet.get_address(),
@@ -228,7 +209,7 @@ impl ClientProxy {
 
     fn submit_program(
         &mut self,
-        space_delim_strings: &[&str],
+        _space_delim_strings: &[&str],
         program: TransactionPayload,
     ) -> Result<()> {
         let addr = self.wallet.get_address();
@@ -369,6 +350,6 @@ impl ClientProxy {
     }
 }
 
-fn parse_bool(para: &str) -> Result<bool> {
+fn _parse_bool(para: &str) -> Result<bool> {
     Ok(para.to_lowercase().parse::<bool>()?)
 }
