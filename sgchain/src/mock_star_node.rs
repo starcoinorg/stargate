@@ -9,12 +9,10 @@ use std::{
 use std::collections::{BTreeMap, HashSet};
 
 use futures::{future, StreamExt};
-use futures::channel::mpsc::{unbounded, UnboundedSender};
 use futures::executor::block_on;
-use futures::stream::Stream;
 use tokio::timer::Interval;
 
-use admission_control_proto::proto::admission_control::{AdmissionControl, SubmitTransactionRequest, SubmitTransactionResponse};
+use admission_control_proto::proto::admission_control::{SubmitTransactionRequest, SubmitTransactionResponse};
 use admission_control_service::{
     admission_control_service::AdmissionControlService,
 };
@@ -24,13 +22,6 @@ use executor::Executor;
 use grpc_helpers::ServerHandle;
 use libra_mempool::{
     core_mempool_client::CoreMemPoolClient,
-    proto::{
-        mempool::{GetBlockRequest, TransactionExclusion},
-        mempool_client::MempoolClientTrait,
-    },
-};
-use libra_types::{
-    transaction::SignedTransaction,
 };
 use libra_types::crypto_proxies::LedgerInfoWithSignatures;
 use libra_types::ledger_info::LedgerInfo;
@@ -123,7 +114,7 @@ pub fn setup_environment(
 
     // Initialize and start AC.
     instant = Instant::now();
-    let (upstream_proxy_sender, upstream_proxy_receiver) = mpsc::unbounded();
+    let (upstream_proxy_sender, _upstream_proxy_receiver) = mpsc::unbounded();
     let (mempool_client, ac) = setup_ac(&node_config, Arc::clone(&storage_service), upstream_proxy_sender);
     debug!("AC started in {} ms", instant.elapsed().as_millis());
 

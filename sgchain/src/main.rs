@@ -13,6 +13,7 @@ use std::sync::{
 use std::path::PathBuf;
 
 use structopt::StructOpt;
+use libra_node::main_node;
 
 #[derive(Debug, StructOpt)]
 #[structopt(about = "Libra Node")]
@@ -55,7 +56,7 @@ fn main() {
     debug!("config : {:?}", config);
     sgchain::star_chain_client::genesis_blob(&config);
 
-    let (_ac_handle, _node_handle) = sgchain::setup_environment(&mut config);
+    let _handle = main_node::setup_environment(&mut config);
 
     let term = Arc::new(AtomicBool::new(false));
     register_signals(Arc::clone(&term));

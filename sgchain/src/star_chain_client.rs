@@ -1,24 +1,18 @@
 use super::mock_star_node::{setup_environment, StarHandle};
 use admission_control_proto::proto::{
-    admission_control::{SubmitTransactionRequest, SubmitTransactionResponse, AdmissionControlClient, AdmissionControl},
+    admission_control::{SubmitTransactionRequest, SubmitTransactionResponse, AdmissionControlClient},
 };
 use async_trait::async_trait;
-use config::{config::NodeConfigHelpers, trusted_peers::ConfigHelpers};
+use config::{config::NodeConfigHelpers};
 use core::borrow::Borrow;
 use failure::prelude::*;
-use futures::{
-    compat::Future01CompatExt,
-    future::{FutureExt, TryFutureExt},
-};
 use grpcio::{ChannelBuilder, EnvBuilder};
 use logger::prelude::*;
-use libra_mempool::core_mempool_client::CoreMemPoolClient;
 use sgtypes::account_state::AccountState;
 use std::{
     convert::TryInto,
     fs::File,
     io::Write,
-    path::Path,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -36,12 +30,7 @@ use libra_types::{
 };
 use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR,};
 use transaction_builder::{encode_create_account_script, encode_transfer_script, };
-use vm_validator::vm_validator::VMValidator;
-use futures::channel::mpsc::UnboundedSender;
-use admission_control_service::admission_control_service::AdmissionControlService;
-use futures::executor::block_on;
 use libra_types::get_with_proof::{ResponseItem};
-use atomic_refcell::AtomicRefCell;
 use tokio::timer::delay;
 use admission_control_service::admission_control_mock_client::AdmissionControlMockClient;
 use prost_ext::MessageExt;
@@ -159,7 +148,7 @@ pub trait ChainClient: Send + Sync {
             sequence_number: seq_num,
             fetch_events: false,
         };
-        let mut resp = parse_response(self.do_request(&build_request(req, None)));
+        let resp = parse_response(self.do_request(&build_request(req, None)));
         resp.into_get_account_txn_by_seq_num_response()
     }
 
