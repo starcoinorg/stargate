@@ -1,0 +1,37 @@
+module VecTest{
+    import 0x0.Vector;
+
+    resource VecBox {
+        grid: Vector.T<bool>,
+    }
+
+    public test_move_vec_to_sender() {
+        let t: Self.VecBox;
+        let grid: Vector.T<bool>;
+
+        grid = Vector.empty<bool>();
+
+        t = VecBox {
+            grid: move(grid),
+        };
+
+        move_to_sender_channel<VecBox>(move(t));
+
+        return;
+    }
+
+    public test_move_vec_to_receiver() {
+        let t: Self.VecBox;
+        let grid: Vector.T<bool>;
+
+        grid = Vector.empty<bool>();
+
+        t = VecBox {
+            grid: move(grid),
+        };
+
+        move_to_receiver_channel<VecBox>(move(t));
+
+        return;
+    }
+}

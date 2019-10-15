@@ -347,3 +347,23 @@ fn test_deploy_and_use_custom_module() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_vector() -> Result<()> {
+    ::logger::init_for_e2e_testing();
+    let init_balance = 1000000;
+
+    let (mock_chain_service, _handle) = MockChainClient::new();
+    let client = Arc::new(mock_chain_service);
+
+    let alice = Arc::new(setup_wallet(client.clone(), init_balance)?);
+    let bob = Arc::new(setup_wallet(client.clone(), init_balance)?);
+    deploy_custom_module_and_script(alice.clone(), "test_vector")?;
+
+    open_channel(alice.clone(), bob.clone(), 100000, 100000)?;
+
+    execute_script(alice.clone(), bob.clone(), "scripts", "move_vector_to_sender", vec![])?;
+    execute_script(alice.clone(), bob.clone(), "scripts", "move_vector_to_receiver", vec![])?;
+
+    Ok(())
+}
