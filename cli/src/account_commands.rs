@@ -1,5 +1,5 @@
 use crate::{client_proxy::ClientProxy, commands::*};
-use star_types::account_state::AccountState;
+use sgtypes::account_state::AccountState;
 
 /// Major command for account related operations.
 pub struct AccountCommand {}

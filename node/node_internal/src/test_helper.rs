@@ -17,7 +17,7 @@ use logger::prelude::*;
 use sg_config::config::NetworkConfig;
 use sgchain::star_chain_client::{faucet_sync, ChainClient, MockChainClient};
 use sgwallet::wallet::*;
-use star_types::message::*;
+use sgtypes::message::*;
 use std::{
     convert::identity,
     sync::{Arc, Mutex},

@@ -31,12 +31,12 @@ use network::{Message, NetworkMessage, NetworkService};
 use sgchain::star_chain_client::ChainClient;
 use sgwallet::wallet::Wallet;
 use node_proto::{ChannelBalanceResponse, ConnectResponse, DeployModuleResponse, DepositResponse, ExecuteScriptResponse, OpenChannelResponse, PayResponse, WithdrawResponse};
-use star_types::{
+use sgtypes::{
     channel_transaction::{ChannelTransactionRequest, ChannelTransactionResponse},
     message::*,
     system_event::Event,
 };
-use star_types::script_package::ChannelScriptPackage;
+use sgtypes::script_package::ChannelScriptPackage;
 
 use crate::message_processor::{MessageFuture, MessageProcessor};
 
@@ -825,7 +825,7 @@ fn error_message(e: Error, hash_value: HashValue) -> bytes::Bytes {
         error_message = ErrorMessage::new(
             hash_value,
             SgError::new(
-                star_types::sg_error::SgErrorCode::UNKNOWN,
+                sgtypes::sg_error::SgErrorCode::UNKNOWN,
                 format!("{:?}", e),
             ),
         );

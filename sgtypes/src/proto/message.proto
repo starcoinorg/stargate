@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package star_types;
+package sgtypes;
 
 import "channel_transaction.proto";
 
@@ -19,11 +19,11 @@ message OpenChannelNodeNegotiateMessage {
 }
 
 message ChannelTransactionRequestMessage {
-    star_types.ChannelTransactionRequest txn_request = 1;
+    sgtypes.ChannelTransactionRequest txn_request = 1;
 }
 
 message ChannelTransactionResponseMessage {
-    star_types.ChannelTransactionResponse txn_response = 1;
+    sgtypes.ChannelTransactionResponse txn_response = 1;
 }
 
 message AddressMessage {

@@ -7,7 +7,7 @@ use failure::prelude::*;
 use state_view::StateView;
 use libra_types::{access_path::AccessPath, account_address::AccountAddress, transaction::Version};
 
-use star_types::account_state::AccountState;
+use sgtypes::account_state::AccountState;
 
 /// A state_view directly fetch remote chain, but lock version.
 pub struct ClientStateView<'a> {

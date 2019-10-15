@@ -14,7 +14,7 @@ protobuf = "2.7"
 grpc_helpers = { path = "../libra/common/grpc_helpers" }
 libra-types = { path = "../libra/types" }
 futures = { version = "=0.3.0-alpha.19", package = "futures-preview", features = ["async-await", "io-compat", "compat"] }
-star_types = { path = "../star_types" }
+sgtypes = { path = "../sgtypes" }
 crypto = { path = "../libra/crypto/crypto" }
 failure = { path = "../libra/common/failure_ext", package = "failure_ext" }
 admission-control-proto = { path = "../libra/admission_control/admission-control-proto" }

@@ -13,7 +13,7 @@ use futures::{
 use grpcio::{ChannelBuilder, EnvBuilder};
 use logger::prelude::*;
 use libra_mempool::core_mempool_client::CoreMemPoolClient;
-use star_types::account_state::AccountState;
+use sgtypes::account_state::AccountState;
 use std::{
     convert::TryInto,
     fs::File,

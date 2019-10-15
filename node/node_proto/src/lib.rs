@@ -4,7 +4,7 @@
 use failure::prelude::*;
 #[cfg(any(test, feature = "testing"))]
 use proptest_derive::Arbitrary;
-use star_types::script_package::ChannelScriptPackage;
+use sgtypes::script_package::ChannelScriptPackage;
 use libra_types::account_address::AccountAddress;
 use protobuf::RepeatedField;
 use libra_types::transaction::SignedTransactionWithProof;

@@ -14,7 +14,7 @@ use crypto::{hash::CryptoHash, HashValue};
 use failure::prelude::*;
 use futures::future::err;
 use logger::prelude::*;
-use star_types::{
+use sgtypes::{
     channel_transaction::ChannelTransactionRequest,
     message::{ErrorMessage, SgError},
 };
@@ -48,7 +48,7 @@ impl Future for MessageFuture {
                 None => {
                     warn!("no data,return timeout");
                     return Err(Self::Error::new(
-                        star_types::sg_error::SgErrorCode::TIMEOUT,
+                        sgtypes::sg_error::SgErrorCode::TIMEOUT,
                         "future time out".to_string(),
                     ));
                 }
@@ -129,7 +129,7 @@ fn error_translate(e: Error) -> SgError {
     } else {
         info!("this is a common error");
         SgError::new(
-            star_types::sg_error::SgErrorCode::UNKNOWN,
+            sgtypes::sg_error::SgErrorCode::UNKNOWN,
             format!("{:?}", e),
         )
     }

@@ -18,7 +18,7 @@ grpc_helpers = { path = "../../libra/common/grpc_helpers" }
 failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
 proptest_helpers = { path = "../../libra/common/proptest_helpers" }
 libra-types = { path = "../../libra/types"}
-star_types = { path = "../../star_types" }
+sgtypes = { path = "../../sgtypes" }
 crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }
 
 [build-dependencies]

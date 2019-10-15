@@ -21,7 +21,7 @@ use sgchain::{
     star_chain_client::{faucet_sync, ChainClient, MockChainClient},
 };
 use sgcompiler::{Compiler, StateViewModuleLoader};
-use star_types::script_package::ChannelScriptPackage;
+use sgtypes::script_package::ChannelScriptPackage;
 use libra_types::{account_address::AccountAddress, transaction::TransactionArgument};
 
 use super::wallet::*;

@@ -29,7 +29,7 @@ use lazy_static::lazy_static;
 use local_state_storage::LocalStateStorage;
 use logger::prelude::*;
 use sgchain::star_chain_client::{ChainClient, StarChainClient};
-use star_types::{
+use sgtypes::{
     account_resource_ext,
     channel::{Channel, WitnessData},
     channel_transaction::{

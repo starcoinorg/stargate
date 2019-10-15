@@ -133,14 +133,14 @@ impl CanonicalDeserialize for ChannelScriptPackage {
     }
 }
 
-impl TryFrom<crate::proto::star_types::ChannelScriptPackage> for ChannelScriptPackage{
+impl TryFrom<crate::proto::sgtypes::ChannelScriptPackage> for ChannelScriptPackage{
     type Error = Error;
-    fn try_from(value: crate::proto::star_types::ChannelScriptPackage) -> Result<Self> {
+    fn try_from(value: crate::proto::sgtypes::ChannelScriptPackage) -> Result<Self> {
         SimpleDeserializer::deserialize(value.payload.as_slice())
     }
 }
 
-impl From<ChannelScriptPackage> for crate::proto::star_types::ChannelScriptPackage{
+impl From<ChannelScriptPackage> for crate::proto::sgtypes::ChannelScriptPackage{
 
     fn from(value: ChannelScriptPackage) -> Self {
         Self{

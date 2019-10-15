@@ -11,7 +11,7 @@ use node_proto::{ChannelBalanceRequest, ChannelBalanceResponse, ConnectRequest, 
 use sg_config::config::NodeConfig;
 use sgchain::star_chain_client::ChainClient;
 use node_proto::proto::node::create_node;
-use star_types::{script_package::ChannelScriptPackage};
+use sgtypes::{script_package::ChannelScriptPackage};
 use std::sync::Arc;
 use std::convert::TryFrom;
 

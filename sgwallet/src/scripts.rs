@@ -11,7 +11,7 @@ use ir_to_bytecode::{compiler::compile_program, parser::parse_program};
 use lazy_static::lazy_static;
 use logger::prelude::*;
 use sgcompiler::{Compiler, ScriptFile};
-use star_types::{
+use sgtypes::{
     channel_transaction::ChannelOp,
     script_package::{ChannelScriptPackage, ScriptCode},
 };

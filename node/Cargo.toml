@@ -28,7 +28,7 @@ sg_config = { path = "../sgconfig"}
 sgwallet = { path="../sgwallet"}
 sgchain = { path = "../sgchain"}
 libra-types = { path = "../libra/types" }
-star_types = { path = "../star_types" }
+sgtypes = { path = "../sgtypes" }
 
 crypto = { path = "../libra/crypto/crypto", features = ["testing"] }
 prost = "0.5.0"

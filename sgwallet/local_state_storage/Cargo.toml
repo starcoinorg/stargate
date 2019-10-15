@@ -11,7 +11,7 @@ failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
 itertools = "0.8.0"
 crypto = { path = "../../libra/crypto/crypto" }
 libra-types = { path = "../../libra/types"}
-star_types = { path = "../../star_types" }
+sgtypes = { path = "../../sgtypes" }
 sgchain = { path = "../../sgchain" }
 state_view = {path = "../../libra/storage/state_view"}
 logger = { path = "../../libra/common/logger"}

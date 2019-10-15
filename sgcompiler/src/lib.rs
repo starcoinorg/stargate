@@ -11,7 +11,7 @@ use ir_to_bytecode::{
 };
 use logger::prelude::*;
 use sgchain::{client_state_view::ClientStateView, star_chain_client::ChainClient};
-use star_types::script_package::{ChannelScriptPackage, ScriptCode};
+use sgtypes::script_package::{ChannelScriptPackage, ScriptCode};
 use state_view::StateView;
 use std::collections::HashSet;
 use stdlib::stdlib_modules;

@@ -2,7 +2,7 @@ use crypto::{ed25519::*, traits::Uniform};
 use grpcio::{EnvBuilder, ServerBuilder};
 use node_service::NodeService;
 use rand::{rngs::StdRng, SeedableRng};
-use star_types::proto::node_grpc::create_node;
+use sgtypes::proto::node_grpc::create_node;
 
 use node_internal::test_helper::*;
 use tokio::runtime::TaskExecutor;

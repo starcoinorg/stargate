@@ -10,7 +10,7 @@ edition = "2018"
 walkdir = "2"
 failure = { path = "../libra/common/failure_ext", package = "failure_ext" }
 libra-types = { path = "../libra/types" }
-star_types = { path = "../star_types" }
+sgtypes = { path = "../sgtypes" }
 stdlib = { path = "../libra/language/stdlib" }
 ir_to_bytecode = { path = "../libra/language/compiler/ir_to_bytecode" }
 vm = { path = "../libra/language/vm" }

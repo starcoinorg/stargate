@@ -641,7 +641,7 @@ dependencies = [
  "serde_json 1.0.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "sgchain 0.1.0",
  "sgcompiler 0.1.0",
- "star_types 0.1.0",
+ "sgtypes 0.1.0",
  "structopt 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "tempfile 3.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio 0.1.22 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2627,7 +2627,7 @@ dependencies = [
  "libra-types 0.1.0",
  "logger 0.1.0",
  "sgchain 0.1.0",
- "star_types 0.1.0",
+ "sgtypes 0.1.0",
  "state_view 0.1.0",
  "tokio 0.1.22 (registry+https://github.com/rust-lang/crates.io-index)",
  "vm_runtime_types 0.1.0",
@@ -3001,8 +3001,8 @@ dependencies = [
  "sg_config 0.1.0",
  "sgchain 0.1.0",
  "sgnetwork 0.1.0",
+ "sgtypes 0.1.0",
  "sgwallet 0.1.0",
- "star_types 0.1.0",
  "structopt 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "switch 0.1.0",
  "tokio 0.2.0-alpha.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3016,7 +3016,7 @@ dependencies = [
  "grpcio 0.5.0-alpha.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "node_proto 0.1.0",
  "prost 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "star_types 0.1.0",
+ "sgtypes 0.1.0",
 ]
 
 [[package]]
@@ -3044,8 +3044,8 @@ dependencies = [
  "sg_config 0.1.0",
  "sgchain 0.1.0",
  "sgnetwork 0.1.0",
+ "sgtypes 0.1.0",
  "sgwallet 0.1.0",
- "star_types 0.1.0",
  "structopt 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "switch 0.1.0",
  "tokio 0.2.0-alpha.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3069,7 +3069,7 @@ dependencies = [
  "prost 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "prost-build 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "protobuf 2.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "star_types 0.1.0",
+ "sgtypes 0.1.0",
 ]
 
 [[package]]
@@ -3091,7 +3091,7 @@ dependencies = [
  "serde 1.0.101 (registry+https://github.com/rust-lang/crates.io-index)",
  "sg_config 0.1.0",
  "sgchain 0.1.0",
- "star_types 0.1.0",
+ "sgtypes 0.1.0",
  "tokio 0.1.22 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -4164,7 +4164,7 @@ name = "routin"
 version = "0.1.0"
 dependencies = [
  "crypto 0.1.0",
- "star_types 0.1.0",
+ "sgtypes 0.1.0",
 ]
 
 [[package]]
@@ -4457,8 +4457,8 @@ dependencies = [
  "prost-ext 0.1.0",
  "protobuf 2.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rayon 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "sgtypes 0.1.0",
  "signal-hook 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "star_types 0.1.0",
  "state_synchronizer 0.1.0",
  "state_view 0.1.0",
  "storage-service 0.1.0",
@@ -4482,7 +4482,7 @@ dependencies = [
  "libra-types 0.1.0",
  "logger 0.1.0",
  "sgchain 0.1.0",
- "star_types 0.1.0",
+ "sgtypes 0.1.0",
  "state_view 0.1.0",
  "stdlib 0.1.0",
  "vm 0.1.0",
@@ -4510,6 +4510,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "sgtypes"
+version = "0.1.0"
+dependencies = [
+ "atomic_refcell 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bytes 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "canonical-serialization 0.1.0",
+ "crypto 0.1.0",
+ "failure_ext 0.1.0",
+ "hex 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "itertools 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libra-types 0.1.0",
+ "logger 0.1.0",
+ "num_enum 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "parity-multiaddr 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "proptest 0.9.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "proptest-derive 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "proptest_helpers 0.1.0",
+ "prost 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "prost-build 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "prost-ext 0.1.0",
+ "protobuf 2.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "radix_trie 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.101 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_json 1.0.40 (registry+https://github.com/rust-lang/crates.io-index)",
+ "vm_runtime_types 0.1.0",
+]
+
+[[package]]
 name = "sgwallet"
 version = "0.1.0"
 dependencies = [
@@ -4534,7 +4563,7 @@ dependencies = [
  "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "sgchain 0.1.0",
  "sgcompiler 0.1.0",
- "star_types 0.1.0",
+ "sgtypes 0.1.0",
  "state_view 0.1.0",
  "stdlib 0.1.0",
  "tokio 0.2.0-alpha.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -4748,35 +4777,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "stable_deref_trait"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "star_types"
-version = "0.1.0"
-dependencies = [
- "atomic_refcell 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "bytes 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)",
- "canonical-serialization 0.1.0",
- "crypto 0.1.0",
- "failure_ext 0.1.0",
- "hex 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "itertools 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "libra-types 0.1.0",
- "logger 0.1.0",
- "num_enum 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "parity-multiaddr 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "proptest 0.9.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "proptest-derive 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "proptest_helpers 0.1.0",
- "prost 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "prost-build 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "prost-ext 0.1.0",
- "protobuf 2.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "radix_trie 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 1.0.101 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_json 1.0.40 (registry+https://github.com/rust-lang/crates.io-index)",
- "vm_runtime_types 0.1.0",
-]
 
 [[package]]
 name = "state_synchronizer"
@@ -5064,7 +5064,7 @@ version = "0.1.0"
 dependencies = [
  "futures-preview 0.3.0-alpha.19 (registry+https://github.com/rust-lang/crates.io-index)",
  "libra-types 0.1.0",
- "star_types 0.1.0",
+ "sgtypes 0.1.0",
 ]
 
 [[package]]

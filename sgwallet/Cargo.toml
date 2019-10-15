@@ -16,7 +16,7 @@ lazy_static = "1.3.0"
 include_dir = "0.2.1"
 failure = { path = "../libra/common/failure_ext", package = "failure_ext" }
 libra-types = { path = "../libra/types" }
-star_types = { path = "../star_types" }
+sgtypes = { path = "../sgtypes" }
 crypto = { path = "../libra/crypto/crypto" }
 
 local_state_storage = { path = "./local_state_storage"}

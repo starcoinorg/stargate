@@ -30,7 +30,7 @@ use logger::prelude::*;
 use sg_config::config::NetworkConfig;
 use sgchain::star_chain_client::{MockChainClient};
 use sgwallet::wallet::*;
-use star_types::message::*;
+use sgtypes::message::*;
 use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -171,7 +171,7 @@ fn error_test() -> Result<()> {
 
 fn new_error() -> Result<()> {
     Err(SgError::new(
-        star_types::sg_error::SgErrorCode::UNKNOWN,
+        sgtypes::sg_error::SgErrorCode::UNKNOWN,
         "111".to_string(),
     )
     .into())

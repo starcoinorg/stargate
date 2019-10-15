@@ -8,7 +8,7 @@ fn main() {
 
     let includes = [
         "../../libra/types/src/proto",
-        "../../star_types/src/proto",
+        "../../sgtypes/src/proto",
         "src/proto",
     ];
 

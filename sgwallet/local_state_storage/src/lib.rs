@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use failure::prelude::*;
 use logger::prelude::*;
 use sgchain::star_chain_client::ChainClient;
-use star_types::{message::SgError, resource::Resource};
+use sgtypes::{message::SgError, resource::Resource};
 use state_view::StateView;
 use libra_types::{
     access_path::{AccessPath, DataPath},
@@ -15,7 +15,7 @@ use vm_runtime_types::loaded_data::struct_def::StructDef;
 
 pub use crate::channel_state_view::ChannelStateView;
 use sgchain::client_state_view::ClientStateView;
-use star_types::{
+use sgtypes::{
     account_state::AccountState,
     channel::{Channel, WitnessData},
 };

@@ -39,7 +39,7 @@ members = [
     "libra/mempool",
     "libra/admission_control/admission-control-proto",
     "libra/admission_control/admission-control-service",
-    "star_types",
+    "sgtypes",
     "routing",
     "sgnetwork",
     "network-libp2p",

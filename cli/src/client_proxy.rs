@@ -16,7 +16,7 @@ use sgchain::{
     star_chain_client::{faucet_sync, ChainClient, StarChainClient},
 };
 use sgcompiler::{Compiler, StateViewModuleLoader};
-use star_types::script_package::ChannelScriptPackage;
+use sgtypes::script_package::ChannelScriptPackage;
 use std::{
     fs,
     io::{stdout, Write},

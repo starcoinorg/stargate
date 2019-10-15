@@ -8,4 +8,4 @@ edition = "2018"
 
 [dependencies]
 crypto = { package = "crypto", path = "../libra/crypto/crypto" }
-star_types = { package = "star_types", path = "../star_types" }
+sgtypes = { package = "sgtypes", path = "../sgtypes" }

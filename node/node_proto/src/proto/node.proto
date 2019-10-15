@@ -93,7 +93,7 @@ message ChannelBalanceResponse{
 }
 
 message InstallChannelScriptPackageRequest{
-    star_types.ChannelScriptPackage channel_script_package=1;
+    sgtypes.ChannelScriptPackage channel_script_package=1;
 }
 
 message InstallChannelScriptPackageResponse{

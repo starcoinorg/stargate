@@ -453,16 +453,16 @@ impl CanonicalDeserialize for ChannelTransactionRequest {
     }
 }
 
-impl TryFrom<crate::proto::star_types::ChannelTransactionRequest> for ChannelTransactionRequest {
+impl TryFrom<crate::proto::sgtypes::ChannelTransactionRequest> for ChannelTransactionRequest {
 
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::ChannelTransactionRequest) -> Result<Self> {
+    fn try_from(value: crate::proto::sgtypes::ChannelTransactionRequest) -> Result<Self> {
         SimpleDeserializer::deserialize(value.payload.as_slice())
     }
 }
 
-impl From<ChannelTransactionRequest> for crate::proto::star_types::ChannelTransactionRequest {
+impl From<ChannelTransactionRequest> for crate::proto::sgtypes::ChannelTransactionRequest {
 
     fn from(value: ChannelTransactionRequest) -> Self {
         Self{
@@ -548,16 +548,16 @@ impl CanonicalDeserialize for ChannelTransactionResponse {
     }
 }
 
-impl TryFrom<crate::proto::star_types::ChannelTransactionResponse> for ChannelTransactionResponse {
+impl TryFrom<crate::proto::sgtypes::ChannelTransactionResponse> for ChannelTransactionResponse {
 
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::ChannelTransactionResponse) -> Result<Self> {
+    fn try_from(value: crate::proto::sgtypes::ChannelTransactionResponse) -> Result<Self> {
         SimpleDeserializer::deserialize(value.payload.as_slice())
     }
 }
 
-impl From<ChannelTransactionResponse> for crate::proto::star_types::ChannelTransactionResponse {
+impl From<ChannelTransactionResponse> for crate::proto::sgtypes::ChannelTransactionResponse {
 
     fn from(value: ChannelTransactionResponse) -> Self {
         Self{

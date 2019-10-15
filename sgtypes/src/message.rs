@@ -51,25 +51,25 @@ impl RawNegotiateMessage {
     pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
         where B: IntoBuf,
     {
-        crate::proto::star_types::RawNegotiateMessage::decode(buf)?.try_into()
+        crate::proto::sgtypes::RawNegotiateMessage::decode(buf)?.try_into()
     }
 
     pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
-        Ok(TryInto::<crate::proto::star_types::RawNegotiateMessage>::try_into(self)?.to_vec()?)
+        Ok(TryInto::<crate::proto::sgtypes::RawNegotiateMessage>::try_into(self)?.to_vec()?)
     }
 
 }
 
-impl TryFrom<crate::proto::star_types::RawNegotiateMessage> for RawNegotiateMessage{
+impl TryFrom<crate::proto::sgtypes::RawNegotiateMessage> for RawNegotiateMessage{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::RawNegotiateMessage) -> Result<Self> {
+    fn try_from(value: crate::proto::sgtypes::RawNegotiateMessage) -> Result<Self> {
         Ok(Self::new(value.sender_addr.try_into()?, value.resource_type.ok_or_else(|| format_err!("Missing resource_type"))?
             .try_into()?, value.sender_amount, value.receiver_addr.try_into()?, value.receiver_amount))
     }
 }
 
-impl From<RawNegotiateMessage> for crate::proto::star_types::RawNegotiateMessage{
+impl From<RawNegotiateMessage> for crate::proto::sgtypes::RawNegotiateMessage{
 
     fn from(value: RawNegotiateMessage) -> Self {
         Self {
@@ -98,18 +98,18 @@ impl OpenChannelNodeNegotiateMessage {
     pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
         where B: IntoBuf,
     {
-        crate::proto::star_types::OpenChannelNodeNegotiateMessage::decode(buf)?.try_into()
+        crate::proto::sgtypes::OpenChannelNodeNegotiateMessage::decode(buf)?.try_into()
     }
 
     pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
-        Ok(TryInto::<crate::proto::star_types::OpenChannelNodeNegotiateMessage>::try_into(self)?.to_vec()?)
+        Ok(TryInto::<crate::proto::sgtypes::OpenChannelNodeNegotiateMessage>::try_into(self)?.to_vec()?)
     }
 }
 
-impl TryFrom<crate::proto::star_types::OpenChannelNodeNegotiateMessage> for OpenChannelNodeNegotiateMessage{
+impl TryFrom<crate::proto::sgtypes::OpenChannelNodeNegotiateMessage> for OpenChannelNodeNegotiateMessage{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::OpenChannelNodeNegotiateMessage) -> Result<Self> {
+    fn try_from(value: crate::proto::sgtypes::OpenChannelNodeNegotiateMessage) -> Result<Self> {
         let raw =value.raw_message.ok_or_else(|| format_err!("Missing raw_message"))?
             .try_into()?;
         let sender_sign = Ed25519Signature::try_from(value.sender_sign.as_slice())?;
@@ -127,7 +127,7 @@ impl TryFrom<crate::proto::star_types::OpenChannelNodeNegotiateMessage> for Open
     }
 }
 
-impl From<OpenChannelNodeNegotiateMessage> for crate::proto::star_types::OpenChannelNodeNegotiateMessage{
+impl From<OpenChannelNodeNegotiateMessage> for crate::proto::sgtypes::OpenChannelNodeNegotiateMessage{
 
     fn from(value: OpenChannelNodeNegotiateMessage) -> Self {
         Self{
@@ -162,16 +162,16 @@ impl StructTag {
     }
 }
 
-impl TryFrom<crate::proto::star_types::StructTag> for StructTag{
+impl TryFrom<crate::proto::sgtypes::StructTag> for StructTag{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::StructTag) -> Result<Self> {
+    fn try_from(value: crate::proto::sgtypes::StructTag) -> Result<Self> {
         let type_params:Result<Vec<StructTag>> = value.type_params.iter().cloned().map(|v|Self::try_from(v)).collect();
         Ok(Self::new(value.account_addr.try_into()?,value.module, value.name, type_params?))
     }
 }
 
-impl From<StructTag> for crate::proto::star_types::StructTag{
+impl From<StructTag> for crate::proto::sgtypes::StructTag{
 
     fn from(value: StructTag) -> Self {
         Self{
@@ -196,25 +196,25 @@ impl ChannelTransactionRequestMessage {
     pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
     where B: IntoBuf,
     {
-        crate::proto::star_types::ChannelTransactionRequestMessage::decode(buf)?.try_into()
+        crate::proto::sgtypes::ChannelTransactionRequestMessage::decode(buf)?.try_into()
     }
 
     pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
-        Ok(TryInto::<crate::proto::star_types::ChannelTransactionRequestMessage>::try_into(self)?.to_vec()?)
+        Ok(TryInto::<crate::proto::sgtypes::ChannelTransactionRequestMessage>::try_into(self)?.to_vec()?)
     }
 }
 
-impl TryFrom<crate::proto::star_types::ChannelTransactionRequestMessage> for ChannelTransactionRequestMessage{
+impl TryFrom<crate::proto::sgtypes::ChannelTransactionRequestMessage> for ChannelTransactionRequestMessage{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::ChannelTransactionRequestMessage) -> Result<Self> {
+    fn try_from(value: crate::proto::sgtypes::ChannelTransactionRequestMessage) -> Result<Self> {
         Ok(Self {
             txn_request: value.txn_request.ok_or_else(|| format_err!("Missing resource_type"))?.try_into()?,
         })
     }
 }
 
-impl From<ChannelTransactionRequestMessage> for crate::proto::star_types::ChannelTransactionRequestMessage{
+impl From<ChannelTransactionRequestMessage> for crate::proto::sgtypes::ChannelTransactionRequestMessage{
 
     fn from(value: ChannelTransactionRequestMessage) -> Self {
         Self{
@@ -236,25 +236,25 @@ impl ChannelTransactionResponseMessage {
     pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
         where B: IntoBuf,
     {
-        crate::proto::star_types::ChannelTransactionResponseMessage::decode(buf)?.try_into()
+        crate::proto::sgtypes::ChannelTransactionResponseMessage::decode(buf)?.try_into()
     }
 
     pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
-        Ok(TryInto::<crate::proto::star_types::ChannelTransactionResponseMessage>::try_into(self)?.to_vec()?)
+        Ok(TryInto::<crate::proto::sgtypes::ChannelTransactionResponseMessage>::try_into(self)?.to_vec()?)
     }
 }
 
-impl TryFrom<crate::proto::star_types::ChannelTransactionResponseMessage> for ChannelTransactionResponseMessage{
+impl TryFrom<crate::proto::sgtypes::ChannelTransactionResponseMessage> for ChannelTransactionResponseMessage{
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::ChannelTransactionResponseMessage) -> Result<Self> {
+    fn try_from(value: crate::proto::sgtypes::ChannelTransactionResponseMessage) -> Result<Self> {
         Ok(Self {
             txn_response: value.txn_response.ok_or_else(|| format_err!("Missing resource_type"))?.try_into()?,
         })
     }
 }
 
-impl From<ChannelTransactionResponseMessage> for crate::proto::star_types::ChannelTransactionResponseMessage{
+impl From<ChannelTransactionResponseMessage> for crate::proto::sgtypes::ChannelTransactionResponseMessage{
 
     fn from(value: ChannelTransactionResponseMessage) -> Self {
         Self{
@@ -275,16 +275,16 @@ impl AddressMessage {
     }
 }
 
-impl TryFrom<crate::proto::star_types::AddressMessage> for AddressMessage {
+impl TryFrom<crate::proto::sgtypes::AddressMessage> for AddressMessage {
 
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::AddressMessage) -> Result<Self> {
+    fn try_from(value: crate::proto::sgtypes::AddressMessage) -> Result<Self> {
         Ok(AddressMessage::new(value.addr.try_into()?, value.ip_addr.to_vec()?.try_into()?))
     }
 }
 
-impl From<AddressMessage> for crate::proto::star_types::AddressMessage {
+impl From<AddressMessage> for crate::proto::sgtypes::AddressMessage {
 
     fn from(value: AddressMessage) -> Self {
         Self{
@@ -337,20 +337,20 @@ impl ErrorMessage {
     pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
         where B: IntoBuf,
     {
-        crate::proto::star_types::ErrorMessage::decode(buf)?.try_into()
+        crate::proto::sgtypes::ErrorMessage::decode(buf)?.try_into()
     }
 
     pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
-        Ok(TryInto::<crate::proto::star_types::ErrorMessage>::try_into(self)?.to_vec()?)
+        Ok(TryInto::<crate::proto::sgtypes::ErrorMessage>::try_into(self)?.to_vec()?)
     }
 }
 
-impl TryFrom<crate::proto::star_types::ErrorMessage> for ErrorMessage {
+impl TryFrom<crate::proto::sgtypes::ErrorMessage> for ErrorMessage {
 
     type Error = Error;
 
-    fn try_from(value: crate::proto::star_types::ErrorMessage) -> Result<Self> {
-        use crate::proto::star_types::ErrorCode;
+    fn try_from(value: crate::proto::sgtypes::ErrorMessage) -> Result<Self> {
+        use crate::proto::sgtypes::ErrorCode;
 
         let raw_transaction_hash = HashValue::from_slice(value.raw_transaction_hash.as_slice())?;
         let error = SgError {
@@ -364,7 +364,7 @@ impl TryFrom<crate::proto::star_types::ErrorMessage> for ErrorMessage {
     }
 }
 
-impl From<ErrorMessage> for crate::proto::star_types::ErrorMessage{
+impl From<ErrorMessage> for crate::proto::sgtypes::ErrorMessage{
 
     fn from(value: ErrorMessage) -> Self {
         Self{
