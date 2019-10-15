@@ -1,18 +1,15 @@
-use std::sync::Arc;
-
-use atomic_refcell::AtomicRefCell;
 
 use failure::prelude::*;
-use logger::prelude::*;
-use sgchain::star_chain_client::ChainClient;
-use sgtypes::channel::Channel;
-use state_view::StateView;
 use libra_types::{
-    access_path::AccessPath, account_address::AccountAddress, language_storage::StructTag,
+    access_path::AccessPath,
     transaction::Version,
 };
 
 use sgchain::client_state_view::ClientStateView;
+use sgchain::star_chain_client::ChainClient;
+use sgtypes::channel::Channel;
+use state_view::StateView;
+
 
 pub struct ChannelStateView<'txn> {
     channel: &'txn Channel,

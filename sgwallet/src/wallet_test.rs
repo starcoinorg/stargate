@@ -1,30 +1,25 @@
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-    thread::sleep,
-};
-
-use futures::future::Future;
-use rand::prelude::*;
-use tokio::runtime::{Runtime, TaskExecutor};
-
+use super::wallet::*;
 use crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
     Uniform,
 };
 use failure::{_core::time::Duration, prelude::*};
-use futures_03::future::{FutureExt, TryFutureExt};
+use libra_types::{account_address::AccountAddress, transaction::TransactionArgument};
 use logger::prelude::*;
+use rand::prelude::*;
 use sgchain::{
     client_state_view::ClientStateView,
     star_chain_client::{faucet_sync, ChainClient, MockChainClient},
 };
 use sgcompiler::{Compiler, StateViewModuleLoader};
 use sgtypes::script_package::ChannelScriptPackage;
-use libra_types::{account_address::AccountAddress, transaction::TransactionArgument};
-
-use super::wallet::*;
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+    thread::sleep,
+};
+use tokio::runtime::Runtime;
 
 pub fn setup_wallet<C>(client: Arc<C>, init_balance: u64) -> Result<Wallet<C>>
 where
@@ -52,7 +47,7 @@ pub fn open_channel<C>(
 where
     C: ChainClient + Send + Sync + 'static,
 {
-    let mut rt = Runtime::new()?;
+    let rt = Runtime::new()?;
     let f = async move {
         let sender = sender_wallet.account();
         let receiver = receiver_wallet.account();
@@ -85,7 +80,7 @@ pub fn execute_script<C>(
 where
     C: ChainClient + Send + Sync + 'static,
 {
-    let mut rt = Runtime::new()?;
+    let rt = Runtime::new()?;
     let f = async move {
         let sender = sender_wallet.account();
         let receiver = receiver_wallet.account();
@@ -122,9 +117,9 @@ fn test_wallet() -> Result<()> {
     let sender_withdraw_amount: u64 = 4_000_000;
     let receiver_withdraw_amount: u64 = 5_000_000;
 
-    let mut rt = Runtime::new()?;
+    let rt = Runtime::new()?;
 
-    let (mock_chain_service, handle) = MockChainClient::new();
+    let (mock_chain_service, _handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
 
     let sender_wallet = Arc::new(setup_wallet(client.clone(), sender_amount).unwrap());
@@ -282,7 +277,7 @@ fn test_wallet_install_package() -> Result<()> {
     ::logger::init_for_e2e_testing();
     let init_balance = 1000000;
 
-    let (mock_chain_service, handle) = MockChainClient::new();
+    let (mock_chain_service, _handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
 
     let alice = Arc::new(setup_wallet(client.clone(), init_balance)?);
@@ -322,7 +317,7 @@ where
     let compiler = Compiler::new_with_module_loader(wallet.account(), &module_loader);
     let module_byte_code = compiler.compile_module(module_source.as_str())?;
 
-    let mut rt = Runtime::new()?;
+    let rt = Runtime::new()?;
     let wallet_clone = wallet.clone();
     let f = async move {
         wallet_clone.deploy_module(module_byte_code).await.unwrap();
@@ -339,7 +334,7 @@ fn test_deploy_and_use_custom_module() -> Result<()> {
     ::logger::init_for_e2e_testing();
     let init_balance = 1000000;
 
-    let (mock_chain_service, handle) = MockChainClient::new();
+    let (mock_chain_service, _handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
 
     let alice = Arc::new(setup_wallet(client.clone(), init_balance)?);

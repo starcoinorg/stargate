@@ -1,25 +1,19 @@
-use std::{collections::HashMap, sync::Arc};
-
+pub use crate::channel_state_view::ChannelStateView;
 use failure::prelude::*;
-use logger::prelude::*;
-use sgchain::star_chain_client::ChainClient;
-use sgtypes::sg_error::SgError;
-use state_view::StateView;
 use libra_types::{
     access_path::{AccessPath, DataPath},
     account_address::AccountAddress,
-    transaction::{ChannelWriteSetPayload, TransactionOutput, Version},
-    write_set::{WriteOp, WriteSet},
+    transaction::Version,
 };
-use vm_runtime_types::loaded_data::struct_def::StructDef;
-
-pub use crate::channel_state_view::ChannelStateView;
+use logger::prelude::*;
 use sgchain::client_state_view::ClientStateView;
+use sgchain::star_chain_client::ChainClient;
+use sgtypes::sg_error::SgError;
 use sgtypes::{
     account_state::AccountState,
     channel::{Channel, WitnessData},
 };
-use std::{thread::sleep, time::Duration};
+use std::{collections::HashMap, sync::Arc};
 
 pub struct LocalStateStorage<C>
 where

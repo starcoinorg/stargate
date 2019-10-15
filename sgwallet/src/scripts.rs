@@ -1,13 +1,10 @@
-use std::{
-    collections::HashMap,
-    fmt::{Display, Formatter},
-};
+use std::collections::HashMap;
 
 use atomic_refcell::AtomicRefCell;
 use include_dir::Dir;
 
 use failure::prelude::*;
-use ir_to_bytecode::{compiler::compile_program, parser::parse_program};
+
 use lazy_static::lazy_static;
 use logger::prelude::*;
 use sgcompiler::{Compiler, ScriptFile};
@@ -15,12 +12,9 @@ use sgtypes::{
     channel_transaction::ChannelOp,
     script_package::{ChannelScriptPackage, ScriptCode},
 };
-use stdlib::stdlib_modules;
+
 use libra_types::{
-    account_address::AccountAddress,
-    account_config::coin_struct_tag,
-    language_storage::StructTag,
-    transaction::{Program, Script, TransactionArgument},
+    account_address::AccountAddress, account_config::coin_struct_tag, language_storage::StructTag,
 };
 
 static SCRIPTS_DIR: Dir = include_dir!("scripts");

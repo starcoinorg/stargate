@@ -1,31 +1,29 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
-
+use crate::scripts::*;
 use atomic_refcell::AtomicRefCell;
-use futures::sync::mpsc::channel;
-use tokio::{
-    runtime::TaskExecutor,
-    timer::{Delay, Interval},
-};
-
 use canonical_serialization::SimpleSerializer;
 use config::config::VMConfig;
 use crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature},
-    hash::{CryptoHash, CryptoHasher, TestOnlyHasher},
+    hash::CryptoHash,
     test_utils::KeyPair,
-    HashValue, SigningKey, VerifyingKey,
+    HashValue, VerifyingKey,
 };
 use failure::prelude::*;
-use futures_03::{
-    compat::{Future01CompatExt, Stream01CompatExt},
-    future::{FutureExt, TryFutureExt},
-    stream::StreamExt,
-};
 use lazy_static::lazy_static;
+use libra_types::{
+    access_path::DataPath,
+    account_address::AccountAddress,
+    account_config::{account_resource_path, coin_struct_tag, AccountResource},
+    channel_account::{channel_account_resource_path, ChannelAccountResource},
+    language_storage::StructTag,
+    transaction::{
+        ChannelScriptPayload, ChannelWriteSetPayload, Module, RawTransaction, Script,
+        SignedTransaction, SignedTransactionWithProof, TransactionArgument, TransactionOutput,
+        TransactionPayload, TransactionStatus,
+    },
+    transaction_helpers::{create_signed_payload_txn, ChannelPayloadSigner, TransactionSigner},
+    vm_error::*,
+};
 use local_state_storage::LocalStateStorage;
 use logger::prelude::*;
 use sgchain::star_chain_client::{ChainClient, StarChainClient};
@@ -37,35 +35,12 @@ use sgtypes::{
         ChannelTransactionRequestPayload, ChannelTransactionResponse,
         ChannelTransactionResponsePayload, Witness,
     },
-    message::{ErrorMessage},
     resource::Resource,
     script_package::{ChannelScriptPackage, ScriptCode},
-    sg_error::{SgError,SgErrorCode},
 };
 use state_view::StateView;
-use libra_types::{
-    access_path::{AccessPath, DataPath},
-    account_address::AccountAddress,
-    account_config::{account_resource_path, coin_struct_tag, AccountResource},
-    channel_account::{
-        channel_account_resource_path, channel_account_struct_tag, ChannelAccountResource,
-    },
-    language_storage::StructTag,
-    proof::{AccumulatorProof, SignedTransactionProof},
-    transaction::{
-        ChannelScriptPayload, ChannelWriteSetPayload, Module, Program, RawTransaction, Script,
-        SignedTransaction, SignedTransactionWithProof, TransactionArgument, TransactionInfo,
-        TransactionOutput, TransactionPayload, TransactionStatus, Version,
-    },
-    transaction_helpers::{create_signed_payload_txn, ChannelPayloadSigner, TransactionSigner},
-    vm_error::*,
-    write_set::{WriteOp, WriteSet},
-};
+use std::sync::Arc;
 use vm_runtime::{MoveVM, VMExecutor};
-
-use crate::scripts::*;
-use sgchain::client_state_view::ClientStateView;
-use sgcompiler::{Compiler, StateViewModuleLoader};
 
 lazy_static! {
     pub static ref DEFAULT_ASSET: StructTag = coin_struct_tag();
@@ -81,7 +56,6 @@ where
     client: Arc<C>,
     storage: Arc<AtomicRefCell<LocalStateStorage<C>>>,
     script_registry: PackageRegistry,
-    lock: futures_locks::Mutex<u64>,
     offchain_transactions: Arc<AtomicRefCell<Vec<(HashValue, u8)>>>,
 }
 
@@ -92,7 +66,7 @@ where
     const TXN_EXPIRATION: i64 = 1000 * 60;
     const MAX_GAS_AMOUNT: u64 = 200000;
     const GAS_UNIT_PRICE: u64 = 1;
-    const RETRY_INTERVAL: u64 = 1000;
+    // const RETRY_INTERVAL: u64 = 1000;
 
     pub fn new(
         account: AccountAddress,
@@ -121,7 +95,6 @@ where
             client,
             storage,
             script_registry,
-            lock: futures_locks::Mutex::new(1),
             offchain_transactions: Arc::new(AtomicRefCell::new(Vec::new())),
         })
     }
@@ -450,7 +423,7 @@ where
         let gas = match (request.payload(), response.payload()) {
             (
                 ChannelTransactionRequestPayload::Travel {
-                    txn_write_set_hash,
+                    txn_write_set_hash: _,
                     txn_signature,
                 },
                 ChannelTransactionResponsePayload::Travel {
@@ -671,8 +644,8 @@ where
         let sender = &signed_transaction.sender();
         let _resp = self.client.submit_signed_transaction(signed_transaction)?;
         let watch_future = self.client.watch_transaction(sender, seq_number);
-        let (tx_proof, account_proof) = watch_future.await?;
-        match  tx_proof {
+        let (tx_proof, _account_proof) = watch_future.await?;
+        match tx_proof {
             Some(proof) => Ok(proof),
             None => Err(format_err!(
                 "proof not found by address {:?} and seq num {} .",
@@ -694,14 +667,14 @@ where
         match hash {
             Some(hash) => {
                 for (hash_item, res) in tnxs.iter() {
-                    if (hash.eq(hash_item)) {
+                    if hash.eq(hash_item) {
                         find_data = true;
                         continue;
                     }
-                    if (find_data && count_num > 0) {
+                    if find_data && count_num > 0 {
                         data.push((*hash_item, *res));
                         count_num = count_num - 1;
-                        if (count_num == 0) {
+                        if count_num == 0 {
                             break;
                         }
                     }
@@ -711,7 +684,7 @@ where
                 for (hash_item, res) in tnxs.iter() {
                     data.push((*hash_item, *res));
                     count_num = count_num - 1;
-                    if (count_num == 0) {
+                    if count_num == 0 {
                         break;
                     }
                 }
