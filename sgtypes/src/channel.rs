@@ -229,7 +229,7 @@ impl Channel {
         witness_payload: ChannelWriteSetPayload,
         signature: Ed25519Signature,
     ) -> Result<()> {
-        self.check_stage(vec![ChannelStage::Opening])?;
+        self.check_stage(vec![ChannelStage::Opening, ChannelStage::Pending])?;
         self.update_witness_data(witness_payload, signature);
         self.reset_pending_txn_request();
         *self.stage.borrow_mut() = ChannelStage::Idle;
