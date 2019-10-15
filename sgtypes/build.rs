@@ -6,7 +6,6 @@ fn main() {
         "src/proto/channel_transaction.proto",
         "src/proto/message.proto",
         "src/proto/script_package.proto",
-        "src/proto/star_account.proto",
     ];
 
     let includes = ["../libra/types/src/proto", "src/proto"];

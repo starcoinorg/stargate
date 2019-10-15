@@ -4,22 +4,6 @@ use libra_types::{
     account_address::AccountAddress, account_config::AccountResource, event::EventHandle,
 };
 
-//impl TryFrom<Vec<u8>> for AccountResource{
-//    type Error = failure::Error;
-//
-//    fn try_from(value: Vec<u8>) -> Result<Self> {
-//        SimpleDeserializer::deserialize(value.as_slice())
-//    }
-//}
-//
-//impl TryInto<Vec<u8>> for &AccountResource{
-//    type Error = failure::Error;
-//
-//    fn try_into(self) -> Result<Vec<u8>> {
-//        SimpleSerializer::serialize(self)
-//    }
-//}
-
 pub fn to_bytes(account_resource: &AccountResource) -> Result<Vec<u8>> {
     SimpleSerializer::serialize(account_resource)
 }
