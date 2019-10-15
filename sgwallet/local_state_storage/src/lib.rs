@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use failure::prelude::*;
 use logger::prelude::*;
 use sgchain::star_chain_client::ChainClient;
-use sgtypes::{message::SgError, resource::Resource};
+use sgtypes::sg_error::SgError;
 use state_view::StateView;
 use libra_types::{
     access_path::{AccessPath, DataPath},

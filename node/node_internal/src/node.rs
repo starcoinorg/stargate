@@ -47,6 +47,7 @@ use futures_01::{
         oneshot,
     },
 };
+use sgtypes::sg_error::SgError;
 
 pub struct Node<C: ChainClient + Send + Sync + 'static> {
     executor: TaskExecutor,

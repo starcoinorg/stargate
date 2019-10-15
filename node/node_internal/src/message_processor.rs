@@ -16,7 +16,8 @@ use futures::future::err;
 use logger::prelude::*;
 use sgtypes::{
     channel_transaction::ChannelTransactionRequest,
-    message::{ErrorMessage, SgError},
+    sg_error::SgError,
+    message::{ErrorMessage},
 };
 use tokio::runtime::TaskExecutor;
 

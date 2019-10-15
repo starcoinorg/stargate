@@ -37,10 +37,10 @@ use sgtypes::{
         ChannelTransactionRequestPayload, ChannelTransactionResponse,
         ChannelTransactionResponsePayload, Witness,
     },
-    message::{ErrorMessage, SgError},
+    message::{ErrorMessage},
     resource::Resource,
     script_package::{ChannelScriptPackage, ScriptCode},
-    sg_error::SgErrorCode,
+    sg_error::{SgError,SgErrorCode},
 };
 use state_view::StateView;
 use libra_types::{

@@ -37,6 +37,7 @@ use std::{
 };
 use tokio::timer::Delay;
 use libra_types::account_address::AccountAddress;
+use sgtypes::sg_error::SgError;
 
 #[test]
 fn node_test() -> Result<()> {
