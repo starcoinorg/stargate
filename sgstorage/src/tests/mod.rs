@@ -8,7 +8,7 @@ use libra_types::account_address::AccountAddress;
 use libra_types::account_state_blob::AccountStateBlob;
 use libra_types::transaction::Version;
 use schemadb::SchemaBatch;
-use sgtypes::account_state::AccountState;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
