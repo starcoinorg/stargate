@@ -14,7 +14,7 @@ use futures::executor::block_on;
 use futures::stream::Stream;
 use tokio::timer::Interval;
 
-use admission_control_proto::proto::admission_control::AdmissionControl;
+use admission_control_proto::proto::admission_control::{AdmissionControl, SubmitTransactionResponse};
 use admission_control_service::{
     admission_control_service::AdmissionControlService,
 };
@@ -39,7 +39,7 @@ use storage_client::{StorageRead, StorageWrite};
 use storage_service::start_storage_service_and_return_service;
 use vm_runtime::MoveVM;
 use vm_validator::vm_validator::VMValidator;
-use futures::channel::oneshot;
+use futures::channel::{oneshot, mpsc};
 use futures::channel::oneshot::Sender;
 
 pub struct StarHandle {
@@ -49,6 +49,10 @@ pub struct StarHandle {
 fn setup_ac<R>(
     config: &NodeConfig,
     r: Arc<R>,
+    upstream_proxy_sender: mpsc::UnboundedSender<(
+        SubmitTransactionRequest,
+        oneshot::Sender<failure::Result<SubmitTransactionResponse>>,
+    )>
 ) -> (
     CoreMemPoolClient,
     AdmissionControlService<CoreMemPoolClient, VMValidator>,
@@ -70,6 +74,7 @@ fn setup_ac<R>(
         config
             .admission_control
             .need_to_check_mempool_before_validation,
+        upstream_proxy_sender
     );
 
     (mempool, handle)

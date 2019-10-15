@@ -32,7 +32,7 @@ futures_03 = { version = "=0.3.0-alpha.19", package = "futures-preview", feature
 futures_locks = { version = "=0.3.0", package = "futures-locks", features=["tokio"]}
 vm_runtime = {path="../libra/language/vm/vm_runtime"}
 vm_cache_map = {path="../libra/language/vm/vm_runtime/vm_cache_map"}
-state_view = { path = "../libra/storage/state_view"}
+state-view = { path = "../libra/storage/state-view"}
 config = { path = "../libra/config"}
 canonical-serialization = { path = "../libra/common/canonical-serialization"}
 sgcompiler = { path = "../sgcompiler"}

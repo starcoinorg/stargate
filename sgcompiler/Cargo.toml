@@ -16,5 +16,5 @@ ir_to_bytecode = { path = "../libra/language/compiler/ir_to_bytecode" }
 vm = { path = "../libra/language/vm" }
 bytecode-verifier = { path = "../libra/language/bytecode-verifier"}
 logger = { path = "../libra/common/logger"}
-state_view = {path = "../libra/storage/state_view"}
+state-view = {path = "../libra/storage/state-view"}
 sgchain = { path = "../sgchain"}

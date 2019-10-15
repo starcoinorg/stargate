@@ -40,6 +40,7 @@ use libra_types::account_address::AccountAddress as PeerId;
 use vm_validator::vm_validator::VMValidator;
 use executor::Executor;
 use vm_runtime::MoveVM;
+use futures::channel::mpsc;
 
 pub struct LibraHandle {
     _ac: ServerHandle,
@@ -59,7 +60,10 @@ impl Drop for LibraHandle {
     }
 }
 
-fn setup_ac<R>(config: &NodeConfig, r: Arc<R>) -> (::grpcio::Server, AdmissionControlClient)
+fn setup_ac<R>(config: &NodeConfig, r: Arc<R>, upstream_proxy_sender: mpsc::UnboundedSender<(
+    SubmitTransactionRequest,
+    oneshot::Sender<failure::Result<SubmitTransactionResponse>>,
+)) -> (::grpcio::Server, AdmissionControlClient)
 where
     R: StorageRead + Clone + 'static,
 {

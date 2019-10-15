@@ -16,7 +16,7 @@ proptest-derive = "0.1.0"
 protobuf = "2.7"
 grpc_helpers = { path = "../../libra/common/grpc_helpers" }
 failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
-proptest_helpers = { path = "../../libra/common/proptest_helpers" }
+proptest-helpers = { path = "../../libra/common/proptest-helpers" }
 libra-types = { path = "../../libra/types"}
 sgtypes = { path = "../../sgtypes" }
 crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }

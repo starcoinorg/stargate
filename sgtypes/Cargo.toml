@@ -24,7 +24,7 @@ libra-types = { path = "../libra/types", features = ["testing"]}
 canonical-serialization = { path = "../libra/common/canonical-serialization"}
 crypto = { path = "../libra/crypto/crypto" }
 failure = { path = "../libra/common/failure_ext", package = "failure_ext" }
-proptest_helpers = { path = "../libra/common/proptest_helpers" }
+proptest-helpers = { path = "../libra/common/proptest-helpers" }
 vm_runtime_types = { path = "../libra/language/vm/vm_runtime/vm_runtime_types"}
 parity-multiaddr = "0.4.0"
 num_enum = "0.4.1"
