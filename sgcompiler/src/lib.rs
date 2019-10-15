@@ -2,24 +2,19 @@ use std::path::{Path, PathBuf};
 
 use bytecode_verifier::VerifiedModule;
 use failure::prelude::*;
-use ir_to_bytecode::{
-    compiler::compile_program,
-    parser::{
-        ast::{ImportDefinition, ModuleIdent},
-        parse_module, parse_program, parse_script,
-    },
+use ir_to_bytecode::parser::{
+    ast::{ImportDefinition, ModuleIdent},
+    parse_module, parse_program, parse_script,
+};
+use libra_types::{
+    access_path::AccessPath, account_address::AccountAddress, language_storage::ModuleId,
 };
 use logger::prelude::*;
-use sgchain::{client_state_view::ClientStateView, star_chain_client::ChainClient};
 use sgtypes::script_package::{ChannelScriptPackage, ScriptCode};
 use state_view::StateView;
 use std::collections::HashSet;
 use stdlib::stdlib_modules;
-use libra_types::{access_path::AccessPath, account_address::AccountAddress, language_storage::ModuleId};
-use vm::{
-    access::{ModuleAccess, ScriptAccess},
-    file_format::{CompiledModule, CompiledScript},
-};
+use vm::{access::ModuleAccess, file_format::CompiledModule};
 
 pub struct ScriptFile {
     path: PathBuf,
@@ -77,7 +72,7 @@ pub trait ModuleLoader {
             .and_then(|module| match module {
                 Some(module) => Ok(Some(VerifiedModule::new(module).map_err(
                     |(complied_module, status)| {
-                        format_err!("Verified module {:?} error", complied_module.self_id())
+                        format_err!("Verified module {:?} error {:?}", complied_module.self_id(), status)
                     },
                 )?)),
                 None => Ok(None),
@@ -168,7 +163,7 @@ impl<'a> Compiler<'a> {
     pub fn compile_script(&self, script_str: &str) -> Result<Vec<u8>> {
         let ast_script = parse_script(script_str)?;
         let deps = self.load_deps(self.get_deps(ast_script.imports.as_slice()))?;
-        let (compiled_script,_) =
+        let (compiled_script, _) =
             ir_to_bytecode::compiler::compile_script(self.address, ast_script, &deps)?;
         let mut byte_code = vec![];
         compiled_script.serialize(&mut byte_code)?;
@@ -178,7 +173,7 @@ impl<'a> Compiler<'a> {
     pub fn compile_module(&self, module_str: &str) -> Result<Vec<u8>> {
         let ast_module = parse_module(module_str)?;
         let deps = self.load_deps(ast_module.get_external_deps())?;
-        let (compiled_module,_) =
+        let (compiled_module, _) =
             ir_to_bytecode::compiler::compile_module(self.address, ast_module, &deps)?;
         let mut byte_code = vec![];
         compiled_module.serialize(&mut byte_code)?;
@@ -194,7 +189,7 @@ impl<'a> Compiler<'a> {
             deps.extend_from_slice(&program_module.get_external_deps());
         }
         let deps_module = self.load_deps(deps)?;
-        let (compiled_program,_) =
+        let (compiled_program, _) =
             ir_to_bytecode::compiler::compile_program(self.address, ast_program, &deps_module)?;
         let mut byte_code = vec![];
         for module in compiled_program.modules.into_iter() {
@@ -258,8 +253,8 @@ impl<'a> Compiler<'a> {
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use logger::init_for_e2e_testing;
     use libra_types::identifier::{IdentStr, Identifier};
+    use logger::init_for_e2e_testing;
 
     use crate::mock_module_loader::MockModuleLoader;
 
