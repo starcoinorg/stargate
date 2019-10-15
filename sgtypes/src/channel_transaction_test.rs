@@ -2,7 +2,7 @@ use canonical_serialization::{
     CanonicalDeserializer, CanonicalSerializer, SimpleDeserializer, SimpleSerializer,
 };
 use crypto::{
-    ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature},
+    ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
     Uniform,
 };

@@ -1,15 +1,11 @@
 use crate::{
     channel_transaction::{ChannelTransactionRequest, ChannelTransactionResponse},
-    script_package::ChannelScriptPackage,
-    sg_error::SgErrorCode,
+    sg_error::SgError,
 };
 use crypto::{ed25519::Ed25519Signature, HashValue};
 use failure::prelude::*;
 use parity_multiaddr::Multiaddr;
-#[cfg(any(test, feature = "testing"))]
-use proptest_derive::Arbitrary;
-use protobuf::ProtobufEnum;
-use std::{convert::{TryFrom, TryInto}, fmt};
+use std::convert::{TryFrom, TryInto};
 use libra_types::account_address::AccountAddress;
 use bytes::IntoBuf;
 use prost::Message;
@@ -300,32 +296,6 @@ pub struct ErrorMessage {
     pub error: SgError,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Fail)]
-#[fail(
-    display = "error code is  {}, error message is {}",
-    error_code, error_message
-)]
-pub struct SgError {
-    pub error_code: SgErrorCode,
-    pub error_message: String,
-}
-
-impl SgError {
-    pub fn new(error_code: SgErrorCode, error_message: String) -> Self {
-        Self {
-            error_code,
-            error_message,
-        }
-    }
-
-    pub fn new_channel_not_exist_error(participant: &AccountAddress) -> Self {
-        Self {
-            error_code: SgErrorCode::CHANNEL_NOT_EXIST,
-            error_message: format!("Can not find channel by participant: {}", participant),
-        }
-    }
-}
-
 impl ErrorMessage {
     pub fn new(raw_transaction_hash: HashValue, error: SgError) -> Self {
         Self {
@@ -350,8 +320,6 @@ impl TryFrom<crate::proto::sgtypes::ErrorMessage> for ErrorMessage {
     type Error = Error;
 
     fn try_from(value: crate::proto::sgtypes::ErrorMessage) -> Result<Self> {
-        use crate::proto::sgtypes::ErrorCode;
-
         let raw_transaction_hash = HashValue::from_slice(value.raw_transaction_hash.as_slice())?;
         let error = SgError {
             error_code: value.error_code.try_into()?,

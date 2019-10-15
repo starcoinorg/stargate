@@ -1,10 +1,7 @@
 use std::{
     collections::{BTreeMap, HashMap},
     convert::TryFrom,
-    sync::Arc,
 };
-
-use atomic_refcell::AtomicRefCell;
 use itertools::Itertools;
 
 use crate::account_resource_ext;
@@ -28,6 +25,8 @@ pub struct AccountState {
 }
 
 impl AccountState {
+
+    #[allow(dead_code)]
     fn new() -> Self {
         Self {
             version: 0,
@@ -36,6 +35,7 @@ impl AccountState {
         }
     }
 
+    #[cfg(test)]
     fn insert(&mut self, path: DataPath, value: Vec<u8>) {
         self.state.insert(path.to_vec(), value);
     }
@@ -94,14 +94,13 @@ impl AccountState {
         self.state
             .iter()
             .map(|(k, v)| (DataPath::from(k).expect("Parse DataPath should success"), v))
-            .filter(|(k, v)| k.is_channel_resource())
-            .group_by(|(k, v)| -> AccountAddress {
+            .filter(|(k, _)| k.is_channel_resource())
+            .group_by(|(k, _)| -> AccountAddress {
                 k.participant()
                     .expect("Channel Resource must contains participant.")
             })
             .into_iter()
             .map(|(participant, group)| {
-                println!("{}", participant);
                 let mut state = BTreeMap::new();
                 for (k, v) in group {
                     state.insert(k.to_vec(), v.clone());

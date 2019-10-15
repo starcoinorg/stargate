@@ -1,16 +1,11 @@
 use hex;
 
-use canonical_serialization::{CanonicalSerialize, SimpleDeserializer, SimpleSerializer};
+use canonical_serialization::{SimpleSerializer};
 use libra_types::{
-    account_config::{account_struct_tag, AccountResource},
+    account_config::{AccountResource},
     event::EventHandle,
 };
-
 use crate::resource::*;
-
-use super::*;
-use crate::account_resource_ext::new_account_for_test;
-use libra_types::account_address::AccountAddress;
 
 #[test]
 fn test_resource() {

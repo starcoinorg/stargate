@@ -1,10 +1,8 @@
 use std::{
-    convert::{TryFrom, TryInto},
+    convert::{TryFrom},
     fmt::{Display, Formatter}
 };
-
 use serde::{Deserialize, Serialize};
-
 use canonical_serialization::{
     CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
     SimpleDeserializer, SimpleSerializer,

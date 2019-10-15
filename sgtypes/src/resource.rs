@@ -1,21 +1,9 @@
-use std::ops::Deref;
-
-use itertools::Itertools;
-
-use canonical_serialization::{
-    CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
-    SimpleDeserializer, SimpleSerializer,
-};
+use canonical_serialization::SimpleSerializer;
 use failure::prelude::*;
-use logger::prelude::*;
 use libra_types::{
-    access_path::{Access, Accesses},
-    account_address::AccountAddress,
     account_config::{
-        account_struct_tag, coin_module_name, coin_struct_tag, core_code_address, AccountResource,
+        account_struct_tag, AccountResource,
     },
-    byte_array::ByteArray,
-    identifier::Identifier,
     language_storage::StructTag,
 };
 use vm_runtime_types::{

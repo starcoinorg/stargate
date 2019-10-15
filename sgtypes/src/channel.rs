@@ -1,11 +1,8 @@
 use crate::{
     channel_transaction::{
-        ChannelOp, ChannelTransactionRequest, ChannelTransactionRequestAndOutput,
-        ChannelTransactionRequestPayload, ChannelTransactionResponse,
-        ChannelTransactionResponsePayload,
+        ChannelOp, ChannelTransactionRequestAndOutput,
     },
-    message::SgError,
-    sg_error::SgErrorCode,
+    sg_error::{SgError},
 };
 use atomic_refcell::AtomicRefCell;
 use crypto::ed25519::Ed25519Signature;
@@ -15,12 +12,12 @@ use libra_types::{
     access_path::{AccessPath, DataPath},
     account_address::AccountAddress,
     channel_account::ChannelAccountResource,
-    transaction::{ChannelWriteSetPayload, TransactionOutput, Version},
+    transaction::{ChannelWriteSetPayload, TransactionOutput},
     write_set::{WriteOp, WriteSet},
 };
 
 //TODO (jole) need maintain network state?
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub enum ChannelStage {
     /// Channel is waiting to open operator finish.
     Opening,
@@ -161,6 +158,14 @@ impl Channel {
         *self.stage.borrow()
     }
 
+    fn check_stage(&self, expect_stages: Vec<ChannelStage>) -> Result<()>{
+        let current_stage = self.stage();
+        if !expect_stages.contains(&current_stage) {
+            return Err(SgError::new_invalid_channel_stage_error(current_stage).into())
+        }
+        Ok(())
+    }
+
     pub fn account(&self) -> &ChannelState {
         &self.account
     }
@@ -203,7 +208,7 @@ impl Channel {
         let ChannelWriteSetPayload {
             channel_sequence_number,
             write_set,
-            receiver,
+            ..
         } = witness_payload;
         let mut witness_data = self.witness_data.borrow_mut();
         *witness_data = Some(WitnessData {
@@ -226,6 +231,7 @@ impl Channel {
         witness_payload: ChannelWriteSetPayload,
         signature: Ed25519Signature,
     ) -> Result<()> {
+        self.check_stage(vec![ChannelStage::Opening])?;
         self.update_witness_data(witness_payload, signature);
         self.reset_pending_txn_request();
         *self.stage.borrow_mut() = ChannelStage::Idle;
@@ -233,7 +239,7 @@ impl Channel {
     }
 
     pub fn apply_state(&self, account: ChannelState, participant: ChannelState) -> Result<()> {
-        let pending_txn = self
+        let _pending_txn = self
             .pending_txn_request
             .borrow()
             .as_ref()
@@ -249,7 +255,7 @@ impl Channel {
 
     pub fn apply_output(&self, output: TransactionOutput) -> Result<()> {
         //TODO
-        let pending_txn = self
+        let _pending_txn = self
             .pending_txn_request
             .borrow()
             .as_ref()
@@ -325,17 +331,6 @@ impl Channel {
             *self.stage.borrow_mut() = ChannelStage::Pending;
         }
         Ok(())
-    }
-
-    fn invalid_channel_stage_error(&self) -> Error {
-        SgError::new(
-            SgErrorCode::INVALID_CHANNEL_STAGE,
-            format!(
-                "Channel at stage: {:?}, unsupported this operator.",
-                self.stage
-            ),
-        )
-        .into()
     }
 
     pub fn channel_sequence_number(&self) -> u64 {

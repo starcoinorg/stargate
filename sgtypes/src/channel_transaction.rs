@@ -1,12 +1,8 @@
 use std::{
-    convert::{TryFrom, TryInto},
+    convert::{TryFrom},
     fmt::{Display, Formatter},
 };
-
-use num_enum::{IntoPrimitive, TryFromPrimitive};
-use protobuf::RepeatedField;
 use serde::{Deserialize, Serialize};
-
 use canonical_serialization::{
     CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
     SimpleDeserializer, SimpleSerializer,
@@ -18,13 +14,10 @@ use crypto::{
 use failure::prelude::*;
 use libra_types::{
     account_address::AccountAddress,
-    contract_event::ContractEvent,
     transaction::{
-        ChannelScriptPayload, ChannelWriteSetPayload, RawTransaction, SignedTransaction,
-        TransactionOutput, TransactionPayload, TransactionStatus, Version,
+        ChannelScriptPayload, ChannelWriteSetPayload, RawTransaction,
+        TransactionOutput, TransactionPayload, Version,
     },
-    vm_error::VMStatus,
-    write_set::WriteSet,
 };
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
