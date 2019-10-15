@@ -150,10 +150,10 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         sender_amount: u64,
         receiver_amount: u64,
     ) -> Result<MessageFuture> {
-        if (receiver_amount > self.default_max_deposit) {
+        if receiver_amount > self.default_max_deposit {
             bail!("deposit coin amount too big")
         }
-        if (receiver_amount > sender_amount) {
+        if receiver_amount > sender_amount {
             bail!("sender amount should bigger than receiver amount.")
         }
         let is_receiver_connected = self
@@ -163,7 +163,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             .unwrap()
             .network_service
             .is_connected(receiver);
-        if (!is_receiver_connected) {
+        if !is_receiver_connected {
             bail!("could not connect to receiver")
         }
         info!("start open channel ");
@@ -221,10 +221,10 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         sender_amount: u64,
         receiver_amount: u64,
     ) -> Result<MessageFuture> {
-        if (receiver_amount > self.default_max_deposit) {
+        if receiver_amount > self.default_max_deposit {
             bail!("deposit coin amount too big")
         }
-        if (receiver_amount > sender_amount) {
+        if receiver_amount > sender_amount {
             bail!("sender amount should bigger than receiver amount.")
         }
         let is_receiver_connected = self
@@ -234,7 +234,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             .unwrap()
             .network_service
             .is_connected(receiver);
-        if (!is_receiver_connected) {
+        if !is_receiver_connected {
             bail!("could not connect to receiver")
         }
         let channel_txn = self.node_inner.clone().lock().unwrap().wallet.deposit(
@@ -291,7 +291,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         sender_amount: u64,
         receiver_amount: u64,
     ) -> Result<MessageFuture> {
-        if (receiver_amount < sender_amount) {
+        if receiver_amount < sender_amount {
             bail!("sender amount should smaller than receiver amount.")
         }
 
@@ -302,7 +302,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             .unwrap()
             .network_service
             .is_connected(receiver);
-        if (!is_receiver_connected) {
+        if !is_receiver_connected {
             bail!("could not connect to receiver")
         }
         info!(
@@ -369,7 +369,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             .unwrap()
             .network_service
             .is_connected(receiver_address);
-        if (!is_receiver_connected) {
+        if !is_receiver_connected {
             bail!("could not connect to receiver")
         }
         let f = self
@@ -590,7 +590,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             }
         }
         let sender_addr = open_channel_message.txn_request.txn().clone().sender();
-        if (&open_channel_message.txn_request.receiver() == &self.wallet.get_address()) {
+        if &open_channel_message.txn_request.receiver() == &self.wallet.get_address() {
             // sign message ,verify messsage,no send back
             let wallet = self.wallet.clone();
             let txn = open_channel_message.txn_request.clone();
@@ -760,7 +760,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
     }
 
     fn future_timeout(&self, hash: HashValue, timeout: u64) {
-        if (timeout == 0) {
+        if timeout == 0 {
             return;
         }
         let processor = self.message_processor.clone();
