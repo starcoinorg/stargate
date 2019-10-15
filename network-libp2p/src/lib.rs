@@ -1,7 +1,3 @@
-//! Networking layer of Substrate.
-//!
-//! **Important**: This crate is unstable and the API and usage may change.
-
 mod behaviour;
 mod config;
 mod custom_proto;
@@ -16,7 +12,7 @@ pub use crate::{
 };
 use libp2p::core::nodes::ConnectedPoint;
 pub use libp2p::{build_multiaddr, core::PublicKey, identity, multiaddr, Multiaddr, PeerId};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::{
     collections::{HashMap, HashSet},
     error, fmt,

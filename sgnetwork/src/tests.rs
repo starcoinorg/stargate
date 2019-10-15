@@ -14,8 +14,7 @@ mod tests {
         time::{Duration, Instant},
     };
     use tokio::{
-        prelude::Async,
-        runtime::{Builder, Runtime, TaskExecutor},
+        runtime::{Builder, Runtime},
         timer::{Delay, Interval},
     };
 
@@ -25,12 +24,12 @@ mod tests {
         Uniform,
     };
 
-    use network_libp2p::{identity, CustomMessage, NodeKeyConfig, PeerId, PublicKey, Secret};
+    use network_libp2p::{identity, NodeKeyConfig, PeerId, PublicKey, Secret};
     use libra_types::account_address::AccountAddress;
 
     use crate::{
         build_network_service, convert_account_address_to_peer_id, helper::convert_boot_nodes,
-        Message, NetworkComponent, NetworkService,
+        NetworkComponent, NetworkService,
     };
 
     use crate::message::NetworkMessage;
@@ -131,15 +130,15 @@ mod tests {
                 }
             });
         let receive_fut = rx1.for_each(|msg| {
-            //println!("{:?}", msg);
+            println!("{:?}", msg);
             Ok(())
         });
         executor.spawn(receive_fut);
         rt.executor().spawn(sender_fut);
         let task = Delay::new(Instant::now() + Duration::from_secs(6))
             .and_then(move |_| {
-                close_tx1.send(());
-                close_tx2.send(());
+                let _ = close_tx1.send(());
+                let _ = close_tx2.send(());
                 Ok(())
             })
             .map_err(|e| panic!("delay errored; err={:?}", e));
@@ -155,7 +154,7 @@ mod tests {
         let ((service1, _tx1, rx1, _close_tx1), (mut service2, _tx2, _rx2, _close_tx2)) =
             build_test_network_pair();
         let msg_peer_id = service1.identify();
-        let receive_fut = rx1.for_each(|msg| Ok(()));
+        let receive_fut = rx1.for_each(|_| Ok(()));
         executor.clone().spawn(receive_fut);
 
         //wait the network started.
@@ -166,7 +165,7 @@ mod tests {
             let random_bytes: Vec<u8> = (0..10240).map(|_| rand::random::<u8>()).collect();
             let fut = service2
                 .send_message(msg_peer_id, random_bytes)
-                .map_err(|e| ());
+                .map_err(|_| ());
             executor.spawn(fut);
         }
         thread::sleep(Duration::from_secs(3));
@@ -262,7 +261,7 @@ mod tests {
                 "/ip4/127.0.0.1/tcp/5000/p2p/{:}",
                 generate_account_address()
             )
-            .to_string(),
+                .to_string(),
         );
         boot_nodes.iter().for_each(|x| println!("{}", x));
 

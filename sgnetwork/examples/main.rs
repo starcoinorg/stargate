@@ -1,19 +1,17 @@
 use crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
-    hash::CryptoHash,
     test_utils::KeyPair,
     traits::Uniform,
 };
 use futures::{future::Future, stream::Stream};
 use rand::prelude::*;
 pub use sgnetwork::{build_network_service, get_unix_ts, NetworkComponent, NetworkService};
-use sgnetwork::{Message, NetworkMessage};
+use sgnetwork::NetworkMessage;
 use std::{
-    convert::TryFrom,
     time::{Duration, Instant},
 };
 use tokio::{
-    runtime::{Runtime, TaskExecutor},
+    runtime::Runtime,
     timer::Interval,
 };
 use libra_types::account_address::AccountAddress;
@@ -36,7 +34,7 @@ fn main() {
         let mut rng: StdRng = SeedableRng::seed_from_u64(get_unix_ts() as u64);
         KeyPair::<Ed25519PrivateKey, Ed25519PublicKey>::generate_for_testing(&mut rng)
     };
-    let (net_srv, tx, rx, close_tx) = build_network_service(&config, key_pair);
+    let (net_srv, tx, rx, _close_tx) = build_network_service(&config, key_pair);
 
     println!(
         "the network identify is {:?}",
@@ -47,7 +45,7 @@ fn main() {
     let executor = rt.executor();
 
     if peer_id.len() == 0 {
-        let receive_fut = rx.for_each(|msg| Ok(()));
+        let receive_fut = rx.for_each(|_| Ok(()));
         executor.spawn(receive_fut);
     } else {
         let sender_fut = Interval::new(Instant::now(), Duration::from_millis(10))

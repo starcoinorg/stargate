@@ -8,13 +8,11 @@ use crypto::{
 };
 
 use crate::{
-    helper::get_unix_ts,
     message::{
-        Message::{self, Payload},
-        NetworkMessage, PayloadMsg,
+        Message::self,
+        NetworkMessage,
     },
 };
-use crypto::hash::CryptoHash;
 use futures::{
     future,
     stream::{self, Stream},
@@ -26,7 +24,7 @@ use futures::{
 };
 use logger::prelude::*;
 use network_libp2p::{
-    identity, start_service, CustomMessage, NetworkConfiguration, NodeKeyConfig, Secret,
+    identity, start_service, NetworkConfiguration, NodeKeyConfig, Secret,
     Service as Libp2pService, ServiceEvent,
 };
 use parking_lot::Mutex;
@@ -101,8 +99,6 @@ fn run_network(
     });
 
     let net_srv_2 = net_srv.clone();
-
-    let identify = net_srv.lock().peer_id().clone();
     let ack_sender = net_srv.clone();
     let task_notify = Arc::new(AtomicTask::new());
     let notify = task_notify.clone();
@@ -170,7 +166,6 @@ fn run_network(
 
     let protocol_fut = stream::poll_fn(move || _rx.poll())
         .for_each(move |message| {
-            let account_address = message.peer_id.clone();
             let peer_id = convert_account_address_to_peer_id(message.peer_id).unwrap();
             net_srv
                 .lock()
