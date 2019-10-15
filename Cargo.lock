@@ -3011,6 +3011,7 @@ dependencies = [
  "libra-types 0.1.0",
  "logger 0.1.0",
  "node_internal 0.1.0",
+ "node_rest_api 0.1.0",
  "node_service 0.1.0",
  "parity-multiaddr 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "prost 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",

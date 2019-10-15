@@ -11,6 +11,7 @@ use network::{build_network_service, NetworkMessage, NetworkService};
 use node::client;
 use node_internal::node::Node;
 use node_service::setup_node_service;
+use node_rest_api::setup_node_rest;
 use sg_config::config::{load_from, NodeConfig, WalletConfig};
 use sgchain::star_chain_client::StarChainClient;
 use sgwallet::wallet::*;
@@ -124,9 +125,10 @@ fn main() {
         close_tx,
     );
     node.start_server();
-
-    let mut node_server = setup_node_service(&swarm.config, Arc::new(node));
+    let  api_node = Arc::new(node);
+    let mut node_server = setup_node_service(&swarm.config, api_node.clone());
     node_server.start();
+    setup_node_rest(api_node.clone());
 
     if args.start_client {
         let client = client::InteractiveClient::new_with_inherit_io(
