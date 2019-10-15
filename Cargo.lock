@@ -4175,14 +4175,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "routin"
-version = "0.1.0"
-dependencies = [
- "crypto 0.1.0",
- "sgtypes 0.1.0",
-]
-
-[[package]]
 name = "rust-argon2"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

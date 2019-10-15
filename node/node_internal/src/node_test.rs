@@ -1,55 +1,35 @@
-#![feature(async_await)]
-
-use futures::{
-    compat::Sink01CompatExt, future::FutureExt, io::AsyncReadExt, prelude::*, sink::SinkExt,
-};
-use network::{build_network_service, NetworkService};
-//use std::io::Result;
 use failure::prelude::*;
 
-use tokio::runtime::{Runtime, TaskExecutor};
-
-use bytes::Bytes;
-use tokio::codec::{Framed, LengthDelimitedCodec};
-
-use rand::prelude::*;
-
-use crate::{node::Node, test_helper::*};
-use core::borrow::Borrow;
 use crypto::{
-    ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature},
+    ed25519::{Ed25519PrivateKey},
     hash::{CryptoHasher, TestOnlyHasher},
-    test_utils::KeyPair,
     traits::SigningKey,
-    Uniform,
 };
-use futures::compat::Future01CompatExt;
-use futures_01::future::Future as Future01;
-use logger::prelude::*;
-use sg_config::config::NetworkConfig;
-use sgchain::star_chain_client::{MockChainClient};
-use sgwallet::wallet::*;
 use sgtypes::message::*;
 use std::{
-    sync::{Arc, Mutex},
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
-use tokio::timer::Delay;
 use libra_types::account_address::AccountAddress;
 use sgtypes::sg_error::SgError;
 
 #[test]
 fn node_test() -> Result<()> {
+    use std::sync::Arc;
+    use tokio::runtime::{Runtime};
+    use crate::{test_helper::*};
+    use sgchain::star_chain_client::{MockChainClient};
+    use logger::prelude::*;
+    use futures::compat::Future01CompatExt;
+
     ::logger::init_for_e2e_testing();
     //env_logger::init();
-    let mut rt1 = Runtime::new().unwrap();
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     let executor = rt.executor();
 
-    let (mock_chain_service, handle) = MockChainClient::new();
+    let (mock_chain_service, _handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
     let network_config1 = create_node_network_config("/ip4/127.0.0.1/tcp/5000".to_string(), vec![]);
-    let (mut node1, addr1, keypair1) = gen_node(executor.clone(), &network_config1, client.clone());
+    let (node1, addr1, _keypair1) = gen_node(executor.clone(), &network_config1, client.clone());
     node1.start_server();
 
     let addr1_hex = hex::encode(addr1);
@@ -61,12 +41,12 @@ fn node_test() -> Result<()> {
     );
     let network_config2 =
         create_node_network_config("/ip4/127.0.0.1/tcp/5001".to_string(), vec![seed]);
-    let (mut node2, addr2, keypair2) = gen_node(executor.clone(), &network_config2, client.clone());
+    let (node2, addr2, keypair2) = gen_node(executor.clone(), &network_config2, client.clone());
     node2.start_server();
 
     let f = async move {
-        let neg_msg = create_negotiate_message(addr2, addr1, keypair2.private_key);
-        node2.open_channel_negotiate(neg_msg);
+        let neg_msg = _create_negotiate_message(addr2, addr1, keypair2.private_key);
+        node2.open_channel_negotiate(neg_msg).unwrap();
 
         let fund_amount = 1000000;
         node2
@@ -87,7 +67,7 @@ fn node_test() -> Result<()> {
             .await
             .unwrap();
 
-        delay(Duration::from_millis(100)).await;
+        _delay(Duration::from_millis(100)).await;
         assert_eq!(
             node2.channel_balance(addr1).unwrap(),
             fund_amount + deposit_amount
@@ -123,7 +103,7 @@ fn node_test() -> Result<()> {
             .await
             .unwrap();
 
-        delay(Duration::from_millis(100)).await;
+        _delay(Duration::from_millis(100)).await;
         assert_eq!(
             node2.channel_balance(addr1).unwrap(),
             fund_amount - transfer_amount - wd_amount + deposit_amount
@@ -133,8 +113,8 @@ fn node_test() -> Result<()> {
             fund_amount + transfer_amount - wd_amount + deposit_amount
         );
 
-        node1.shutdown();
-        node2.shutdown();
+        node1.shutdown().unwrap();
+        node2.shutdown().unwrap();
     };
     rt.block_on(f);
 
@@ -143,19 +123,21 @@ fn node_test() -> Result<()> {
     Ok(())
 }
 
-async fn delay(duration: Duration) {
+async fn _delay(duration: Duration) {
     let timeout_time = Instant::now() + duration;
     tokio::timer::delay(timeout_time).await;
 }
 
 #[test]
 fn error_test() -> Result<()> {
+    use logger::prelude::*;
+
     ::logger::init_for_e2e_testing();
     env_logger::init();
 
-    match new_error() {
+    match _new_error() {
         Err(e) => {
-            if let Some(err) = e.downcast_ref::<SgError>() {
+            if let Some(_err) = e.downcast_ref::<SgError>() {
                 info!("this is a sg error");
                 assert_eq!(1, 1)
             } else {
@@ -169,7 +151,7 @@ fn error_test() -> Result<()> {
     Ok(())
 }
 
-fn new_error() -> Result<()> {
+fn _new_error() -> Result<()> {
     Err(SgError::new(
         sgtypes::sg_error::SgErrorCode::UNKNOWN,
         "111".to_string(),
@@ -177,7 +159,7 @@ fn new_error() -> Result<()> {
     .into())
 }
 
-fn create_negotiate_message(
+fn _create_negotiate_message(
     sender_addr: AccountAddress,
     receiver_addr: AccountAddress,
     private_key: Ed25519PrivateKey,

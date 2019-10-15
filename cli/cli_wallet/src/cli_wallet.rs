@@ -1,16 +1,12 @@
 use crate::{
     error::*,
-    key_factory::{ChildNumber, KeyFactory, Seed},
-    mnemonic::Mnemonic,
 };
 use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
     traits::{ Uniform},
 };
-use protobuf::Message;
-use rand::{prelude::*, rngs::EntropyRng, Rng};
-use serde;
+use rand::{prelude::*};
 use std::{
     convert::TryFrom,
     fs,

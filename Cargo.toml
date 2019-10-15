@@ -40,7 +40,6 @@ members = [
     "libra/admission_control/admission-control-proto",
     "libra/admission_control/admission-control-service",
     "sgtypes",
-    "routing",
     "sgnetwork",
     "network-libp2p",
     "network-libp2p/peerset",
