@@ -115,12 +115,15 @@ impl Command for DevCommandDeployModule {
     fn get_aliases(&self) -> Vec<&'static str> {
         vec!["deploy module", "dm"]
     }
+
     fn get_params_help(&self) -> &'static str {
         "<module_path> "
     }
+
     fn get_description(&self) -> &'static str {
         "Deploy move package"
     }
+
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
         if params.len() < 2 {
             println!("Invalid number of arguments for compilation");
@@ -140,12 +143,15 @@ impl Command for DevCommandInstallPackage {
     fn get_aliases(&self) -> Vec<&'static str> {
         vec!["install package", "ip"]
     }
+
     fn get_params_help(&self) -> &'static str {
         "<dir_path>"
     }
+
     fn get_description(&self) -> &'static str {
         "Install move package"
     }
+
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
         if params.len() < 2 {
             println!("Invalid number of arguments for compilation");
@@ -166,12 +172,15 @@ impl Command for DevCommandExecuteInstalledScript {
     fn get_aliases(&self) -> Vec<&'static str> {
         vec!["package execute", "pe"]
     }
+
     fn get_params_help(&self) -> &'static str {
         "remote_address package_name script_name args..."
     }
+
     fn get_description(&self) -> &'static str {
         "Deploy move package"
     }
+    
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
         if params.len() < 3 {
             println!("Invalid number of arguments for compilation");
