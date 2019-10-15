@@ -168,7 +168,7 @@ impl<'a> Compiler<'a> {
     pub fn compile_script(&self, script_str: &str) -> Result<Vec<u8>> {
         let ast_script = parse_script(script_str)?;
         let deps = self.load_deps(self.get_deps(ast_script.imports.as_slice()))?;
-        let compiled_script =
+        let (compiled_script,_) =
             ir_to_bytecode::compiler::compile_script(self.address, ast_script, &deps)?;
         let mut byte_code = vec![];
         compiled_script.serialize(&mut byte_code)?;
@@ -178,7 +178,7 @@ impl<'a> Compiler<'a> {
     pub fn compile_module(&self, module_str: &str) -> Result<Vec<u8>> {
         let ast_module = parse_module(module_str)?;
         let deps = self.load_deps(ast_module.get_external_deps())?;
-        let compiled_module =
+        let (compiled_module,_) =
             ir_to_bytecode::compiler::compile_module(self.address, ast_module, &deps)?;
         let mut byte_code = vec![];
         compiled_module.serialize(&mut byte_code)?;
@@ -194,7 +194,7 @@ impl<'a> Compiler<'a> {
             deps.extend_from_slice(&program_module.get_external_deps());
         }
         let deps_module = self.load_deps(deps)?;
-        let compiled_program =
+        let (compiled_program,_) =
             ir_to_bytecode::compiler::compile_program(self.address, ast_program, &deps_module)?;
         let mut byte_code = vec![];
         for module in compiled_program.modules.into_iter() {

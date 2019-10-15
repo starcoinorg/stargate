@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use admission_control_proto::proto::admission_control::{
-    create_admission_control, AdmissionControlClient,
+    create_admission_control, AdmissionControlClient, SubmitTransactionRequest, SubmitTransactionResponse
 };
 use admission_control_service::admission_control_service::AdmissionControlService;
 use config::config::{NetworkConfig, NodeConfig, RoleType};
@@ -40,7 +40,7 @@ use libra_types::account_address::AccountAddress as PeerId;
 use vm_validator::vm_validator::VMValidator;
 use executor::Executor;
 use vm_runtime::MoveVM;
-use futures::channel::mpsc;
+use futures::channel::{mpsc, oneshot};
 
 pub struct LibraHandle {
     _ac: ServerHandle,
@@ -63,7 +63,7 @@ impl Drop for LibraHandle {
 fn setup_ac<R>(config: &NodeConfig, r: Arc<R>, upstream_proxy_sender: mpsc::UnboundedSender<(
     SubmitTransactionRequest,
     oneshot::Sender<failure::Result<SubmitTransactionResponse>>,
-)) -> (::grpcio::Server, AdmissionControlClient)
+)>) -> (::grpcio::Server, AdmissionControlClient)
 where
     R: StorageRead + Clone + 'static,
 {
@@ -97,6 +97,7 @@ where
         config
             .admission_control
             .need_to_check_mempool_before_validation,
+        upstream_proxy_sender
     );
     let service = create_admission_control(handle);
     let server = ServerBuilder::new(Arc::clone(&env))
@@ -336,7 +337,9 @@ pub fn setup_environment(node_config: &mut NodeConfig) -> (AdmissionControlClien
 
     // Initialize and start AC.
     instant = Instant::now();
-    let (ac_server, ac_client) = setup_ac(&node_config, Arc::clone(&storage_service));
+    //TODO setup ac controller runtime by upstream_proxy_receiver
+    let (upstream_proxy_sender, upstream_proxy_receiver) = mpsc::unbounded();
+    let (ac_server, ac_client) = setup_ac(&node_config, Arc::clone(&storage_service), upstream_proxy_sender);
     let ac = ServerHandle::setup(ac_server);
     debug!("AC started in {} ms", instant.elapsed().as_millis());
 

@@ -14,7 +14,7 @@ use futures::executor::block_on;
 use futures::stream::Stream;
 use tokio::timer::Interval;
 
-use admission_control_proto::proto::admission_control::{AdmissionControl, SubmitTransactionResponse};
+use admission_control_proto::proto::admission_control::{AdmissionControl, SubmitTransactionRequest, SubmitTransactionResponse};
 use admission_control_service::{
     admission_control_service::AdmissionControlService,
 };
@@ -41,6 +41,7 @@ use vm_runtime::MoveVM;
 use vm_validator::vm_validator::VMValidator;
 use futures::channel::{oneshot, mpsc};
 use futures::channel::oneshot::Sender;
+use libra_types::transaction::Transaction;
 
 pub struct StarHandle {
     _storage: ServerHandle,
@@ -122,7 +123,8 @@ pub fn setup_environment(
 
     // Initialize and start AC.
     instant = Instant::now();
-    let (mempool_client, ac) = setup_ac(&node_config, Arc::clone(&storage_service));
+    let (upstream_proxy_sender, upstream_proxy_receiver) = mpsc::unbounded();
+    let (mempool_client, ac) = setup_ac(&node_config, Arc::clone(&storage_service), upstream_proxy_sender);
     debug!("AC started in {} ms", instant.elapsed().as_millis());
 
     let block_hash_vec = Mutex::new(vec![*GENESIS_BLOCK_ID]);
@@ -162,7 +164,7 @@ fn commit_block(
                 let latest_hash = block_hash_vec.lock().unwrap().get(len - 1).unwrap().clone();
                 debug!("block height: {:?}, new block hash: {:?}", len, latest_hash);
                 let exclude_transactions = txns.iter().map(|txn| (txn.sender(), txn.sequence_number())).collect();
-                let resp = block_on(executor.execute_block(txns, latest_hash, block_id)).unwrap().unwrap();
+                let resp = block_on(executor.execute_block(txns.iter().map(|txn|Transaction::UserTransaction(txn.clone())).collect(), latest_hash, block_id)).unwrap().unwrap();
 
                 block_hash_vec.lock().unwrap().push(block_id);
 
