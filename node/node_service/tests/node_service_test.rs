@@ -12,7 +12,7 @@ use libra_types::account_address::AccountAddress;
 
 #[test]
 fn test_node_service_basic() {
-    let config = get_test_config("localhost".to_string(), 8080);
+    let config = get_test_config("localhost".to_string(), 8080, 8081);
     let rt = Runtime::new().unwrap();
     let executor = rt.executor();
 

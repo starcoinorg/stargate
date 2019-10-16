@@ -515,6 +515,22 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         f
     }
 
+    pub fn execute_script_with_argument(
+        &self,
+        receiver_address: AccountAddress,
+        package_name: String,
+        script_name: String,
+        transaction_args: Vec<TransactionArgument>,
+    ) -> Result<MessageFuture> {
+        let f = self
+            .node_inner
+            .clone()
+            .lock()
+            .unwrap()
+            .execute_script(receiver_address, package_name, script_name, transaction_args);
+        f
+    }
+
     pub fn find_offchain_txn(&self, hash: Option<HashValue>, count: u32) -> Result<Vec<(HashValue, u8)>> {
         self
             .node_inner

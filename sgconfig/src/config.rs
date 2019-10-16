@@ -7,6 +7,7 @@ pub struct NodeConfig {
     pub rpc_config: RpcConfig,
     pub net_config: NetworkConfig,
     pub wallet: WalletConfig,
+    pub rest_config: RestConfig,
     //pub log_collector: LoggerConfig,
 }
 
@@ -28,6 +29,12 @@ pub struct RpcConfig {
     pub port: u16,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct RestConfig {
+    pub address: String,
+    pub port: u16,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LoggerConfig {
     pub http_endpoint: Option<String>,
@@ -42,10 +49,14 @@ pub fn load_from(config_file: &str) -> Result<NodeConfig> {
     Ok(node_config)
 }
 
-pub fn get_test_config(addr: String, port: u16) -> (NodeConfig) {
+pub fn get_test_config(addr: String, port: u16, rest_port: u16) -> (NodeConfig) {
     let network = RpcConfig {
         address: addr.clone(),
         port,
+    };
+    let rest = RestConfig {
+        address: addr.clone(),
+        port: rest_port,
     };
     let node_network = NetworkConfig {
         listen: String::from("127.0.0.1:8000"),
@@ -59,5 +70,6 @@ pub fn get_test_config(addr: String, port: u16) -> (NodeConfig) {
         rpc_config: network,
         net_config: node_network,
         wallet: wallet_config,
+        rest_config: rest,
     }
 }

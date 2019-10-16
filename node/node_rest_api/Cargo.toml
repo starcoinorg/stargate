@@ -1,0 +1,23 @@
+[package]
+name = "node_rest_api"
+version = "0.1.0"
+authors = ["chengsuoyuan <suoyuan@gmail.com>"]
+edition = "2018"
+workspace = "../../"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde_json = "1.0"
+hyper = "0.12.31"
+bytes = "0.4.12"
+url = "1.0"
+futures01 = { package = "futures", version = "0.1.26" }
+futures03 = { package = "futures-preview", version = "=0.3.0-alpha.19", features = ["compat"] }
+
+node_internal = { path = "../node_internal" }
+sg_config = {path="../../sgconfig"}
+sgchain = { path = "../../sgchain"}
+libra-types = { path = "../../libra/types"}
+canonical-serialization = { path = "../../libra/common/canonical-serialization"}
+crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }
