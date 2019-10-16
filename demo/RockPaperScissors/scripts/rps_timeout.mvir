@@ -1,0 +1,14 @@
+// new-transaction
+// sender: bob
+// receiver: alice
+
+import {{starlab}}.RockPaperScissors;
+import 0x0.ChannelAccount;
+
+main() {
+  let result: u64;
+
+  result = RockPaperScissors.game_timeout();
+
+  return;
+}

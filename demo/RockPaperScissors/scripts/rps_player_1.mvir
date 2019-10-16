@@ -1,0 +1,16 @@
+// new-transaction
+// sender: alice
+// receiver: bob
+// args: b"bde750abcf1d176a34cce61b607107092413100c9195b08f13d6e7d46980cf1c", 20
+//  the above 'secret hand' is generated with hand=h"72"(r), key=h"616263"
+
+import {{starlab}}.RockPaperScissors;
+import 0x0.U64Util;
+
+main(secret_hand: bytearray, amount: u64) {
+  let result: u64;
+
+  result = RockPaperScissors.s_play(move(secret_hand), move(amount));
+  assert(move(result) == 0, 66);
+  return;
+}
