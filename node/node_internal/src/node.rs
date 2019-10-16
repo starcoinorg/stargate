@@ -786,7 +786,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         self.executor.spawn(task);
     }
 
-    pub fn find_offchain_txn(&self, hash: Option<HashValue>, count: u32) -> Result<Vec<(HashValue, u8)>> {
+    pub fn find_offchain_txn(&self, hash: Option<HashValue>, count: u32) -> Result<Vec<(HashValue,ChannelTransactionRequest, u8)>> {
         self.wallet.find_offchain_txn(hash, count)
     }
 }
