@@ -143,7 +143,7 @@ where
         channel_op: ChannelOp,
         channel: &Channel,
         receiver: AccountAddress,
-        mut args: Vec<TransactionArgument>,
+        args: Vec<TransactionArgument>,
     ) -> Result<ChannelTransactionRequest> {
         let mut all_args = Vec::new();
         let script = match &channel_op {
@@ -162,12 +162,12 @@ where
                     script_name
                 ))?;
                 all_args.push(TransactionArgument::String(package_name.to_string()));
-                all_args.push(TransactionArgument::String(script_name.to_string()));
+                all_args.push(TransactionArgument::String(package_name.to_string()));
                 s
             },
         };
 
-        all_args.append(&mut args);
+        all_args.append(&mut args.clone());
         let script = script.encode_script(args);
         let channel_sequence_number = channel.channel_sequence_number();
         let txn = self.create_signed_script_txn(channel, receiver, script)?;
