@@ -1,0 +1,482 @@
+//! account: starlab, 1000000
+//! account: alice, 1000000
+//! account: bob, 1000000
+
+//! sender: starlab
+
+module RockPaperScissors {
+  import 0x0.LibraCoin;
+  import 0x0.LibraAccount;
+  import 0x0.Hash;
+  import 0x0.BytearrayUtil;
+  import 0x0.U64Util;
+  import 0x0.Block;
+  import 0x0.ChannelAccount;
+
+  resource T {
+    amount: u64,
+    hand: bytearray,
+    timeout_height: u64,
+  }
+
+  resource T_S {
+    amount: u64,
+    secret_hand: bytearray,
+    timeout_height: u64,
+  }
+
+  get_timeout_interval(): u64 {
+    return 0; //1; // timeout when Block height + 1
+  }
+
+  new_secret_hand(hand: bytearray, key: bytearray): bytearray {
+    let input: bytearray;
+
+    input = BytearrayUtil.bytearray_concat(move(hand), move(key));
+    return Hash.sha3_256(move(input));
+  }
+
+  public current_state(): u64 {
+    let exist_sender_T: bool;
+    let exist_sender_T_S: bool;
+    let exist_receiver_T: bool;
+    let exist_receiver_T_S: bool;
+
+    exist_sender_T = exist_sender_channel<T>();
+    exist_sender_T_S = exist_sender_channel<T_S>();
+    exist_receiver_T = exist_receiver_channel<T>();
+    exist_receiver_T_S = exist_receiver_channel<T_S>();
+
+    if (!copy(exist_sender_T) && !copy(exist_sender_T_S)
+        && !copy(exist_receiver_T) && !copy(exist_receiver_T_S)) {
+      return 1; // game not started
+    }
+
+    if (!copy(exist_sender_T) && copy(exist_sender_T_S)
+        && !copy(exist_receiver_T) && !copy(exist_receiver_T_S)) {
+      return 2; // sender has started to play with secret hand
+    }
+
+    if (!copy(exist_sender_T) && !copy(exist_sender_T_S)
+        && !copy(exist_receiver_T) && copy(exist_receiver_T_S)) {
+      return 3; // receiver has started to play with secret hand
+    }
+
+    if (!copy(exist_sender_T) && copy(exist_sender_T_S)
+        && copy(exist_receiver_T) && !copy(exist_receiver_T_S)) {
+      return 4; // sender has played with secret hand, receiver has played with normal hand
+    }
+
+    if (move(exist_sender_T) && !move(exist_sender_T_S)
+        && !move(exist_receiver_T) && move(exist_receiver_T_S)) {
+      return 5; // receiver has played with secret hand, sender has played with normal hand
+    }
+
+    return 6; // wrong state
+  }
+
+  public s_play(secret_hand: bytearray, amount: u64): u64 {
+    let t: Self.T_S;
+    let current_height: u64;
+    let state: u64;
+
+    state = Self.current_state();
+
+    if (copy(state) == 1) {
+      current_height = Block.get_current_height();
+
+      t = T_S {
+      amount: move(amount),
+      secret_hand: move(secret_hand),
+      timeout_height: move(current_height) + Self.get_timeout_interval(),
+      };
+
+      move_to_sender_channel<T_S>(move(t));
+      return 0;
+    }
+    return move(state);
+  }
+
+  public play(hand: bytearray, amount: u64): u64 {
+    let t: Self.T;
+    let state: u64;
+    let current_height: u64;
+
+    state = Self.current_state();
+
+    if (copy(state) == 3) {
+      current_height = Block.get_current_height();
+
+      t = T {
+      amount: move(amount),
+      hand: move(hand),
+      timeout_height: move(current_height) + Self.get_timeout_interval(),
+      };
+
+      move_to_sender_channel<T>(move(t));
+      return 0;
+    }
+
+    return move(state);
+  }
+
+  public cancel(): u64 {
+    let t_ref: &mut Self.T_S;
+    let amount: u64;
+    let current_height: u64;
+    let state: u64;
+
+    // check state
+    state = Self.current_state();
+    if (copy(state) != 2) {
+      return 1; // wrong state
+    }
+
+    // check timeout
+    current_height = Block.get_current_height();
+    t_ref = borrow_sender_channel<T_S>();
+    if (*&copy(t_ref).timeout_height > move(current_height)) {
+      _ = move(t_ref);
+      return 2; // not timeout
+    }
+    _ = move(t_ref);
+
+    amount = Self.unwrap_T_S(move_from_sender_channel<T_S>());
+    return 0;
+  }
+
+  // Rules of the game:
+  //    Rock > Paper > Scissors > Rock
+  //     r       p        s        r
+  //    h"72"  h"70"    h"73"     h"72"
+  //
+  // Result for player_1:
+  //    win    loss    flat
+  //     0       1      2
+  //
+  logic(hand_player_1: bytearray, hand_player_2: bytearray): u64 {
+    let result: u64;
+    result = 0; // default value
+
+    if (copy(hand_player_1) == copy(hand_player_2)) {
+      result = 2; // flat
+    }
+
+    if (copy(hand_player_1) == h"72") {
+      if (copy(hand_player_2) == h"70") {
+        result = 1; // player_1 loss
+      }
+      if (copy(hand_player_2) == h"73") {
+        result = 0; // player_1 win
+      }
+    }
+
+    if (copy(hand_player_1) == h"70") {
+      if (copy(hand_player_2) == h"72") {
+        result = 0; // player_1 win
+      }
+      if (copy(hand_player_2) == h"73") {
+        result = 1; // player_1 loss
+      }
+    }
+
+    if (copy(hand_player_1) == h"73") {
+      if (copy(hand_player_2) == h"72") {
+        result = 1; // player_1 loss
+      }
+      if (copy(hand_player_2) == h"70") {
+        result = 0; // player_1 win
+      }
+    }
+
+    return move(result);
+  }
+
+  unwrap_T(t: Self.T): u64 {
+    let amount: u64;
+    let hand: bytearray;
+    let timeout_height: u64;
+
+    T { amount, hand, timeout_height } = move(t);
+    return move(amount);
+  }
+
+  unwrap_T_S(t: Self.T_S): u64 {
+    let amount: u64;
+    let secret_hand: bytearray;
+    let timeout_height: u64;
+
+    T_S { amount, secret_hand, timeout_height } = move(t);
+    return move(amount);
+  }
+
+  pay_winner(result: u64, timeout: bool) {
+    let amount1: u64;
+    let amount2: u64;
+    let transfer_coin: LibraCoin.T;
+
+    if (!move(timeout)) {
+      amount1 = Self.unwrap_T_S(move_from_sender_channel<T_S>());
+      amount2 = Self.unwrap_T(move_from_receiver_channel<T>());
+    } else {
+      amount1 = Self.unwrap_T(move_from_sender_channel<T>());
+      amount2 = Self.unwrap_T_S(move_from_receiver_channel<T_S>());
+    }
+
+    if (copy(result) == 0) { // sender win
+      if (copy(amount1) >= copy(amount2)) {
+        transfer_coin = ChannelAccount.withdraw_from_receiver(copy(amount2));
+        ChannelAccount.deposit_to_sender(move(transfer_coin));
+      } else {
+        transfer_coin = ChannelAccount.withdraw_from_receiver(copy(amount1));
+        ChannelAccount.deposit_to_sender(move(transfer_coin));
+      }
+    } else {
+      if (copy(result) == 1) { // sender loss
+        if (copy(amount2) >= copy(amount1)) {
+          ChannelAccount.transfer(copy(amount1));
+        } else {
+          ChannelAccount.transfer(copy(amount1) - copy(amount2));
+        }
+      } else {
+        // flat, do nothing
+      }
+    }
+
+    return;
+  }
+
+  public end_game(hand: bytearray, key: bytearray): u64 {
+    let t_ref_1: &mut Self.T_S;
+    let t_ref_2: &mut Self.T;
+    let receiver_hand: bytearray;
+    let result: u64;
+    let secret_hand: bytearray;
+    let state: u64;
+
+    // check state
+    state = Self.current_state();
+    if (copy(state) != 4) {
+      return move(state);
+    }
+
+    // verify the secret hand
+    t_ref_1 = borrow_sender_channel<T_S>();
+    secret_hand = Self.new_secret_hand(copy(hand), move(key));
+    if (*&copy(t_ref_1).secret_hand != move(secret_hand)) {
+      _ = move(t_ref_1);
+      return 6; // 1~5 used by current_state()
+    }
+    _ = move(t_ref_1);
+
+    t_ref_2 = borrow_receiver_channel<T>();
+    receiver_hand = *&copy(t_ref_2).hand;
+    result = Self.logic(move(hand), move(receiver_hand));
+    _ = move(t_ref_2);
+
+    Self.pay_winner(move(result), false);
+
+    return 0;
+  }
+
+  public game_timeout(): u64 {
+    let t_ref: &mut Self.T;
+    let result: u64;
+    let current_height: u64;
+    let state: u64;
+
+    // check state
+    state = Self.current_state();
+    if (copy(state) != 5) {
+      return move(state);
+    }
+
+    // check timeout
+    current_height = Block.get_current_height();
+    t_ref = borrow_sender_channel<T>();
+    if (*&copy(t_ref).timeout_height > move(current_height)) {
+      _ = move(t_ref);
+      return 1; // not timeout
+    }
+    _ = move(t_ref);
+
+    Self.pay_winner(0, true); // timeout, sender win
+
+    return 0;
+  }
+}
+
+//! new-transaction
+//! sender: alice
+//! receiver: bob
+//! args: 8000, 8000
+
+import 0x0.ChannelAccount;
+//open channel
+main(sender_amount:u64, receiver_amount:u64) {
+    ChannelAccount.open(move(sender_amount), move(receiver_amount));
+    return;
+}
+
+//! new-transaction
+//! sender: alice
+//! receiver: bob
+//! args: b"bde750abcf1d176a34cce61b607107092413100c9195b08f13d6e7d46980cf1c", 20
+//  the above 'secret hand' is generated with hand=h"72"(r), key=h"616263"
+
+import {{starlab}}.RockPaperScissors;
+import 0x0.U64Util;
+
+main(secret_hand: bytearray, amount: u64) {
+  let result: u64;
+
+  result = RockPaperScissors.s_play(move(secret_hand), move(amount));
+  assert(move(result) == 0, 66);
+  return;
+}
+
+//! new-transaction
+//! sender: alice
+//! receiver: bob
+
+import {{starlab}}.RockPaperScissors;
+import 0x0.U64Util;
+
+main() {
+  let result: u64;
+
+  result = RockPaperScissors.cancel();
+  assert(move(result) == 0, 67);
+  return;
+}
+
+//! new-transaction
+//! sender: alice
+//! receiver: bob
+//! args: b"bde750abcf1d176a34cce61b607107092413100c9195b08f13d6e7d46980cf1c", 20
+//  the above 'secret hand' is generated with hand=h"72"(r), key=h"616263"
+
+import {{starlab}}.RockPaperScissors;
+import 0x0.U64Util;
+
+main(secret_hand: bytearray, amount: u64) {
+  let result: u64;
+
+  result = RockPaperScissors.s_play(move(secret_hand), move(amount));
+  assert(move(result) == 0, 66);
+  return;
+}
+
+//! new-transaction
+//! sender: bob
+//! receiver: alice
+//! args: b"70", 10
+//  hand=b"70"(p)
+
+import {{starlab}}.RockPaperScissors;
+
+main(hand: bytearray, amount: u64) {
+  let result: u64;
+
+  result = RockPaperScissors.play(move(hand), move(amount));
+  assert(move(result) == 0, 67);
+  return;
+}
+
+//! new-transaction
+//! sender: bob
+//! receiver: alice
+
+import {{starlab}}.RockPaperScissors;
+import 0x0.ChannelAccount;
+
+main() {
+  let result: u64;
+  let sender_balance: u64;
+  let new_sender_balance: u64;
+  let receiver_balance: u64;
+  let new_receiver_balance: u64;
+
+  sender_balance = ChannelAccount.sender_balance();
+  receiver_balance = ChannelAccount.receiver_balance();
+
+  result = RockPaperScissors.game_timeout();
+
+  new_sender_balance = ChannelAccount.sender_balance();
+  new_receiver_balance = ChannelAccount.receiver_balance();
+
+  assert(move(sender_balance) == move(new_sender_balance) - 10, 42);
+  assert(move(receiver_balance) == move(new_receiver_balance) + 10, 42);
+  return;
+}
+
+//! new-transaction
+//! sender: alice
+//! receiver: bob
+//! args: b"bde750abcf1d176a34cce61b607107092413100c9195b08f13d6e7d46980cf1c", 20
+//  the above 'secret hand' is generated with hand=h"72"(r), key=h"616263"
+
+import {{starlab}}.RockPaperScissors;
+import 0x0.U64Util;
+
+main(secret_hand: bytearray, amount: u64) {
+  let result: u64;
+
+  result = RockPaperScissors.s_play(move(secret_hand), move(amount));
+  assert(move(result) == 0, 66);
+  return;
+}
+
+//! new-transaction
+//! sender: bob
+//! receiver: alice
+//! args: b"70", 10
+
+import {{starlab}}.RockPaperScissors;
+
+main(hand: bytearray, amount: u64) {
+  let result: u64;
+
+  result = RockPaperScissors.play(move(hand), move(amount));
+  assert(move(result) == 0, 67);
+  return;
+}
+
+//! new-transaction
+//! sender: alice
+//! receiver: bob
+//! args: b"72", b"616263"
+
+import {{starlab}}.RockPaperScissors;
+import 0x0.ChannelAccount;
+
+main(hand: bytearray, key: bytearray) {
+  let result: u64;
+  let sender_balance: u64;
+  let new_sender_balance: u64;
+  let receiver_balance: u64;
+  let new_receiver_balance: u64;
+
+  sender_balance = ChannelAccount.sender_balance();
+  receiver_balance = ChannelAccount.receiver_balance();
+
+  result = RockPaperScissors.end_game(move(hand), move(key));
+
+  new_sender_balance = ChannelAccount.sender_balance();
+  new_receiver_balance = ChannelAccount.receiver_balance();
+
+  assert(move(sender_balance) == move(new_sender_balance) + 10, copy(result));
+  assert(move(receiver_balance) == move(new_receiver_balance) - 10, move(result));
+  return;
+}
+
+//! new-transaction
+//! sender: alice
+//! receiver: bob
+
+import 0x0.ChannelAccount;
+//close
+main() {
+    ChannelAccount.close();
+    return;
+}

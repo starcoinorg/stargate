@@ -1,0 +1,11 @@
+// new-transaction
+// sender: alice
+// receiver: bob
+// args: 8000, 8000
+
+import 0x0.ChannelAccount;
+//open channel
+main(sender_amount:u64, receiver_amount:u64) {
+    ChannelAccount.open(move(sender_amount), move(receiver_amount));
+    return;
+}

@@ -1,0 +1,14 @@
+// new-transaction
+// sender: alice
+// receiver: bob
+
+import {{starlab}}.RockPaperScissors;
+import 0x0.U64Util;
+
+main() {
+  let result: u64;
+
+  result = RockPaperScissors.cancel();
+  assert(move(result) == 0, 67);
+  return;
+}

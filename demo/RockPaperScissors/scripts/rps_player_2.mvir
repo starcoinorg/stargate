@@ -1,0 +1,14 @@
+// new-transaction
+// sender: bob
+// receiver: alice
+// args: b"70", 10
+
+import {{starlab}}.RockPaperScissors;
+
+main(hand: bytearray, amount: u64) {
+  let result: u64;
+
+  result = RockPaperScissors.play(move(hand), move(amount));
+  assert(move(result) == 0, 67);
+  return;
+}
