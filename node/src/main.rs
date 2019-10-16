@@ -128,7 +128,7 @@ fn main() {
     let  api_node = Arc::new(node);
     let mut node_server = setup_node_service(&swarm.config, api_node.clone());
     node_server.start();
-    setup_node_rest(swarm.config.rest_config, api_node.clone());
+    setup_node_rest(swarm.config.rest_config, api_node.clone()).ok();
 
     if args.start_client {
         let client = client::InteractiveClient::new_with_inherit_io(

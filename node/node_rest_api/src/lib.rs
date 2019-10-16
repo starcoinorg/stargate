@@ -1,6 +1,5 @@
 #[macro_use]
 extern crate serde_json;
-use canonical_serialization::{CanonicalSerialize, SimpleSerializer};
 use crypto::hash::HashValue;
 use futures01::{
     Future,  Stream,
@@ -19,7 +18,6 @@ use std::{
     thread,
 };
 use libra_types::{account_address::AccountAddress, transaction::parse_as_transaction_argument};
-use std::net::{SocketAddr, Ipv4Addr, IpAddr};
 
 
 trait CompoundTrait: ChainClient + Clone + Send + Sync + 'static {}
@@ -37,13 +35,6 @@ where
     });
     Ok(())
 }
-
-//struct RequestForm {
-//    address: String,
-//    package_name: String,
-//    script_name: String,
-//    args: String,
-//}
 
 struct ResponseResult {
     state: bool,
@@ -176,7 +167,7 @@ impl<C: ChainClient + Clone + 'static> Service for WebServer<C> {
                         match node_internal
                             .find_offchain_txn(HashValue::from_slice(tid.as_bytes()).ok(), count)
                         {
-                            Ok(msg_future) => {
+                            Ok(_msg_future) => {
                                 result = ResponseResult::format(
                                     true,
                                     HashValue::zero(),
