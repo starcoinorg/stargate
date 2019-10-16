@@ -1,29 +1,24 @@
 #[macro_use]
 extern crate serde_json;
 use crypto::hash::HashValue;
-use futures01::{
-    Future,  Stream,
-};
+use futures01::{Future, Stream};
 use hyper::{
     service::{NewService, Service},
     Body, Error, Request, Response, Server, StatusCode,
 };
-use sg_config::config::{ RestConfig};
-use node_internal::node::Node as Node_Internal;
-use sgchain::star_chain_client::ChainClient;
-use std::{
-    collections::HashMap,
-    str::FromStr,
-    sync::Arc,
-    thread,
-};
 use libra_types::{account_address::AccountAddress, transaction::parse_as_transaction_argument};
+use logger::prelude::*;
+use node_internal::node::Node as Node_Internal;
+use sg_config::config::RestConfig;
+use sgchain::star_chain_client::ChainClient;
 
+use serde_json::Value;
+use std::{str::FromStr, sync::Arc, thread};
 
 trait CompoundTrait: ChainClient + Clone + Send + Sync + 'static {}
 
 pub fn setup_node_rest<C>(
-        config: RestConfig,
+    config: RestConfig,
     node: Arc<Node_Internal<C>>,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
@@ -96,51 +91,56 @@ impl<C: ChainClient + Clone + 'static> Service for WebServer<C> {
         match req.uri().path() {
             "/exec" => {
                 let resp = req.into_body().concat2().map(move |chunk| {
-                    let mut form = url::form_urlencoded::parse(chunk.as_ref())
-                        .into_owned()
-                        .collect::<HashMap<String, String>>();
-                    let result: ResponseResult;
-                    if let Some(address) = form.remove("address") {
-                        let package_name = form.remove("package_name").unwrap();
-                        let script_name = form.remove("script_name").unwrap();
-                        let args = form.remove("args").unwrap();
+                    let body = chunk.iter().cloned().collect::<Vec<u8>>();
+                    let json_args: Value = serde_json::from_slice(body.as_slice()).unwrap();
+                    info!("exec interface args is {:?}", json_args);
+                    let mut result: ResponseResult =
+                        ResponseResult::format(false, HashValue::zero(), "fail".to_string());
+                    let address = json_args.get("address").unwrap().as_str().unwrap();
+                    let package_name = json_args.get("package_name").unwrap().as_str().unwrap();
+                    let script_name = json_args.get("script_name").unwrap().as_str().unwrap();
+                    let args = json_args.get("args").unwrap().as_str().unwrap();
+                    let mut args_error = true;
+                    if address.is_empty() {
+                        result.reason = "address is null".to_string();
+                    } else {
+                        args_error = false;
+                    }
+                    if package_name.is_empty() {
+                        result.reason = "package name is null".to_string();
+                    } else {
+                        args_error = false;
+                    }
+                    if script_name.is_empty() {
+                        result.reason = "scripts is null".to_string();
+                    } else {
+                        args_error = false;
+                    }
+                    if !args_error {
                         let mut arguments: Vec<_> = Vec::new();
                         if !args.is_empty() {
-                            let arg_vec: Vec<_> = args
-                                .split(',')
-                                .collect();
-                            arguments = arg_vec.iter()
+                            let arg_vec: Vec<_> = args.split(',').collect();
+                            arguments = arg_vec
+                                .iter()
                                 .filter_map(|arg| parse_as_transaction_argument(arg).ok())
                                 .collect();
                         }
 
                         match node_internal.execute_script_with_argument(
                             AccountAddress::from_hex_literal(&address).unwrap_or_default(),
-                            package_name,
-                            script_name,
+                            package_name.to_owned(),
+                            script_name.to_owned(),
                             arguments,
                         ) {
                             Ok(msg_future) => {
-                                result = ResponseResult::format(
-                                    true,
-                                    msg_future.wait().unwrap(),
-                                    "OK".to_string(),
-                                )
+                                result.state = true;
+                                result.reason = "OK".to_string();
+                                result.req_id = msg_future.wait().unwrap();
                             }
                             Err(e) => {
-                                result = ResponseResult::format(
-                                    false,
-                                    HashValue::zero(),
-                                    format!("Failed to execute request: {}", e),
-                                )
+                                result.reason = format!("Failed to execute request: {}", e);
                             }
                         };
-                    } else {
-                        result = ResponseResult::format(
-                            false,
-                            HashValue::zero(),
-                            "addresss is null".to_string(),
-                        )
                     }
                     //json format
                     *response.body_mut() = Body::from(
@@ -157,37 +157,31 @@ impl<C: ChainClient + Clone + 'static> Service for WebServer<C> {
             }
             "/query" => {
                 let resp = req.into_body().concat2().map(move |chunk| {
-                    let mut form = url::form_urlencoded::parse(chunk.as_ref())
-                        .into_owned()
-                        .collect::<HashMap<String, String>>();
-                    let result: ResponseResult;
-                    if let Some(tid) = form.remove("transation_id") {
-                        let count_str: String = form.remove("count").unwrap_or("0".to_string());
+                    let body = chunk.iter().cloned().collect::<Vec<u8>>();
+                    let json_args: Value = serde_json::from_slice(body.as_slice()).unwrap();
+                    info!("query interface args is {:?}", json_args);
+                    let mut result: ResponseResult =
+                        ResponseResult::format(false, HashValue::zero(), "fail".to_string());
+                    let transation_id = json_args.get("transation_id").unwrap().as_str().unwrap();
+                    let count_str = json_args.get("count").unwrap().as_str().unwrap();
+                    if transation_id.is_empty() {
+                        result.reason = "transation id is null".to_string();
+                    } else {
+                        //                        let count_str: String = form.remove("count").unwrap_or("0".to_string());
                         let count = u32::from_str(&count_str).unwrap_or_default();
-                        match node_internal
-                            .find_offchain_txn(HashValue::from_slice(tid.as_bytes()).ok(), count)
-                        {
+                        match node_internal.find_offchain_txn(
+                            HashValue::from_slice(transation_id.as_bytes()).ok(),
+                            count,
+                        ) {
                             Ok(_msg_future) => {
-                                result = ResponseResult::format(
-                                    true,
-                                    HashValue::zero(),
-                                    "Ok".to_string(),
-                                )
+                                result.state = true;
+                                result.reason = "OK".to_string();
+                                //                                result.req_id = msg_future.wait().unwrap();
                             }
                             Err(e) => {
-                                result = ResponseResult::format(
-                                    false,
-                                    HashValue::zero(),
-                                    format!("Failed to execute request: {}", e),
-                                )
+                                result.reason = format!("Failed to execute request: {}", e);
                             }
                         };
-                    } else {
-                        result = ResponseResult::format(
-                            false,
-                            HashValue::zero(),
-                            "transation id  is null".to_string(),
-                        )
                     }
                     //json format
                     *response.body_mut() = Body::from(
