@@ -363,7 +363,9 @@ fn test_vector() -> Result<()> {
     open_channel(alice.clone(), bob.clone(), 100000, 100000)?;
 
     execute_script(alice.clone(), bob.clone(), "scripts", "move_vector_to_sender", vec![])?;
-    execute_script(alice.clone(), bob.clone(), "scripts", "move_vector_to_receiver", vec![])?;
+    execute_script(alice.clone(), bob.clone(), "scripts", "move_vector_from_sender", vec![])?;
 
+    execute_script(alice.clone(), bob.clone(), "scripts", "move_vector_to_receiver", vec![])?;
+    execute_script(alice.clone(), bob.clone(), "scripts", "move_vector_from_receiver", vec![])?;
     Ok(())
 }
