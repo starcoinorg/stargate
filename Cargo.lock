@@ -4556,6 +4556,7 @@ dependencies = [
  "sgchain 0.1.0",
  "sgtypes 0.1.0",
  "state-view 0.1.0",
+ "storage_proto 0.1.0",
  "tools 0.1.0",
  "vm_runtime_types 0.1.0",
 ]

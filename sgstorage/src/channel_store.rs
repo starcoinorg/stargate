@@ -11,11 +11,12 @@ use libra_types::crypto_proxies::LedgerInfoWithSignatures;
 use libra_types::transaction::{TransactionInfo, TransactionToCommit, Version};
 use schemadb::SchemaBatch;
 use std::sync::Arc;
+use storage_proto::StartupInfo;
 
 pub struct ChannelStore<S> {
     db: Arc<S>,
     state_store: ChannelStateStore<S>,
-    ledger_info_store: LedgerStore<S>,
+    ledger_store: LedgerStore<S>,
     transaction_store: ChannelTransactionStore<S>,
 }
 
@@ -24,15 +25,18 @@ where
     S: SchemaDB,
 {
     pub fn new(db: Arc<S>, owner_address: AccountAddress) -> Self {
-        ChannelStore {
+        let store = ChannelStore {
             db: db.clone(),
             state_store: ChannelStateStore::new(db.clone(), owner_address),
-            ledger_info_store: LedgerStore::new(db.clone()),
+            ledger_store: LedgerStore::new(db.clone()),
             transaction_store: ChannelTransactionStore::new(db.clone()),
-        }
+        };
+        store.ledger_store.bootstrap();
+        store
     }
 }
 
+/// Write data part
 impl<S> ChannelStore<S>
 where
     S: SchemaDB + ChannelAddressProvider,
@@ -64,15 +68,14 @@ where
                 new_ledger_hash,
                 expected_root_hash,
             );
-            self.ledger_info_store
-                .put_ledger_info(x, &mut schema_batch)?;
+            self.ledger_store.put_ledger_info(x, &mut schema_batch)?;
         }
 
         self.commit(schema_batch)?;
 
         // Once everything is successfully persisted, update the latest in-memory ledger info.
         if let Some(x) = ledger_info_with_sigs {
-            self.ledger_info_store.set_latest_ledger_info(x.clone());
+            self.ledger_store.set_latest_ledger_info(x.clone());
         }
 
         // TODO: wake pruner
@@ -104,7 +107,7 @@ where
         );
         // TODO: save to ledger store
         let new_ledger_root_hash =
-            self.ledger_info_store
+            self.ledger_store
                 .put_tx_info(version, &tx_info, &mut schema_batch)?;
         Ok(new_ledger_root_hash)
     }
@@ -114,5 +117,36 @@ where
         self.db.write_schemas(schema_batch)?;
 
         Ok(())
+    }
+}
+
+impl<S> ChannelStore<S>
+where
+    S: SchemaDB + ChannelAddressProvider,
+{
+    /// Gets information needed from storage during the startup of the executor or state
+    /// synchronizer module.
+    pub fn get_startup_info(&self) -> Result<Option<StartupInfo>> {
+        // Get the latest ledger info. Return None if not bootstrapped.
+        let ledger_info_with_sigs = match self.ledger_store.get_latest_ledger_info_option() {
+            Some(x) => x,
+            None => return Ok(None),
+        };
+        let ledger_info = ledger_info_with_sigs.ledger_info().clone();
+
+        let (latest_version, txn_info) = self.ledger_store.get_latest_transaction_info()?;
+
+        let account_state_root_hash = txn_info.state_root_hash();
+
+        let ledger_frozen_subtree_hashes = self
+            .ledger_store
+            .get_ledger_frozen_subtree_hashes(latest_version)?;
+
+        Ok(Some(StartupInfo {
+            ledger_info,
+            latest_version,
+            account_state_root_hash,
+            ledger_frozen_subtree_hashes,
+        }))
     }
 }

@@ -38,7 +38,7 @@ jellyfish-merkle = { path = "../libra/storage/jellyfish-merkle" }
 libradb = { path = "../libra/storage/libradb" }
 schemadb = { path = "../libra/storage/schemadb" }
 state-view = {path = "../libra/storage/state-view"}
-
+storage_proto = {path = "../libra/storage/storage_proto"}
 # deps on libra vm
 vm_runtime_types = { path = "../libra/language/vm/vm_runtime/vm_runtime_types"}
 
