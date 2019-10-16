@@ -1,147 +1,146 @@
-use crate::channel_state_store::ChannelStateStore;
-use crate::channel_transaction_store::ChannelTransactionStore;
-use crate::SgDB;
-use crypto::hash::CryptoHash;
-use crypto::HashValue;
 use failure::prelude::*;
-use lazy_static::lazy_static;
 use libra_types::account_address::AccountAddress;
-use libra_types::account_state_blob::AccountStateBlob;
-use libra_types::crypto_proxies::LedgerInfoWithSignatures;
-use libra_types::transaction::{Transaction, TransactionInfo, TransactionToCommit, Version};
-use logger::prelude::*;
-use metrics::OpMetrics;
-use schemadb::SchemaBatch;
-use std::collections::HashMap;
-use std::sync::Arc;
-
-lazy_static! {
-    static ref OP_COUNTER: OpMetrics = OpMetrics::new_and_registered("storage");
-}
+use rocksdb::{rocksdb_options::ColumnFamilyDescriptor, CFHandle, DBOptions, DB};
+use schemadb::ColumnFamilyOptionsMap;
+use schemadb::DEFAULT_CF_NAME;
+use std::collections::BTreeMap;
+use std::path::Path;
 
 pub struct SgStorage {
-    db: Arc<SgDB>,
+    inner: rocksdb::DB,
+    owner: AccountAddress,
+}
+
+impl AsMut<rocksdb::DB> for SgStorage {
+    fn as_mut(&mut self) -> &mut rocksdb::DB {
+        &mut self.inner
+    }
+}
+impl AsRef<rocksdb::DB> for SgStorage {
+    fn as_ref(&self) -> &rocksdb::DB {
+        &self.inner
+    }
+}
+
+impl core::ops::Deref for SgStorage {
+    type Target = rocksdb::DB;
+
+    fn deref(&self) -> &Self::Target {
+        self.as_ref()
+    }
+}
+
+impl core::ops::DerefMut for SgStorage {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.as_mut()
+    }
 }
 
 impl SgStorage {
-    pub fn new(db: Arc<SgDB>) -> Self {
-        Self { db }
-    }
-}
+    /// Create db with all the column families provided if it doesn't exist at `path`; Otherwise,
+    /// try to open it with all the column families.
+    pub fn open<P: AsRef<Path>>(
+        owner: AccountAddress,
+        path: P,
+        mut cf_opts_map: ColumnFamilyOptionsMap,
+    ) -> Result<Self> {
+        let mut db_opts = DBOptions::new();
 
-impl SgStorage {
-    pub fn save_tx(
-        &self,
-        tx: &TransactionToCommit,
-        version: Version,
-        _ledger_info_with_sigs: Option<LedgerInfoWithSignatures>, // ignore this for now
-    ) -> Result<()> {
-        let mut schema_batch = SchemaBatch::default();
-        // get write batch
-        let _ledger_hash = self.save_tx_impl(tx, version, &mut schema_batch)?;
-        // TODO: check ledger info
+        // For now we set the max total WAL size to be 1G. This config can be useful when column
+        // families are updated at non-uniform frequencies.
+        db_opts.set_max_total_wal_size(1 << 30);
 
-        // Persist
-        self.commit(schema_batch)?;
-        Ok(())
-    }
+        // If db exists, just open it with all cfs.
+        if db_exists(path.as_ref()) {
+            let inner = Self::open_cf(db_opts, &path, cf_opts_map.into_iter().collect())?;
+            return Ok(SgStorage { inner, owner });
+        }
 
-    #[inline]
-    pub fn get_channel_state_store(&self, receiver_address: AccountAddress) -> ChannelStateStore {
-        ChannelStateStore::new(self.db.clone(), receiver_address)
-    }
+        // If db doesn't exist, create a db first with all column families.
+        db_opts.create_if_missing(true);
 
-    pub fn get_channel_transaction_store(
-        &self,
-        receiver: AccountAddress,
-    ) -> ChannelTransactionStore {
-        ChannelTransactionStore::new(self.db.clone(), receiver)
-    }
-
-    fn save_tx_impl(
-        &self,
-        tx: &TransactionToCommit,
-        version: Version,
-        mut schema_batch: &mut SchemaBatch,
-    ) -> Result<HashValue> {
-        let (sender, receiver) = Self::get_channel_participants_from_tx(tx.transaction())?;
-        Self::check_channel_state(sender, receiver, tx.account_states())?;
-
-        let participant_address = if self.db.owner_account_address() == sender {
-            receiver
-        } else {
-            sender
-        };
-        let channel_state_store = self.get_channel_state_store(participant_address);
-        let state_root_hash = channel_state_store.put_channel_state_set(
-            tx.account_states().clone(),
-            version,
-            &mut schema_batch,
+        let db = Self::open_cf(
+            db_opts,
+            &path,
+            vec![cf_opts_map
+                .remove_entry(&DEFAULT_CF_NAME)
+                .ok_or_else(|| format_err!("No \"default\" column family name found"))?],
         )?;
-        // TODO: save events
-
-        // TODO: save tx
-        let channel_transaction_store = self.get_channel_transaction_store(participant_address);
-
-        channel_transaction_store.put_transaction(version, tx.transaction(), &mut schema_batch)?;
-
-        let _tx_info = TransactionInfo::new(
-            tx.transaction().as_signed_user_txn()?.hash(),
-            state_root_hash,
-            HashValue::default(),
-            tx.gas_used(),
-            tx.major_status(),
-        );
-        // TODO: save to ledger store
-
-        unimplemented!()
+        let mut storage = SgStorage { inner: db, owner };
+        cf_opts_map
+            .into_iter()
+            .map(|(cf_name, cf_opts)| storage.create_cf((cf_name, cf_opts)))
+            .collect::<Result<Vec<_>>>()?;
+        Ok(storage)
+    }
+    pub fn get_cf_handle(&self, cf_name: &str) -> Result<&CFHandle> {
+        self.inner.cf_handle(cf_name).ok_or_else(|| {
+            format_err!(
+                "DB::cf_handle not found for column family name: {}",
+                cf_name
+            )
+        })
+    }
+    pub fn owner_address(&self) -> AccountAddress {
+        self.owner
     }
 
-    fn commit(&self, schema_batch: SchemaBatch) -> Result<()> {
-        self.db.write_schemas(schema_batch)?;
-        match self.db.get_approximate_sizes_cf() {
-            Ok(cf_sizes) => {
-                for (cf_name, size) in cf_sizes {
-                    OP_COUNTER.set(&format!("cf_size_bytes_{}", cf_name), size as usize);
-                }
-            }
-            Err(err) => warn!(
-                "Failed to get approximate size of column families: {}.",
-                err
-            ),
+    /// Returns the approximate size of each non-empty column family in bytes.
+    pub fn get_approximate_sizes_cf(&self) -> Result<BTreeMap<String, u64>> {
+        let mut cf_sizes = BTreeMap::new();
+
+        for cf_name in self.inner.cf_names().into_iter().map(ToString::to_string) {
+            let cf_handle = self.get_cf_handle(&cf_name)?;
+            let size = self
+                .inner
+                .get_property_int_cf(cf_handle, "rocksdb.estimate-live-data-size")
+                .ok_or_else(|| {
+                    format_err!(
+                        "Unable to get approximate size of {} column family.",
+                        cf_name,
+                    )
+                })?;
+            cf_sizes.insert(cf_name, size);
         }
 
+        Ok(cf_sizes)
+    }
+
+    fn open_cf<'a, P, T>(opts: DBOptions, path: P, cfds: Vec<T>) -> Result<DB>
+    where
+        P: AsRef<Path>,
+        T: Into<ColumnFamilyDescriptor<'a>>,
+    {
+        let inner = rocksdb::DB::open_cf(
+            opts,
+            path.as_ref().to_str().ok_or_else(|| {
+                format_err!("Path {:?} can not be converted to string.", path.as_ref())
+            })?,
+            cfds,
+        )
+        .map_err(convert_rocksdb_err)?;
+
+        Ok(inner)
+    }
+
+    fn create_cf<'a, T>(&mut self, cfd: T) -> Result<()>
+    where
+        T: Into<ColumnFamilyDescriptor<'a>>,
+    {
+        let _cf_handle = self.inner.create_cf(cfd).map_err(convert_rocksdb_err)?;
         Ok(())
     }
+}
 
-    /// helpers
+/// Checks underlying Rocksdb instance existence by checking `CURRENT` file existence, the same way
+/// Rocksdb adopts to detect db existence.
+fn db_exists(path: &Path) -> bool {
+    let rocksdb_current_file = path.join("CURRENT");
+    rocksdb_current_file.is_file()
+}
 
-    fn get_channel_participants_from_tx(
-        tx: &Transaction,
-    ) -> Result<(AccountAddress, AccountAddress)> {
-        match tx {
-            Transaction::UserTransaction(signed_tx) => match signed_tx.receiver() {
-                Some(receiver) => Ok((signed_tx.sender(), receiver)),
-                None => bail!("only support channel transaction"),
-            },
-            _ => {
-                bail!("only support user transaction");
-            }
-        }
-    }
-
-    fn check_channel_state(
-        sender: AccountAddress,
-        receiver: AccountAddress,
-        channel_states: &HashMap<AccountAddress, AccountStateBlob>,
-    ) -> Result<()> {
-        let valid = channel_states
-            .keys()
-            .all(|addr| *addr == sender || *addr == receiver);
-        ensure!(
-            valid,
-            "channel_state should only contain sender or receiver data"
-        );
-        Ok(())
-    }
+/// All the RocksDB methods return `std::result::Result<T, String>`. Since our methods return
+/// `failure::Result<T>`, manual conversion is needed.
+fn convert_rocksdb_err(msg: String) -> failure::Error {
+    format_err!("RocksDB internal error: {}.", msg)
 }

@@ -5,30 +5,32 @@
 //! This file defines transaction store APIs that are related to committed signed transactions.
 
 use crate::error::SgStorageError;
-use crate::schema::{
-    channel_transaction::{ChannelTransactionSchema, ChannelTransactionVersion},
-    channel_transaction_by_account::ChannelTransactionByAccountSchema,
-};
-use crate::SgDB;
+use crate::schema_db::SchemaDB;
 use failure::prelude::*;
 use libra_types::transaction::SignedTransaction;
 use libra_types::{
     account_address::AccountAddress,
     transaction::{Transaction, TransactionPayload, Version},
 };
+use libradb::schema::transaction::*;
+use libradb::schema::transaction_by_account::*;
 use schemadb::SchemaBatch;
 use std::sync::Arc;
 
-pub struct ChannelTransactionStore {
-    db: Arc<SgDB>,
-    receiver: AccountAddress,
+pub struct ChannelTransactionStore<S> {
+    db: Arc<S>,
 }
 
-impl ChannelTransactionStore {
-    pub fn new(db: Arc<SgDB>, receiver: AccountAddress) -> Self {
-        Self { db, receiver }
+impl<S> ChannelTransactionStore<S> {
+    pub fn new(db: Arc<S>) -> Self {
+        Self { db }
     }
+}
 
+impl<S> ChannelTransactionStore<S>
+where
+    S: SchemaDB,
+{
     /// Gets the version of a transaction by the `tx_sender_address` and `channel_sequence_number`.
     pub fn lookup_transaction_by_account(
         &self,
@@ -36,11 +38,8 @@ impl ChannelTransactionStore {
         channel_sequence_number: u64,
         ledger_version: Version,
     ) -> Result<Option<Version>> {
-        let lookup_key = (self.receiver, tx_sender_address, channel_sequence_number);
-        if let Some(version) = self
-            .db
-            .get::<ChannelTransactionByAccountSchema>(&lookup_key)?
-        {
+        let lookup_key = (tx_sender_address, channel_sequence_number);
+        if let Some(version) = self.db.get::<TransactionByAccountSchema>(&lookup_key)? {
             if version <= ledger_version {
                 return Ok(Some(version));
             }
@@ -51,10 +50,9 @@ impl ChannelTransactionStore {
 
     /// Get signed transaction given `version`
     pub fn get_transaction(&self, version: Version) -> Result<SignedTransaction> {
-        let key = ChannelTransactionVersion(self.receiver, version);
         let txn = self
             .db
-            .get::<ChannelTransactionSchema>(&key)?
+            .get::<TransactionSchema>(&version)?
             .ok_or_else(|| SgStorageError::NotFound(format!("Txn {}", version)))?;
 
         match txn {
@@ -77,14 +75,10 @@ impl ChannelTransactionStore {
                 TransactionPayload::ChannelWriteSet(cwp) => cwp.channel_sequence_number,
                 _ => bail!("only support channel transaction"),
             };
-            cs.put::<ChannelTransactionByAccountSchema>(
-                &(self.receiver, txn.sender(), channel_seq_number),
-                &version,
-            )?;
+            cs.put::<TransactionByAccountSchema>(&(txn.sender(), channel_seq_number), &version)?;
         }
 
-        let channel_transaction_version = ChannelTransactionVersion(self.receiver, version);
-        cs.put::<ChannelTransactionSchema>(&channel_transaction_version, &transaction)?;
+        cs.put::<TransactionSchema>(&version, &transaction)?;
 
         Ok(())
     }

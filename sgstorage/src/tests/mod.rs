@@ -1,5 +1,6 @@
 use crate::channel_state_store::{ChannelState, ChannelStateStore};
-use crate::SgDB;
+use crate::schema_db::SchemaDB;
+use crate::sg_db::SgDB;
 use crypto::hash::CryptoHash;
 use crypto::HashValue;
 use failure::Result;
@@ -8,7 +9,6 @@ use libra_types::account_address::AccountAddress;
 use libra_types::account_state_blob::AccountStateBlob;
 use libra_types::transaction::Version;
 use schemadb::SchemaBatch;
-
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -17,10 +17,11 @@ fn test_db_get_and_put() -> Result<()> {
     logger::try_init_for_testing();
     let tmp_dir = TempPath::new();
     let sender_address = AccountAddress::random();
-    let sg_db = Arc::new(SgDB::new(&tmp_dir, sender_address));
+    let sg_db = Arc::new(SgDB::open(sender_address, &tmp_dir));
 
     let receiver_address = AccountAddress::random();
-    let channel_state_store = ChannelStateStore::new(sg_db.clone(), receiver_address);
+    let channel_state_store = sg_db.get_channel_state_store(receiver_address);
+
     assert!(channel_state_store
         .get_state_with_proof_by_version(0)
         .is_err());
@@ -96,13 +97,13 @@ fn put_state(
         state_set.insert(receiver_address, blob);
     }
     let mut schema_batch = SchemaBatch::default();
-
-    let channel_state_store = ChannelStateStore::new(sg_db.clone(), receiver_address);
+    let channel_db = Arc::new(sg_db.get_channel_db(receiver_address));
+    let channel_state_store = ChannelStateStore::new(channel_db.clone(), sender_address);
 
     let new_root_hash =
         channel_state_store.put_channel_state_set(state_set, version, &mut schema_batch)?;
 
-    sg_db.write_schemas(schema_batch)?;
+    channel_db.write_schemas(schema_batch)?;
     Ok(new_root_hash)
 }
 
