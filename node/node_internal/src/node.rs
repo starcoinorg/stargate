@@ -530,8 +530,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             .execute_script(receiver_address, package_name, script_name, transaction_args);
         f
     }
-
-    pub fn find_offchain_txn(&self, hash: Option<HashValue>, count: u32) -> Result<Vec<(HashValue, u8)>> {
+    pub fn find_offchain_txn(&self, hash: Option<HashValue>, count: u32) -> Result<Vec<(HashValue,ChannelTransactionRequest, u8)>> {
         self
             .node_inner
             .clone()

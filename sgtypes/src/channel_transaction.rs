@@ -19,6 +19,7 @@ use std::{
     convert::TryFrom,
     fmt::{Display, Formatter},
 };
+use libra_types::transaction::TransactionArgument;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ChannelOp {
@@ -158,6 +159,8 @@ pub struct ChannelTransactionRequest {
     payload: ChannelTransactionRequestPayload,
     /// The sender's public key
     public_key: Ed25519PublicKey,
+
+    args:Vec<TransactionArgument>,
 }
 
 impl ChannelTransactionRequest {
@@ -167,6 +170,7 @@ impl ChannelTransactionRequest {
         txn: RawTransaction,
         payload: ChannelTransactionRequestPayload,
         public_key: Ed25519PublicKey,
+        args:Vec<TransactionArgument>,
     ) -> Self {
         let request_id = if let TransactionPayload::ChannelScript(script_payload) = txn.payload() {
             Self::generate_request_id(
@@ -185,6 +189,7 @@ impl ChannelTransactionRequest {
             txn,
             payload,
             public_key,
+            args,
         }
     }
     //TODO(jole) should use sequence_number?
@@ -419,7 +424,8 @@ impl CanonicalSerialize for ChannelTransactionRequest {
             .encode_struct(&self.operator)?
             .encode_struct(&self.txn)?
             .encode_struct(&self.payload)?
-            .encode_bytes(&self.public_key.to_bytes())?;
+            .encode_bytes(&self.public_key.to_bytes())?
+            .encode_vec(&self.args)?;
         Ok(())
     }
 }
@@ -435,6 +441,7 @@ impl CanonicalDeserialize for ChannelTransactionRequest {
         let txn = deserializer.decode_struct()?;
         let payload = deserializer.decode_struct()?;
         let public_key_bytes = deserializer.decode_bytes()?;
+        let args = deserializer.decode_vec()?;
         Ok(Self {
             request_id,
             version,
@@ -442,6 +449,7 @@ impl CanonicalDeserialize for ChannelTransactionRequest {
             txn,
             payload,
             public_key: Ed25519PublicKey::try_from(public_key_bytes.as_slice())?,
+            args,
         })
     }
 }

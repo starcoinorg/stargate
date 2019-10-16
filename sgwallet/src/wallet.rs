@@ -56,7 +56,7 @@ where
     client: Arc<C>,
     storage: Arc<AtomicRefCell<LocalStateStorage<C>>>,
     script_registry: PackageRegistry,
-    offchain_transactions: Arc<AtomicRefCell<Vec<(HashValue, u8)>>>,
+    offchain_transactions: Arc<AtomicRefCell<Vec<(HashValue,ChannelTransactionRequest,u8)>>>,
 }
 
 impl<C> Wallet<C>
@@ -145,22 +145,29 @@ where
         receiver: AccountAddress,
         args: Vec<TransactionArgument>,
     ) -> Result<ChannelTransactionRequest> {
+        let mut all_args = Vec::new();
         let script = match &channel_op {
             ChannelOp::Open => self.script_registry.open_script(),
             ChannelOp::Close => self.script_registry.close_script(),
             ChannelOp::Execute {
                 package_name,
                 script_name,
-            } => self
+            } => {
+                let s=self
                 .script_registry
                 .get_script(package_name, script_name)
                 .ok_or(format_err!(
                     "Can not find script by package {} and script name {}",
                     package_name,
                     script_name
-                ))?,
+                ))?;
+                all_args.push(TransactionArgument::String(package_name.to_string()));
+                all_args.push(TransactionArgument::String(package_name.to_string()));
+                s
+            },
         };
 
+        all_args.append(&mut args.clone());
         let script = script.encode_script(args);
         let channel_sequence_number = channel.channel_sequence_number();
         let txn = self.create_signed_script_txn(channel, receiver, script)?;
@@ -196,6 +203,7 @@ where
             txn.raw_txn().clone(),
             payload,
             self.keypair.public_key.clone(),
+            all_args,
         );
         channel.append_txn_request(ChannelTransactionRequestAndOutput::new(
             request.clone(),
@@ -484,7 +492,7 @@ where
                 }
                 self.offchain_transactions
                     .borrow_mut()
-                    .push((response.request_id(), 1));
+                    .push((response.request_id(), request,1));
                 0
             }
             _ => bail!("ChannelTransaction request and response type not match."),
@@ -659,20 +667,20 @@ where
         &self,
         hash: Option<HashValue>,
         count: u32,
-    ) -> Result<Vec<(HashValue, u8)>> {
+    ) -> Result<Vec<(HashValue,ChannelTransactionRequest, u8)>> {
         let tnxs = self.offchain_transactions.borrow();
         let mut count_num = count;
         let mut find_data = false;
         let mut data = Vec::new();
         match hash {
             Some(hash) => {
-                for (hash_item, res) in tnxs.iter() {
+                for (hash_item,request ,res) in tnxs.iter() {
                     if hash.eq(hash_item) {
                         find_data = true;
                         continue;
                     }
                     if find_data && count_num > 0 {
-                        data.push((*hash_item, *res));
+                        data.push((*hash_item,request.clone(), *res));
                         count_num = count_num - 1;
                         if count_num == 0 {
                             break;
@@ -681,8 +689,8 @@ where
                 }
             }
             None => {
-                for (hash_item, res) in tnxs.iter() {
-                    data.push((*hash_item, *res));
+                for (hash_item,request, res) in tnxs.iter() {
+                    data.push((*hash_item,request.clone(), *res));
                     count_num = count_num - 1;
                     if count_num == 0 {
                         break;
