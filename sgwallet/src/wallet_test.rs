@@ -305,27 +305,31 @@ fn get_test_case_path(case_name: &str) -> PathBuf {
     crate_root.join(format!("test_case/{}", case_name))
 }
 
-fn deploy_custom_module_and_script<C>(wallet: Arc<Wallet<C>>, test_case: &str) -> Result<()>
+fn deploy_custom_module_and_script<C>(wallet1: Arc<Wallet<C>>, wallet2: Arc<Wallet<C>>, test_case: &str) -> Result<()>
 where
     C: ChainClient + Send + Sync + 'static,
 {
     let path = get_test_case_path(test_case);
     let module_source = std::fs::read_to_string(path.join("module.mvir")).unwrap();
 
-    let client_state_view = ClientStateView::new(None, wallet.client());
+    let client_state_view = ClientStateView::new(None, wallet1.client());
     let module_loader = StateViewModuleLoader::new(&client_state_view);
-    let compiler = Compiler::new_with_module_loader(wallet.account(), &module_loader);
+    let compiler = Compiler::new_with_module_loader(wallet1.account(), &module_loader);
     let module_byte_code = compiler.compile_module(module_source.as_str())?;
 
     let rt = Runtime::new()?;
-    let wallet_clone = wallet.clone();
+    let wallet_clone = wallet1.clone();
     let f = async move {
         wallet_clone.deploy_module(module_byte_code).await.unwrap();
     };
     rt.block_on(f);
     sleep(Duration::from_millis(1000));
     let package = compiler.compile_package(path.join("scripts"))?;
-    wallet.install_package(package)?;
+    wallet1.install_package(package)?;
+    sleep(Duration::from_millis(1000));
+    // ugly, fix with package.clone()
+    let pkg = compiler.compile_package(path.join("scripts"))?;
+    wallet2.install_package(pkg)?;
     Ok(())
 }
 
@@ -339,7 +343,7 @@ fn test_deploy_and_use_custom_module() -> Result<()> {
 
     let alice = Arc::new(setup_wallet(client.clone(), init_balance)?);
     let bob = Arc::new(setup_wallet(client.clone(), init_balance)?);
-    deploy_custom_module_and_script(alice.clone(), "test_custom_module")?;
+    deploy_custom_module_and_script(alice.clone(), bob.clone(), "test_custom_module")?;
 
     open_channel(alice.clone(), bob.clone(), 100000, 100000)?;
 
@@ -358,7 +362,7 @@ fn test_vector() -> Result<()> {
 
     let alice = Arc::new(setup_wallet(client.clone(), init_balance)?);
     let bob = Arc::new(setup_wallet(client.clone(), init_balance)?);
-    deploy_custom_module_and_script(alice.clone(), "test_vector")?;
+    deploy_custom_module_and_script(alice.clone(), bob.clone(), "test_vector")?;
 
     open_channel(alice.clone(), bob.clone(), 100000, 100000)?;
 
@@ -369,3 +373,34 @@ fn test_vector() -> Result<()> {
     execute_script(alice.clone(), bob.clone(), "scripts", "move_vector_from_receiver", vec![])?;
     Ok(())
 }
+
+#[test]
+fn test_gobang() -> Result<()> {
+    ::logger::init_for_e2e_testing();
+    let init_balance = 1000000;
+
+    let (mock_chain_service, _handle) = MockChainClient::new();
+    let client = Arc::new(mock_chain_service);
+
+    let alice = Arc::new(setup_wallet(client.clone(), init_balance)?);
+    let bob = Arc::new(setup_wallet(client.clone(), init_balance)?);
+    deploy_custom_module_and_script(alice.clone(), bob.clone(), "test_gobang")?;
+
+    open_channel(alice.clone(), bob.clone(), 100, 100)?;
+
+    execute_script(alice.clone(), bob.clone(), "scripts", "new", vec![])?;
+    execute_script(bob.clone(), alice.clone(), "scripts", "join", vec![])?;
+    execute_script(alice.clone(), bob.clone(), "scripts", "play", vec![TransactionArgument::U64(2), TransactionArgument::U64(2)])?;
+    execute_script(bob.clone(), alice.clone(), "scripts", "play", vec![TransactionArgument::U64(3), TransactionArgument::U64(2)])?;
+    execute_script(alice.clone(), bob.clone(), "scripts", "play", vec![TransactionArgument::U64(2), TransactionArgument::U64(3)])?;
+    execute_script(bob.clone(), alice.clone(), "scripts", "play", vec![TransactionArgument::U64(3), TransactionArgument::U64(3)])?;
+    execute_script(alice.clone(), bob.clone(), "scripts", "play", vec![TransactionArgument::U64(2), TransactionArgument::U64(4)])?;
+    execute_script(bob.clone(), alice.clone(), "scripts", "play", vec![TransactionArgument::U64(3), TransactionArgument::U64(4)])?;
+    execute_script(alice.clone(), bob.clone(), "scripts", "play", vec![TransactionArgument::U64(2), TransactionArgument::U64(5)])?;
+    execute_script(bob.clone(), alice.clone(), "scripts", "play", vec![TransactionArgument::U64(3), TransactionArgument::U64(5)])?;
+    execute_script(alice.clone(), bob.clone(), "scripts", "play", vec![TransactionArgument::U64(2), TransactionArgument::U64(6)])?;
+    execute_script(alice.clone(), bob.clone(), "scripts", "check_score", vec![TransactionArgument::U64(1)])?;
+
+    Ok(())
+}
+

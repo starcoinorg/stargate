@@ -1,0 +1,8 @@
+import Transaction.TheFive;
+
+main(){
+    let result: u64;
+    result = TheFive.new();
+    assert(move(result) == 0, 61);
+    return;
+}

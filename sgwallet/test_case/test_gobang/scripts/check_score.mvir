@@ -1,0 +1,10 @@
+import Transaction.TheFive;
+
+main(x: u64) {
+    let result: u64;
+
+    result = TheFive.get_score();
+    assert(move(result) == move(x), 55);
+
+    return;
+}
