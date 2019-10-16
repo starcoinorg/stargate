@@ -51,6 +51,7 @@ fn request_roundtrip_canonical_serialization() {
         txn,
         ChannelTransactionRequestPayload::Offchain(witness),
         keypair.public_key.clone(),
+        Vec::new(),
     );
     let mut serializer = SimpleSerializer::<Vec<u8>>::new();
     serializer.encode_struct(&request).unwrap();
