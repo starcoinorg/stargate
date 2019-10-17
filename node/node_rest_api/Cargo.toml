@@ -19,6 +19,7 @@ logger = { path = "../../libra/common/logger" }
 node_internal = { path = "../node_internal" }
 sg_config = {path="../../sgconfig"}
 sgchain = { path = "../../sgchain"}
+sgtypes = { path = "../../sgtypes" }
 libra-types = { path = "../../libra/types"}
 canonical-serialization = { path = "../../libra/common/canonical-serialization"}
 crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }

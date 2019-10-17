@@ -3104,6 +3104,7 @@ dependencies = [
  "serde_json 1.0.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "sg_config 0.1.0",
  "sgchain 0.1.0",
+ "sgtypes 0.1.0",
  "url 1.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

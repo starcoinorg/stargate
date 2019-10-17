@@ -9,10 +9,10 @@ use hyper::{
 use libra_types::{account_address::AccountAddress, transaction::parse_as_transaction_argument};
 use logger::prelude::*;
 use node_internal::node::Node as Node_Internal;
+use serde_json::Value;
 use sg_config::config::RestConfig;
 use sgchain::star_chain_client::ChainClient;
-
-use serde_json::Value;
+use sgtypes::channel_transaction::ChannelTransactionRequest;
 use std::{str::FromStr, sync::Arc, thread};
 
 trait CompoundTrait: ChainClient + Clone + Send + Sync + 'static {}
@@ -35,6 +35,7 @@ struct ResponseResult {
     state: bool,
     req_id: HashValue,
     reason: String,
+    transation_requests: Option<Vec<ChannelTransactionRequest>>,
 }
 trait ResponseFormat {
     fn format(state: bool, req_id: HashValue, reason: String) -> ResponseResult;
@@ -46,18 +47,10 @@ impl ResponseFormat for ResponseResult {
             state,
             req_id,
             reason,
+            transation_requests: None,
         }
     }
 }
-
-////TODO query transation interface
-//#[get("/query", data = "<request>")]
-//fn query(tid: u64) -> JsonValue {
-//    json!({
-//        "transation_id": 1000,
-//        "transation_info": "scripts execute success."
-//    })
-//}
 
 struct WebServer<C: ChainClient + Clone + 'static> {
     node: Arc<Node_Internal<C>>,
@@ -177,21 +170,36 @@ impl<C: ChainClient + Clone + 'static> Service for WebServer<C> {
                             HashValue::from_slice(transation_id.as_bytes()).ok(),
                             count,
                         ) {
-                            Ok(_msg_future) => {
+                            Ok(msg_result) => {
                                 result.state = true;
                                 result.reason = "OK".to_string();
-                                //                                result.req_id = msg_future.wait().unwrap();
+                                //                               Result<Vec<(HashValue,ChannelTransactionRequest, u8)>>
+                                let transation_vec: Vec<(
+                                    HashValue,
+                                    ChannelTransactionRequest,
+                                    u8,
+                                )> = msg_result;
+                                let mut trans: Vec<ChannelTransactionRequest> = Vec::new();
+                                for (_, request, _) in &transation_vec {
+                                    trans.push(request.clone());
+                                }
+                                result.transation_requests = Some(trans);
                             }
                             Err(e) => {
                                 result.reason = format!("Failed to execute request: {}", e);
                             }
                         };
                     }
+                    let mut req_list_str = String::new();
+                    if result.state {
+                        req_list_str =
+                            serde_json::to_string(&result.transation_requests.unwrap()).unwrap();
+                    }
                     //json format
                     *response.body_mut() = Body::from(
                         json!({
                             "status": result.state,
-                            "tids": result.reason
+                            "request_list": req_list_str
                         })
                         .to_string(),
                     );
@@ -213,7 +221,7 @@ impl<C: ChainClient + Clone + 'static> WebServer<C> {
         let server = Server::bind(&addr)
             .serve(self)
             .map_err(|e| eprintln!("error: {}", e));
-        println!("Serving HTTP at {}", addr);
+        info!("Serving HTTP at {}", addr);
         hyper::rt::run(server);
     }
 }
