@@ -15,7 +15,10 @@ pub trait SchemaDB {
         S: Schema,
         SK: SeekKeyCodec<S>;
 
-    fn iter<S: Schema + 'static>(&self, opts: ReadOptions) -> Result<Box<dyn SchemaIterator<S>>>;
+    fn iter<'a, S: Schema + 'static>(
+        &'a self,
+        opts: ReadOptions,
+    ) -> Result<Box<dyn SchemaIterator<S> + 'a>>;
 
     fn write_schemas(&self, batch: SchemaBatch) -> Result<()>;
 }

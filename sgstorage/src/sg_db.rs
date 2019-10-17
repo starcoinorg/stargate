@@ -2,14 +2,19 @@ use crate::channel_db::ChannelDB;
 use crate::channel_state_store::ChannelStateStore;
 use crate::channel_store::ChannelStore;
 use crate::channel_transaction_store::ChannelTransactionStore;
+use crate::rocksdb_utils::FixedPrefixSliceTransform;
 use crate::storage::SgStorage;
 use failure::prelude::*;
 use lazy_static::lazy_static;
-use libra_types::account_address::AccountAddress;
+use libra_types::account_address::{AccountAddress, ADDRESS_LENGTH};
 use libra_types::account_state_blob::AccountStateBlob;
 use libra_types::crypto_proxies::LedgerInfoWithSignatures;
 use libra_types::transaction::{Transaction, TransactionToCommit, Version};
-use libradb::schema::{JELLYFISH_MERKLE_NODE_CF_NAME, STALE_NODE_INDEX_CF_NAME};
+use libradb::schema::{
+    EVENT_ACCUMULATOR_CF_NAME, EVENT_BY_KEY_CF_NAME, EVENT_CF_NAME, JELLYFISH_MERKLE_NODE_CF_NAME,
+    LEDGER_COUNTERS_CF_NAME, STALE_NODE_INDEX_CF_NAME, TRANSACTION_ACCUMULATOR_CF_NAME,
+    TRANSACTION_BY_ACCOUNT_CF_NAME, TRANSACTION_CF_NAME, TRANSACTION_INFO_CF_NAME,
+};
 use logger::prelude::*;
 use metrics::OpMetrics;
 use schemadb::{ColumnFamilyOptions, DEFAULT_CF_NAME};
@@ -33,9 +38,24 @@ impl SgDB {
             (DEFAULT_CF_NAME, ColumnFamilyOptions::default()),
             (
                 JELLYFISH_MERKLE_NODE_CF_NAME,
-                ColumnFamilyOptions::default(),
+                default_column_family_options(),
             ),
-            (STALE_NODE_INDEX_CF_NAME, ColumnFamilyOptions::default()),
+            (STALE_NODE_INDEX_CF_NAME, default_column_family_options()),
+            (EVENT_ACCUMULATOR_CF_NAME, default_column_family_options()),
+            (EVENT_BY_KEY_CF_NAME, default_column_family_options()),
+            (EVENT_CF_NAME, default_column_family_options()),
+            (LEDGER_COUNTERS_CF_NAME, default_column_family_options()),
+            (TRANSACTION_CF_NAME, default_column_family_options()),
+            (
+                TRANSACTION_ACCUMULATOR_CF_NAME,
+                default_column_family_options(),
+            ),
+            (
+                TRANSACTION_BY_ACCOUNT_CF_NAME,
+                default_column_family_options(),
+            ),
+            (TRANSACTION_INFO_CF_NAME, default_column_family_options()),
+            //            (VALIDATOR_CF_NAME, ColumnFamilyOptions::default()),
         ]
         .iter()
         .cloned()
@@ -149,4 +169,22 @@ impl SgDB {
         );
         Ok(())
     }
+}
+
+/// default column family options.
+/// it use prefix_extractor.
+/// See https://github.com/facebook/rocksdb/wiki/Prefix-Seek-API-Changes for more details
+fn default_column_family_options() -> ColumnFamilyOptions {
+    let mut opt = ColumnFamilyOptions::default();
+    let _ = opt
+        .set_prefix_extractor(
+            "FixedPrefixSliceTransform",
+            Box::new(FixedPrefixSliceTransform::new(ADDRESS_LENGTH)),
+        )
+        .unwrap_or_else(|e| panic!("set prefix extractor for column family failed: {:?}", e));
+
+    // TODO(caojiafeng): optimise the options about prefix scan
+    //    options.memtable_prefix_bloom_bits = 100000000;
+    //    options.memtable_prefix_bloom_probes = 6;
+    opt
 }

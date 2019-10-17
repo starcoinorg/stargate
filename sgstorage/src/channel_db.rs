@@ -9,53 +9,10 @@ use schemadb::schema::{KeyCodec, Schema, SeekKeyCodec, ValueCodec};
 use schemadb::ReadOptions;
 use schemadb::{SchemaBatch, WriteOp};
 
+use crate::utils;
+use std::io::Read;
 use std::marker::PhantomData;
 use std::sync::Arc;
-
-//pub struct PrefixedSchema<S>(PhantomData<S>);
-//impl<S> Schema for PrefixedSchema<S>
-//where
-//    S: Schema,
-//{
-//    const COLUMN_FAMILY_NAME: &'static str = S::COLUMN_FAMILY_NAME;
-//    type Key = PrefixedSchemaKey<S::Key>;
-//    type Value = S::Value;
-//}
-//
-//#[derive(Debug, PartialEq)]
-//pub struct PrefixedSchemaKey<K>
-//where
-//    K: Sized + PartialEq + Debug,
-//{
-//    pub prefix: AccountAddress,
-//    pub key: K,
-//}
-//
-//impl<S> KeyCodec<PrefixedSchema<S>> for PrefixedSchemaKey<S::Key>
-//where
-//    S: Schema + ?Sized,
-//    S::Key: Sized + PartialEq + Debug,
-//{
-//    fn encode_key(&self) -> Result<Vec<u8>> {
-//        let mut encoded_data = Vec::new();
-//        encoded_data.write_all(self.prefix.as_ref())?;
-//
-//        encoded_data.write_all(&<S::Key as KeyCodec<S>>::encode_key(&self.key)?)?;
-//        Ok(encoded_data)
-//    }
-//
-//    fn decode_key(data: &[u8]) -> Result<Self> {
-//        let mut data = &data[0..];
-//        let mut prefix = [0u8; 32];
-//        data.read_exact(&mut prefix)?;
-//        let key = <S::Key as KeyCodec<S>>::decode_key(data)?;
-//        Ok(Self {
-//            prefix: AccountAddress::new(prefix),
-//            key,
-//        })
-//    }
-//}
-//
 
 lazy_static! {
     static ref OP_COUNTER: OpMetrics = OpMetrics::new_and_registered("schemadb");
@@ -131,11 +88,25 @@ impl SchemaDB for ChannelDB {
             .map_err(convert_rocksdb_err)
     }
 
-    fn iter<S: Schema + 'static>(&self, _opts: ReadOptions) -> Result<Box<dyn SchemaIterator<S>>> {
-        Ok(Box::new(ChannelSchemaIterator {
-            channel_db: self.clone(),
+    fn iter<'a, S: Schema + 'static>(
+        &'a self,
+        _opts: ReadOptions,
+    ) -> Result<Box<dyn SchemaIterator<S> + 'a>> {
+        let cf_handle = self.inner.get_cf_handle(S::COLUMN_FAMILY_NAME)?;
+        let mut iter_opts = rocksdb::ReadOptions::default();
+        iter_opts.set_prefix_same_as_start(false);
+
+        let iter = self.inner.iter_cf_opt(cf_handle, iter_opts);
+        let mut schema_iterator = ChannelSchemaIterator {
+            db_iter: iter,
+            participant_address: self.participant,
             schema: PhantomData,
-        }))
+        };
+        let seek_first_ok = schema_iterator.seek_to_first();
+        if !seek_first_ok {
+            bail!("cannot init iterator");
+        }
+        Ok(Box::new(schema_iterator))
     }
 
     fn write_schemas(&self, batch: SchemaBatch) -> Result<()> {
@@ -202,46 +173,104 @@ fn prefix_key(prefix: &[u8], mut key: Vec<u8>) -> Vec<u8> {
     k
 }
 
-pub struct ChannelSchemaIterator<S> {
-    channel_db: ChannelDB,
+pub struct ChannelSchemaIterator<'a, S> {
+    db_iter: rocksdb::DBIterator<&'a rocksdb::DB>,
+    participant_address: AccountAddress,
     schema: PhantomData<S>,
 }
 
-impl<S> Iterator for ChannelSchemaIterator<S>
+impl<'a, S> ChannelSchemaIterator<'a, S>
+where
+    S: Schema,
+{
+    fn is_in_valid_range(&self) -> bool {
+        self.db_iter.valid()
+            && self
+                .db_iter
+                .key()
+                .starts_with(self.participant_address.as_ref())
+    }
+    fn decode_kv(&self) -> Result<(S::Key, S::Value)> {
+        let mut key = self.db_iter.key();
+        let value = self.db_iter.value();
+        let mut address_data = [0; ADDRESS_LENGTH];
+        key.read_exact(&mut address_data)?;
+        let participant_address = AccountAddress::new(address_data);
+        debug_assert!(self.participant_address == participant_address);
+        Ok((
+            <S::Key as KeyCodec<S>>::decode_key(key)?,
+            <S::Value as ValueCodec<S>>::decode_value(value)?,
+        ))
+    }
+}
+
+impl<'a, S> Iterator for ChannelSchemaIterator<'a, S>
 where
     S: Schema,
 {
     type Item = Result<(S::Key, S::Value)>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        //        self.db_iter.kv().map(|(raw_key, raw_value)| {
-        //            self.db_iter.next();
-        //            Ok((
-        //                <S::Key as KeyCodec<S>>::decode_key(&raw_key)?,
-        //                <S::Value as ValueCodec<S>>::decode_value(&raw_value)?,
-        //            ))
-        //        })
-        unimplemented!()
+        if self.is_in_valid_range() {
+            let kv = self.decode_kv();
+            let _ = self.db_iter.next();
+            Some(kv)
+        } else {
+            return None;
+        }
     }
 }
 
-impl<S> SchemaIterator<S> for ChannelSchemaIterator<S>
+impl<'a, S> SchemaIterator<S> for ChannelSchemaIterator<'a, S>
 where
     S: Schema,
 {
     fn seek_to_first(&mut self) -> bool {
-        unimplemented!()
+        let seek_key = rocksdb::SeekKey::Key(self.participant_address.as_ref());
+        self.db_iter.seek(seek_key)
     }
 
     fn seek_to_last(&mut self) -> bool {
-        unimplemented!()
+        let prefix_next_key = utils::prefix_next(self.participant_address.as_ref());
+        let seek_key = rocksdb::SeekKey::Key(&prefix_next_key);
+        self.db_iter.seek_for_prev(seek_key)
     }
 
-    fn seek(&mut self, _seek_key: &S::Key) -> Result<bool> {
-        unimplemented!()
+    fn seek(&mut self, seek_key: &S::Key) -> Result<bool> {
+        let mut k = self.participant_address.to_vec();
+        let mut key = <S::Key as KeyCodec<S>>::encode_key(seek_key)?;
+        k.append(&mut key);
+        drop(key);
+
+        let seek_result = self.db_iter.seek(k.as_slice().into());
+        match seek_result {
+            false => Ok(false), // if this address is the last range
+            true => {
+                // check whether the seek result is in this address range
+                let in_range = self
+                    .db_iter
+                    .key()
+                    .starts_with(self.participant_address.as_ref());
+                Ok(in_range)
+            }
+        }
     }
 
-    fn seek_for_prev(&mut self, _seek_key: &S::Key) -> Result<bool> {
-        unimplemented!()
+    fn seek_for_prev(&mut self, seek_key: &S::Key) -> Result<bool> {
+        let mut k = self.participant_address.to_vec();
+        let mut key = <S::Key as KeyCodec<S>>::encode_key(seek_key)?;
+        k.append(&mut key);
+        drop(key);
+        let seek_result = self.db_iter.seek_for_prev(k.as_slice().into());
+        match seek_result {
+            false => Ok(false), // if this address is the first range
+            true => {
+                let in_range = self
+                    .db_iter
+                    .key()
+                    .starts_with(self.participant_address.as_ref());
+                Ok(in_range)
+            }
+        }
     }
 }
