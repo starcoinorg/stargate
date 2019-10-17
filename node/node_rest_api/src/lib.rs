@@ -87,7 +87,6 @@ impl<C: ChainClient + Clone + 'static> Service for WebServer<C> {
     fn call(&mut self, req: Request<Self::ReqBody>) -> Self::Future {
         let mut response = Response::new(Body::empty());
         let node_internal = self.node.clone();
-
         match req.uri().path() {
             "/exec" => {
                 let resp = req.into_body().concat2().map(move |chunk| {
@@ -150,6 +149,11 @@ impl<C: ChainClient + Clone + 'static> Service for WebServer<C> {
                             "reason": result.reason
                         })
                         .to_string(),
+                    );
+                    info!("response :{:?}", response.body_mut());
+                    response.headers_mut().append(
+                        "Access-Control-Allow-Origin",
+                        "*".to_string().parse().unwrap(),
                     );
                     response
                 });
