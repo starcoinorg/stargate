@@ -54,7 +54,8 @@ members = [
     "cli",
     "cli/cli_wallet",
     "sgcompiler",
-    "sgchain"
+    "sgchain",
+    "sgstorage",
 ]
 
 [replace]
