@@ -1,0 +1,13 @@
+[rpc_config]
+address = 'localhost'
+port = 9000
+
+[net_config]
+listen = '/ip4/127.0.0.1/tcp/10000'
+max_sockets = 20
+in_memory = false
+seeds = []
+
+[wallet]
+chain_address = 'localhost'
+chain_port = 8000
