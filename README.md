@@ -1,14 +1,14 @@
-StarGate
+Stargate
 
 ---
 
 [![License](https://img.shields.io/badge/license-Apache-green.svg)](LICENSE)
 
-StarGate is the layer2 state channel protocol and implements of StarCoin. 
+Stargate is the layer2 state channel protocol and implements of Starcoin. 
 
-The goal of StarGate is to provide a second layer for StarCoin, that can execute smart contract on state channel, and the state of smart contract can be seamlessly transferred between chain and offchain channel.
+The goal of Stargate is to provide a second layer for Starcoin, that can execute smart contract on state channel, and the state of smart contract can be seamlessly transferred between chain and offchain channel.
 
-Note that the StarCoin's chain code has not been released yet, we just use [Libra](https://github.com/libra/libra) to mock it.
+Note that the Starcoin's chain code has not been released yet, we just use [Libra](https://github.com/libra/libra) to mock it.
 
 ## Features
 
@@ -26,7 +26,7 @@ TODO
 
 ## Note to Developers
 
-* StarGate is a prototype implement.
+* Stargate is a prototype implement.
 * Project is under heavy development, not production ready. 
 
 ## Getting Started
@@ -35,4 +35,4 @@ TODO
 
 ## License
 
-StarGate is licensed as [Apache 2.0](https://github.com/libra/libra/blob/master/LICENSE).
+Stargate is licensed as [Apache 2.0](https://github.com/libra/libra/blob/master/LICENSE).
