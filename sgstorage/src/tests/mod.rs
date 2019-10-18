@@ -1,4 +1,4 @@
-use crate::channel_state_store::{ChannelState, ChannelStateStore};
+use crate::channel_state_store::ChannelState;
 use crate::schema_db::SchemaDB;
 use crate::sg_db::SgDB;
 use crypto::hash::CryptoHash;

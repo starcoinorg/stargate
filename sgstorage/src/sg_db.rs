@@ -1,6 +1,5 @@
 use crate::channel_db::ChannelDB;
 use crate::channel_store::ChannelStore;
-use crate::channel_transaction_store::ChannelTransactionStore;
 use crate::rocksdb_utils::FixedPrefixSliceTransform;
 use crate::storage::SgStorage;
 use failure::prelude::*;

@@ -41,18 +41,18 @@ where
 {
     // Upon restart, read the latest ledger info and signatures and cache them in memory.
     pub fn bootstrap(&self) {
-        let ledger_info = {
-            let mut iter = self
-                .db
-                .iter::<LedgerInfoSchema>(ReadOptions::default())
-                .expect("Constructing iterator should work.");
-            iter.seek_to_last();
-            iter.next()
-                .transpose()
-                .expect("Reading latest ledger info from DB should work.")
-                .map(|kv| kv.1)
-        };
-        self.latest_ledger_info.store(Arc::new(ledger_info));
+        //        let ledger_info = {
+        //            let mut iter = self
+        //                .db
+        //                .iter::<LedgerInfoSchema>(ReadOptions::default())
+        //                .expect("Constructing iterator should work.");
+        //            iter.seek_to_last();
+        //            iter.next()
+        //                .transpose()
+        //                .expect("Reading latest ledger info from DB should work.")
+        //                .map(|kv| kv.1)
+        //        };
+        //        self.latest_ledger_info.store(Arc::new(ledger_info));
     }
 
     /// Return the ledger infos with their least 2f+1 signatures starting from `start_epoch` to
