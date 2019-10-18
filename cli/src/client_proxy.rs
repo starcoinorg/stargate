@@ -1,17 +1,24 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-
 use canonical_serialization::{CanonicalSerialize, SimpleSerializer};
 use cli_wallet::cli_wallet::WalletLibrary;
 use failure::prelude::*;
 use grpcio::EnvBuilder;
+use libra_types::{
+    account_address::AccountAddress,
+    proof::SparseMerkleProof,
+    transaction::{
+        parse_as_transaction_argument, Script, SignedTransaction, TransactionPayload, Version,
+    },
+    transaction_helpers::create_signed_txn,
+};
 use node_client::NodeClient;
 use node_proto::{
-    ChannelBalanceRequest, ChannelBalanceResponse,
-    DeployModuleRequest, DeployModuleResponse, DepositRequest, DepositResponse,
-    ExecuteScriptRequest, InstallChannelScriptPackageRequest, OpenChannelRequest,
-    OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest, WithdrawResponse,
+    ChannelBalanceRequest, ChannelBalanceResponse, DeployModuleRequest, DeployModuleResponse,
+    DepositRequest, DepositResponse, ExecuteScriptRequest, InstallChannelScriptPackageRequest,
+    OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest,
+    WithdrawResponse,
 };
 use sgchain::{
     client_state_view::ClientStateView,
@@ -27,15 +34,6 @@ use std::{
     thread, time,
 };
 use tempfile::{NamedTempFile, TempPath};
-use libra_types::{
-    account_address::AccountAddress,
-    proof::SparseMerkleProof,
-    transaction::{
-        parse_as_transaction_argument, Script, SignedTransaction, TransactionPayload,
-        Version,
-    },
-    transaction_helpers::{create_signed_txn},
-};
 
 const GAS_UNIT_PRICE: u64 = 0;
 const MAX_GAS_AMOUNT: u64 = 100_000;
@@ -338,7 +336,7 @@ impl ClientProxy {
             stdout().flush().unwrap();
             max_iterations -= 1;
 
-            if let Ok((Some(_),_)) = self
+            if let Ok((Some(_), _)) = self
                 .chain_client
                 .get_transaction_by_seq_num(&account, sequence_number)
             {

@@ -3,19 +3,19 @@
 
 use failure::Result;
 use futures03::{channel::oneshot, FutureExt, TryFutureExt};
-use grpc_helpers::{
-    provide_grpc_response,
-};
+use grpc_helpers::provide_grpc_response;
 use grpcio::{EnvBuilder, RpcStatus, RpcStatusCode};
 use node_internal::node::Node as Node_Internal;
-use node_proto::{ChannelBalanceRequest, ChannelBalanceResponse, DepositRequest,
-                 InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse, OpenChannelRequest, PayRequest,
-                 WithdrawRequest, DeployModuleRequest, ExecuteScriptRequest};
+use node_proto::proto::node::create_node;
+use node_proto::{
+    ChannelBalanceRequest, ChannelBalanceResponse, DeployModuleRequest, DepositRequest,
+    ExecuteScriptRequest, InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse,
+    OpenChannelRequest, PayRequest, WithdrawRequest,
+};
 use sg_config::config::NodeConfig;
 use sgchain::star_chain_client::ChainClient;
-use node_proto::proto::node::create_node;
-use std::sync::Arc;
 use std::convert::TryFrom;
+use std::sync::Arc;
 
 pub fn setup_node_service<C>(config: &NodeConfig, node: Arc<Node_Internal<C>>) -> ::grpcio::Server
 where
@@ -136,31 +136,40 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> node_proto::proto::node::No
         provide_grpc_response(Ok(resp), ctx, sink);
     }
 
-    fn deploy_module(&mut self,
-                     ctx: ::grpcio::RpcContext,
-                     req: node_proto::proto::node::DeployModuleRequest,
-                     sink: ::grpcio::UnarySink<node_proto::proto::node::DeployModuleResponse>){
+    fn deploy_module(
+        &mut self,
+        ctx: ::grpcio::RpcContext,
+        req: node_proto::proto::node::DeployModuleRequest,
+        sink: ::grpcio::UnarySink<node_proto::proto::node::DeployModuleResponse>,
+    ) {
         let request = DeployModuleRequest::try_from(req).unwrap();
         let rx = self.node.deploy_package_oneshot(request.module_bytes);
         let fut = process_response(rx, sink);
         ctx.spawn(fut.boxed().unit_error().compat());
     }
 
-    fn execute_script(&mut self, ctx: ::grpcio::RpcContext,
-                      req: node_proto::proto::node::ExecuteScriptRequest,
-                      sink: ::grpcio::UnarySink<node_proto::proto::node::ExecuteScriptResponse>) {
+    fn execute_script(
+        &mut self,
+        ctx: ::grpcio::RpcContext,
+        req: node_proto::proto::node::ExecuteScriptRequest,
+        sink: ::grpcio::UnarySink<node_proto::proto::node::ExecuteScriptResponse>,
+    ) {
         let request = ExecuteScriptRequest::try_from(req).unwrap();
-        let rx = self.node.execute_script_oneshot(request.remote_addr,request.package_name,request.script_name,request.args);
+        let rx = self.node.execute_script_oneshot(
+            request.remote_addr,
+            request.package_name,
+            request.script_name,
+            request.args,
+        );
         let fut = process_response(rx, sink);
         ctx.spawn(fut.boxed().unit_error().compat());
     }
-
 }
 
-async fn process_response<T,S>(
-    resp: oneshot::Receiver<Result<T>>,
-    sink: grpcio::UnarySink<S>,
-)where S: std::convert::From<T> {
+async fn process_response<T, S>(resp: oneshot::Receiver<Result<T>>, sink: grpcio::UnarySink<S>)
+where
+    S: std::convert::From<T>,
+{
     match resp.await {
         Ok(Ok(response)) => {
             sink.success(response.into());

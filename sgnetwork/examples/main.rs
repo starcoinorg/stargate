@@ -7,17 +7,12 @@ use crypto::{
     traits::Uniform,
 };
 use futures::{future::Future, stream::Stream};
-use rand::prelude::*;
-pub use sgnetwork::{build_network_service, get_unix_ts, NetworkComponent, NetworkService};
-use sgnetwork::NetworkMessage;
-use std::{
-    time::{Duration, Instant},
-};
-use tokio::{
-    runtime::Runtime,
-    timer::Interval,
-};
 use libra_types::account_address::AccountAddress;
+use rand::prelude::*;
+use sgnetwork::NetworkMessage;
+pub use sgnetwork::{build_network_service, get_unix_ts, NetworkComponent, NetworkService};
+use std::time::{Duration, Instant};
+use tokio::{runtime::Runtime, timer::Interval};
 fn main() {
     env_logger::init();
     ::logger::init_for_e2e_testing();

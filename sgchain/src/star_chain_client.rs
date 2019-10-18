@@ -2,15 +2,29 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::mock_star_node::{setup_environment, StarHandle};
-use admission_control_proto::proto::{
-    admission_control::{SubmitTransactionRequest, SubmitTransactionResponse, AdmissionControlClient},
+use admission_control_proto::proto::admission_control::{
+    AdmissionControlClient, SubmitTransactionRequest, SubmitTransactionResponse,
 };
+use admission_control_service::admission_control_mock_client::AdmissionControlMockClient;
 use async_trait::async_trait;
-use config::{config::NodeConfigHelpers};
+use config::config::NodeConfig;
+use config::config::NodeConfigHelpers;
 use core::borrow::Borrow;
 use failure::prelude::*;
+use futures::channel::oneshot::Sender;
 use grpcio::{ChannelBuilder, EnvBuilder};
+use libra_types::get_with_proof::ResponseItem;
+use libra_types::{
+    account_address::AccountAddress,
+    account_config::{association_address, AccountResource},
+    account_state_blob::{AccountStateBlob, AccountStateWithProof},
+    get_with_proof::RequestItem,
+    proof::SparseMerkleProof,
+    proto::types::{UpdateToLatestLedgerRequest, UpdateToLatestLedgerResponse},
+    transaction::{RawTransaction, SignedTransaction, SignedTransactionWithProof, Version},
+};
 use logger::prelude::*;
+use prost_ext::MessageExt;
 use sgtypes::account_state::AccountState;
 use std::{
     convert::TryInto,
@@ -20,25 +34,9 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::runtime::Runtime;
-use libra_types::{
-    account_address::AccountAddress,
-    account_config::{association_address, AccountResource},
-    account_state_blob::{AccountStateBlob, AccountStateWithProof},
-    get_with_proof::RequestItem,
-    proof::SparseMerkleProof,
-    proto::types::{
-        UpdateToLatestLedgerRequest, UpdateToLatestLedgerResponse,
-    },
-    transaction::{RawTransaction, SignedTransaction, SignedTransactionWithProof, Version},
-};
-use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR,};
-use transaction_builder::{encode_create_account_script, encode_transfer_script, };
-use libra_types::get_with_proof::{ResponseItem};
 use tokio::timer::delay;
-use admission_control_service::admission_control_mock_client::AdmissionControlMockClient;
-use prost_ext::MessageExt;
-use config::config::NodeConfig;
-use futures::channel::oneshot::Sender;
+use transaction_builder::{encode_create_account_script, encode_transfer_script};
+use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR};
 
 #[async_trait]
 pub trait ChainClient: Send + Sync {
@@ -118,26 +116,28 @@ pub trait ChainClient: Send + Sync {
         &self,
         address: &AccountAddress,
         seq: u64,
-    ) -> Result<(Option<SignedTransactionWithProof>, Option<AccountStateWithProof>)> {
+    ) -> Result<(
+        Option<SignedTransactionWithProof>,
+        Option<AccountStateWithProof>,
+    )> {
         let end_time = Instant::now() + Duration::from_millis(10_000);
         loop {
             let timeout_time = Instant::now() + Duration::from_millis(1000);
             delay(timeout_time).await;
-                debug!("watch address : {:?}, seq number : {}", address, seq);
-                let (tx_proof,account_proof)  = self.get_transaction_by_seq_num(address, seq)?;
-                let flag = timeout_time >= end_time;
-                match tx_proof {
-                    None => {
-                        if flag {
-                            return Ok((None,account_proof));
-                        }
-                        continue;
+            debug!("watch address : {:?}, seq number : {}", address, seq);
+            let (tx_proof, account_proof) = self.get_transaction_by_seq_num(address, seq)?;
+            let flag = timeout_time >= end_time;
+            match tx_proof {
+                None => {
+                    if flag {
+                        return Ok((None, account_proof));
                     }
-                    Some(t) => {
-                        return Ok((Some(t), account_proof));
-                    }
+                    continue;
                 }
-
+                Some(t) => {
+                    return Ok((Some(t), account_proof));
+                }
+            }
         }
     }
 
@@ -145,7 +145,10 @@ pub trait ChainClient: Send + Sync {
         &self,
         account_address: &AccountAddress,
         seq_num: u64,
-    ) -> Result<(Option<SignedTransactionWithProof>, Option<AccountStateWithProof>)> {
+    ) -> Result<(
+        Option<SignedTransactionWithProof>,
+        Option<AccountStateWithProof>,
+    )> {
         let req = RequestItem::GetAccountTransactionBySequenceNumber {
             account: account_address.clone(),
             sequence_number: seq_num,
@@ -168,9 +171,10 @@ pub trait ChainClient: Send + Sync {
         let req = RequestItem::GetAccountState {
             address: account_address.clone(),
         };
-        let resp = parse_response(self.do_request(&build_request(req, version))).into_get_account_state_response()?;
+        let resp = parse_response(self.do_request(&build_request(req, version)))
+            .into_get_account_state_response()?;
         let proof = resp.proof;
-        let blob = resp.blob.map(|blob|blob.into());
+        let blob = resp.blob.map(|blob| blob.into());
         //TODO should return whole proof.
         Ok((
             resp.version,
@@ -253,15 +257,15 @@ impl MockChainClient {
         let mut config =
             NodeConfigHelpers::get_single_node_test_config(false /* random ports */);
         info!("MockChainClient config: {:?} ", config);
-//        if config.consensus.consensus_peers.peers.len() == 0 {
-//            let (_, single_peer_consensus_config,_) =
-//                ConfigHelpers::gen_validator_nodes(1, None);
-//            config.consensus.consensus_peers = single_peer_consensus_config;
-//            genesis_blob(&config.execution.genesis_file_location);
-//        }
+        //        if config.consensus.consensus_peers.peers.len() == 0 {
+        //            let (_, single_peer_consensus_config,_) =
+        //                ConfigHelpers::gen_validator_nodes(1, None);
+        //            config.consensus.consensus_peers = single_peer_consensus_config;
+        //            genesis_blob(&config.execution.genesis_file_location);
+        //        }
         genesis_blob(&config);
 
-        let (_handle, shutdown_sender,ac) = setup_environment(&mut config);
+        let (_handle, shutdown_sender, ac) = setup_environment(&mut config);
         (
             MockChainClient {
                 ac_client: Arc::new(AdmissionControlMockClient::new(ac)),
@@ -289,7 +293,8 @@ impl ChainClient for MockChainClient {
 }
 
 fn build_request(req: RequestItem, ver: Option<Version>) -> UpdateToLatestLedgerRequest {
-    libra_types::get_with_proof::UpdateToLatestLedgerRequest::new(ver.unwrap_or(0), vec![req]).into()
+    libra_types::get_with_proof::UpdateToLatestLedgerRequest::new(ver.unwrap_or(0), vec![req])
+        .into()
 }
 
 pub fn faucet_sync<C>(client: C, receiver: AccountAddress, amount: u64) -> Result<()>
@@ -304,9 +309,7 @@ where
 fn parse_response(mut resp: UpdateToLatestLedgerResponse) -> ResponseItem {
     //TODO fix unwrap
     //.expect("response item is none.")
-    resp.response_items
-        .remove(0)
-        .try_into().unwrap()
+    resp.response_items.remove(0).try_into().unwrap()
 }
 
 pub fn genesis_blob(config: &NodeConfig) {
@@ -318,8 +321,10 @@ pub fn genesis_blob(config: &NodeConfig) {
     let mut genesis_file = File::create(path).expect("open genesis file err.");
     genesis_file
         .write_all(
-                Into::<libra_types::proto::types::SignedTransaction>::into(genesis_txn)
-                .to_vec().unwrap().as_slice(),
+            Into::<libra_types::proto::types::SignedTransaction>::into(genesis_txn)
+                .to_vec()
+                .unwrap()
+                .as_slice(),
         )
         .expect("write genesis file err.");
     genesis_file.flush().expect("flush genesis file err.");

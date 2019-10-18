@@ -6,9 +6,9 @@ use crypto::{
     hash::{CryptoHash, CryptoHasher, TestOnlyHasher},
     HashValue,
 };
+use libra_types::account_address::AccountAddress;
 use network_libp2p::CustomMessage;
 use parity_codec::{Decode, Encode};
-use libra_types::account_address::AccountAddress;
 
 #[derive(Clone, Debug)]
 pub struct InnerMessage {

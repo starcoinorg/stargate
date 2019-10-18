@@ -10,12 +10,7 @@ use crypto::{
     test_utils::KeyPair,
 };
 
-use crate::{
-    message::{
-        Message::self,
-        NetworkMessage,
-    },
-};
+use crate::message::{Message, NetworkMessage};
 use futures::{
     future,
     stream::{self, Stream},
@@ -25,16 +20,16 @@ use futures::{
     },
     try_ready, Async, Future,
 };
+use libra_types::account_address::AccountAddress;
 use logger::prelude::*;
 use network_libp2p::{
-    identity, start_service, NetworkConfiguration, NodeKeyConfig, Secret,
-    Service as Libp2pService, ServiceEvent,
+    identity, start_service, NetworkConfiguration, NodeKeyConfig, Secret, Service as Libp2pService,
+    ServiceEvent,
 };
 use parking_lot::Mutex;
 use sg_config::config::NetworkConfig;
 use std::{collections::HashMap, io, sync::Arc, thread};
 use tokio::prelude::task::AtomicTask;
-use libra_types::account_address::AccountAddress;
 
 #[derive(Clone)]
 pub struct NetworkService {

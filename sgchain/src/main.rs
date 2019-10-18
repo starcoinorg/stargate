@@ -4,19 +4,17 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use executable_helpers::helpers::{
-    setup_executable,
-};
+use executable_helpers::helpers::setup_executable;
 use logger::prelude::*;
 use signal_hook;
+use std::path::PathBuf;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use std::path::PathBuf;
 
-use structopt::StructOpt;
 use libra_node::main_node;
+use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
 #[structopt(about = "Libra Node")]
@@ -67,5 +65,4 @@ fn main() {
     while !term.load(Ordering::Acquire) {
         std::thread::park();
     }
-
 }

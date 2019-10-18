@@ -2,10 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::star_chain_client::{faucet_sync, ChainClient, MockChainClient};
-use std::{
-    thread::{spawn},
-};
 use libra_types::account_address::AccountAddress;
+use std::thread::spawn;
 
 #[test]
 fn test_mock_chain_client_faucet() {

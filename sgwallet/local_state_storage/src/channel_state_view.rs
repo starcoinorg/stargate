@@ -1,18 +1,13 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-
 use failure::prelude::*;
-use libra_types::{
-    access_path::AccessPath,
-    transaction::Version,
-};
+use libra_types::{access_path::AccessPath, transaction::Version};
 
 use sgchain::client_state_view::ClientStateView;
 use sgchain::star_chain_client::ChainClient;
 use sgtypes::channel::Channel;
 use state_view::StateView;
-
 
 pub struct ChannelStateView<'txn> {
     channel: &'txn Channel,

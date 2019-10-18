@@ -1,7 +1,6 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
@@ -22,9 +21,9 @@ impl Command for DevCommand {
             Box::new(DevCommandCompile {}),
             Box::new(DevCommandPublish {}),
             Box::new(DevCommandExecute {}),
-            Box::new(DevCommandDeployModule{}),
-            Box::new(DevCommandInstallPackage{}),
-            Box::new(DevCommandExecuteInstalledScript{}),
+            Box::new(DevCommandDeployModule {}),
+            Box::new(DevCommandInstallPackage {}),
+            Box::new(DevCommandExecuteInstalledScript {}),
         ];
         subcommand_execute(&params[0], commands, client, &params[1..]);
     }
@@ -135,7 +134,7 @@ impl Command for DevCommandDeployModule {
         }
         println!(">> Deploy module");
         match client.deploy_module(params) {
-            Ok(resp) => println!("Successfully deployed package {:?}",resp),
+            Ok(resp) => println!("Successfully deployed package {:?}", resp),
             Err(e) => println!("{}", e),
         }
     }
@@ -184,7 +183,7 @@ impl Command for DevCommandExecuteInstalledScript {
     fn get_description(&self) -> &'static str {
         "Deploy move package"
     }
-    
+
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
         if params.len() < 3 {
             println!("Invalid number of arguments for compilation");

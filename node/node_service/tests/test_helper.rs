@@ -3,9 +3,9 @@
 
 use crypto::{ed25519::*, traits::Uniform};
 use grpcio::{EnvBuilder, ServerBuilder};
+use node_proto::proto::node::create_node;
 use node_service::NodeService;
 use rand::{rngs::StdRng, SeedableRng};
-use node_proto::proto::node::create_node;
 
 use node_internal::test_helper::*;
 use tokio::runtime::TaskExecutor;

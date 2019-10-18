@@ -1,25 +1,22 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-
-use crate::{
-    error::*,
-};
+use crate::error::*;
 use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
-    traits::{ Uniform},
-};
-use rand::{prelude::*};
-use std::{
-    convert::TryFrom,
-    fs,
-    time::{SystemTime, UNIX_EPOCH},
+    traits::Uniform,
 };
 use libra_types::{
     account_address::AccountAddress,
     transaction::{RawTransaction, SignedTransaction},
     transaction_helpers::TransactionSigner,
+};
+use rand::prelude::*;
+use std::{
+    convert::TryFrom,
+    fs,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 pub struct WalletLibrary {

@@ -6,12 +6,12 @@ mod test_helper;
 use crate::test_helper::create_and_start_server;
 use futures01::future::Future as Future01;
 use grpcio::EnvBuilder;
+use libra_types::account_address::AccountAddress;
 use node_client::NodeClient;
-use node_proto::{OpenChannelRequest};
+use node_proto::OpenChannelRequest;
 use sg_config::config::get_test_config;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
-use libra_types::account_address::AccountAddress;
 
 #[test]
 fn test_node_service_basic() {

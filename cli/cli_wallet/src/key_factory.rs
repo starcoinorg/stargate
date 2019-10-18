@@ -1,16 +1,15 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-
 use byteorder::{ByteOrder, LittleEndian};
 use crypto::{hmac::Hmac as CryptoHmac, pbkdf2::pbkdf2, sha3::Sha3};
 use ed25519_dalek;
 use libra_crypto::{hash::HashValue, hkdf::Hkdf};
+use libra_types::account_address::AccountAddress;
 use serde::{Deserialize, Serialize};
 use sha3::Sha3_256;
 use std::{convert::TryFrom, ops::AddAssign};
 use tiny_keccak::Keccak;
-use libra_types::account_address::AccountAddress;
 
 use crate::{error::Result, mnemonic::Mnemonic};
 

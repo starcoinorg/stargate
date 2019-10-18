@@ -1,7 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use network::{build_network_service};
+use network::build_network_service;
 use rand::prelude::*;
 
 use crate::node::Node;
@@ -10,6 +10,7 @@ use crypto::{
     test_utils::KeyPair,
     Uniform,
 };
+use libra_types::account_address::AccountAddress;
 use sg_config::config::NetworkConfig;
 use sgchain::star_chain_client::{faucet_sync, MockChainClient};
 use sgwallet::wallet::*;
@@ -19,8 +20,6 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::runtime::TaskExecutor;
-use libra_types::{account_address::AccountAddress};
-
 
 pub fn gen_node(
     executor: TaskExecutor,

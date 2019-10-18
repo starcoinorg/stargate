@@ -308,7 +308,11 @@ fn get_test_case_path(case_name: &str) -> PathBuf {
     crate_root.join(format!("test_case/{}", case_name))
 }
 
-fn deploy_custom_module_and_script<C>(wallet1: Arc<Wallet<C>>, wallet2: Arc<Wallet<C>>, test_case: &str) -> Result<()>
+fn deploy_custom_module_and_script<C>(
+    wallet1: Arc<Wallet<C>>,
+    wallet2: Arc<Wallet<C>>,
+    test_case: &str,
+) -> Result<()>
 where
     C: ChainClient + Send + Sync + 'static,
 {
@@ -369,11 +373,35 @@ fn test_vector() -> Result<()> {
 
     open_channel(alice.clone(), bob.clone(), 100000, 100000)?;
 
-    execute_script(alice.clone(), bob.clone(), "scripts", "move_vector_to_sender", vec![])?;
-    execute_script(alice.clone(), bob.clone(), "scripts", "move_vector_from_sender", vec![])?;
+    execute_script(
+        alice.clone(),
+        bob.clone(),
+        "scripts",
+        "move_vector_to_sender",
+        vec![],
+    )?;
+    execute_script(
+        alice.clone(),
+        bob.clone(),
+        "scripts",
+        "move_vector_from_sender",
+        vec![],
+    )?;
 
-    execute_script(alice.clone(), bob.clone(), "scripts", "move_vector_to_receiver", vec![])?;
-    execute_script(alice.clone(), bob.clone(), "scripts", "move_vector_from_receiver", vec![])?;
+    execute_script(
+        alice.clone(),
+        bob.clone(),
+        "scripts",
+        "move_vector_to_receiver",
+        vec![],
+    )?;
+    execute_script(
+        alice.clone(),
+        bob.clone(),
+        "scripts",
+        "move_vector_from_receiver",
+        vec![],
+    )?;
     Ok(())
 }
 
@@ -393,17 +421,76 @@ fn test_gobang() -> Result<()> {
 
     execute_script(alice.clone(), bob.clone(), "scripts", "new", vec![])?;
     execute_script(bob.clone(), alice.clone(), "scripts", "join", vec![])?;
-    execute_script(alice.clone(), bob.clone(), "scripts", "play", vec![TransactionArgument::U64(2), TransactionArgument::U64(2)])?;
-    execute_script(bob.clone(), alice.clone(), "scripts", "play", vec![TransactionArgument::U64(3), TransactionArgument::U64(2)])?;
-    execute_script(alice.clone(), bob.clone(), "scripts", "play", vec![TransactionArgument::U64(2), TransactionArgument::U64(3)])?;
-    execute_script(bob.clone(), alice.clone(), "scripts", "play", vec![TransactionArgument::U64(3), TransactionArgument::U64(3)])?;
-    execute_script(alice.clone(), bob.clone(), "scripts", "play", vec![TransactionArgument::U64(2), TransactionArgument::U64(4)])?;
-    execute_script(bob.clone(), alice.clone(), "scripts", "play", vec![TransactionArgument::U64(3), TransactionArgument::U64(4)])?;
-    execute_script(alice.clone(), bob.clone(), "scripts", "play", vec![TransactionArgument::U64(2), TransactionArgument::U64(5)])?;
-    execute_script(bob.clone(), alice.clone(), "scripts", "play", vec![TransactionArgument::U64(3), TransactionArgument::U64(5)])?;
-    execute_script(alice.clone(), bob.clone(), "scripts", "play", vec![TransactionArgument::U64(2), TransactionArgument::U64(6)])?;
-    execute_script(alice.clone(), bob.clone(), "scripts", "check_score", vec![TransactionArgument::U64(1)])?;
+    execute_script(
+        alice.clone(),
+        bob.clone(),
+        "scripts",
+        "play",
+        vec![TransactionArgument::U64(2), TransactionArgument::U64(2)],
+    )?;
+    execute_script(
+        bob.clone(),
+        alice.clone(),
+        "scripts",
+        "play",
+        vec![TransactionArgument::U64(3), TransactionArgument::U64(2)],
+    )?;
+    execute_script(
+        alice.clone(),
+        bob.clone(),
+        "scripts",
+        "play",
+        vec![TransactionArgument::U64(2), TransactionArgument::U64(3)],
+    )?;
+    execute_script(
+        bob.clone(),
+        alice.clone(),
+        "scripts",
+        "play",
+        vec![TransactionArgument::U64(3), TransactionArgument::U64(3)],
+    )?;
+    execute_script(
+        alice.clone(),
+        bob.clone(),
+        "scripts",
+        "play",
+        vec![TransactionArgument::U64(2), TransactionArgument::U64(4)],
+    )?;
+    execute_script(
+        bob.clone(),
+        alice.clone(),
+        "scripts",
+        "play",
+        vec![TransactionArgument::U64(3), TransactionArgument::U64(4)],
+    )?;
+    execute_script(
+        alice.clone(),
+        bob.clone(),
+        "scripts",
+        "play",
+        vec![TransactionArgument::U64(2), TransactionArgument::U64(5)],
+    )?;
+    execute_script(
+        bob.clone(),
+        alice.clone(),
+        "scripts",
+        "play",
+        vec![TransactionArgument::U64(3), TransactionArgument::U64(5)],
+    )?;
+    execute_script(
+        alice.clone(),
+        bob.clone(),
+        "scripts",
+        "play",
+        vec![TransactionArgument::U64(2), TransactionArgument::U64(6)],
+    )?;
+    execute_script(
+        alice.clone(),
+        bob.clone(),
+        "scripts",
+        "check_score",
+        vec![TransactionArgument::U64(1)],
+    )?;
 
     Ok(())
 }
-

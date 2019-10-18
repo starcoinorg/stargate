@@ -27,8 +27,8 @@ mod tests {
         Uniform,
     };
 
-    use network_libp2p::{identity, NodeKeyConfig, PeerId, PublicKey, Secret};
     use libra_types::account_address::AccountAddress;
+    use network_libp2p::{identity, NodeKeyConfig, PeerId, PublicKey, Secret};
 
     use crate::{
         build_network_service, convert_account_address_to_peer_id, helper::convert_boot_nodes,
@@ -264,7 +264,7 @@ mod tests {
                 "/ip4/127.0.0.1/tcp/5000/p2p/{:}",
                 generate_account_address()
             )
-                .to_string(),
+            .to_string(),
         );
         boot_nodes.iter().for_each(|x| println!("{}", x));
 

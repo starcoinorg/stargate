@@ -5,9 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 fn main() {
-    let proto_files = [
-        "src/proto/node.proto",
-    ];
+    let proto_files = ["src/proto/node.proto"];
 
     let includes = [
         "../../libra/types/src/proto",
@@ -20,5 +18,5 @@ fn main() {
         &includes,
         &std::env::var("OUT_DIR").unwrap(),
     )
-        .unwrap();
+    .unwrap();
 }

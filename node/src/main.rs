@@ -9,18 +9,18 @@ use crypto::{
 };
 use failure::*;
 use futures_01::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use libra_types::account_address::AccountAddress;
 use logger::prelude::*;
 use network::{build_network_service, NetworkMessage, NetworkService};
 use node::client;
 use node_internal::node::Node;
-use node_service::setup_node_service;
 use node_rest_api::setup_node_rest;
+use node_service::setup_node_service;
 use sg_config::config::{load_from, NodeConfig, WalletConfig};
 use sgchain::star_chain_client::StarChainClient;
 use sgwallet::wallet::*;
 use structopt::StructOpt;
 use tokio::runtime::{Runtime, TaskExecutor};
-use libra_types::account_address::AccountAddress;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -128,7 +128,7 @@ fn main() {
         close_tx,
     );
     node.start_server();
-    let  api_node = Arc::new(node);
+    let api_node = Arc::new(node);
     let mut node_server = setup_node_service(&swarm.config, api_node.clone());
     node_server.start();
     setup_node_rest(swarm.config.rest_config, api_node.clone()).ok();

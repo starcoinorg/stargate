@@ -1,7 +1,6 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-
 use crate::{client_proxy::ClientProxy, commands::*};
 
 /// Major command for account related operations.
@@ -43,7 +42,6 @@ impl Command for NodeCommandOpenChannel {
     }
 
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-
         if params.len() < 4 {
             println!("Invalid number of arguments for open channel");
             return;
@@ -72,7 +70,6 @@ impl Command for NodeCommandDepositChannel {
     }
 
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-
         if params.len() < 4 {
             println!("Invalid number of arguments for deposit channel");
             return;
@@ -101,7 +98,6 @@ impl Command for NodeCommandPay {
     }
 
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-
         if params.len() < 3 {
             println!("Invalid number of arguments for pay");
             return;
@@ -130,7 +126,6 @@ impl Command for NodeCommandWithdrawChannel {
     }
 
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-
         if params.len() < 4 {
             println!("Invalid number of arguments for withdrawl from channel");
             return;
@@ -146,7 +141,6 @@ impl Command for NodeCommandWithdrawChannel {
 pub struct NodeCommandChannelBalance {}
 
 impl Command for NodeCommandChannelBalance {
-
     fn get_aliases(&self) -> Vec<&'static str> {
         vec!["channel balance ", "cb"]
     }
@@ -160,7 +154,6 @@ impl Command for NodeCommandChannelBalance {
     }
 
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-
         if params.len() < 2 {
             println!("Invalid number of arguments for get channel balance");
             return;

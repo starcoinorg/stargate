@@ -75,7 +75,11 @@ pub trait ModuleLoader {
             .and_then(|module| match module {
                 Some(module) => Ok(Some(VerifiedModule::new(module).map_err(
                     |(complied_module, status)| {
-                        format_err!("Verified module {:?} error {:?}", complied_module.self_id(), status)
+                        format_err!(
+                            "Verified module {:?} error {:?}",
+                            complied_module.self_id(),
+                            status
+                        )
                     },
                 )?)),
                 None => Ok(None),

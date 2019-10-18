@@ -15,10 +15,7 @@ use futures_01::{
 use crypto::HashValue;
 use failure::prelude::*;
 use logger::prelude::*;
-use sgtypes::{
-    sg_error::SgError,
-    message::{ErrorMessage},
-};
+use sgtypes::{message::ErrorMessage, sg_error::SgError};
 
 pub struct MessageFuture {
     rx: Receiver<Result<HashValue>>,
@@ -106,7 +103,7 @@ impl MessageProcessor {
         }
     }
 
-    pub fn future_error(&self, error_msg: ErrorMessage)->Result<()> {
+    pub fn future_error(&self, error_msg: ErrorMessage) -> Result<()> {
         let mut tx_map = self.tx_map.lock().unwrap();
         match tx_map.get(&error_msg.raw_transaction_hash) {
             Some(tx) => {
@@ -128,9 +125,6 @@ fn error_translate(e: Error) -> SgError {
         err.clone()
     } else {
         info!("this is a common error");
-        SgError::new(
-            sgtypes::sg_error::SgErrorCode::UNKNOWN,
-            format!("{:?}", e),
-        )
+        SgError::new(sgtypes::sg_error::SgErrorCode::UNKNOWN, format!("{:?}", e))
     }
 }

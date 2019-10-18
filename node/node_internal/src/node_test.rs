@@ -4,25 +4,23 @@
 use failure::prelude::*;
 
 use crypto::{
-    ed25519::{Ed25519PrivateKey},
+    ed25519::Ed25519PrivateKey,
     hash::{CryptoHasher, TestOnlyHasher},
     traits::SigningKey,
 };
-use sgtypes::message::*;
-use std::{
-    time::{Duration, Instant},
-};
 use libra_types::account_address::AccountAddress;
+use sgtypes::message::*;
 use sgtypes::sg_error::SgError;
+use std::time::{Duration, Instant};
 
 #[test]
 fn node_test() -> Result<()> {
-    use std::sync::Arc;
-    use tokio::runtime::{Runtime};
-    use crate::{test_helper::*};
-    use sgchain::star_chain_client::{MockChainClient};
-    use logger::prelude::*;
+    use crate::test_helper::*;
     use futures::compat::Future01CompatExt;
+    use logger::prelude::*;
+    use sgchain::star_chain_client::MockChainClient;
+    use std::sync::Arc;
+    use tokio::runtime::Runtime;
 
     ::logger::init_for_e2e_testing();
     //env_logger::init();
@@ -155,11 +153,7 @@ fn error_test() -> Result<()> {
 }
 
 fn _new_error() -> Result<()> {
-    Err(SgError::new(
-        sgtypes::sg_error::SgErrorCode::UNKNOWN,
-        "111".to_string(),
-    )
-    .into())
+    Err(SgError::new(sgtypes::sg_error::SgErrorCode::UNKNOWN, "111".to_string()).into())
 }
 
 fn _create_negotiate_message(

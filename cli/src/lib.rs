@@ -1,14 +1,13 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-
 use crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
     ValidKeyStringExt,
 };
-use serde::{Deserialize, Serialize};
 use libra_types::account_address::AccountAddress;
+use serde::{Deserialize, Serialize};
 
 mod account_commands;
 pub mod client_proxy;
