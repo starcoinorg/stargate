@@ -193,19 +193,14 @@ impl<C: ChainClient + Clone + 'static> Service for WebServer<C> {
                             }
                         };
                     }
-                    let mut req_list_str = String::new();
-                    if result.state {
-                        req_list_str =
-                            serde_json::to_string(&result.transation_requests.unwrap()).unwrap();
-                    }
-                    //json format
                     *response.body_mut() = Body::from(
                         json!({
                             "status": result.state,
-                            "request_list": req_list_str
+                            "request_list": &result.transation_requests.unwrap()
                         })
                         .to_string(),
                     );
+                    info!("response :{:?}", response.body_mut());
                     response
                 });
                 return Box::new(resp);

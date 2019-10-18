@@ -775,6 +775,7 @@ where
         match hash {
             Some(hash) => {
                 for (hash_item, request, res) in tnxs.iter() {
+                    debug!("hash_item:{}", hash_item);
                     if hash.eq(hash_item) {
                         find_data = true;
                         continue;
@@ -790,6 +791,7 @@ where
             }
             None => {
                 for (hash_item, request, res) in tnxs.iter() {
+                    debug!("hash_item:{}", hash_item);
                     data.push((*hash_item, request.clone(), *res));
                     count_num = count_num - 1;
                     if count_num == 0 {
