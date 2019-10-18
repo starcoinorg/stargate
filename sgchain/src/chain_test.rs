@@ -1,7 +1,6 @@
 use crate::star_chain_client::{faucet_sync, ChainClient, MockChainClient};
 use std::{
-    thread::{sleep, spawn},
-    time::Duration,
+    thread::{spawn},
 };
 use libra_types::account_address::AccountAddress;
 
@@ -19,6 +18,7 @@ fn test_mock_chain_client_faucet() {
     drop(client);
 }
 
+#[test]
 fn test_multi_mock_chain_client() {
     for _i in 1..3 {
         let (client, _handle) = MockChainClient::new();
