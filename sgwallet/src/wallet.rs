@@ -38,7 +38,7 @@ use sgtypes::{
     channel_transaction::{
         ChannelOp, ChannelTransactionRequest, ChannelTransactionRequestAndOutput,
         ChannelTransactionRequestPayload, ChannelTransactionResponse,
-        ChannelTransactionResponsePayload, Witness,
+        ChannelTransactionResponsePayload,
     },
     resource::Resource,
     script_package::{ChannelScriptPackage, ScriptCode},
@@ -185,8 +185,6 @@ where
             let txn_write_set_hash = HashValue::from_sha3_256(write_set_bytes.as_slice());
             let txn_signature = gas_fixed_signed_txn.signature();
             ChannelTransactionRequestPayload::Travel {
-                max_gas_amount: gas_fixed_signed_txn.max_gas_amount(),
-                gas_unit_price: gas_fixed_signed_txn.gas_unit_price(),
                 txn_write_set_hash,
                 txn_signature,
             }
@@ -197,11 +195,10 @@ where
                 receiver,
             );
             let witness_signature = self.sign_write_set_payload(&witness_payload)?;
-            let witness = Witness {
-                witness_payload,
+            ChannelTransactionRequestPayload::Offchain {
+                witness_hash: witness_payload.hash(),
                 witness_signature,
-            };
-            ChannelTransactionRequestPayload::Offchain(witness)
+            }
         };
         let version = state_view.version();
         let request = ChannelTransactionRequest::new(
@@ -215,6 +212,8 @@ where
             payload,
             self.keypair.public_key.clone(),
             args,
+            gas_fixed_signed_txn.max_gas_amount(),
+            gas_fixed_signed_txn.gas_unit_price(),
         );
         channel.append_txn_request(ChannelTransactionRequestAndOutput::new(
             request.clone(),
@@ -247,47 +246,25 @@ where
 
         let storage = self.storage.borrow();
         let channel = storage.get_channel(&sender)?;
+        let my_channel_sequence_number = channel.channel_sequence_number();
         ensure!(
-            channel.channel_sequence_number() == txn_request.channel_sequence_number(),
+            my_channel_sequence_number == txn_request.channel_sequence_number(),
             "check channel_sequence_number fail."
         );
-        let WitnessData {
-            channel_sequence_number: _,
-            write_set,
-            signature: _,
-        } = channel.witness_data();
+        let WitnessData { write_set, .. } = channel.witness_data();
         //TODO refactor this with verify flow strategy.
-        let raw_txn = match txn_request.payload() {
-            ChannelTransactionRequestPayload::Offchain(_) => self.build_txn_with_op(
-                sender,
-                receiver,
-                txn_request.sequence_number(),
-                txn_request.channel_sequence_number(),
-                write_set,
-                txn_request.operator(),
-                txn_request.args().to_vec(),
-                Self::MAX_GAS_AMOUNT_OFFCHAIN,
-                Self::GAS_UNIT_PRICE,
-                txn_request.expiration_time(),
-            )?,
-            ChannelTransactionRequestPayload::Travel {
-                max_gas_amount,
-                gas_unit_price,
-                txn_write_set_hash: _,
-                txn_signature: _,
-            } => self.build_txn_with_op(
-                sender,
-                receiver,
-                txn_request.sequence_number(),
-                txn_request.channel_sequence_number(),
-                write_set,
-                txn_request.operator(),
-                txn_request.args().to_vec(),
-                *max_gas_amount,
-                *gas_unit_price,
-                txn_request.expiration_time(),
-            )?,
-        };
+        let raw_txn = self.build_txn_with_op(
+            sender,
+            receiver,
+            txn_request.sequence_number(),
+            txn_request.channel_sequence_number(),
+            write_set,
+            txn_request.operator(),
+            txn_request.args().to_vec(),
+            txn_request.max_gas_amount(),
+            txn_request.gas_unit_price(),
+            txn_request.expiration_time(),
+        )?;
         let txn_hash = raw_txn.hash();
         debug!("verify_txn txn_hash:{}", txn_hash);
         //TODO refactor receiver's travis txn signature do not need to mock.
@@ -308,30 +285,30 @@ where
 
         //TODO check public_key match with sender address.
         let payload = match txn_request.payload() {
-            ChannelTransactionRequestPayload::Offchain(sender_witness) => {
-                let sender_payload = &sender_witness.witness_payload;
-                ensure!(
-                    write_set == &sender_payload.write_set,
-                    "check write_set fail."
-                );
-                txn_request
-                    .public_key()
-                    .verify_signature(&sender_payload.hash(), &sender_witness.witness_signature)?;
-                let witness_payload = ChannelWriteSetPayload::new(
-                    sender_payload.channel_sequence_number,
+            ChannelTransactionRequestPayload::Offchain {
+                witness_hash: sender_witness_hash,
+                witness_signature: sender_witness_signature,
+            } => {
+                let my_witness_payload = ChannelWriteSetPayload::new(
+                    my_channel_sequence_number,
                     write_set.clone(),
                     self.account,
                 );
-                let witness_signature = self.sign_write_set_payload(&witness_payload)?;
-                let new_witness = Witness {
-                    witness_payload,
-                    witness_signature,
-                };
-                ChannelTransactionResponsePayload::Offchain(new_witness)
+                let my_witness_hash = my_witness_payload.hash();
+                ensure!(
+                    my_witness_hash == *sender_witness_hash,
+                    "check witeness hash fail"
+                );
+                txn_request
+                    .public_key()
+                    .verify_signature(&sender_witness_hash, &sender_witness_signature)?;
+
+                let witness_signature = self.sign_write_set_payload(&my_witness_payload)?;
+                ChannelTransactionResponsePayload::Offchain {
+                    witness_payload_signature: witness_signature,
+                }
             }
             ChannelTransactionRequestPayload::Travel {
-                max_gas_amount: _,
-                gas_unit_price: _,
                 txn_write_set_hash,
                 txn_signature,
             } => {
@@ -491,12 +468,7 @@ where
         );
         let gas = match (request.payload(), response.payload()) {
             (
-                ChannelTransactionRequestPayload::Travel {
-                    max_gas_amount: _,
-                    gas_unit_price: _,
-                    txn_write_set_hash: _,
-                    txn_signature,
-                },
+                ChannelTransactionRequestPayload::Travel { txn_signature, .. },
                 ChannelTransactionResponsePayload::Travel {
                     txn_payload_signature,
                 },
@@ -538,19 +510,44 @@ where
                 gas
             }
             (
-                ChannelTransactionRequestPayload::Offchain(sender_witness),
-                ChannelTransactionResponsePayload::Offchain(receiver_witness),
+                ChannelTransactionRequestPayload::Offchain {
+                    witness_signature: sender_witness_signature,
+                    witness_hash,
+                },
+                ChannelTransactionResponsePayload::Offchain {
+                    witness_payload_signature: receiver_witness_signature,
+                },
             ) => {
+                // rebuild payload from scratch
+                let channel_write_set_payload = ChannelWriteSetPayload {
+                    channel_sequence_number: response.channel_sequence_number(),
+                    write_set: output.write_set().clone(),
+                    receiver: request.receiver(),
+                };
+                // now, it's the final chance to validate the whole transaction flows.
+                ensure!(
+                    *witness_hash == channel_write_set_payload.hash(),
+                    "check payload hash fail"
+                );
+                response.public_key().verify_signature(
+                    &channel_write_set_payload.hash(),
+                    receiver_witness_signature,
+                )?;
+                request.public_key().verify_signature(
+                    &channel_write_set_payload.hash(),
+                    sender_witness_signature,
+                )?;
+
                 // apply the other's witness payload to use his signature.
                 if request.sender() == self.account {
                     channel.apply_witness(
-                        receiver_witness.witness_payload.clone(),
-                        receiver_witness.witness_signature.clone(),
+                        channel_write_set_payload,
+                        receiver_witness_signature.clone(),
                     )?;
                 } else {
                     channel.apply_witness(
-                        sender_witness.witness_payload.clone(),
-                        sender_witness.witness_signature.clone(),
+                        channel_write_set_payload,
+                        sender_witness_signature.clone(),
                     )?;
                 }
                 self.offchain_transactions
@@ -720,11 +717,7 @@ where
         channel_op: &ChannelOp,
         args: Vec<TransactionArgument>,
     ) -> Result<SignedTransaction> {
-        let WitnessData {
-            channel_sequence_number: _,
-            write_set,
-            signature: _,
-        } = channel.witness_data();
+        let WitnessData { write_set, .. } = channel.witness_data();
         let txn = self.build_txn_with_op(
             self.account,
             receiver,
