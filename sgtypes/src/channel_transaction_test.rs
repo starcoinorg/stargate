@@ -6,10 +6,9 @@ use crypto::{
     test_utils::KeyPair,
     Uniform,
 };
-use failure::_core::time::Duration;
 use libra_types::{
     account_address::AccountAddress,
-    transaction::{ChannelScriptPayload, ChannelWriteSetPayload, RawTransaction, Script},
+    transaction::{ChannelScriptPayload, ChannelWriteSetPayload, Script},
     transaction_helpers::ChannelPayloadSigner,
     write_set::WriteSet,
 };
@@ -18,6 +17,7 @@ use rand::prelude::*;
 use crate::channel_transaction::{
     ChannelOp, ChannelTransactionRequest, ChannelTransactionRequestPayload, Witness,
 };
+use failure::_core::time::Duration;
 
 //TODO(jole) use Arbitrary
 #[test]
@@ -33,31 +33,57 @@ fn request_roundtrip_canonical_serialization() {
     let signature = keypair
         .sign_script_payload(&channel_script_payload)
         .unwrap();
-    let txn = RawTransaction::new_channel_script(
-        sender,
-        0,
-        channel_script_payload,
-        0,
-        0,
-        Duration::from_millis(1000),
-    );
-    let witness = Witness {
-        witness_payload: ChannelWriteSetPayload::new(0, WriteSet::default(), receiver),
-        witness_signature: signature,
-    };
-    let request = ChannelTransactionRequest::new(
-        0,
-        ChannelOp::Open,
-        txn,
-        ChannelTransactionRequestPayload::Offchain(witness),
-        keypair.public_key.clone(),
-        Vec::new(),
-    );
-    let mut serializer = SimpleSerializer::<Vec<u8>>::new();
-    serializer.encode_struct(&request).unwrap();
-    let serialized_bytes = serializer.get_output();
+    let sequence_number = rng0.next_u64();
+    let channel_sequence_number = rng0.next_u64();
 
-    let mut deserializer = SimpleDeserializer::new(&serialized_bytes);
-    let output: ChannelTransactionRequest = deserializer.decode_struct().unwrap();
-    assert_eq!(request, output);
+    let requests = vec![
+        ChannelTransactionRequest::new(
+            rng0.next_u64(),
+            ChannelOp::Open,
+            sender,
+            sequence_number,
+            receiver,
+            channel_sequence_number,
+            Duration::from_secs(rng0.next_u64()),
+            ChannelTransactionRequestPayload::Offchain(Witness {
+                witness_payload: ChannelWriteSetPayload::new(
+                    channel_sequence_number,
+                    WriteSet::default(),
+                    receiver,
+                ),
+                witness_signature: signature.clone(),
+            }),
+            keypair.public_key.clone(),
+            Vec::new(),
+        ),
+        ChannelTransactionRequest::new(
+            rng0.next_u64(),
+            ChannelOp::Execute {
+                package_name: "Test".to_string(),
+                script_name: "Test".to_string(),
+            },
+            sender,
+            sequence_number,
+            receiver,
+            channel_sequence_number,
+            Duration::from_secs(rng0.next_u64()),
+            ChannelTransactionRequestPayload::Travel {
+                max_gas_amount: rng0.next_u64(),
+                gas_unit_price: rng0.next_u64(),
+                txn_write_set_hash: Default::default(),
+                txn_signature: signature,
+            },
+            keypair.public_key.clone(),
+            Vec::new(),
+        ),
+    ];
+    for request in requests {
+        let mut serializer = SimpleSerializer::<Vec<u8>>::new();
+        serializer.encode_struct(&request).unwrap();
+        let serialized_bytes = serializer.get_output();
+
+        let mut deserializer = SimpleDeserializer::new(&serialized_bytes);
+        let output: ChannelTransactionRequest = deserializer.decode_struct().unwrap();
+        assert_eq!(request, output);
+    }
 }

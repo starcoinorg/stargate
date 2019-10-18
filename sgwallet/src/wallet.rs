@@ -10,6 +10,7 @@ use crypto::{
 };
 use failure::prelude::*;
 use lazy_static::lazy_static;
+use libra_types::write_set::WriteSet;
 use libra_types::{
     access_path::DataPath,
     account_address::AccountAddress,
@@ -17,9 +18,9 @@ use libra_types::{
     channel_account::{channel_account_resource_path, ChannelAccountResource},
     language_storage::StructTag,
     transaction::{
-        ChannelScriptPayload, ChannelWriteSetPayload, Module, RawTransaction, Script,
-        SignedTransaction, SignedTransactionWithProof, TransactionArgument, TransactionOutput,
-        TransactionPayload, TransactionStatus,
+        ChannelScriptPayload, ChannelWriteSetPayload, Module, RawTransaction, SignedTransaction,
+        SignedTransactionWithProof, TransactionArgument, TransactionOutput, TransactionPayload,
+        TransactionStatus,
     },
     transaction_helpers::{create_signed_payload_txn, ChannelPayloadSigner, TransactionSigner},
     vm_error::*,
@@ -40,6 +41,8 @@ use sgtypes::{
 };
 use state_view::StateView;
 use std::sync::Arc;
+use std::time::Duration;
+use vm::gas_schedule::GasAlgebra;
 use vm_runtime::{MoveVM, VMExecutor};
 
 lazy_static! {
@@ -56,15 +59,16 @@ where
     client: Arc<C>,
     storage: Arc<AtomicRefCell<LocalStateStorage<C>>>,
     script_registry: PackageRegistry,
-    offchain_transactions: Arc<AtomicRefCell<Vec<(HashValue,ChannelTransactionRequest,u8)>>>,
+    offchain_transactions: Arc<AtomicRefCell<Vec<(HashValue, ChannelTransactionRequest, u8)>>>,
 }
 
 impl<C> Wallet<C>
 where
     C: ChainClient + Send + Sync + 'static,
 {
-    const TXN_EXPIRATION: i64 = 1000 * 60;
-    const MAX_GAS_AMOUNT: u64 = 200000;
+    const TXN_EXPIRATION: Duration = Duration::from_secs(60 * 60);
+    const MAX_GAS_AMOUNT_OFFCHAIN: u64 = std::u64::MAX;
+    const MAX_GAS_AMOUNT_ONCHAIN: u64 = 1_000_000;
     const GAS_UNIT_PRICE: u64 = 1;
     // const RETRY_INTERVAL: u64 = 1000;
 
@@ -145,41 +149,41 @@ where
         receiver: AccountAddress,
         args: Vec<TransactionArgument>,
     ) -> Result<ChannelTransactionRequest> {
-        let mut all_args = Vec::new();
-        let script = match &channel_op {
-            ChannelOp::Open => self.script_registry.open_script(),
-            ChannelOp::Close => self.script_registry.close_script(),
-            ChannelOp::Execute {
-                package_name,
-                script_name,
-            } => {
-                let s=self
-                .script_registry
-                .get_script(package_name, script_name)
-                .ok_or(format_err!(
-                    "Can not find script by package {} and script name {}",
-                    package_name,
-                    script_name
-                ))?;
-                all_args.push(TransactionArgument::String(package_name.to_string()));
-                all_args.push(TransactionArgument::String(package_name.to_string()));
-                s
-            },
-        };
-
-        all_args.append(&mut args.clone());
-        let script = script.encode_script(args);
         let channel_sequence_number = channel.channel_sequence_number();
-        let txn = self.create_signed_script_txn(channel, receiver, script)?;
+        let txn = self.create_signed_script_txn(channel, receiver, &channel_op, args.clone())?;
         let storage = self.storage.borrow();
         let state_view = storage.new_channel_view(None, &receiver)?;
         let output = Self::execute_transaction(&state_view, txn.clone())?;
+        let gas_used = output.gas_used();
+        if gas_used > vm::gas_schedule::MAXIMUM_NUMBER_OF_GAS_UNITS.get() {
+            warn!(
+                "GasUsed {} > gas_schedule::MAXIMUM_NUMBER_OF_GAS_UNITS {}",
+                gas_used,
+                vm::gas_schedule::MAXIMUM_NUMBER_OF_GAS_UNITS.get()
+            );
+        }
 
+        //TODO need add a buffer to max_gas_amount? such as 10%?
+        let max_gas_amount = gas_used;
+        let sender = txn.sender();
+        let sequence_number = txn.sequence_number();
+        let gas_fixed_txn = RawTransaction::new(
+            sender,
+            sequence_number,
+            txn.payload().clone(),
+            max_gas_amount,
+            txn.gas_unit_price(),
+            txn.expiration_time(),
+        );
+        debug!("gas fixed txn: {}", gas_fixed_txn.hash());
+        let gas_fixed_signed_txn = self.sign_txn(gas_fixed_txn.clone())?;
         let payload = if output.is_travel_txn() {
             let write_set_bytes: Vec<u8> = SimpleSerializer::serialize(output.write_set())?;
             let txn_write_set_hash = HashValue::from_sha3_256(write_set_bytes.as_slice());
-            let txn_signature = txn.signature();
+            let txn_signature = gas_fixed_signed_txn.signature();
             ChannelTransactionRequestPayload::Travel {
+                max_gas_amount: gas_fixed_signed_txn.max_gas_amount(),
+                gas_unit_price: gas_fixed_signed_txn.gas_unit_price(),
                 txn_write_set_hash,
                 txn_signature,
             }
@@ -200,14 +204,19 @@ where
         let request = ChannelTransactionRequest::new(
             version,
             channel_op.clone(),
-            txn.raw_txn().clone(),
+            sender,
+            sequence_number,
+            receiver,
+            channel_sequence_number,
+            gas_fixed_signed_txn.expiration_time(),
             payload,
             self.keypair.public_key.clone(),
-            all_args,
+            args,
         );
         channel.append_txn_request(ChannelTransactionRequestAndOutput::new(
             request.clone(),
             output,
+            gas_fixed_txn,
         ))?;
         Ok(request)
     }
@@ -217,8 +226,8 @@ where
         &self,
         txn_request: &ChannelTransactionRequest,
     ) -> Result<ChannelTransactionResponse> {
-        let txn_hash = txn_request.txn().hash();
-        debug!("verify_txn {}", txn_hash);
+        let id = txn_request.request_id();
+        debug!("verify_txn id:{}", id);
         ensure!(
             txn_request.receiver() == self.account,
             "check receiver fail."
@@ -231,14 +240,55 @@ where
             self.storage.borrow_mut().new_channel(sender);
         }
 
+        let receiver = txn_request.receiver();
+
         let storage = self.storage.borrow();
         let channel = storage.get_channel(&sender)?;
-
         ensure!(
             channel.channel_sequence_number() == txn_request.channel_sequence_number(),
             "check channel_sequence_number fail."
         );
-        let signed_txn = self.mock_signature(txn_request.txn().clone())?;
+        let WitnessData {
+            channel_sequence_number: _,
+            write_set,
+            signature: _,
+        } = channel.witness_data();
+        //TODO refactor this with verify flow strategy.
+        let raw_txn = match txn_request.payload() {
+            ChannelTransactionRequestPayload::Offchain(_) => self.build_txn_with_op(
+                sender,
+                receiver,
+                txn_request.sequence_number(),
+                txn_request.channel_sequence_number(),
+                write_set,
+                txn_request.operator(),
+                txn_request.args().to_vec(),
+                Self::MAX_GAS_AMOUNT_OFFCHAIN,
+                Self::GAS_UNIT_PRICE,
+                txn_request.expiration_time(),
+            )?,
+            ChannelTransactionRequestPayload::Travel {
+                max_gas_amount,
+                gas_unit_price,
+                txn_write_set_hash: _,
+                txn_signature: _,
+            } => self.build_txn_with_op(
+                sender,
+                receiver,
+                txn_request.sequence_number(),
+                txn_request.channel_sequence_number(),
+                write_set,
+                txn_request.operator(),
+                txn_request.args().to_vec(),
+                *max_gas_amount,
+                *gas_unit_price,
+                txn_request.expiration_time(),
+            )?,
+        };
+        let txn_hash = raw_txn.hash();
+        debug!("verify_txn txn_hash:{}", txn_hash);
+        //TODO refactor receiver's travis txn signature do not need to mock.
+        let signed_txn = self.mock_signature(raw_txn.clone())?;
         let version = txn_request.version();
         let state_view = storage.new_channel_view(Some(version), &sender)?;
         let txn_payload_signature = signed_txn
@@ -249,8 +299,10 @@ where
         channel.append_txn_request(ChannelTransactionRequestAndOutput::new(
             txn_request.clone(),
             output.clone(),
+            raw_txn,
         ))?;
         let write_set = output.write_set();
+
         //TODO check public_key match with sender address.
         let payload = match txn_request.payload() {
             ChannelTransactionRequestPayload::Offchain(sender_witness) => {
@@ -275,6 +327,8 @@ where
                 ChannelTransactionResponsePayload::Offchain(new_witness)
             }
             ChannelTransactionRequestPayload::Travel {
+                max_gas_amount: _,
+                gas_unit_price: _,
                 txn_write_set_hash,
                 txn_signature,
             } => {
@@ -412,8 +466,12 @@ where
     ) -> Result<u64> {
         let storage = self.storage.borrow();
         let channel = storage.get_channel(&participant)?;
-        let (request, output) = match channel.pending_txn_request() {
-            Some(ChannelTransactionRequestAndOutput { request, output }) => (request, output),
+        let (request, output, raw_txn) = match channel.pending_txn_request() {
+            Some(ChannelTransactionRequestAndOutput {
+                request,
+                output,
+                raw_txn,
+            }) => (request, output, raw_txn),
             //TODO(jole) can not find request has such reason:
             // 1. txn is expire.
             // 2. txn is invalid.
@@ -422,7 +480,7 @@ where
                 channel.stage()
             ),
         };
-        let raw_txn_hash = request.txn().hash();
+        let raw_txn_hash = raw_txn.hash();
         info!("apply_txn: {}", raw_txn_hash);
         ensure!(
             request.channel_sequence_number() == response.channel_sequence_number(),
@@ -431,6 +489,8 @@ where
         let gas = match (request.payload(), response.payload()) {
             (
                 ChannelTransactionRequestPayload::Travel {
+                    max_gas_amount: _,
+                    gas_unit_price: _,
                     txn_write_set_hash: _,
                     txn_signature,
                 },
@@ -439,7 +499,7 @@ where
                 },
             ) => {
                 let mut signed_txn = SignedTransaction::new(
-                    request.txn().clone(),
+                    raw_txn,
                     request.public_key().clone(),
                     txn_signature.clone(),
                 );
@@ -492,7 +552,7 @@ where
                 }
                 self.offchain_transactions
                     .borrow_mut()
-                    .push((response.request_id(), request,1));
+                    .push((response.request_id(), request, 1));
                 0
             }
             _ => bail!("ChannelTransaction request and response type not match."),
@@ -537,14 +597,15 @@ where
         module_byte_code: Vec<u8>,
     ) -> Result<SignedTransactionWithProof> {
         let payload = TransactionPayload::Module(Module::new(module_byte_code));
+        //TODO pre execute deploy module txn on local , and get real gas used to set max_gas_amount.
         let txn = create_signed_payload_txn(
             self,
             payload,
             self.account,
             self.sequence_number()?,
-            Self::MAX_GAS_AMOUNT,
+            Self::MAX_GAS_AMOUNT_ONCHAIN,
             Self::GAS_UNIT_PRICE,
-            Self::TXN_EXPIRATION,
+            Self::TXN_EXPIRATION.as_secs() as i64,
         )?;
         //TODO need execute at local vm for check?
         self.submit_transaction(txn).await
@@ -600,32 +661,72 @@ where
             .unwrap_or(0))
     }
 
+    fn build_txn_with_op(
+        &self,
+        sender: AccountAddress,
+        receiver: AccountAddress,
+        sequence_number: u64,
+        channel_sequence_number: u64,
+        write_set: WriteSet,
+        channel_op: &ChannelOp,
+        args: Vec<TransactionArgument>,
+        max_gas_amount: u64,
+        gas_unit_price: u64,
+        txn_expiration: Duration,
+    ) -> Result<RawTransaction> {
+        let script_code = match &channel_op {
+            ChannelOp::Open => self.script_registry.open_script(),
+            ChannelOp::Close => self.script_registry.close_script(),
+            ChannelOp::Execute {
+                package_name,
+                script_name,
+            } => self
+                .script_registry
+                .get_script(package_name, script_name)
+                .ok_or(format_err!(
+                    "Can not find script by package {} and script name {}",
+                    package_name,
+                    script_name
+                ))?,
+        };
+        let script = script_code.encode_script(args);
+        let channel_script =
+            ChannelScriptPayload::new(channel_sequence_number, write_set, receiver, script);
+        Ok(RawTransaction::new_payload_txn(
+            sender,
+            sequence_number,
+            TransactionPayload::ChannelScript(channel_script),
+            max_gas_amount,
+            gas_unit_price,
+            txn_expiration,
+        ))
+    }
+
     /// Craft a transaction request.
     fn create_signed_script_txn(
         &self,
         channel: &Channel,
         receiver: AccountAddress,
-        script: Script,
+        channel_op: &ChannelOp,
+        args: Vec<TransactionArgument>,
     ) -> Result<SignedTransaction> {
         let WitnessData {
             channel_sequence_number: _,
             write_set,
             signature: _,
         } = channel.witness_data();
-        let channel_script = ChannelScriptPayload::new(
+        let txn = self.build_txn_with_op(
+            self.account,
+            receiver,
+            self.sequence_number()?,
             channel.channel_sequence_number(),
             write_set,
-            receiver,
-            script,
-        );
-        let txn = libra_types::transaction_helpers::create_unsigned_payload_txn(
-            TransactionPayload::ChannelScript(channel_script),
-            self.account,
-            self.sequence_number()?,
-            Self::MAX_GAS_AMOUNT,
+            channel_op,
+            args,
+            Self::MAX_GAS_AMOUNT_OFFCHAIN,
             Self::GAS_UNIT_PRICE,
             Self::TXN_EXPIRATION,
-        );
+        )?;
         let signed_txn = self.mock_signature(txn)?;
         Ok(signed_txn)
     }
@@ -636,10 +737,6 @@ where
         let mut signed_txn = self.sign_txn(txn)?;
         signed_txn.sign_by_receiver(&self.keypair.private_key, self.keypair.public_key.clone())?;
         Ok(signed_txn)
-    }
-
-    pub fn get_address(&self) -> AccountAddress {
-        self.account
     }
 
     pub async fn submit_transaction(
@@ -667,20 +764,20 @@ where
         &self,
         hash: Option<HashValue>,
         count: u32,
-    ) -> Result<Vec<(HashValue,ChannelTransactionRequest, u8)>> {
+    ) -> Result<Vec<(HashValue, ChannelTransactionRequest, u8)>> {
         let tnxs = self.offchain_transactions.borrow();
         let mut count_num = count;
         let mut find_data = false;
         let mut data = Vec::new();
         match hash {
             Some(hash) => {
-                for (hash_item,request ,res) in tnxs.iter() {
+                for (hash_item, request, res) in tnxs.iter() {
                     if hash.eq(hash_item) {
                         find_data = true;
                         continue;
                     }
                     if find_data && count_num > 0 {
-                        data.push((*hash_item,request.clone(), *res));
+                        data.push((*hash_item, request.clone(), *res));
                         count_num = count_num - 1;
                         if count_num == 0 {
                             break;
@@ -689,8 +786,8 @@ where
                 }
             }
             None => {
-                for (hash_item,request, res) in tnxs.iter() {
-                    data.push((*hash_item,request.clone(), *res));
+                for (hash_item, request, res) in tnxs.iter() {
+                    data.push((*hash_item, request.clone(), *res));
                     count_num = count_num - 1;
                     if count_num == 0 {
                         break;

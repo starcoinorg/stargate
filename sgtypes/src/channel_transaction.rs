@@ -1,3 +1,10 @@
+use std::{
+    convert::TryFrom,
+    fmt::{Display, Formatter},
+};
+
+use serde::{Deserialize, Serialize};
+
 use canonical_serialization::{
     CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
     SimpleDeserializer, SimpleSerializer,
@@ -7,19 +14,12 @@ use crypto::{
     HashValue,
 };
 use failure::prelude::*;
+use libra_types::transaction::TransactionArgument;
 use libra_types::{
     account_address::AccountAddress,
-    transaction::{
-        ChannelScriptPayload, ChannelWriteSetPayload, RawTransaction, TransactionOutput,
-        TransactionPayload, Version,
-    },
+    transaction::{ChannelWriteSetPayload, RawTransaction, TransactionOutput, Version},
 };
-use serde::{Deserialize, Serialize};
-use std::{
-    convert::TryFrom,
-    fmt::{Display, Formatter},
-};
-use libra_types::transaction::TransactionArgument;
+use std::time::Duration;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ChannelOp {
@@ -134,6 +134,10 @@ pub struct Witness {
 pub enum ChannelTransactionRequestPayload {
     Offchain(Witness),
     Travel {
+        /// Maximal total gas specified by wallet to spend for this transaction.
+        max_gas_amount: u64,
+        /// Maximal price can be paid per gas.
+        gas_unit_price: u64,
         /// The txn output's write_set hash, for receiver to verify the output.
         /// TODO(jole) need hash the whole output?
         txn_write_set_hash: HashValue,
@@ -150,43 +154,47 @@ pub struct ChannelTransactionRequest {
     /// The global status version on this tx executed.
     version: Version,
     operator: ChannelOp,
-    /// The sender raw transaction, this txn has not signature
-    /// if the txn is travel txn, txn signature at payload, so receiver can submit the txn to
-    /// chain, if the txn is offchain txn, receiver can not submit the txn, receiver need to
-    /// wrap a new txn with witness_payload.
-    txn: RawTransaction,
+    /// txn sender
+    sender: AccountAddress,
+    /// Sequence number of this transaction corresponding to sender's account.
+    sequence_number: u64,
+    /// txn receiver
+    receiver: AccountAddress,
+    /// Sequence number of this channel.
+    channel_sequence_number: u64,
+    /// The txn expiration time
+    expiration_time: Duration,
     /// The request payload, depend on txn type.
     payload: ChannelTransactionRequestPayload,
     /// The sender's public key
     public_key: Ed25519PublicKey,
 
-    args:Vec<TransactionArgument>,
+    args: Vec<TransactionArgument>,
 }
 
 impl ChannelTransactionRequest {
     pub fn new(
         version: Version,
         operator: ChannelOp,
-        txn: RawTransaction,
+        sender: AccountAddress,
+        sequence_number: u64,
+        receiver: AccountAddress,
+        channel_sequence_number: u64,
+        expiration_time: Duration,
         payload: ChannelTransactionRequestPayload,
         public_key: Ed25519PublicKey,
-        args:Vec<TransactionArgument>,
+        args: Vec<TransactionArgument>,
     ) -> Self {
-        let request_id = if let TransactionPayload::ChannelScript(script_payload) = txn.payload() {
-            Self::generate_request_id(
-                txn.sender(),
-                script_payload.receiver,
-                script_payload.channel_sequence_number,
-            )
-        } else {
-            panic!("Only support ChannelScript payload.");
-        };
-
+        let request_id = Self::generate_request_id(sender, receiver, channel_sequence_number);
         Self {
             request_id,
             version,
             operator,
-            txn,
+            sender,
+            sequence_number,
+            receiver,
+            channel_sequence_number,
+            expiration_time,
             payload,
             public_key,
             args,
@@ -217,23 +225,12 @@ impl ChannelTransactionRequest {
         &self.operator
     }
 
-    pub fn txn(&self) -> &RawTransaction {
-        &self.txn
-    }
-
     pub fn payload(&self) -> &ChannelTransactionRequestPayload {
         &self.payload
     }
 
     pub fn public_key(&self) -> &Ed25519PublicKey {
         &self.public_key
-    }
-
-    pub fn txn_payload(&self) -> &ChannelScriptPayload {
-        match self.txn.payload() {
-            TransactionPayload::ChannelScript(payload) => payload,
-            _ => panic!("Only support ChannelScript payload."),
-        }
     }
 
     pub fn is_travel_txn(&self) -> bool {
@@ -244,15 +241,27 @@ impl ChannelTransactionRequest {
     }
 
     pub fn sender(&self) -> AccountAddress {
-        self.txn.sender()
+        self.sender
     }
 
     pub fn receiver(&self) -> AccountAddress {
-        self.txn_payload().receiver
+        self.receiver
     }
 
     pub fn channel_sequence_number(&self) -> u64 {
-        self.txn_payload().channel_sequence_number
+        self.channel_sequence_number
+    }
+
+    pub fn sequence_number(&self) -> u64 {
+        self.sequence_number
+    }
+
+    pub fn args(&self) -> &[TransactionArgument] {
+        self.args.as_slice()
+    }
+
+    pub fn expiration_time(&self) -> Duration {
+        self.expiration_time
     }
 }
 
@@ -260,11 +269,20 @@ impl ChannelTransactionRequest {
 pub struct ChannelTransactionRequestAndOutput {
     pub request: ChannelTransactionRequest,
     pub output: TransactionOutput,
+    pub raw_txn: RawTransaction,
 }
 
 impl ChannelTransactionRequestAndOutput {
-    pub fn new(request: ChannelTransactionRequest, output: TransactionOutput) -> Self {
-        Self { request, output }
+    pub fn new(
+        request: ChannelTransactionRequest,
+        output: TransactionOutput,
+        raw_txn: RawTransaction,
+    ) -> Self {
+        Self {
+            request,
+            output,
+            raw_txn,
+        }
     }
 }
 
@@ -373,11 +391,15 @@ impl CanonicalSerialize for ChannelTransactionRequestPayload {
                     .encode_struct(witness)?;
             }
             ChannelTransactionRequestPayload::Travel {
+                max_gas_amount,
+                gas_unit_price,
                 txn_write_set_hash,
                 txn_signature,
             } => {
                 serializer
                     .encode_u32(ChannelTransactionType::Travel as u32)?
+                    .encode_u64(*max_gas_amount)?
+                    .encode_u64(*gas_unit_price)?
                     .encode_bytes(txn_write_set_hash.as_ref())?
                     .encode_bytes(&txn_signature.to_bytes())?;
             }
@@ -399,11 +421,15 @@ impl CanonicalDeserialize for ChannelTransactionRequestPayload {
                 Ok(ChannelTransactionRequestPayload::Offchain(witness))
             }
             Some(ChannelTransactionType::Travel) => {
+                let max_gas_amount = deserializer.decode_u64()?;
+                let gas_unit_price = deserializer.decode_u64()?;
                 let hash_bytes = deserializer.decode_bytes()?;
                 let txn_write_set_hash = HashValue::from_slice(hash_bytes.as_slice())?;
                 let signature_bytes = deserializer.decode_bytes()?;
                 let txn_signature = Ed25519Signature::try_from(signature_bytes.as_slice())?;
                 Ok(ChannelTransactionRequestPayload::Travel {
+                    max_gas_amount,
+                    gas_unit_price,
                     txn_write_set_hash,
                     txn_signature,
                 })
@@ -422,9 +448,13 @@ impl CanonicalSerialize for ChannelTransactionRequest {
             .encode_bytes(self.request_id.to_vec().as_slice())?
             .encode_u64(self.version)?
             .encode_struct(&self.operator)?
-            .encode_struct(&self.txn)?
+            .encode_struct(&self.sender)?
+            .encode_u64(self.sequence_number)?
+            .encode_struct(&self.receiver)?
+            .encode_u64(self.channel_sequence_number)?
+            .encode_u64(self.expiration_time.as_secs())?
             .encode_struct(&self.payload)?
-            .encode_bytes(&self.public_key.to_bytes())?
+            .encode_struct(&self.public_key)?
             .encode_vec(&self.args)?;
         Ok(())
     }
@@ -438,17 +468,25 @@ impl CanonicalDeserialize for ChannelTransactionRequest {
         let request_id = HashValue::from_slice(deserializer.decode_bytes()?.as_slice())?;
         let version = deserializer.decode_u64()?;
         let operator = deserializer.decode_struct()?;
-        let txn = deserializer.decode_struct()?;
+        let sender = deserializer.decode_struct()?;
+        let sequence_number = deserializer.decode_u64()?;
+        let receiver = deserializer.decode_struct()?;
+        let channel_sequence_number = deserializer.decode_u64()?;
+        let expiration_time = Duration::from_secs(deserializer.decode_u64()?);
         let payload = deserializer.decode_struct()?;
-        let public_key_bytes = deserializer.decode_bytes()?;
+        let public_key = deserializer.decode_struct()?;
         let args = deserializer.decode_vec()?;
         Ok(Self {
             request_id,
             version,
             operator,
-            txn,
+            sender,
+            sequence_number,
+            receiver,
+            channel_sequence_number,
+            expiration_time,
             payload,
-            public_key: Ed25519PublicKey::try_from(public_key_bytes.as_slice())?,
+            public_key,
             args,
         })
     }

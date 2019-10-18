@@ -4589,6 +4589,7 @@ dependencies = [
  "state-view 0.1.0",
  "stdlib 0.1.0",
  "tokio 0.2.0-alpha.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "vm 0.1.0",
  "vm_cache_map 0.1.0",
  "vm_genesis 0.1.0",
  "vm_runtime 0.1.0",
