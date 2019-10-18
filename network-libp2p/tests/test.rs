@@ -11,8 +11,8 @@ use std::{
 /// Builds two services. The second one and further have the first one as its bootstrap node.
 /// This is to be used only for testing, and a panic will happen if something goes wrong.
 fn build_nodes<TMsg>(num: usize, base_port: u16) -> Vec<network_libp2p::Service<TMsg>>
-where
-    TMsg: CustomMessage + Send + 'static,
+    where
+        TMsg: CustomMessage + Send + 'static,
 {
     let mut result: Vec<network_libp2p::Service<_>> = Vec::with_capacity(num);
     let mut first_addr = None::<Multiaddr>;
@@ -79,7 +79,7 @@ fn basic_two_nodes_connectivity() {
     });
 
     let combined = fut1.select(fut2).map_err(|(err, _)| err);
-    tokio::runtime::Runtime::new()
+    let _ = tokio::runtime::Runtime::new()
         .unwrap()
         .block_on_all(combined)
         .unwrap();
@@ -132,7 +132,7 @@ fn two_nodes_transfer_lots_of_packets() {
     });
 
     let combined = fut1.select(fut2).map_err(|(err, _)| err);
-    tokio::runtime::Runtime::new()
+    let _ = tokio::runtime::Runtime::new()
         .unwrap()
         .block_on(combined)
         .unwrap();
@@ -257,7 +257,7 @@ fn basic_two_nodes_requests_in_parallel() {
     });
 
     let combined = fut1.select(fut2).map_err(|(err, _)| err);
-    tokio::runtime::Runtime::new()
+    let _ = tokio::runtime::Runtime::new()
         .unwrap()
         .block_on_all(combined)
         .unwrap();
