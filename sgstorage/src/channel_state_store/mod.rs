@@ -36,17 +36,31 @@ impl<S> ChannelStateStore<S>
 where
     S: SchemaDB + ChannelAddressProvider,
 {
+    /// get this channel state of sender and receiver
     pub fn get_state_with_proof_by_version(&self, version: Version) -> Result<ChannelState> {
-        let (receiver_blob, receiver_proof) = JellyfishMerkleTree::new(self)
-            .get_with_proof(self.db.participant_address().hash(), version)?;
+        let (receiver_blob, receiver_proof) =
+            self.get_account_state_with_proof_by_version(self.db.participant_address(), version)?;
         let (sender_blob, sender_proof) =
-            JellyfishMerkleTree::new(self).get_with_proof(self.owner.hash(), version)?;
+            self.get_account_state_with_proof_by_version(self.owner, version)?;
+
         Ok(ChannelState {
             sender_state: sender_blob,
             receiver_state: receiver_blob,
             sender_state_proof: sender_proof,
             receiver_state_proof: receiver_proof,
         })
+    }
+
+    /// Get the account state blob given account address and root hash of state Merkle tree
+    #[inline]
+    pub fn get_account_state_with_proof_by_version(
+        &self,
+        address: AccountAddress,
+        version: Version,
+    ) -> Result<(Option<AccountStateBlob>, SparseMerkleProof)> {
+        let (blob, proof) =
+            JellyfishMerkleTree::new(self).get_with_proof(address.hash(), version)?;
+        Ok((blob, proof))
     }
 
     pub fn put_channel_state_set(

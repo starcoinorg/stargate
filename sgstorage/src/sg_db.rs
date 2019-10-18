@@ -1,5 +1,4 @@
 use crate::channel_db::ChannelDB;
-use crate::channel_state_store::ChannelStateStore;
 use crate::channel_store::ChannelStore;
 use crate::channel_transaction_store::ChannelTransactionStore;
 use crate::rocksdb_utils::FixedPrefixSliceTransform;
@@ -86,12 +85,12 @@ impl SgDB {
     }
 
     #[inline]
-    pub fn get_channel_state_store(
+    pub fn get_channel_store(
         &self,
         participant_address: AccountAddress,
-    ) -> ChannelStateStore<ChannelDB> {
+    ) -> ChannelStore<ChannelDB> {
         let channel_db = ChannelDB::new(participant_address, self.db.clone());
-        ChannelStateStore::new(Arc::new(channel_db), self.owner_address)
+        ChannelStore::new(Arc::new(channel_db), self.owner_address)
     }
 
     pub fn get_channel_transaction_store(

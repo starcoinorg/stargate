@@ -7,7 +7,9 @@ use crypto::hash::CryptoHash;
 use crypto::HashValue;
 use failure::prelude::*;
 use libra_types::account_address::AccountAddress;
+use libra_types::account_state_blob::AccountStateWithProof;
 use libra_types::crypto_proxies::LedgerInfoWithSignatures;
+use libra_types::proof::AccountStateProof;
 use libra_types::transaction::{TransactionInfo, TransactionToCommit, Version};
 use schemadb::SchemaBatch;
 use std::sync::Arc;
@@ -148,5 +150,49 @@ where
             account_state_root_hash,
             ledger_frozen_subtree_hashes,
         }))
+    }
+
+    /// Returns the account state corresponding to the given version and account address with proof
+    /// based on `ledger_version`
+    pub fn get_account_state_with_proof(
+        &self,
+        address: AccountAddress,
+        version: Version,
+        ledger_version: Version,
+    ) -> Result<AccountStateWithProof> {
+        ensure!(
+            version <= ledger_version,
+            "The queried version {} should be equal to or older than ledger version {}.",
+            version,
+            ledger_version
+        );
+        let latest_version = self.get_latest_version()?;
+        ensure!(
+            ledger_version <= latest_version,
+            "The ledger version {} is greater than the latest version currently in ledger: {}",
+            ledger_version,
+            latest_version
+        );
+
+        let (txn_info, txn_info_accumulator_proof) = self
+            .ledger_store
+            .get_transaction_info_with_proof(version, ledger_version)?;
+        let (account_state_blob, sparse_merkle_proof) = self
+            .state_store
+            .get_account_state_with_proof_by_version(address, version)?;
+        Ok(AccountStateWithProof::new(
+            version,
+            account_state_blob,
+            AccountStateProof::new(txn_info_accumulator_proof, txn_info, sparse_merkle_proof),
+        ))
+    }
+
+    /// Gets the latest version number available in the ledger.
+    fn get_latest_version(&self) -> Result<Version> {
+        Ok(self
+            .ledger_store
+            .get_latest_ledger_info()?
+            .ledger_info()
+            .version())
     }
 }
