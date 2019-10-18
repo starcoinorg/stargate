@@ -1,3 +1,6 @@
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use futures::{future, prelude::*, stream, try_ready};
 use network_libp2p::{
     build_multiaddr, multiaddr::Protocol, CustomMessage, Multiaddr, ServiceEvent,

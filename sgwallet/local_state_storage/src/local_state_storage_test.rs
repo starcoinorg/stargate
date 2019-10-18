@@ -1,3 +1,6 @@
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::*;
 use logger::init_for_e2e_testing;
 use sgchain::star_chain_client::{faucet_sync, MockChainClient};

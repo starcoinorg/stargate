@@ -1,3 +1,7 @@
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
+
 use crate::{
     account_commands::AccountCommand, client_proxy::ClientProxy, dev_commands::DevCommand,
     node_commands::NodeCommand,

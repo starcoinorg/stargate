@@ -1,3 +1,6 @@
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::ProtocolId;
 use bytes::Bytes;
 use futures::{future, prelude::*, stream};

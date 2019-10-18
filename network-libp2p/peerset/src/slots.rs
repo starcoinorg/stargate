@@ -1,3 +1,6 @@
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use libp2p::PeerId;
 use linked_hash_map::LinkedHashMap;
 use std::mem;

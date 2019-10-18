@@ -1,3 +1,6 @@
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use canonical_serialization::SimpleSerializer;
 use failure::prelude::*;
 use libra_types::{

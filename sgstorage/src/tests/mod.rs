@@ -1,3 +1,6 @@
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::channel_state_store::ChannelState;
 use crate::schema_db::SchemaDB;
 use crate::sg_db::SgDB;

@@ -1,3 +1,6 @@
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
 mod test_helper;
 
 use crate::test_helper::create_and_start_server;

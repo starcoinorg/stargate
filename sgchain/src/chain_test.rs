@@ -1,3 +1,6 @@
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::star_chain_client::{faucet_sync, ChainClient, MockChainClient};
 use std::{
     thread::{spawn},

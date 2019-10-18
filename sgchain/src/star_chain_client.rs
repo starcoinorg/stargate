@@ -1,3 +1,6 @@
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::mock_star_node::{setup_environment, StarHandle};
 use admission_control_proto::proto::{
     admission_control::{SubmitTransactionRequest, SubmitTransactionResponse, AdmissionControlClient},

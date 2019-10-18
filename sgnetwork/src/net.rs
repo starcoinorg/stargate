@@ -1,3 +1,6 @@
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::{
     convert_account_address_to_peer_id, convert_peer_id_to_account_address,
     helper::convert_boot_nodes,

@@ -1,3 +1,7 @@
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
+
 use canonical_serialization::{CanonicalSerialize, SimpleSerializer};
 use cli_wallet::cli_wallet::WalletLibrary;
 use failure::prelude::*;

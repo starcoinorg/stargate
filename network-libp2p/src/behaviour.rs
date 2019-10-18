@@ -1,3 +1,6 @@
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::custom_proto::{CustomProto, CustomProtoOut, RegisteredProtocol};
 use futures::prelude::*;
 use libp2p::{

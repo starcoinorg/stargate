@@ -1,3 +1,6 @@
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
 pub mod account_resource_ext;
 pub mod channel_transaction;
 #[cfg(test)]

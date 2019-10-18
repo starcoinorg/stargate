@@ -1,3 +1,6 @@
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! This module defines error types used by sgstorage.
 
 use failure::Fail;

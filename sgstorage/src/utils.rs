@@ -1,3 +1,6 @@
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
 /// prefix_next returns the next prefix key.
 ///
 /// Assume there are keys like:
