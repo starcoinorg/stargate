@@ -1,7 +1,7 @@
 [package]
 name = "node_rest_api"
 version = "0.1.0"
-authors = ["chengsuoyuan <suoyuan@gmail.com>"]
+authors = ["Starcoin Core Dev <dev@starcoin.org>"]
 edition = "2018"
 workspace = "../../"
 
