@@ -20,8 +20,9 @@ fn test_db_get_and_put() -> Result<()> {
     let sg_db = Arc::new(SgDB::open(sender_address, &tmp_dir));
 
     let receiver_address = AccountAddress::random();
-    let channel_state_store = sg_db.get_channel_state_store(receiver_address);
+    let channel_store = sg_db.get_channel_store(receiver_address);
 
+    let channel_state_store = channel_store.state_store();
     assert!(channel_state_store
         .get_state_with_proof_by_version(0)
         .is_err());
@@ -97,13 +98,14 @@ fn put_state(
         state_set.insert(receiver_address, blob);
     }
     let mut schema_batch = SchemaBatch::default();
-    let channel_db = Arc::new(sg_db.get_channel_db(receiver_address));
-    let channel_state_store = ChannelStateStore::new(channel_db.clone(), sender_address);
+    let channel_store = sg_db.get_channel_store(receiver_address);
+
+    let channel_state_store = channel_store.state_store();
 
     let new_root_hash =
         channel_state_store.put_channel_state_set(state_set, version, &mut schema_batch)?;
 
-    channel_db.write_schemas(schema_batch)?;
+    channel_store.db().write_schemas(schema_batch)?;
     Ok(new_root_hash)
 }
 
@@ -127,3 +129,4 @@ fn verify_state(
 }
 
 mod rocksdb_prefix_seek_test;
+mod sg_db_test;

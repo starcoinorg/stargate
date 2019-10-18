@@ -36,6 +36,24 @@ where
         store.ledger_store.bootstrap();
         store
     }
+
+    #[cfg(test)]
+    #[inline]
+    pub fn db(&self) -> Arc<S> {
+        self.db.clone()
+    }
+    #[cfg(test)]
+    pub fn state_store(&self) -> &ChannelStateStore<S> {
+        &self.state_store
+    }
+    #[cfg(test)]
+    pub fn ledger_store(&self) -> &LedgerStore<S> {
+        &self.ledger_store
+    }
+    #[cfg(test)]
+    pub fn transaction_store(&self) -> &ChannelTransactionStore<S> {
+        &self.transaction_store
+    }
 }
 
 /// Write data part

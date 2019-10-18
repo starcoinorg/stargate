@@ -80,25 +80,12 @@ impl SgDB {
 
 impl SgDB {
     #[inline]
-    pub fn get_channel_db(&self, participant_address: AccountAddress) -> ChannelDB {
-        ChannelDB::new(participant_address, self.db.clone())
-    }
-
-    #[inline]
     pub fn get_channel_store(
         &self,
         participant_address: AccountAddress,
     ) -> ChannelStore<ChannelDB> {
         let channel_db = ChannelDB::new(participant_address, self.db.clone());
         ChannelStore::new(Arc::new(channel_db), self.owner_address)
-    }
-
-    pub fn get_channel_transaction_store(
-        &self,
-        participant_address: AccountAddress,
-    ) -> ChannelTransactionStore<ChannelDB> {
-        let channel_db = ChannelDB::new(participant_address, self.db.clone());
-        ChannelTransactionStore::new(Arc::new(channel_db))
     }
 
     pub fn save_tx(
