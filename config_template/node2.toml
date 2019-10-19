@@ -2,6 +2,10 @@
 address = 'localhost'
 port = 9001
 
+[rest_config]
+address = '127.0.0.1'
+port = 7001
+
 [net_config]
 listen = '/ip4/127.0.0.1/tcp/10001'
 max_sockets = 20
