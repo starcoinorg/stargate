@@ -4484,6 +4484,7 @@ dependencies = [
  "protobuf 2.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "sgtypes 0.1.0",
  "signal-hook 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "slog-scope 4.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "state-view 0.1.0",
  "storage-client 0.1.0",
  "storage-service 0.1.0",

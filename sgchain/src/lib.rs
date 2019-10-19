@@ -7,4 +7,5 @@ mod mock_star_node;
 mod chain_test;
 
 pub mod client_state_view;
+pub mod main_node;
 pub mod star_chain_client;

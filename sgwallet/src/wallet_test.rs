@@ -11,6 +11,8 @@ use failure::{_core::time::Duration, prelude::*};
 use libra_types::{account_address::AccountAddress, transaction::TransactionArgument};
 use logger::prelude::*;
 use rand::prelude::*;
+use sgchain::main_node::Args;
+use sgchain::star_chain_client::StarChainClient;
 use sgchain::{
     client_state_view::ClientStateView,
     star_chain_client::{faucet_sync, ChainClient, MockChainClient},
@@ -104,8 +106,10 @@ where
     Ok(())
 }
 
-#[test]
-fn test_wallet() -> Result<()> {
+fn test_wallet<C>(chain_client: Arc<C>) -> Result<()>
+where
+    C: ChainClient + Clone + Send + Sync + 'static,
+{
     ::logger::init_for_e2e_testing();
     let sender_amount: u64 = 10_000_000;
     let receiver_amount: u64 = 10_000_000;
@@ -122,11 +126,8 @@ fn test_wallet() -> Result<()> {
 
     let rt = Runtime::new()?;
 
-    let (mock_chain_service, _handle) = MockChainClient::new();
-    let client = Arc::new(mock_chain_service);
-
-    let sender_wallet = Arc::new(setup_wallet(client.clone(), sender_amount).unwrap());
-    let receiver_wallet = Arc::new(setup_wallet(client.clone(), receiver_amount).unwrap());
+    let sender_wallet = Arc::new(setup_wallet(chain_client.clone(), sender_amount).unwrap());
+    let receiver_wallet = Arc::new(setup_wallet(chain_client.clone(), receiver_amount).unwrap());
 
     let sender = sender_wallet.account();
     let receiver = receiver_wallet.account();
@@ -273,6 +274,25 @@ fn test_wallet() -> Result<()> {
 
     rt.block_on(f);
     Ok(())
+}
+
+#[test]
+fn test_wallet_with_mock_client() -> Result<()> {
+    let (mock_chain_service, _handle) = MockChainClient::new();
+    let chain_client = Arc::new(mock_chain_service);
+    test_wallet(chain_client)
+}
+
+#[test]
+fn test_wallet_with_rpc_client() -> Result<()> {
+    let (_handler, _config, _logger) = sgchain::main_node::run_node(Args {
+        config: None,
+        no_logging: false,
+    });
+    //TODO use a random port and check port available.
+    let rpc_client = StarChainClient::new("localhost", 8000);
+    let chain_client = Arc::new(rpc_client);
+    test_wallet(chain_client)
 }
 
 #[test]
