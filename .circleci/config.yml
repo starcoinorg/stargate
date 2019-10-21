@@ -62,9 +62,6 @@ jobs:
     steps:
       - build_setup
       - run:
-          name: Git Hooks and Checks
-          command: ./libra/scripts/git-checks.sh
-      - run:
           name: Linting
           command: |
             [[ $CIRCLE_NODE_INDEX =~ [123] ]] || cargo fmt -- --check
