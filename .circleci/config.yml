@@ -4,11 +4,11 @@ executors:
   build-executor:
     docker:
       - image: circleci/rust:stretch
-    resource_class: 2xlarge
+    resource_class: medium
   audit-executor:
     docker:
       - image: circleci/rust:stretch
-    resource_class: xlarge
+    resource_class: medium
 
 commands:
   print_versions:
