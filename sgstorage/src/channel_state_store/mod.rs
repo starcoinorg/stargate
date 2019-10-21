@@ -17,6 +17,7 @@ use libradb::schema::{jellyfish_merkle_node::*, stale_node_index::*};
 use schemadb::SchemaBatch;
 use std::{collections::HashMap, sync::Arc};
 
+#[derive(Clone)]
 pub struct ChannelStateStore<S> {
     db: Arc<S>,
     owner: AccountAddress,

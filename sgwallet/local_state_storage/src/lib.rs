@@ -1,6 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::channel::Channel;
 pub use crate::channel_state_view::ChannelStateView;
 use failure::prelude::*;
 use libra_types::{
@@ -11,11 +12,10 @@ use libra_types::{
 use logger::prelude::*;
 use sgchain::client_state_view::ClientStateView;
 use sgchain::star_chain_client::ChainClient;
+use sgstorage::sg_db::SgDB;
 use sgtypes::sg_error::SgError;
-use sgtypes::{
-    account_state::AccountState,
-    channel::{Channel, WitnessData},
-};
+use sgtypes::{account_state::AccountState, channel::WitnessData};
+use std::path::Path;
 use std::{collections::HashMap, sync::Arc};
 
 pub struct LocalStateStorage<C>
@@ -24,6 +24,7 @@ where
 {
     account: AccountAddress,
     client: Arc<C>,
+    sgdb: Arc<SgDB>,
     channels: HashMap<AccountAddress, Channel>,
 }
 
@@ -31,10 +32,16 @@ impl<C> LocalStateStorage<C>
 where
     C: ChainClient,
 {
-    pub fn new(account: AccountAddress, client: Arc<C>) -> Result<Self> {
+    pub fn new<P: AsRef<Path>>(
+        account: AccountAddress,
+        store_dir: P,
+        client: Arc<C>,
+    ) -> Result<Self> {
+        let sgdb = Arc::new(SgDB::open(account, store_dir));
         let mut storage = Self {
             account,
             client,
+            sgdb,
             channels: HashMap::new(),
         };
         storage.refresh_channels()?;
@@ -58,7 +65,9 @@ where
                         self.account,
                         participant
                     ))?;
-                let channel = Channel::new_with_state(my_channel_state, participant_channel_state);
+                let channel_store = self.sgdb.get_channel_store(participant);
+                let channel =
+                    Channel::load(my_channel_state, participant_channel_state, channel_store)?;
                 info!("Init new channel with: {}", participant);
                 self.channels.insert(participant, channel);
             }
@@ -87,7 +96,11 @@ where
     }
 
     pub fn new_channel(&mut self, participant: AccountAddress) {
-        let channel = Channel::new(self.account, participant);
+        let channel = Channel::new(
+            self.account,
+            participant,
+            self.sgdb.get_channel_store(participant),
+        );
         self.channels.insert(participant, channel);
     }
 
@@ -136,6 +149,8 @@ where
     //    }
 }
 
+pub mod channel;
 mod channel_state_view;
 #[cfg(test)]
 mod local_state_storage_test;
+mod tx_applier;

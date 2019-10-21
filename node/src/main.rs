@@ -88,8 +88,13 @@ fn gen_node(
     );
 
     info!("account addr is {:?}", hex::encode(account_address));
-    let wallet =
-        Wallet::new_with_client(account_address, keypair.clone(), Arc::new(client)).unwrap();
+    let wallet = Wallet::new_with_client(
+        account_address,
+        keypair.clone(),
+        Arc::new(client),
+        &wallet_config.store_dir,
+    )
+    .unwrap();
 
     info!("account resource is {:?}", wallet.account_resource());
     Node::new(

@@ -22,11 +22,25 @@ use libra_types::proof::{AccumulatorConsistencyProof, TransactionAccumulatorProo
 use libra_types::transaction::{TransactionInfo, Version};
 use libradb::schema::{ledger_info::*, transaction_accumulator::*, transaction_info::*};
 use schemadb::{ReadOptions, SchemaBatch};
+use std::fmt::Formatter;
 use std::{ops::Deref, sync::Arc};
 
+#[derive(Clone)]
 pub struct LedgerStore<S> {
     db: Arc<S>,
     latest_ledger_info: ArcSwap<Option<LedgerInfoWithSignatures>>,
+}
+impl<S> core::fmt::Debug for LedgerStore<S>
+where
+    S: core::fmt::Debug,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "db: {:?}, latest_ledger_info: {:?}",
+            self.db, self.latest_ledger_info
+        )
+    }
 }
 
 impl<S> LedgerStore<S> {

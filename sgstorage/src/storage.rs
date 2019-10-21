@@ -9,10 +9,14 @@ use schemadb::DEFAULT_CF_NAME;
 use std::collections::BTreeMap;
 use std::path::Path;
 
+#[derive(Debug)]
 pub struct SgStorage {
     inner: rocksdb::DB,
     owner: AccountAddress,
 }
+
+unsafe impl Send for SgStorage {}
+unsafe impl Sync for SgStorage {}
 
 impl AsMut<rocksdb::DB> for SgStorage {
     fn as_mut(&mut self) -> &mut rocksdb::DB {
