@@ -20,11 +20,11 @@ A smart contract demo written with libra move ir (.mvir).
      Alice plays with secret hand in her cli.
      "bde750a..." is the normal hand "72" (hex of "r"(石头)) encrypted with a key "616263"(hex of "abc").
      Specifically, secret hand is the sha3_256 result of "normal_hand+key".
-     20 is her bet amount.
+     20 is her tokens.
     ```
     dev pe {bob} scripts rps_player_1 b"bde750abcf1d176a34cce61b607107092413100c9195b08f13d6e7d46980cf1c", 20
     ```
-     Bob plays with normal hand in his cli. "70" is hex of "p"(剪刀), 10 is his bet amount.
+     Bob plays with normal hand in his cli. "70" is hex of "p"(剪刀), 10 is his tokens.
     ```
     dev pe {alice} scripts rps_player_2 b"70" 10
     ```
