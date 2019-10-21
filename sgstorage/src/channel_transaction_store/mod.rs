@@ -3,7 +3,6 @@
 
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
-// Copyright (c) The SG Core Contributors
 
 //! This file defines transaction store APIs that are related to committed signed transactions.
 
@@ -20,6 +19,7 @@ use libradb::schema::transaction_by_account::*;
 use schemadb::SchemaBatch;
 use std::sync::Arc;
 
+#[derive(Clone)]
 pub struct ChannelTransactionStore<S> {
     db: Arc<S>,
 }

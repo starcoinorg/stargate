@@ -19,7 +19,12 @@ logger = { path = "../../libra/common/logger"}
 atomic_refcell = "0.1.3"
 vm_runtime_types = { path = "../../libra/language/vm/vm_runtime/vm_runtime_types"}
 tokio = "0.1.22"
+sgstorage = { path = "../../sgstorage" }
+
+canonical-serialization = { path = "../../libra/common/canonical-serialization"}
+scratchpad = { path = "../../libra/storage/scratchpad" }
 
 [dev-dependencies]
 crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }
 sgchain = { path = "../../sgchain" }
+sgconfig = { path = "../../sgconfig", package = "sg_config"}

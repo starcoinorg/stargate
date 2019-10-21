@@ -15,14 +15,25 @@ use libra_types::crypto_proxies::LedgerInfoWithSignatures;
 use libra_types::proof::AccountStateProof;
 use libra_types::transaction::{TransactionInfo, TransactionToCommit, Version};
 use schemadb::SchemaBatch;
+use std::fmt::Formatter;
 use std::sync::Arc;
 use storage_proto::StartupInfo;
 
+#[derive(Clone)]
 pub struct ChannelStore<S> {
     db: Arc<S>,
     state_store: ChannelStateStore<S>,
     ledger_store: LedgerStore<S>,
     transaction_store: ChannelTransactionStore<S>,
+}
+
+impl<S> core::fmt::Debug for ChannelStore<S>
+where
+    S: core::fmt::Debug,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "db: {:?}", self.db)
+    }
 }
 
 impl<S> ChannelStore<S>

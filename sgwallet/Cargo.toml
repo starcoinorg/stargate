@@ -17,6 +17,7 @@ include_dir = "0.2.1"
 failure = { path = "../libra/common/failure_ext", package = "failure_ext" }
 libra-types = { path = "../libra/types" }
 sgtypes = { path = "../sgtypes" }
+sgconfig = { path = "../sgconfig", package="sg_config" }
 crypto = { path = "../libra/crypto/crypto" }
 
 local_state_storage = { path = "./local_state_storage"}

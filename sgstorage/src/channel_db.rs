@@ -25,11 +25,14 @@ pub trait ChannelAddressProvider {
     fn participant_address(&self) -> AccountAddress;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ChannelDB {
     inner: Arc<SgStorage>,
     participant: AccountAddress,
 }
+
+unsafe impl Send for ChannelDB {}
+unsafe impl Sync for ChannelDB {}
 
 impl ChannelDB {
     pub fn new(participant: AccountAddress, inner: Arc<SgStorage>) -> Self {

@@ -15,6 +15,7 @@ use sgchain::{
     star_chain_client::{faucet_sync, ChainClient},
 };
 use sgcompiler::{Compiler, StateViewModuleLoader};
+use sgconfig::config::WalletConfig;
 use sgtypes::script_package::ChannelScriptPackage;
 use sgwallet::wallet::Wallet;
 use std::time::Duration;
@@ -37,7 +38,12 @@ where
 
     let account = AccountAddress::from_public_key(&account_keypair.public_key);
     faucet_sync(client.as_ref().clone(), account, init_balance)?;
-    let wallet = Wallet::new_with_client(account, account_keypair, client)?;
+    let wallet = Wallet::new_with_client(
+        account,
+        account_keypair,
+        client,
+        WalletConfig::default().store_dir,
+    )?;
     assert_eq!(init_balance, wallet.balance()?);
     Ok(wallet)
 }

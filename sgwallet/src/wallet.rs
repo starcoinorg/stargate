@@ -28,13 +28,15 @@ use libra_types::{
     transaction_helpers::{create_signed_payload_txn, ChannelPayloadSigner, TransactionSigner},
     vm_error::*,
 };
+use local_state_storage::channel::Channel;
 use local_state_storage::LocalStateStorage;
 use logger::prelude::*;
 use sgchain::star_chain_client::{ChainClient, StarChainClient};
+use sgconfig::config::WalletConfig;
 use sgtypes::channel_transaction_sigs::{ChannelTransactionSigs, TxnSignature};
 use sgtypes::{
     account_resource_ext,
-    channel::{Channel, WitnessData},
+    channel::WitnessData,
     channel_transaction::{
         ChannelOp, ChannelTransaction, ChannelTransactionRequest,
         ChannelTransactionRequestAndOutput, ChannelTransactionResponse,
@@ -43,6 +45,7 @@ use sgtypes::{
     script_package::{ChannelScriptPackage, ScriptCode},
 };
 use state_view::StateView;
+use std::path::Path;
 use std::{sync::Arc, time::Duration};
 use vm::gas_schedule::GasAlgebra;
 use vm_runtime::{MoveVM, VMExecutor};
@@ -82,16 +85,18 @@ where
     ) -> Result<Wallet<StarChainClient>> {
         let chain_client = StarChainClient::new(rpc_host, rpc_port as u32);
         let client = Arc::new(chain_client);
-        Wallet::new_with_client(account, keypair, client)
+        Wallet::new_with_client(account, keypair, client, WalletConfig::default().store_dir)
     }
 
-    pub fn new_with_client(
+    pub fn new_with_client<P: AsRef<Path>>(
         account: AccountAddress,
         keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
         client: Arc<C>,
+        store_dir: P,
     ) -> Result<Self> {
         let storage = Arc::new(AtomicRefCell::new(LocalStateStorage::new(
             account,
+            store_dir,
             client.clone(),
         )?));
         let script_registry = PackageRegistry::build()?;

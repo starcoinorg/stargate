@@ -18,6 +18,17 @@ pub struct NodeConfig {
 pub struct WalletConfig {
     pub chain_address: String,
     pub chain_port: u16,
+    pub store_dir: String,
+}
+
+impl Default for WalletConfig {
+    fn default() -> Self {
+        WalletConfig {
+            chain_address: "localhost".to_string(),
+            chain_port: 8000,
+            store_dir: "sgstore".to_string(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -68,6 +79,7 @@ pub fn get_test_config(addr: String, port: u16, rest_port: u16) -> (NodeConfig) 
     let wallet_config = WalletConfig {
         chain_address: addr,
         chain_port: port,
+        ..WalletConfig::default()
     };
     NodeConfig {
         rpc_config: network,
