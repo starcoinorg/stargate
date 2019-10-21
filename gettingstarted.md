@@ -22,7 +22,7 @@ Create two new accounts without password for testing.
 mkdir alice
 mkdir bob
 ```
-Then transfer some testing eth from coinbase to these new accounts
+Then transfer some testing coin from coinbase to these new accounts
 ```
 ./target/debug/cli --chain_host localhost --chain_port 8000 --host localhost --port 9000 -m alice/key
 ```
@@ -99,3 +99,19 @@ a s
     node cb {alice}
 
     ```
+## Channel Contract
+1. Deploy Module to Chain
+    In alice's cli
+    ```
+    dev dm demo/RockPaperScissors/module/rps.mvir
+
+    ```
+
+2. Install Script to Node
+    Change all {{starlab}} in demo/RockPaperScissors/scripts to alice's address,then in both cli execute
+    ```
+    dev ip demo/RockPaperScissors/scripts
+
+    ```
+
+3.
