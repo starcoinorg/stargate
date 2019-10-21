@@ -69,7 +69,7 @@ impl<C> Wallet<C>
 where
     C: ChainClient + Send + Sync + 'static,
 {
-    const TXN_EXPIRATION: Duration = Duration::from_secs(60 * 60);
+    const TXN_EXPIRATION: Duration = Duration::from_secs(24 * 60 * 60);
     const MAX_GAS_AMOUNT_OFFCHAIN: u64 = std::u64::MAX;
     const MAX_GAS_AMOUNT_ONCHAIN: u64 = 1_000_000;
     const GAS_UNIT_PRICE: u64 = 1;

@@ -356,16 +356,15 @@ where
     Ok(())
 }
 
-#[test]
-fn test_deploy_and_use_custom_module() -> Result<()> {
+fn test_deploy_custom_module<C>(chain_client: Arc<C>) -> Result<()>
+where
+    C: ChainClient + Clone + Send + Sync + 'static,
+{
     ::logger::init_for_e2e_testing();
     let init_balance = 1000000;
 
-    let (mock_chain_service, _handle) = MockChainClient::new();
-    let client = Arc::new(mock_chain_service);
-
-    let alice = Arc::new(setup_wallet(client.clone(), init_balance)?);
-    let bob = Arc::new(setup_wallet(client.clone(), init_balance)?);
+    let alice = Arc::new(setup_wallet(chain_client.clone(), init_balance)?);
+    let bob = Arc::new(setup_wallet(chain_client.clone(), init_balance)?);
     deploy_custom_module_and_script(alice.clone(), bob.clone(), "test_custom_module")?;
 
     open_channel(alice.clone(), bob.clone(), 100000, 100000)?;
@@ -373,6 +372,22 @@ fn test_deploy_and_use_custom_module() -> Result<()> {
     execute_script(alice.clone(), bob.clone(), "scripts", "do_nothing", vec![])?;
 
     Ok(())
+}
+
+#[test]
+fn test_deploy_custom_module_by_mock_client() -> Result<()> {
+    let (mock_chain_service, _handle) = MockChainClient::new();
+    let chain_client = Arc::new(mock_chain_service);
+    test_deploy_custom_module(chain_client)
+}
+
+#[test]
+fn test_deploy_custom_module_by_rpc_client() -> Result<()> {
+    let (_config, _logger, _handler) = sgchain::main_node::run_node(None, false);
+    //TODO use a random port and check port available.
+    let rpc_client = StarChainClient::new("localhost", 8000);
+    let chain_client = Arc::new(rpc_client);
+    test_deploy_custom_module(chain_client)
 }
 
 #[test]
