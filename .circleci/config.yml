@@ -69,6 +69,8 @@ jobs:
           command: |
             [[ $CIRCLE_NODE_INDEX =~ [123] ]] || ./libra/scripts/clippy.sh
             [[ $CIRCLE_NODE_INDEX =~ [123] ]] || cargo fmt -- --check
+          environment:
+            - NUM_JOBS: 4
       - run:
           name: Build Release
           command: |
