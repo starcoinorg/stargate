@@ -38,6 +38,11 @@ commands:
             sudo apt-get clean
             sudo rm -r /var/lib/apt/lists/*
             rustup component add clippy rustfmt
+
+            curl -O https://dl.google.com/go/go1.12.5.linux-amd64.tar.gz
+            sudo tar -C /usr/local -xzf go1.12.5.linux-amd64.tar.gz
+            echo 'export PATH=$PATH:/usr/local/go/bin' >> $BASH_ENV
+            sudo rm go1.12.5.linux-amd64.tar.gz
   build_setup:
     steps:
       - checkout
