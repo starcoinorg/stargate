@@ -70,32 +70,33 @@ jobs:
           name: Git Hooks and Checks
           command: ./libra/scripts/git-checks.sh
       - run:
+          name: Cargo check
+          command: |
+            cargo check --workspace -j 4
+      - run:
           name: Linting
           command: |
-            [[ $CIRCLE_NODE_INDEX =~ [123] ]] || ./libra/scripts/clippy.sh
             [[ $CIRCLE_NODE_INDEX =~ [123] ]] || cargo fmt -- --check
-          environment:
-            - NUM_JOBS: 4
       - run:
           name: Build Release
           command: |
-            [[ $CIRCLE_NODE_INDEX =~ [023] ]] || RUST_BACKTRACE=1 cargo build -j 16 --all --release
+            [[ $CIRCLE_NODE_INDEX =~ [023] ]] || RUST_BACKTRACE=1 cargo build -j 4 --all --release
       - run:
           name: Build Dev
           command: |
-            [[ $CIRCLE_NODE_INDEX =~ [01] ]] || RUST_BACKTRACE=1 cargo build -j 16 --all
+            [[ $CIRCLE_NODE_INDEX =~ [01] ]] || RUST_BACKTRACE=1 cargo build -j 4 --all
       - run:
           name: Run All Unit Tests
           command: |
-            [[ $CIRCLE_NODE_INDEX =~ [013] ]] || RUST_BACKTRACE=1 cargo test -j 16 --all --exclude testsuite
+            [[ $CIRCLE_NODE_INDEX =~ [013] ]] || RUST_BACKTRACE=1 cargo test -j 4 --all --exclude testsuite
       - run:
           name: Run Cryptography Unit Tests with the formally verified backend
           command: |
-            [[ $CIRCLE_NODE_INDEX =~ [013] ]] || RUST_BACKTRACE=1 cargo test -j 16 -p crypto -p secret-service --features='std fiat_u64_backend' --no-default-features
+            [[ $CIRCLE_NODE_INDEX =~ [013] ]] || RUST_BACKTRACE=1 cargo test -j 4 -p crypto -p secret-service --features='std fiat_u64_backend' --no-default-features
       - run:
           name: Run All End to End Tests
           command: |
-            [[ $CIRCLE_NODE_INDEX =~ [012] ]] || RUST_BACKTRACE=1 cargo test -j 16 --package testsuite -- --test-threads 1
+            [[ $CIRCLE_NODE_INDEX =~ [012] ]] || RUST_BACKTRACE=1 cargo test -j 4 --package testsuite -- --test-threads 1
       - build_teardown
   audit:
     executor: audit-executor
