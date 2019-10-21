@@ -785,7 +785,6 @@ where
                     debug!("hash_item:{}", hash_item);
                     if hash.eq(hash_item) {
                         find_data = true;
-                        continue;
                     }
                     if find_data && count_num > 0 {
                         data.push((*hash_item, request.clone(), *res));
