@@ -4,6 +4,7 @@
 use crate::scripts::*;
 use atomic_refcell::AtomicRefCell;
 use canonical_serialization::SimpleSerializer;
+use chrono::Utc;
 use config::config::VMConfig;
 use crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature},
@@ -43,8 +44,7 @@ use sgtypes::{
     script_package::{ChannelScriptPackage, ScriptCode},
 };
 use state_view::StateView;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 use vm::gas_schedule::GasAlgebra;
 use vm_runtime::{MoveVM, VMExecutor};
 
@@ -705,6 +705,13 @@ where
         ))
     }
 
+    fn txn_expiration() -> Duration {
+        std::time::Duration::new(
+            (Utc::now().timestamp() + Self::TXN_EXPIRATION.as_secs() as i64) as u64,
+            0,
+        )
+    }
+
     /// Craft a transaction request.
     fn create_signed_script_txn(
         &self,
@@ -728,7 +735,7 @@ where
             args,
             Self::MAX_GAS_AMOUNT_OFFCHAIN,
             Self::GAS_UNIT_PRICE,
-            Self::TXN_EXPIRATION,
+            Self::txn_expiration(),
         )?;
         let signed_txn = self.mock_signature(txn)?;
         Ok(signed_txn)
