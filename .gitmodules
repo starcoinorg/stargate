@@ -1,4 +1,4 @@
 [submodule "libra"]
 	path = libra
-	url = git@github.com:starcoinorg/libra.git
+	url = https://github.com/starcoinorg/libra.git
 	branch = stargate
