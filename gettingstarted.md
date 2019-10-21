@@ -1,11 +1,10 @@
 # Getting started
 
-## Required
-+ Rust >= "1.35.0"
-+ Cargo >= "1.35.0"
-
 ## Compile project
 ```
+cd stargage
+./libra/scripts/dev_setup.sh 
+source ~/.cargo/env
 cargo build
 ```
 
