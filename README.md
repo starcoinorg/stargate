@@ -2,6 +2,7 @@ Stargate
 
 ---
 
+[![CircleCI](https://circleci.com/gh/starcoinorg/stargate.svg?style=shield)](https://circleci.com/gh/starcoinorg/stargate)
 [![License](https://img.shields.io/badge/license-Apache-green.svg)](LICENSE)
 
 Stargate is the layer2 state channel protocol and implements of Starcoin. 
