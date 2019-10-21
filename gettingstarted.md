@@ -114,4 +114,19 @@ a s
 
     ```
 
-3.
+3. Play Game
+
+   Before the game begin,you could check channel balance,remember the both balance.  
+   In Alice:
+   ```
+   dev pe {bob} scripts rps_player_1 b"bde750abcf1d176a34cce61b607107092413100c9195b08f13d6e7d46980cf1c" 20
+   ```
+   Then ,for Bob
+   ```
+   dev pe {alice} scripts rps_player_2 b"70" 10
+   ```
+   Then ,end game ,in alice
+   ```
+   dev pe {bob} scripts rps_end_game b"72" b"616263"
+   ```
+   After the game end,you could check channel balance.Alice lose the game,so balance of her should be origin balance minus 10,balance of bob should be his origin balance plus 10.
