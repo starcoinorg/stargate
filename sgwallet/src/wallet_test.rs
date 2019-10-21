@@ -11,7 +11,6 @@ use failure::{_core::time::Duration, prelude::*};
 use libra_types::{account_address::AccountAddress, transaction::TransactionArgument};
 use logger::prelude::*;
 use rand::prelude::*;
-use sgchain::main_node::Args;
 use sgchain::star_chain_client::StarChainClient;
 use sgchain::{
     client_state_view::ClientStateView,
@@ -285,10 +284,7 @@ fn test_wallet_with_mock_client() -> Result<()> {
 
 #[test]
 fn test_wallet_with_rpc_client() -> Result<()> {
-    let (_handler, _config, _logger) = sgchain::main_node::run_node(Args {
-        config: None,
-        no_logging: false,
-    });
+    let (_config, _logger, _handler) = sgchain::main_node::run_node(None, false);
     //TODO use a random port and check port available.
     let rpc_client = StarChainClient::new("localhost", 8000);
     let chain_client = Arc::new(rpc_client);

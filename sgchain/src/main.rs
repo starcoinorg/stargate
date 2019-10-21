@@ -7,8 +7,20 @@ use std::sync::{
     Arc,
 };
 
-use sgchain::main_node::{run_node, Args};
+use sgchain::main_node::run_node;
+use std::path::PathBuf;
 use structopt::StructOpt;
+
+#[derive(Debug, StructOpt)]
+#[structopt(about = "Libra Node")]
+struct Args {
+    #[structopt(short = "f", long, parse(from_os_str))]
+    /// Path to NodeConfig
+    config: Option<PathBuf>,
+    #[structopt(short = "d", long)]
+    /// Disable logging
+    no_logging: bool,
+}
 
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
@@ -33,7 +45,8 @@ fn register_signals(term: Arc<AtomicBool>) {
 
 fn main() {
     let args = Args::from_args();
-    let (_handle, _config, _logger) = run_node(args);
+    let (_config, _logger, _handler) =
+        run_node(args.config.as_ref().map(PathBuf::as_path), args.no_logging);
     let term = Arc::new(AtomicBool::new(false));
     register_signals(Arc::clone(&term));
     while !term.load(Ordering::Acquire) {
