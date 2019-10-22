@@ -383,10 +383,10 @@ impl CanonicalDeserialize for Witness {
         Self: Sized,
     {
         let witness_payload = deserializer.decode_struct()?;
-        let witness_signature_bytes = deserializer.decode_bytes()?;
+        let witness_signature = deserializer.decode_struct()?;
         Ok(Self {
             witness_payload,
-            witness_signature: Ed25519Signature::try_from(witness_signature_bytes.as_slice())?,
+            witness_signature,
         })
     }
 }
@@ -444,8 +444,7 @@ impl CanonicalDeserialize for ChannelTransactionRequestPayload {
             Some(ChannelTransactionType::Offchain) => {
                 let hash_bytes = deserializer.decode_bytes()?;
                 let witness_hash = HashValue::from_slice(hash_bytes.as_slice())?;
-                let signature_bytes = deserializer.decode_bytes()?;
-                let witness_signature = Ed25519Signature::try_from(signature_bytes.as_slice())?;
+                let witness_signature = deserializer.decode_struct()?;
 
                 Ok(ChannelTransactionRequestPayload::Offchain {
                     witness_signature,
@@ -455,8 +454,7 @@ impl CanonicalDeserialize for ChannelTransactionRequestPayload {
             Some(ChannelTransactionType::Travel) => {
                 let hash_bytes = deserializer.decode_bytes()?;
                 let txn_write_set_hash = HashValue::from_slice(hash_bytes.as_slice())?;
-                let signature_bytes = deserializer.decode_bytes()?;
-                let txn_signature = Ed25519Signature::try_from(signature_bytes.as_slice())?;
+                let txn_signature = deserializer.decode_struct()?;
                 Ok(ChannelTransactionRequestPayload::Travel {
                     txn_write_set_hash,
                     txn_signature,
@@ -573,16 +571,13 @@ impl CanonicalDeserialize for ChannelTransactionResponsePayload {
         let channel_txn_type = ChannelTransactionType::from_u32(decoded_txn_type);
         match channel_txn_type {
             Some(ChannelTransactionType::Offchain) => {
-                let signature_bytes = deserializer.decode_bytes()?;
-                let signature = Ed25519Signature::try_from(signature_bytes.as_slice())?;
-
+                let signature = deserializer.decode_struct()?;
                 Ok(ChannelTransactionResponsePayload::Offchain {
                     witness_payload_signature: signature,
                 })
             }
             Some(ChannelTransactionType::Travel) => {
-                let signature_bytes = deserializer.decode_bytes()?;
-                let txn_payload_signature = Ed25519Signature::try_from(signature_bytes.as_slice())?;
+                let txn_payload_signature = deserializer.decode_struct()?;
                 Ok(ChannelTransactionResponsePayload::Travel {
                     txn_payload_signature,
                 })
@@ -614,8 +609,7 @@ impl CanonicalDeserialize for ChannelTransactionResponse {
         let request_id = HashValue::from_slice(deserializer.decode_bytes()?.as_slice())?;
         let channel_sequence_number = deserializer.decode_u64()?;
         let payload = deserializer.decode_struct()?;
-        let public_key_bytes = deserializer.decode_bytes()?;
-        let public_key = Ed25519PublicKey::try_from(public_key_bytes.as_slice())?;
+        let public_key = deserializer.decode_struct()?;
         Ok(Self {
             request_id,
             channel_sequence_number,
