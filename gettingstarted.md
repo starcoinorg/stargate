@@ -3,7 +3,7 @@
 ## Compile project
 ```
 cd stargage
-./libra/scripts/dev_setup.sh 
+./libra/scripts/dev_setup.sh
 source ~/.cargo/env
 cargo build
 ```
