@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use tokio::{runtime::Runtime, timer::Interval};
 fn main() {
     env_logger::init();
-    ::logger::init_for_e2e_testing();
+    ::logger::try_init_for_testing();
     let mut peer_id = "".to_string();
     let (seeds, port) = match std::env::args().nth(1) {
         Some(seed) => {

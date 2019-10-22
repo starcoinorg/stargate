@@ -261,7 +261,7 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use libra_types::identifier::{IdentStr, Identifier};
-    use logger::init_for_e2e_testing;
+    use logger::try_init_for_testing;
 
     use crate::mock_module_loader::MockModuleLoader;
 
@@ -274,7 +274,7 @@ mod tests {
 
     #[test]
     fn test_compile() -> Result<()> {
-        init_for_e2e_testing();
+        try_init_for_testing();
         let compiler = Compiler::new(AccountAddress::default());
         let package1_path = get_test_package("package1");
         let package = compiler.compile_package(package1_path)?;
@@ -285,7 +285,7 @@ mod tests {
 
     #[test]
     fn test_with_module_loader() -> Result<()> {
-        init_for_e2e_testing();
+        try_init_for_testing();
         let address = AccountAddress::random();
         let module_loader = MockModuleLoader::new();
         let module_id = ModuleId::new(address, Identifier::from(IdentStr::new("Mock")?));

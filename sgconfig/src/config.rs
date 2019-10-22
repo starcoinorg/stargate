@@ -62,8 +62,8 @@ pub fn get_test_config(addr: String, port: u16, rest_port: u16) -> (NodeConfig) 
         port: rest_port,
     };
     let node_network = NetworkConfig {
-        listen: String::from("127.0.0.1:8000"),
-        seeds: vec![String::from("127.0.0.1:8001")],
+        listen: String::from("/ip4/127.0.0.1/tcp/8000"),
+        seeds: vec![],
     };
     let wallet_config = WalletConfig {
         chain_address: addr,

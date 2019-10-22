@@ -1,23 +1,22 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use super::wallet::*;
 use crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
     Uniform,
 };
-use failure::{_core::time::Duration, prelude::*};
+use failure::prelude::*;
 use libra_types::{account_address::AccountAddress, transaction::TransactionArgument};
 use logger::prelude::*;
 use rand::prelude::*;
-use sgchain::star_chain_client::StarChainClient;
 use sgchain::{
     client_state_view::ClientStateView,
-    star_chain_client::{faucet_sync, ChainClient, MockChainClient},
+    star_chain_client::{faucet_sync, ChainClient},
 };
 use sgcompiler::{Compiler, StateViewModuleLoader};
-use sgtypes::script_package::ChannelScriptPackage;
+use sgwallet::wallet::Wallet;
+use std::time::Duration;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -105,11 +104,11 @@ where
     Ok(())
 }
 
-fn test_wallet<C>(chain_client: Arc<C>) -> Result<()>
+pub fn test_wallet<C>(chain_client: Arc<C>) -> Result<()>
 where
     C: ChainClient + Clone + Send + Sync + 'static,
 {
-    ::logger::init_for_e2e_testing();
+    //::logger::try_init_for_testing();
     let sender_amount: u64 = 10_000_000;
     let receiver_amount: u64 = 10_000_000;
     let sender_fund_amount: u64 = 0;
@@ -275,56 +274,12 @@ where
     Ok(())
 }
 
-#[test]
-fn test_wallet_with_mock_client() -> Result<()> {
-    let (mock_chain_service, _handle) = MockChainClient::new();
-    let chain_client = Arc::new(mock_chain_service);
-    test_wallet(chain_client)
-}
-
-#[test]
-fn test_wallet_with_rpc_client() -> Result<()> {
-    let (_config, _logger, _handler) = sgchain::main_node::run_node(None, false);
-    //TODO use a random port and check port available.
-    let rpc_client = StarChainClient::new("localhost", 8000);
-    let chain_client = Arc::new(rpc_client);
-    test_wallet(chain_client)
-}
-
-#[test]
-fn test_wallet_install_package() -> Result<()> {
-    ::logger::init_for_e2e_testing();
-    let init_balance = 1000000;
-
-    let (mock_chain_service, _handle) = MockChainClient::new();
-    let client = Arc::new(mock_chain_service);
-
-    let alice = Arc::new(setup_wallet(client.clone(), init_balance)?);
-    let bob = Arc::new(setup_wallet(client.clone(), init_balance)?);
-
-    let transfer_code = alice.get_script("libra", "transfer").unwrap();
-    let package = ChannelScriptPackage::new("test".to_string(), vec![transfer_code]);
-    alice.install_package(package.clone())?;
-    bob.install_package(package.clone())?;
-
-    open_channel(alice.clone(), bob.clone(), 100000, 100000)?;
-
-    execute_script(
-        alice.clone(),
-        bob.clone(),
-        "test",
-        "transfer",
-        vec![TransactionArgument::U64(10000)],
-    )?;
-    Ok(())
-}
-
 fn get_test_case_path(case_name: &str) -> PathBuf {
     let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     crate_root.join(format!("test_case/{}", case_name))
 }
 
-fn deploy_custom_module_and_script<C>(
+pub(crate) fn deploy_custom_module_and_script<C>(
     wallet1: Arc<Wallet<C>>,
     wallet2: Arc<Wallet<C>>,
     test_case: &str,
@@ -356,11 +311,11 @@ where
     Ok(())
 }
 
-fn test_deploy_custom_module<C>(chain_client: Arc<C>) -> Result<()>
+pub fn test_deploy_custom_module<C>(chain_client: Arc<C>) -> Result<()>
 where
     C: ChainClient + Clone + Send + Sync + 'static,
 {
-    ::logger::init_for_e2e_testing();
+    //::logger::try_init_for_testing();
     let init_balance = 1000000;
 
     let alice = Arc::new(setup_wallet(chain_client.clone(), init_balance)?);
@@ -370,158 +325,6 @@ where
     open_channel(alice.clone(), bob.clone(), 100000, 100000)?;
 
     execute_script(alice.clone(), bob.clone(), "scripts", "do_nothing", vec![])?;
-
-    Ok(())
-}
-
-#[test]
-fn test_deploy_custom_module_by_mock_client() -> Result<()> {
-    let (mock_chain_service, _handle) = MockChainClient::new();
-    let chain_client = Arc::new(mock_chain_service);
-    test_deploy_custom_module(chain_client)
-}
-
-#[test]
-fn test_deploy_custom_module_by_rpc_client() -> Result<()> {
-    let (_config, _logger, _handler) = sgchain::main_node::run_node(None, false);
-    //TODO use a random port and check port available.
-    let rpc_client = StarChainClient::new("localhost", 8000);
-    let chain_client = Arc::new(rpc_client);
-    test_deploy_custom_module(chain_client)
-}
-
-#[test]
-fn test_vector() -> Result<()> {
-    ::logger::init_for_e2e_testing();
-    let init_balance = 1000000;
-
-    let (mock_chain_service, _handle) = MockChainClient::new();
-    let client = Arc::new(mock_chain_service);
-
-    let alice = Arc::new(setup_wallet(client.clone(), init_balance)?);
-    let bob = Arc::new(setup_wallet(client.clone(), init_balance)?);
-    deploy_custom_module_and_script(alice.clone(), bob.clone(), "test_vector")?;
-
-    open_channel(alice.clone(), bob.clone(), 100000, 100000)?;
-
-    execute_script(
-        alice.clone(),
-        bob.clone(),
-        "scripts",
-        "move_vector_to_sender",
-        vec![],
-    )?;
-    execute_script(
-        alice.clone(),
-        bob.clone(),
-        "scripts",
-        "move_vector_from_sender",
-        vec![],
-    )?;
-
-    execute_script(
-        alice.clone(),
-        bob.clone(),
-        "scripts",
-        "move_vector_to_receiver",
-        vec![],
-    )?;
-    execute_script(
-        alice.clone(),
-        bob.clone(),
-        "scripts",
-        "move_vector_from_receiver",
-        vec![],
-    )?;
-    Ok(())
-}
-
-#[test]
-fn test_gobang() -> Result<()> {
-    ::logger::init_for_e2e_testing();
-    let init_balance = 1000000;
-
-    let (mock_chain_service, _handle) = MockChainClient::new();
-    let client = Arc::new(mock_chain_service);
-
-    let alice = Arc::new(setup_wallet(client.clone(), init_balance)?);
-    let bob = Arc::new(setup_wallet(client.clone(), init_balance)?);
-    deploy_custom_module_and_script(alice.clone(), bob.clone(), "test_gobang")?;
-
-    open_channel(alice.clone(), bob.clone(), 100, 100)?;
-
-    execute_script(alice.clone(), bob.clone(), "scripts", "new", vec![])?;
-    execute_script(bob.clone(), alice.clone(), "scripts", "join", vec![])?;
-    execute_script(
-        alice.clone(),
-        bob.clone(),
-        "scripts",
-        "play",
-        vec![TransactionArgument::U64(2), TransactionArgument::U64(2)],
-    )?;
-    execute_script(
-        bob.clone(),
-        alice.clone(),
-        "scripts",
-        "play",
-        vec![TransactionArgument::U64(3), TransactionArgument::U64(2)],
-    )?;
-    execute_script(
-        alice.clone(),
-        bob.clone(),
-        "scripts",
-        "play",
-        vec![TransactionArgument::U64(2), TransactionArgument::U64(3)],
-    )?;
-    execute_script(
-        bob.clone(),
-        alice.clone(),
-        "scripts",
-        "play",
-        vec![TransactionArgument::U64(3), TransactionArgument::U64(3)],
-    )?;
-    execute_script(
-        alice.clone(),
-        bob.clone(),
-        "scripts",
-        "play",
-        vec![TransactionArgument::U64(2), TransactionArgument::U64(4)],
-    )?;
-    execute_script(
-        bob.clone(),
-        alice.clone(),
-        "scripts",
-        "play",
-        vec![TransactionArgument::U64(3), TransactionArgument::U64(4)],
-    )?;
-    execute_script(
-        alice.clone(),
-        bob.clone(),
-        "scripts",
-        "play",
-        vec![TransactionArgument::U64(2), TransactionArgument::U64(5)],
-    )?;
-    execute_script(
-        bob.clone(),
-        alice.clone(),
-        "scripts",
-        "play",
-        vec![TransactionArgument::U64(3), TransactionArgument::U64(5)],
-    )?;
-    execute_script(
-        alice.clone(),
-        bob.clone(),
-        "scripts",
-        "play",
-        vec![TransactionArgument::U64(2), TransactionArgument::U64(6)],
-    )?;
-    execute_script(
-        alice.clone(),
-        bob.clone(),
-        "scripts",
-        "check_score",
-        vec![TransactionArgument::U64(1)],
-    )?;
 
     Ok(())
 }
