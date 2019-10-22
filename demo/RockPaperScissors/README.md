@@ -1,5 +1,5 @@
 # RockPaperScissors
-A smart contract demo written with libra move ir (.mvir).
+RockPaperScissors is a smart contract demo written with libra move ir (.mvir). Suppose you've successfully opened the channel according to the [gettingstarted document](../../gettingstarted.md).
 
 1. Deploy Module to Chain
     In alice's cli
