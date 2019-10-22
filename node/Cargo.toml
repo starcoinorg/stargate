@@ -18,7 +18,7 @@ parity-multiaddr = "0.4.0"
 tokio = "=0.2.0-alpha.6"
 bytes = "0.4.12"
 rand = "0.6.5"
-grpcio = "0.4.3"
+grpcio = { version = "=0.5.0-alpha.4", default-features = false, features = ["prost-codec"] }
 hex = "0.3.2"
 
 logger = { path = "../libra/common/logger" }

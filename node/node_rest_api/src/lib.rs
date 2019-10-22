@@ -142,10 +142,12 @@ impl<C: ChainClient + Clone + 'static> Service for WebServer<C> {
                         };
                     }
                     //json format
+                    let rqid = hex::encode(result.req_id.to_vec());
+
                     *response.body_mut() = Body::from(
                         json!({
                             "status": result.state,
-                            "req_id": result.req_id.to_string(),
+                            "req_id": rqid,
                             "reason": result.reason
                         })
                         .to_string(),
@@ -169,14 +171,14 @@ impl<C: ChainClient + Clone + 'static> Service for WebServer<C> {
                     } else {
                         //                        let count_str: String = form.remove("count").unwrap_or("0".to_string());
                         let count = u32::from_str(&count_str).unwrap_or_default();
-                        match node_internal.find_offchain_txn(
-                            HashValue::from_slice(transation_id.as_bytes()).ok(),
-                            count,
-                        ) {
+
+                        let tid_byte_array: Vec<u8> = hex::decode(transation_id).unwrap();
+                        match node_internal
+                            .find_offchain_txn(HashValue::from_slice(&tid_byte_array).ok(), count)
+                        {
                             Ok(msg_result) => {
                                 result.state = true;
                                 result.reason = "OK".to_string();
-                                //                               Result<Vec<(HashValue,ChannelTransactionRequest, u8)>>
                                 let transation_vec: Vec<(
                                     HashValue,
                                     ChannelTransactionRequest,
