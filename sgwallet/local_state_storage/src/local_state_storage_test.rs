@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
-use logger::init_for_e2e_testing;
+use logger::try_init_for_testing;
 use sgchain::star_chain_client::{faucet_sync, MockChainClient};
 use state_view::StateView;
 
 #[test]
 fn test_local_state_storage() -> Result<()> {
-    init_for_e2e_testing();
+    try_init_for_testing();
     let (mock_chain_service, _handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service.clone());
     let account_address = AccountAddress::random();

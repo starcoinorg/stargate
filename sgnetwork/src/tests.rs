@@ -95,7 +95,7 @@ mod tests {
 
     #[test]
     fn test_send_receive_1() {
-        ::logger::init_for_e2e_testing();
+        ::logger::try_init_for_testing();
         env_logger::init();
 
         let rt = Builder::new().core_threads(1).build().unwrap();
@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn test_send_receive_2() {
-        ::logger::init_for_e2e_testing();
+        ::logger::try_init_for_testing();
         let rt = Runtime::new().unwrap();
         let executor = rt.executor();
         let ((service1, _tx1, rx1, _close_tx1), (mut service2, _tx2, _rx2, _close_tx2)) =
