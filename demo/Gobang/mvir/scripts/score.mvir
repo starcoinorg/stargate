@@ -1,0 +1,11 @@
+import 0x0.ChannelAccount;
+import 0x80731e386aeba31813bee57882a4af64922afca7ee8ca51f8914b7405a066028.TheFive;
+
+main(x: u64) {
+    let result: u64;
+
+    result = TheFive.get_score();
+    assert(move(result) == move(x), 55);
+
+    return;
+}
