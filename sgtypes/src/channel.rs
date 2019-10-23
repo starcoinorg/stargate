@@ -93,29 +93,15 @@ impl ChannelState {
 
 #[derive(Clone, Debug, Default)]
 pub struct WitnessData {
-    pub channel_sequence_number: u64,
     pub write_set: WriteSet,
     pub signature: Option<Ed25519Signature>,
 }
 
 impl WitnessData {
-    pub fn new(
-        channel_sequence_number: u64,
-        write_set: WriteSet,
-        signature: Ed25519Signature,
-    ) -> Self {
+    pub fn new(write_set: WriteSet, signature: Ed25519Signature) -> Self {
         Self {
-            channel_sequence_number,
             write_set,
             signature: Some(signature),
-        }
-    }
-
-    pub fn new_with_sequence_number(channel_sequence_number: u64) -> Self {
-        Self {
-            channel_sequence_number,
-            write_set: WriteSet::default(),
-            signature: None,
         }
     }
 }
@@ -206,14 +192,9 @@ impl Channel {
         witness_payload: ChannelWriteSetPayload,
         signature: Ed25519Signature,
     ) {
-        let ChannelWriteSetPayload {
-            channel_sequence_number,
-            write_set,
-            ..
-        } = witness_payload;
+        let ChannelWriteSetPayload { write_set, .. } = witness_payload;
         let mut witness_data = self.witness_data.borrow_mut();
         *witness_data = Some(WitnessData {
-            channel_sequence_number,
             write_set,
             signature: Some(signature),
         })
@@ -289,9 +270,12 @@ impl Channel {
     pub fn witness_data(&self) -> WitnessData {
         match &*self.stage.borrow() {
             ChannelStage::Opening => WitnessData::default(),
-            _ => self.witness_data.borrow().as_ref().cloned().unwrap_or(
-                WitnessData::new_with_sequence_number(self.channel_sequence_number()),
-            ),
+            _ => self
+                .witness_data
+                .borrow()
+                .as_ref()
+                .cloned()
+                .unwrap_or(WitnessData::default()),
         }
     }
 

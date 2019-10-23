@@ -1,44 +1,6 @@
 [workspace]
 
 members = [
-    "libra/common/logger",
-    "libra/common/canonical-serialization",
-    "libra/common/failure_ext",
-    "libra/common/proptest-helpers",
-    "libra/common/prost-ext",
-    "libra/common/channel",
-    "libra/common/crash-handler",
-    "libra/config",
-    "libra/config/config-builder",
-    "libra/config/generate-keypair",
-    "libra/crypto/crypto",
-    "libra/crypto/crypto_derive",
-    "libra/storage/accumulator",
-    "libra/storage/state-view",
-    "libra/storage/scratchpad",
-    "libra/storage/libradb",
-    "libra/storage/jellyfish-merkle",
-    "libra/language/vm",
-    "libra/language/vm/serializer_tests",
-    "libra/language/vm/vm_runtime",
-    "libra/language/vm/vm_runtime/vm_cache_map",
-    "libra/language/vm/vm_runtime/vm_runtime_types",
-    "libra/language/vm/vm_genesis",
-    "libra/language/bytecode-verifier",
-    "libra/language/bytecode-verifier/invalid-mutations",
-    "libra/language/bytecode-verifier/bytecode_verifier_tests",
-    "libra/language/compiler",
-    "libra/language/compiler/ir_to_bytecode",
-    "libra/language/compiler/ir_to_bytecode/syntax",
-    "libra/language/functional_tests",
-    "libra/language/e2e_tests",
-    "libra/language/transaction_builder",
-    "libra/types",
-    "libra/libra-node",
-    "libra/execution/executor",
-    "libra/mempool",
-    "libra/admission_control/admission-control-proto",
-    "libra/admission_control/admission-control-service",
     "sgtypes",
     "sgnetwork",
     "network-libp2p",
@@ -57,6 +19,8 @@ members = [
     "sgchain",
     "sgstorage",
 ]
+
+exclude = ["libra"]
 
 [replace]
 "libp2p:0.7.0" = { git = "https://github.com/starcoinorg/rust-libp2p", tag = "v0.7.0-stargate" }

@@ -22,7 +22,7 @@ fn node_test() -> Result<()> {
     use std::sync::Arc;
     use tokio::runtime::Runtime;
 
-    ::logger::init_for_e2e_testing();
+    ::logger::try_init_for_testing();
     //env_logger::init();
     let rt = Runtime::new().unwrap();
     let executor = rt.executor();
@@ -133,7 +133,7 @@ async fn _delay(duration: Duration) {
 fn error_test() -> Result<()> {
     use logger::prelude::*;
 
-    ::logger::init_for_e2e_testing();
+    ::logger::try_init_for_testing();
     env_logger::init();
 
     match _new_error() {
