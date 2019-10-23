@@ -4,11 +4,11 @@ executors:
   build-executor:
     docker:
       - image: circleci/rust:stretch
-    resource_class: 2xlarge
+    resource_class: xlarge
   audit-executor:
     docker:
       - image: circleci/rust:stretch
-    resource_class: 2xlarge
+    resource_class: xlarge
 
 commands:
   print_versions:
@@ -45,7 +45,7 @@ commands:
           name: "Pull Submodules"
           command: |
             git submodule init
-            git submodule update --remote
+            git submodule update
       - print_versions
       - env_setup
       - install_deps
@@ -68,15 +68,15 @@ jobs:
       - run:
           name: Build Release
           command: |
-            [[ $CIRCLE_NODE_INDEX =~ [023] ]] || RUST_BACKTRACE=1 cargo build -j 16 --all --release
+            [[ $CIRCLE_NODE_INDEX =~ [023] ]] || RUST_BACKTRACE=1 cargo build -j 8 --all --release
       - run:
           name: Build Dev
           command: |
-            [[ $CIRCLE_NODE_INDEX =~ [01] ]] || RUST_BACKTRACE=1 cargo build -j 16 --all
+            [[ $CIRCLE_NODE_INDEX =~ [01] ]] || RUST_BACKTRACE=1 cargo build -j 8 --all
       - run:
           name: Run All Unit Tests
           command: |
-            [[ $CIRCLE_NODE_INDEX =~ [013] ]] || RUST_BACKTRACE=1 cargo test -j 16 --all --exclude network-libp2p --exclude sgnetwork -- --test-threads=1
+            [[ $CIRCLE_NODE_INDEX =~ [013] ]] || RUST_BACKTRACE=1 cargo test -j 8 --all --exclude network-libp2p --exclude sgnetwork -- --test-threads=1
       - build_teardown
   audit:
     executor: audit-executor
