@@ -135,12 +135,14 @@ pub struct Witness {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ChannelTransactionRequestPayload {
-    Offchain(Witness),
+    Offchain {
+        /// The witness_payload include txn output's write_set,
+        /// Receiver can build a new txn with this payload, and submit to chain.
+        //        witness_payload: ChannelWriteSetPayload,
+        witness_hash: HashValue,
+        witness_signature: Ed25519Signature,
+    },
     Travel {
-        /// Maximal total gas specified by wallet to spend for this transaction.
-        max_gas_amount: u64,
-        /// Maximal price can be paid per gas.
-        gas_unit_price: u64,
         /// The txn output's write_set hash, for receiver to verify the output.
         /// TODO(jole) need hash the whole output?
         txn_write_set_hash: HashValue,
@@ -173,6 +175,11 @@ pub struct ChannelTransactionRequest {
     public_key: Ed25519PublicKey,
 
     args: Vec<TransactionArgument>,
+
+    /// Maximal total gas specified by wallet to spend for this transaction.
+    max_gas_amount: u64,
+    /// Maximal price can be paid per gas.
+    gas_unit_price: u64,
 }
 
 impl ChannelTransactionRequest {
@@ -187,6 +194,8 @@ impl ChannelTransactionRequest {
         payload: ChannelTransactionRequestPayload,
         public_key: Ed25519PublicKey,
         args: Vec<TransactionArgument>,
+        max_gas_amount: u64,
+        gas_unit_price: u64,
     ) -> Self {
         let request_id = Self::generate_request_id(sender, receiver, channel_sequence_number);
         Self {
@@ -201,6 +210,8 @@ impl ChannelTransactionRequest {
             payload,
             public_key,
             args,
+            max_gas_amount,
+            gas_unit_price,
         }
     }
     //TODO(jole) should use sequence_number?
@@ -266,6 +277,13 @@ impl ChannelTransactionRequest {
     pub fn expiration_time(&self) -> Duration {
         self.expiration_time
     }
+
+    pub fn max_gas_amount(&self) -> u64 {
+        self.max_gas_amount
+    }
+    pub fn gas_unit_price(&self) -> u64 {
+        self.gas_unit_price
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -291,7 +309,11 @@ impl ChannelTransactionRequestAndOutput {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ChannelTransactionResponsePayload {
-    Offchain(Witness),
+    //    Offchain(Witness),
+    Offchain {
+        /// receiver's signature on witness payload
+        witness_payload_signature: Ed25519Signature,
+    },
     Travel {
         /// For travel txn, receiver only need to signature txn payload.
         txn_payload_signature: Ed25519Signature,
@@ -361,10 +383,10 @@ impl CanonicalDeserialize for Witness {
         Self: Sized,
     {
         let witness_payload = deserializer.decode_struct()?;
-        let witness_signature_bytes = deserializer.decode_bytes()?;
+        let witness_signature = deserializer.decode_struct()?;
         Ok(Self {
             witness_payload,
-            witness_signature: Ed25519Signature::try_from(witness_signature_bytes.as_slice())?,
+            witness_signature,
         })
     }
 }
@@ -388,21 +410,21 @@ impl ChannelTransactionType {
 impl CanonicalSerialize for ChannelTransactionRequestPayload {
     fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
         match self {
-            ChannelTransactionRequestPayload::Offchain(witness) => {
+            ChannelTransactionRequestPayload::Offchain {
+                witness_signature,
+                witness_hash,
+            } => {
                 serializer
                     .encode_u32(ChannelTransactionType::Offchain as u32)?
-                    .encode_struct(witness)?;
+                    .encode_bytes(witness_hash.as_ref())?
+                    .encode_bytes(witness_signature.to_bytes().as_ref())?;
             }
             ChannelTransactionRequestPayload::Travel {
-                max_gas_amount,
-                gas_unit_price,
                 txn_write_set_hash,
                 txn_signature,
             } => {
                 serializer
                     .encode_u32(ChannelTransactionType::Travel as u32)?
-                    .encode_u64(*max_gas_amount)?
-                    .encode_u64(*gas_unit_price)?
                     .encode_bytes(txn_write_set_hash.as_ref())?
                     .encode_bytes(&txn_signature.to_bytes())?;
             }
@@ -420,19 +442,20 @@ impl CanonicalDeserialize for ChannelTransactionRequestPayload {
         let channel_txn_type = ChannelTransactionType::from_u32(decoded_txn_type);
         match channel_txn_type {
             Some(ChannelTransactionType::Offchain) => {
-                let witness = deserializer.decode_struct()?;
-                Ok(ChannelTransactionRequestPayload::Offchain(witness))
+                let hash_bytes = deserializer.decode_bytes()?;
+                let witness_hash = HashValue::from_slice(hash_bytes.as_slice())?;
+                let witness_signature = deserializer.decode_struct()?;
+
+                Ok(ChannelTransactionRequestPayload::Offchain {
+                    witness_signature,
+                    witness_hash,
+                })
             }
             Some(ChannelTransactionType::Travel) => {
-                let max_gas_amount = deserializer.decode_u64()?;
-                let gas_unit_price = deserializer.decode_u64()?;
                 let hash_bytes = deserializer.decode_bytes()?;
                 let txn_write_set_hash = HashValue::from_slice(hash_bytes.as_slice())?;
-                let signature_bytes = deserializer.decode_bytes()?;
-                let txn_signature = Ed25519Signature::try_from(signature_bytes.as_slice())?;
+                let txn_signature = deserializer.decode_struct()?;
                 Ok(ChannelTransactionRequestPayload::Travel {
-                    max_gas_amount,
-                    gas_unit_price,
                     txn_write_set_hash,
                     txn_signature,
                 })
@@ -458,7 +481,9 @@ impl CanonicalSerialize for ChannelTransactionRequest {
             .encode_u64(self.expiration_time.as_secs())?
             .encode_struct(&self.payload)?
             .encode_struct(&self.public_key)?
-            .encode_vec(&self.args)?;
+            .encode_vec(&self.args)?
+            .encode_u64(self.max_gas_amount)?
+            .encode_u64(self.gas_unit_price)?;
         Ok(())
     }
 }
@@ -479,6 +504,8 @@ impl CanonicalDeserialize for ChannelTransactionRequest {
         let payload = deserializer.decode_struct()?;
         let public_key = deserializer.decode_struct()?;
         let args = deserializer.decode_vec()?;
+        let max_gas_amount = deserializer.decode_u64()?;
+        let gas_unit_price = deserializer.decode_u64()?;
         Ok(Self {
             request_id,
             version,
@@ -491,6 +518,8 @@ impl CanonicalDeserialize for ChannelTransactionRequest {
             payload,
             public_key,
             args,
+            max_gas_amount,
+            gas_unit_price,
         })
     }
 }
@@ -514,10 +543,12 @@ impl From<ChannelTransactionRequest> for crate::proto::sgtypes::ChannelTransacti
 impl CanonicalSerialize for ChannelTransactionResponsePayload {
     fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
         match self {
-            ChannelTransactionResponsePayload::Offchain(witness) => {
+            ChannelTransactionResponsePayload::Offchain {
+                witness_payload_signature,
+            } => {
                 serializer
                     .encode_u32(ChannelTransactionType::Offchain as u32)?
-                    .encode_struct(witness)?;
+                    .encode_bytes(witness_payload_signature.to_bytes().as_ref())?;
             }
             ChannelTransactionResponsePayload::Travel {
                 txn_payload_signature,
@@ -540,12 +571,13 @@ impl CanonicalDeserialize for ChannelTransactionResponsePayload {
         let channel_txn_type = ChannelTransactionType::from_u32(decoded_txn_type);
         match channel_txn_type {
             Some(ChannelTransactionType::Offchain) => {
-                let witness = deserializer.decode_struct()?;
-                Ok(ChannelTransactionResponsePayload::Offchain(witness))
+                let signature = deserializer.decode_struct()?;
+                Ok(ChannelTransactionResponsePayload::Offchain {
+                    witness_payload_signature: signature,
+                })
             }
             Some(ChannelTransactionType::Travel) => {
-                let signature_bytes = deserializer.decode_bytes()?;
-                let txn_payload_signature = Ed25519Signature::try_from(signature_bytes.as_slice())?;
+                let txn_payload_signature = deserializer.decode_struct()?;
                 Ok(ChannelTransactionResponsePayload::Travel {
                     txn_payload_signature,
                 })
@@ -577,8 +609,7 @@ impl CanonicalDeserialize for ChannelTransactionResponse {
         let request_id = HashValue::from_slice(deserializer.decode_bytes()?.as_slice())?;
         let channel_sequence_number = deserializer.decode_u64()?;
         let payload = deserializer.decode_struct()?;
-        let public_key_bytes = deserializer.decode_bytes()?;
-        let public_key = Ed25519PublicKey::try_from(public_key_bytes.as_slice())?;
+        let public_key = deserializer.decode_struct()?;
         Ok(Self {
             request_id,
             channel_sequence_number,

@@ -6,6 +6,7 @@ use canonical_serialization::{
 };
 use crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
+    hash::CryptoHash,
     test_utils::KeyPair,
     Uniform,
 };
@@ -18,7 +19,7 @@ use libra_types::{
 use rand::prelude::*;
 
 use crate::channel_transaction::{
-    ChannelOp, ChannelTransactionRequest, ChannelTransactionRequestPayload, Witness,
+    ChannelOp, ChannelTransactionRequest, ChannelTransactionRequestPayload,
 };
 use failure::_core::time::Duration;
 
@@ -48,16 +49,19 @@ fn request_roundtrip_canonical_serialization() {
             receiver,
             channel_sequence_number,
             Duration::from_secs(rng0.next_u64()),
-            ChannelTransactionRequestPayload::Offchain(Witness {
-                witness_payload: ChannelWriteSetPayload::new(
+            ChannelTransactionRequestPayload::Offchain {
+                witness_hash: ChannelWriteSetPayload::new(
                     channel_sequence_number,
                     WriteSet::default(),
                     receiver,
-                ),
+                )
+                .hash(),
                 witness_signature: signature.clone(),
-            }),
+            },
             keypair.public_key.clone(),
             Vec::new(),
+            rng0.next_u64(),
+            rng0.next_u64(),
         ),
         ChannelTransactionRequest::new(
             rng0.next_u64(),
@@ -71,13 +75,13 @@ fn request_roundtrip_canonical_serialization() {
             channel_sequence_number,
             Duration::from_secs(rng0.next_u64()),
             ChannelTransactionRequestPayload::Travel {
-                max_gas_amount: rng0.next_u64(),
-                gas_unit_price: rng0.next_u64(),
                 txn_write_set_hash: Default::default(),
                 txn_signature: signature,
             },
             keypair.public_key.clone(),
             Vec::new(),
+            rng0.next_u64(),
+            rng0.next_u64(),
         ),
     ];
     for request in requests {

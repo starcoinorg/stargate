@@ -124,7 +124,7 @@ fn get_file_contents(path: &str) -> Result<&str> {
 
 #[cfg(test)]
 mod tests {
-    use logger::init_for_e2e_testing;
+    use logger::try_init_for_testing;
 
     use super::*;
 
@@ -135,7 +135,7 @@ mod tests {
 
     #[test]
     fn test_compile_script() {
-        init_for_e2e_testing();
+        try_init_for_testing();
         let registry = PackageRegistry::build().unwrap();
         let package = registry.get_package("libra").unwrap();
         println!("{}", package);
