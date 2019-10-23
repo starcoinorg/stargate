@@ -201,6 +201,11 @@ where
             }
         };
         let version = state_view.version();
+        let max_gas_amount = if output.is_travel_txn() {
+            gas_fixed_signed_txn.max_gas_amount()
+        } else {
+            Self::MAX_GAS_AMOUNT_OFFCHAIN
+        };
         let request = ChannelTransactionRequest::new(
             version,
             channel_op.clone(),
@@ -212,7 +217,7 @@ where
             payload,
             self.keypair.public_key.clone(),
             args,
-            gas_fixed_signed_txn.max_gas_amount(),
+            max_gas_amount,
             gas_fixed_signed_txn.gas_unit_price(),
         );
         channel.append_txn_request(ChannelTransactionRequestAndOutput::new(
