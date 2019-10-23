@@ -167,8 +167,7 @@ where
             );
         }
 
-        //TODO need add a buffer to max_gas_amount? such as 10%?
-        let max_gas_amount = gas_used;
+        let max_gas_amount = std::cmp::min(gas_used * 1.1 as u64, Self::MAX_GAS_AMOUNT_ONCHAIN);
         let sender = txn.sender();
         let sequence_number = txn.sequence_number();
         let gas_fixed_txn = RawTransaction::new(
