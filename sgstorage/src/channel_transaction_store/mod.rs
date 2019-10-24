@@ -74,8 +74,7 @@ where
     ) -> Result<()> {
         if let Transaction::UserTransaction(txn) = transaction {
             let channel_seq_number = match txn.raw_txn().payload() {
-                TransactionPayload::ChannelScript(csp) => csp.channel_sequence_number,
-                TransactionPayload::ChannelWriteSet(cwp) => cwp.channel_sequence_number,
+                TransactionPayload::Channel(csp) => csp.channel_sequence_number(),
                 _ => bail!("only support channel transaction"),
             };
             cs.put::<TransactionByAccountSchema>(&(txn.sender(), channel_seq_number), &version)?;

@@ -20,7 +20,7 @@ use failure::prelude::*;
 use libra_types::transaction::TransactionArgument;
 use libra_types::{
     account_address::AccountAddress,
-    transaction::{ChannelWriteSetPayload, RawTransaction, TransactionOutput, Version},
+    transaction::{ChannelWriteSetBody, RawTransaction, TransactionOutput, Version},
 };
 use std::time::Duration;
 
@@ -129,16 +129,14 @@ impl ChannelOpType {
 pub struct Witness {
     /// The witness_payload include txn output's write_set,
     /// Receiver can build a new txn with this payload, and submit to chain.
-    pub witness_payload: ChannelWriteSetPayload,
+    pub witness_payload: ChannelWriteSetBody,
     pub witness_signature: Ed25519Signature,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ChannelTransactionRequestPayload {
     Offchain {
-        /// The witness_payload include txn output's write_set,
-        /// Receiver can build a new txn with this payload, and submit to chain.
-        //        witness_payload: ChannelWriteSetPayload,
+        /// The witness_payload hash,
         witness_hash: HashValue,
         witness_signature: Ed25519Signature,
     },

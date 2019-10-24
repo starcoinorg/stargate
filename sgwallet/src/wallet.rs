@@ -14,6 +14,7 @@ use crypto::{
 };
 use failure::prelude::*;
 use lazy_static::lazy_static;
+use libra_types::transaction::{ChannelTransactionPayload, ChannelTransactionPayloadBody};
 use libra_types::write_set::WriteSet;
 use libra_types::{
     access_path::DataPath,
@@ -22,7 +23,7 @@ use libra_types::{
     channel_account::{channel_account_resource_path, ChannelAccountResource},
     language_storage::StructTag,
     transaction::{
-        ChannelScriptPayload, ChannelWriteSetPayload, Module, RawTransaction, SignedTransaction,
+        ChannelScriptBody, ChannelWriteSetBody, Module, RawTransaction, SignedTransaction,
         SignedTransactionWithProof, TransactionArgument, TransactionOutput, TransactionPayload,
         TransactionStatus,
     },
@@ -166,8 +167,7 @@ where
             );
         }
 
-        //TODO need add a buffer to max_gas_amount? such as 10%?
-        let max_gas_amount = gas_used;
+        let max_gas_amount = std::cmp::min(gas_used * 1.1 as u64, Self::MAX_GAS_AMOUNT_ONCHAIN);
         let sender = txn.sender();
         let sequence_number = txn.sequence_number();
         let gas_fixed_txn = RawTransaction::new(
@@ -189,7 +189,7 @@ where
                 txn_signature,
             }
         } else {
-            let witness_payload = ChannelWriteSetPayload::new(
+            let witness_payload = ChannelWriteSetBody::new(
                 channel_sequence_number,
                 output.write_set().clone(),
                 receiver,
@@ -201,6 +201,11 @@ where
             }
         };
         let version = state_view.version();
+        let max_gas_amount = if output.is_travel_txn() {
+            gas_fixed_signed_txn.max_gas_amount()
+        } else {
+            Self::MAX_GAS_AMOUNT_OFFCHAIN
+        };
         let request = ChannelTransactionRequest::new(
             version,
             channel_op.clone(),
@@ -212,7 +217,7 @@ where
             payload,
             self.keypair.public_key.clone(),
             args,
-            gas_fixed_signed_txn.max_gas_amount(),
+            max_gas_amount,
             gas_fixed_signed_txn.gas_unit_price(),
         );
         channel.append_txn_request(ChannelTransactionRequestAndOutput::new(
@@ -252,6 +257,7 @@ where
             "check channel_sequence_number fail."
         );
         let WitnessData { write_set, .. } = channel.witness_data();
+
         //TODO refactor this with verify flow strategy.
         let raw_txn = self.build_txn_with_op(
             sender,
@@ -264,6 +270,7 @@ where
             txn_request.max_gas_amount(),
             txn_request.gas_unit_price(),
             txn_request.expiration_time(),
+            None,
         )?;
         let txn_hash = raw_txn.hash();
         debug!("verify_txn txn_hash:{}", txn_hash);
@@ -289,7 +296,7 @@ where
                 witness_hash: sender_witness_hash,
                 witness_signature: sender_witness_signature,
             } => {
-                let my_witness_payload = ChannelWriteSetPayload::new(
+                let my_witness_payload = ChannelWriteSetBody::new(
                     my_channel_sequence_number,
                     write_set.clone(),
                     self.account,
@@ -310,7 +317,7 @@ where
             }
             ChannelTransactionRequestPayload::Travel {
                 txn_write_set_hash,
-                txn_signature,
+                txn_signature: _,
             } => {
                 let write_set_bytes: Vec<u8> = SimpleSerializer::serialize(output.write_set())?;
                 let new_txn_write_set_hash = HashValue::from_sha3_256(write_set_bytes.as_slice());
@@ -318,9 +325,10 @@ where
                     txn_write_set_hash == &new_txn_write_set_hash,
                     "check write_set fail"
                 );
-                txn_request
-                    .public_key()
-                    .verify_signature(&txn_hash, txn_signature)?;
+                //FIXME(jole) after refactor ChannelTransactionRequest
+                //                txn_request
+                //                    .public_key()
+                //                    .verify_signature(&txn_hash, txn_signature)?;
                 ChannelTransactionResponsePayload::Travel {
                     txn_payload_signature,
                 }
@@ -446,6 +454,7 @@ where
     ) -> Result<u64> {
         let storage = self.storage.borrow();
         let channel = storage.get_channel(&participant)?;
+        //TODO refactor, raw_txn does not need to be saved, should build raw_txn from request and response.
         let (request, output, raw_txn) = match channel.pending_txn_request() {
             Some(ChannelTransactionRequestAndOutput {
                 request,
@@ -460,6 +469,7 @@ where
                 channel.stage()
             ),
         };
+
         let raw_txn_hash = raw_txn.hash();
         info!("apply_txn: {}", raw_txn_hash);
         ensure!(
@@ -468,28 +478,48 @@ where
         );
         let gas = match (request.payload(), response.payload()) {
             (
-                ChannelTransactionRequestPayload::Travel { txn_signature, .. },
+                ChannelTransactionRequestPayload::Travel {
+                    txn_signature: _, ..
+                },
                 ChannelTransactionResponsePayload::Travel {
                     txn_payload_signature,
                 },
             ) => {
-                let mut signed_txn = SignedTransaction::new(
-                    raw_txn,
-                    request.public_key().clone(),
-                    txn_signature.clone(),
-                );
-                signed_txn.set_receiver_public_key_and_signature(
+                let channel_script = match raw_txn.payload() {
+                    TransactionPayload::Channel(payload) => match &payload.body {
+                        ChannelTransactionPayloadBody::Script(channel_script) => {
+                            channel_script.clone()
+                        }
+                        _ => panic!("raw txn must a ChannelScript Transaction"),
+                    },
+                    _ => panic!("raw txn must a ChannelScript Transaction"),
+                };
+
+                //build a new raw txn and update payload signature.
+                let channel_payload = ChannelTransactionPayload::new_with_script(
+                    channel_script,
                     response.public_key().clone(),
                     txn_payload_signature.clone(),
                 );
-                let sender = &signed_txn.sender();
-                let txn_with_proof = if request.sender() == self.account {
+
+                let new_raw_txn = RawTransaction::new_channel(
+                    raw_txn.sender(),
+                    raw_txn.sequence_number(),
+                    channel_payload,
+                    raw_txn.max_gas_amount(),
+                    raw_txn.gas_unit_price(),
+                    raw_txn.expiration_time(),
+                );
+
+                let sender = request.sender();
+                let txn_with_proof = if sender == self.account {
+                    let signed_txn = self.mock_signature(new_raw_txn)?;
                     // sender submit transaction to chain.
                     self.submit_transaction(signed_txn).await?
                 } else {
                     let watch_future = self
                         .client
-                        .watch_transaction(sender, signed_txn.sequence_number());
+                        .watch_transaction(&sender, new_raw_txn.sequence_number());
                     // FIXME: should not panic here, handle timeout situation.
                     watch_future.await?.0.expect("proof is none.")
                 };
@@ -519,7 +549,7 @@ where
                 },
             ) => {
                 // rebuild payload from scratch
-                let channel_write_set_payload = ChannelWriteSetPayload {
+                let channel_write_set_payload = ChannelWriteSetBody {
                     channel_sequence_number: response.channel_sequence_number(),
                     write_set: output.write_set().clone(),
                     receiver: request.receiver(),
@@ -673,6 +703,7 @@ where
         max_gas_amount: u64,
         gas_unit_price: u64,
         txn_expiration: Duration,
+        payload_key_and_signature: Option<(Ed25519PublicKey, Ed25519Signature)>,
     ) -> Result<RawTransaction> {
         let script_code = match &channel_op {
             ChannelOp::Open => self.script_registry.open_script(),
@@ -691,11 +722,19 @@ where
         };
         let script = script_code.encode_script(args);
         let channel_script =
-            ChannelScriptPayload::new(channel_sequence_number, write_set, receiver, script);
+            ChannelScriptBody::new(channel_sequence_number, write_set, receiver, script);
+        let channel_txn_payload = match payload_key_and_signature {
+            Some((public_key, signature)) => {
+                ChannelTransactionPayload::new_with_script(channel_script, public_key, signature)
+            }
+            None => {
+                self.mock_payload_signature(ChannelTransactionPayloadBody::Script(channel_script))
+            }
+        };
         Ok(RawTransaction::new_payload_txn(
             sender,
             sequence_number,
-            TransactionPayload::ChannelScript(channel_script),
+            TransactionPayload::Channel(channel_txn_payload),
             max_gas_amount,
             gas_unit_price,
             txn_expiration,
@@ -729,6 +768,7 @@ where
             Self::MAX_GAS_AMOUNT_OFFCHAIN,
             Self::GAS_UNIT_PRICE,
             Self::txn_expiration(),
+            None,
         )?;
         let signed_txn = self.mock_signature(txn)?;
         Ok(signed_txn)
@@ -737,9 +777,15 @@ where
     fn mock_signature(&self, txn: RawTransaction) -> Result<SignedTransaction> {
         // execute txn on offchain vm, should mock sender and receiver signature with a local
         // keypair. the vm will skip signature check on offchain vm.
-        let mut signed_txn = self.sign_txn(txn)?;
-        signed_txn.sign_by_receiver(&self.keypair.private_key, self.keypair.public_key.clone())?;
+        let signed_txn = self.sign_txn(txn)?;
         Ok(signed_txn)
+    }
+
+    fn mock_payload_signature(
+        &self,
+        payload_body: ChannelTransactionPayloadBody,
+    ) -> ChannelTransactionPayload {
+        payload_body.sign(&self.keypair.private_key, self.keypair.public_key.clone())
     }
 
     pub async fn submit_transaction(
