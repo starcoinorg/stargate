@@ -54,11 +54,6 @@ pub struct ChannelTransaction {
     expiration_time: Duration,
 
     args: Vec<TransactionArgument>,
-
-    /// Maximal total gas specified by wallet to spend for this transaction.
-    max_gas_amount: u64,
-    /// Maximal price can be paid per gas.
-    gas_unit_price: u64,
 }
 
 impl ChannelTransaction {
@@ -71,8 +66,6 @@ impl ChannelTransaction {
         channel_sequence_number: u64,
         expiration_time: Duration,
         args: Vec<TransactionArgument>,
-        max_gas_amount: u64,
-        gas_unit_price: u64,
     ) -> Self {
         Self {
             version,
@@ -83,8 +76,6 @@ impl ChannelTransaction {
             channel_sequence_number,
             expiration_time,
             args,
-            max_gas_amount,
-            gas_unit_price,
         }
     }
 }
@@ -121,13 +112,6 @@ impl ChannelTransaction {
     pub fn expiration_time(&self) -> Duration {
         self.expiration_time
     }
-
-    pub fn max_gas_amount(&self) -> u64 {
-        self.max_gas_amount
-    }
-    pub fn gas_unit_price(&self) -> u64 {
-        self.gas_unit_price
-    }
 }
 
 impl CryptoHash for ChannelTransaction {
@@ -154,9 +138,7 @@ impl CanonicalSerialize for ChannelTransaction {
             .encode_struct(&self.receiver)?
             .encode_u64(self.channel_sequence_number)?
             .encode_u64(self.expiration_time.as_secs())?
-            .encode_vec(&self.args)?
-            .encode_u64(self.max_gas_amount)?
-            .encode_u64(self.gas_unit_price)?;
+            .encode_vec(&self.args)?;
 
         Ok(())
     }
@@ -175,8 +157,6 @@ impl CanonicalDeserialize for ChannelTransaction {
         let channel_sequence_number = deserializer.decode_u64()?;
         let expiration_time = Duration::from_secs(deserializer.decode_u64()?);
         let args = deserializer.decode_vec()?;
-        let max_gas_amount = deserializer.decode_u64()?;
-        let gas_unit_price = deserializer.decode_u64()?;
         Ok(ChannelTransaction::new(
             version,
             operator,
@@ -186,8 +166,6 @@ impl CanonicalDeserialize for ChannelTransaction {
             channel_sequence_number,
             expiration_time,
             args,
-            max_gas_amount,
-            gas_unit_price,
         ))
     }
 }

@@ -172,8 +172,6 @@ where
             channel.channel_sequence_number(),
             Self::txn_expiration(),
             args,
-            Self::MAX_GAS_AMOUNT_OFFCHAIN,
-            Self::GAS_UNIT_PRICE,
         );
 
         // create mocked txn to execute
@@ -225,6 +223,7 @@ where
         Ok(channel_txn_request)
     }
 
+    /// called by reciever to verify sender's channel_txn.
     fn verify_channel_txn(
         &self,
         channel: &Channel,
@@ -512,7 +511,7 @@ where
     }
 
     /// called by sender, to verify receiver's response
-    pub fn verify_response(
+    fn verify_response(
         &self,
         channel: &Channel,
         channel_txn: &ChannelTransaction,
@@ -604,7 +603,7 @@ where
                 channel_txn.sequence_number(),
                 verified_participant_script_payload,
                 max_gas_amount,
-                channel_txn.gas_unit_price(),
+                Self::GAS_UNIT_PRICE,
                 channel_txn.expiration_time(),
             );
 
@@ -777,8 +776,8 @@ where
             channel_txn.sender(),
             channel_txn.sequence_number(),
             TransactionPayload::Channel(channel_txn_payload),
-            channel_txn.max_gas_amount(),
-            channel_txn.gas_unit_price(),
+            Self::MAX_GAS_AMOUNT_OFFCHAIN,
+            Self::GAS_UNIT_PRICE,
             channel_txn.expiration_time(),
         ))
     }

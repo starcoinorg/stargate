@@ -48,8 +48,6 @@ fn request_roundtrip_canonical_serialization() {
                 channel_sequence_number,
                 Duration::from_secs(rng0.next_u64()),
                 Vec::new(),
-                rng0.next_u64(),
-                rng0.next_u64(),
             ),
             ChannelTransactionSigs::new(
                 keypair.public_key.clone(),
@@ -75,8 +73,6 @@ fn request_roundtrip_canonical_serialization() {
                 channel_sequence_number,
                 Duration::from_secs(rng0.next_u64()),
                 Vec::new(),
-                rng0.next_u64(),
-                rng0.next_u64(),
             ),
             ChannelTransactionSigs::new(
                 keypair.public_key.clone(),
