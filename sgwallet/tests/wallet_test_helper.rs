@@ -62,8 +62,8 @@ where
 
         let receiver_open_txn = receiver_wallet.verify_txn(&open_txn).unwrap();
 
-        let sender_future = sender_wallet.apply_txn(receiver, &receiver_open_txn);
-        let receiver_future = receiver_wallet.apply_txn(sender, &receiver_open_txn);
+        let sender_future = sender_wallet.sender_apply_txn(receiver, &receiver_open_txn);
+        let receiver_future = receiver_wallet.receiver_apply_txn(sender, &receiver_open_txn);
 
         let gas_used = sender_future.await.unwrap();
         receiver_future.await.unwrap();
@@ -93,8 +93,8 @@ where
             .unwrap();
         let txn_response = receiver_wallet.verify_txn(&txn_request).unwrap();
 
-        let sender_future = sender_wallet.apply_txn(receiver, &txn_response);
-        let receiver_future = receiver_wallet.apply_txn(sender, &txn_response);
+        let sender_future = sender_wallet.sender_apply_txn(receiver, &txn_response);
+        let receiver_future = receiver_wallet.receiver_apply_txn(sender, &txn_response);
 
         let gas_used = sender_future.await.unwrap();
         receiver_future.await.unwrap();
@@ -142,8 +142,8 @@ where
 
         let receiver_open_txn = receiver_wallet.verify_txn(&open_txn).unwrap();
 
-        let sender_future = sender_wallet.apply_txn(receiver, &receiver_open_txn);
-        let receiver_future = receiver_wallet.apply_txn(sender, &receiver_open_txn);
+        let sender_future = sender_wallet.sender_apply_txn(receiver, &receiver_open_txn);
+        let receiver_future = receiver_wallet.receiver_apply_txn(sender, &receiver_open_txn);
 
         sender_gas_used += sender_future.await.unwrap();
         receiver_future.await.unwrap();
@@ -166,8 +166,8 @@ where
 
         let receiver_deposit_txn = receiver_wallet.verify_txn(&deposit_txn).unwrap();
 
-        let receiver_future = receiver_wallet.apply_txn(sender, &receiver_deposit_txn);
-        let sender_future = sender_wallet.apply_txn(receiver, &receiver_deposit_txn);
+        let receiver_future = receiver_wallet.receiver_apply_txn(sender, &receiver_deposit_txn);
+        let sender_future = sender_wallet.sender_apply_txn(receiver, &receiver_deposit_txn);
 
         sender_gas_used += sender_future.await.unwrap();
         receiver_future.await.unwrap();
@@ -197,8 +197,8 @@ where
 
         let receiver_transfer_txn = receiver_wallet.verify_txn(&transfer_txn).unwrap();
 
-        let receiver_future = receiver_wallet.apply_txn(sender, &receiver_transfer_txn);
-        let sender_future = sender_wallet.apply_txn(receiver, &receiver_transfer_txn);
+        let receiver_future = receiver_wallet.receiver_apply_txn(sender, &receiver_transfer_txn);
+        let sender_future = sender_wallet.sender_apply_txn(receiver, &receiver_transfer_txn);
 
         sender_gas_used += sender_future.await.unwrap();
         receiver_future.await.unwrap();
@@ -227,8 +227,8 @@ where
 
         let receiver_withdraw_txn = receiver_wallet.verify_txn(&withdraw_txn).unwrap();
 
-        let receiver_future = receiver_wallet.apply_txn(sender, &receiver_withdraw_txn);
-        let sender_future = sender_wallet.apply_txn(receiver, &receiver_withdraw_txn);
+        let receiver_future = receiver_wallet.receiver_apply_txn(sender, &receiver_withdraw_txn);
+        let sender_future = sender_wallet.sender_apply_txn(receiver, &receiver_withdraw_txn);
 
         sender_gas_used += sender_future.await.unwrap();
         receiver_future.await.unwrap();
