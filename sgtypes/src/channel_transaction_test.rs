@@ -1,6 +1,8 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::channel_transaction::*;
+use crate::channel_transaction_sigs::*;
 use canonical_serialization::{
     CanonicalDeserializer, CanonicalSerializer, SimpleDeserializer, SimpleSerializer,
 };
@@ -8,7 +10,7 @@ use crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     hash::CryptoHash,
     test_utils::KeyPair,
-    Uniform,
+    HashValue, Uniform,
 };
 use libra_types::{
     account_address::AccountAddress,
@@ -17,11 +19,7 @@ use libra_types::{
     write_set::WriteSet,
 };
 use rand::prelude::*;
-
-use crate::channel_transaction::{
-    ChannelOp, ChannelTransactionRequest, ChannelTransactionRequestPayload,
-};
-use failure::_core::time::Duration;
+use std::time::Duration;
 
 //TODO(jole) use Arbitrary
 #[test]
@@ -41,46 +39,54 @@ fn request_roundtrip_canonical_serialization() {
 
     let requests = vec![
         ChannelTransactionRequest::new(
-            rng0.next_u64(),
-            ChannelOp::Open,
-            sender,
-            sequence_number,
-            receiver,
-            channel_sequence_number,
-            Duration::from_secs(rng0.next_u64()),
-            ChannelTransactionRequestPayload::Offchain {
-                witness_hash: ChannelWriteSetBody::new(
-                    channel_sequence_number,
-                    WriteSet::default(),
-                    receiver,
-                )
-                .hash(),
-                witness_signature: signature.clone(),
-            },
-            keypair.public_key.clone(),
-            Vec::new(),
-            rng0.next_u64(),
-            rng0.next_u64(),
+            ChannelTransaction::new(
+                rng0.next_u64(),
+                ChannelOp::Open,
+                sender,
+                sequence_number,
+                receiver,
+                channel_sequence_number,
+                Duration::from_secs(rng0.next_u64()),
+                Vec::new(),
+                rng0.next_u64(),
+                rng0.next_u64(),
+            ),
+            ChannelTransactionSigs::new(
+                keypair.public_key.clone(),
+                TxnSignature::SenderSig {
+                    channel_txn_signature: signature.clone(),
+                },
+                ChannelWriteSetBody::new(channel_sequence_number, WriteSet::default(), receiver)
+                    .hash(),
+                signature.clone(),
+            ),
+            true,
         ),
         ChannelTransactionRequest::new(
-            rng0.next_u64(),
-            ChannelOp::Execute {
-                package_name: "Test".to_string(),
-                script_name: "Test".to_string(),
-            },
-            sender,
-            sequence_number,
-            receiver,
-            channel_sequence_number,
-            Duration::from_secs(rng0.next_u64()),
-            ChannelTransactionRequestPayload::Travel {
-                txn_write_set_hash: Default::default(),
-                txn_signature: signature,
-            },
-            keypair.public_key.clone(),
-            Vec::new(),
-            rng0.next_u64(),
-            rng0.next_u64(),
+            ChannelTransaction::new(
+                rng0.next_u64(),
+                ChannelOp::Execute {
+                    package_name: "Test".to_string(),
+                    script_name: "Test".to_string(),
+                },
+                sender,
+                sequence_number,
+                receiver,
+                channel_sequence_number,
+                Duration::from_secs(rng0.next_u64()),
+                Vec::new(),
+                rng0.next_u64(),
+                rng0.next_u64(),
+            ),
+            ChannelTransactionSigs::new(
+                keypair.public_key.clone(),
+                TxnSignature::ReceiverSig {
+                    channel_script_body_signature: signature.clone(),
+                },
+                HashValue::default(),
+                signature.clone(),
+            ),
+            false,
         ),
     ];
     for request in requests {
