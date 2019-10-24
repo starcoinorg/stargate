@@ -12,7 +12,7 @@ use libra_types::{
     access_path::{AccessPath, DataPath},
     account_address::AccountAddress,
     channel_account::ChannelAccountResource,
-    transaction::{ChannelWriteSetPayload, TransactionOutput},
+    transaction::{ChannelWriteSetBody, TransactionOutput},
     write_set::{WriteOp, WriteSet},
 };
 use std::collections::{BTreeMap, HashSet};
@@ -189,10 +189,10 @@ impl Channel {
 
     fn update_witness_data(
         &self,
-        witness_payload: ChannelWriteSetPayload,
+        witness_payload: ChannelWriteSetBody,
         signature: Ed25519Signature,
     ) {
-        let ChannelWriteSetPayload { write_set, .. } = witness_payload;
+        let ChannelWriteSetBody { write_set, .. } = witness_payload;
         let mut witness_data = self.witness_data.borrow_mut();
         *witness_data = Some(WitnessData {
             write_set,
@@ -210,7 +210,7 @@ impl Channel {
 
     pub fn apply_witness(
         &self,
-        witness_payload: ChannelWriteSetPayload,
+        witness_payload: ChannelWriteSetBody,
         signature: Ed25519Signature,
     ) -> Result<()> {
         self.check_stage(vec![ChannelStage::Opening, ChannelStage::Pending])?;
