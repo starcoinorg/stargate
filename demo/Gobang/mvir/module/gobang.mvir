@@ -12,14 +12,6 @@ module TheFive {
         total: u64,
     }
 
-    resource T_test {
-        grid: Vector.T<bool>,
-    }
-
-    resource T_test2 {
-        grid: bool,
-    }
-
     public new(): u64 {
         let t: Self.T;
         let grid: Vector.T<Vector.T<bool>>;
@@ -323,19 +315,6 @@ module TheFive {
         return;
     }
 
-    end_game() {
-        let t1: Self.T;
-        let t2: Self.T;
-
-        t1 = move_from_sender_channel<T>();
-        t2 = move_from_receiver_channel<T>();
-        Self.unwrap_T(move(t1));
-        Self.unwrap_T(move(t2));
-
-        Self.update_score();
-        return;
-    }
-
     update_score() {
         let score_ref: &mut Self.Score;
         let total_ref: &mut u64;
@@ -346,13 +325,29 @@ module TheFive {
         return;
     }
 
-    public play(x: u64, y: u64): u64 {
+    public end_game() {
+        let t1: Self.T;
+        let t2: Self.T;
+
+        t1 = move_from_sender_channel<T>();
+        t2 = move_from_receiver_channel<T>();
+        Self.unwrap_T(move(t1));
+        Self.unwrap_T(move(t2));
+
+        return;
+    }
+
+    public play(canvas_x: u64, canvas_y: u64): u64 {
         let win: bool;
+        let x: u64;
+        let y: u64;
 
         if (!Self.is_my_turn()) {
             return 1;
         }
 
+        x = move(canvas_x) + 1;
+        y = move(canvas_y) + 1;
         if (!Self.is_blank(copy(x), copy(y))) {
             return 2;
         }
@@ -362,6 +357,7 @@ module TheFive {
 
         if (move(win)) {
             Self.end_game();
+            Self.update_score();
         }
         return 0;
     }
@@ -384,34 +380,4 @@ module TheFive {
         return;
     }
 
-    public test1() {
-        let t: Self.T_test;
-        let grid: Vector.T<bool>;
-
-        grid = Vector.empty<bool>();
-
-        t = T_test {
-            grid: move(grid),
-        };
-        move_to_sender_channel<T_test>(move(t));
-        //move_to_sender<T_test>(move(t));
-
-        return;
-    }
-    public test2() {
-        let t: Self.T_test2;
-        let grid: bool;
-
-        grid = true;
-
-        t = T_test2 {
-            grid: move(grid),
-        };
-        move_to_sender_channel<T_test2>(move(t));
-
-        return;
-    }
-    public test3() {
-        return;
-    }
 }

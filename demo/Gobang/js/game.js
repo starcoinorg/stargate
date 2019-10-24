@@ -30,6 +30,7 @@
 			backColorORImg: "default",
 			playerBIsComputer: false,
 			srvAddr: "",
+			ply2Addr: "",
 			isWaiting: false,
 			joinTxnId: ""
 		};
@@ -628,7 +629,7 @@
 			function eventHandle(ps) {
 				if (!my.gameover && !(my.ComputerThinking || self.Opt.isWaiting)) {
 					logic(ps);
-                    sendTxnPlay(self.Opt.srvAddr, self.Opt.playBName, ps.I, ps.J);
+                    sendTxnPlay(self.Opt.srvAddr, self.Opt.ply2Addr, ps.I, ps.J);
                     self.Opt.isWaiting = true;
 					if (my.playerBIsComputer && my.switcher == 2) {
 						my.ComputerThinking = true;
@@ -667,7 +668,9 @@
                     if (txn_exe_success) {
                         my.queryPlay = setInterval(function(){ queryTxnPlay(server, data.req_id) }, 3000);
                     } else {
-
+                        var str = "游戏异常终止！";
+                        alert(str);
+                        location.reload();
                     }
                 },
                 error: function(err){
@@ -706,6 +709,10 @@
                                     J: args1
                                 }, true);
                                 console.log(data);
+                            } else if (pkg == "scripts" && (script == "end" || script == "new")) {
+                                var str = "游戏异常终止！";
+                                alert(str);
+                                location.reload();
                             }
                         }
 					}
@@ -714,6 +721,34 @@
 				},
 				error: function(err){
 					console.log("请求失败了："+err)
+				}
+			});
+		}
+
+		function sendTxnEnd(server, receiver) {
+			var testURL = server.concat("/exec");
+			var para = {
+				address: receiver,
+				package_name: "scripts",
+				script_name: "end",
+				args: ""
+			};
+			$.ajax({
+				url: testURL,
+				type: 'Post',
+				data: JSON.stringify(para),
+				dataType: "json",
+				crossDomain: true,
+				success: function(data){
+					console.log(data);
+					var txn_exe_success = data.status;
+					if (txn_exe_success) {
+					} else {
+						// failed
+					}
+				},
+				error: function(err){
+					console.log("请求失败："+err);
 				}
 			});
 		}
