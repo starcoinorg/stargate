@@ -12,7 +12,7 @@ use crypto::{
 };
 use libra_types::{
     account_address::AccountAddress,
-    transaction::{ChannelScriptPayload, ChannelWriteSetPayload, Script},
+    transaction::{ChannelScriptBody, ChannelWriteSetBody, Script},
     transaction_helpers::ChannelPayloadSigner,
     write_set::WriteSet,
 };
@@ -32,8 +32,7 @@ fn request_roundtrip_canonical_serialization() {
     let sender = AccountAddress::from_public_key(&keypair.public_key);
     let receiver = AccountAddress::random();
     let script = Script::new(vec![], vec![]);
-    let channel_script_payload =
-        ChannelScriptPayload::new(0, WriteSet::default(), receiver, script);
+    let channel_script_payload = ChannelScriptBody::new(0, WriteSet::default(), receiver, script);
     let signature = keypair
         .sign_script_payload(&channel_script_payload)
         .unwrap();
@@ -50,7 +49,7 @@ fn request_roundtrip_canonical_serialization() {
             channel_sequence_number,
             Duration::from_secs(rng0.next_u64()),
             ChannelTransactionRequestPayload::Offchain {
-                witness_hash: ChannelWriteSetPayload::new(
+                witness_hash: ChannelWriteSetBody::new(
                     channel_sequence_number,
                     WriteSet::default(),
                     receiver,
