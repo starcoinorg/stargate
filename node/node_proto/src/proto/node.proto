@@ -4,10 +4,15 @@ package node;
 
 import "script_package.proto";
 import "transaction.proto";
-import "get_with_proof.proto";
+import "google/api/annotations.proto";
 
 service Node {
-    rpc OpenChannel(OpenChannelRequest) returns (OpenChannelResponse) {}
+    rpc OpenChannel(OpenChannelRequest) returns (OpenChannelResponse) {
+        option (google.api.http) = {
+           post: "/node/openchannel"
+           body: "*"
+        };
+    }
   
     rpc Pay(PayRequest) returns (PayResponse) {}
 

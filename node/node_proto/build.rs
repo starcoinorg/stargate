@@ -11,6 +11,7 @@ fn main() {
         "../../libra/types/src/proto",
         "../../sgtypes/src/proto",
         "src/proto",
+        "src/proto/google/api/annotations.proto",
     ];
 
     grpcio_compiler::prost_codegen::compile_protos(
