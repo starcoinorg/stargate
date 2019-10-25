@@ -3,25 +3,26 @@
 
 use crate::schema_db::{SchemaDB, SchemaIterator};
 use crate::storage::SgStorage;
+use crate::utils;
 use failure::prelude::*;
 use lazy_static::lazy_static;
 use libra_types::account_address::{AccountAddress, ADDRESS_LENGTH};
+use logger::prelude::*;
 use metrics::OpMetrics;
 use rocksdb::{Writable, WriteOptions};
 use schemadb::schema::{KeyCodec, Schema, SeekKeyCodec, ValueCodec};
 use schemadb::ReadOptions;
 use schemadb::{SchemaBatch, WriteOp};
-
-use crate::utils;
 use std::io::Read;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
 lazy_static! {
-    static ref OP_COUNTER: OpMetrics = OpMetrics::new_and_registered("schemadb");
+    static ref OP_COUNTER: OpMetrics = OpMetrics::new_and_registered("sg_storage");
 }
 
 pub trait ChannelAddressProvider {
+    fn owner_address(&self) -> AccountAddress;
     fn participant_address(&self) -> AccountAddress;
 }
 
@@ -108,10 +109,7 @@ impl SchemaDB for ChannelDB {
             participant_address: self.participant,
             schema: PhantomData,
         };
-        let seek_first_ok = schema_iterator.seek_to_first();
-        if !seek_first_ok {
-            bail!("cannot init iterator");
-        }
+        let _ = schema_iterator.seek_to_first();
         Ok(Box::new(schema_iterator))
     }
 
@@ -146,6 +144,19 @@ impl SchemaDB for ChannelDB {
             }
         }
 
+        // metric rocksdb cf size
+        match self.inner.get_approximate_sizes_cf() {
+            Ok(cf_sizes) => {
+                for (cf_name, size) in cf_sizes {
+                    OP_COUNTER.set(&format!("cf_size_bytes_{}", cf_name), size as usize);
+                }
+            }
+            Err(err) => warn!(
+                "Failed to get approximate size of column families: {}.",
+                err
+            ),
+        }
+
         Ok(())
     }
 }
@@ -154,6 +165,10 @@ impl ChannelAddressProvider for ChannelDB {
     #[inline]
     fn participant_address(&self) -> AccountAddress {
         self.participant
+    }
+    #[inline]
+    fn owner_address(&self) -> AccountAddress {
+        self.inner.owner_address()
     }
 }
 

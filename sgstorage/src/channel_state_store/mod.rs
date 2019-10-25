@@ -9,18 +9,17 @@ use jellyfish_merkle::{
     node_type::{LeafNode, Node, NodeKey},
     JellyfishMerkleTree, TreeReader,
 };
-use libra_types::proof::SparseMerkleProof;
 use libra_types::{
-    account_address::AccountAddress, account_state_blob::AccountStateBlob, transaction::Version,
+    account_address::AccountAddress, account_state_blob::AccountStateBlob,
+    proof::SparseMerkleProof, transaction::Version,
 };
 use libradb::schema::{jellyfish_merkle_node::*, stale_node_index::*};
 use schemadb::SchemaBatch;
-use std::{collections::HashMap, sync::Arc};
+use std::collections::BTreeMap;
 
 #[derive(Clone)]
 pub struct ChannelStateStore<S> {
-    db: Arc<S>,
-    owner: AccountAddress,
+    db: S,
 }
 
 pub struct ChannelState {
@@ -31,8 +30,8 @@ pub struct ChannelState {
 }
 
 impl<S> ChannelStateStore<S> {
-    pub fn new(db: Arc<S>, owner: AccountAddress) -> Self {
-        Self { db, owner }
+    pub fn new(db: S) -> Self {
+        Self { db }
     }
 }
 
@@ -45,7 +44,7 @@ where
         let (receiver_blob, receiver_proof) =
             self.get_account_state_with_proof_by_version(self.db.participant_address(), version)?;
         let (sender_blob, sender_proof) =
-            self.get_account_state_with_proof_by_version(self.owner, version)?;
+            self.get_account_state_with_proof_by_version(self.db.owner_address(), version)?;
 
         Ok(ChannelState {
             sender_state: sender_blob,
@@ -69,14 +68,14 @@ where
 
     pub fn put_channel_state_set(
         &self,
-        channel_state_set: HashMap<AccountAddress, AccountStateBlob>,
+        channel_state_set: BTreeMap<AccountAddress, AccountStateBlob>,
         version: Version,
         schema_batch: &mut SchemaBatch,
     ) -> Result<HashValue> {
         let is_all_channel_related_data = channel_state_set
             .keys()
             .into_iter()
-            .all(|addr| self.db.participant_address() == *addr || self.owner == *addr);
+            .all(|addr| self.db.participant_address() == *addr || self.db.owner_address() == *addr);
         ensure!(
             is_all_channel_related_data,
             "state_set contain invalid data"

@@ -12,6 +12,7 @@ failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
 itertools = "0.8.0"
 crypto = { path = "../../libra/crypto/crypto" }
 libra-types = { path = "../../libra/types"}
+libra_tools = { path = "../../libra/common/tools", package="tools"}
 sgtypes = { path = "../../sgtypes" }
 sgchain = { path = "../../sgchain" }
 state-view = {path = "../../libra/storage/state-view"}
@@ -23,8 +24,10 @@ sgstorage = { path = "../../sgstorage" }
 
 canonical-serialization = { path = "../../libra/common/canonical-serialization"}
 scratchpad = { path = "../../libra/storage/scratchpad" }
-
+storage_proto = { path = "../../libra/storage/storage_proto" }
+chashmap = "2.2"
 [dev-dependencies]
 crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }
 sgchain = { path = "../../sgchain" }
 sgconfig = { path = "../../sgconfig", package = "sg_config"}
+rand = "0.6.5"

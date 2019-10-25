@@ -42,5 +42,6 @@ chrono = { version = "0.4.7", default-features = false }
 
 [dev-dependencies]
 crypto = { path = "../libra/crypto/crypto", features = ["testing"] }
+libra_tools = { path = "../libra/common/tools", package = "tools" }
 sgchain = { path = "../sgchain" }
 rusty-fork = "0.2.1"

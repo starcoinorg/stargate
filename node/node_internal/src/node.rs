@@ -650,7 +650,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
                 {
                     Ok(_) => {}
                     Err(e) => {
-                        warn!("apply tx fail");
+                        warn!("apply tx fail, err: {:?}", &e);
                         sender
                             .unbounded_send(NetworkMessage {
                                 peer_id: sender_addr,
