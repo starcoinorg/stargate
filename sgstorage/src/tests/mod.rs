@@ -1,9 +1,11 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::channel_db::{ChannelAddressProvider, ChannelDB};
 use crate::channel_state_store::ChannelState;
+use crate::channel_store::ChannelStore;
 use crate::schema_db::SchemaDB;
-use crate::sg_db::SgDB;
+use crate::storage::SgStorage;
 use crypto::hash::CryptoHash;
 use crypto::HashValue;
 use failure::Result;
@@ -12,7 +14,7 @@ use libra_types::account_address::AccountAddress;
 use libra_types::account_state_blob::AccountStateBlob;
 use libra_types::transaction::Version;
 use schemadb::SchemaBatch;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 #[test]
@@ -20,10 +22,11 @@ fn test_db_get_and_put() -> Result<()> {
     logger::try_init_for_testing();
     let tmp_dir = TempPath::new();
     let sender_address = AccountAddress::random();
-    let sg_db = Arc::new(SgDB::open(sender_address, &tmp_dir));
+    let sg_db = Arc::new(SgStorage::new(sender_address, &tmp_dir));
 
     let receiver_address = AccountAddress::random();
-    let channel_store = sg_db.get_channel_store(receiver_address);
+    let channel_db = ChannelDB::new(receiver_address, sg_db);
+    let channel_store = ChannelStore::new(channel_db);
 
     let channel_state_store = channel_store.state_store();
     assert!(channel_state_store
@@ -31,11 +34,9 @@ fn test_db_get_and_put() -> Result<()> {
         .is_err());
 
     let new_root_hash = put_state(
-        sg_db.clone(),
+        channel_store.clone(),
         0,
-        sender_address,
         None,
-        receiver_address,
         Some(AccountStateBlob::from(vec![])),
     )?;
 
@@ -54,11 +55,9 @@ fn test_db_get_and_put() -> Result<()> {
     assert!(verify_result.is_ok());
 
     let new_root_hash = put_state(
-        sg_db.clone(),
+        channel_store.clone(),
         0,
-        sender_address,
         Some(AccountStateBlob::from(vec![0, 1, 2, 3])),
-        receiver_address,
         Some(AccountStateBlob::from(vec![1, 2, 3, 4])),
     )?;
 
@@ -86,14 +85,15 @@ fn test_db_get_and_put() -> Result<()> {
 }
 
 fn put_state(
-    sg_db: Arc<SgDB>,
+    channel_store: ChannelStore<ChannelDB>,
     version: Version,
-    sender_address: AccountAddress,
     sender_state_blob: Option<AccountStateBlob>,
-    receiver_address: AccountAddress,
     receiver_state_blob: Option<AccountStateBlob>,
 ) -> Result<HashValue> {
-    let mut state_set = HashMap::new();
+    let sender_address = channel_store.db().owner_address();
+    let receiver_address = channel_store.db().participant_address();
+
+    let mut state_set = BTreeMap::new();
     if let Some(blob) = sender_state_blob {
         state_set.insert(sender_address, blob);
     }
@@ -101,10 +101,8 @@ fn put_state(
         state_set.insert(receiver_address, blob);
     }
     let mut schema_batch = SchemaBatch::default();
-    let channel_store = sg_db.get_channel_store(receiver_address);
 
     let channel_state_store = channel_store.state_store();
-
     let new_root_hash =
         channel_state_store.put_channel_state_set(state_set, version, &mut schema_batch)?;
 
@@ -132,4 +130,3 @@ fn verify_state(
 }
 
 mod rocksdb_prefix_seek_test;
-mod sg_db_test;

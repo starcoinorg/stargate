@@ -3,6 +3,7 @@
 
 use crate::channel::Channel;
 pub use crate::channel_state_view::ChannelStateView;
+use chashmap::{CHashMap, ReadGuard, WriteGuard};
 use failure::prelude::*;
 use libra_types::{
     access_path::{AccessPath, DataPath},
@@ -12,11 +13,16 @@ use libra_types::{
 use logger::prelude::*;
 use sgchain::client_state_view::ClientStateView;
 use sgchain::star_chain_client::ChainClient;
-use sgstorage::sg_db::SgDB;
+use sgstorage::channel_db::ChannelDB;
+use sgstorage::channel_store::ChannelStore;
+use sgstorage::storage::SgStorage;
 use sgtypes::sg_error::SgError;
-use sgtypes::{account_state::AccountState, channel::WitnessData};
 use std::path::Path;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
+
+pub mod channel;
+mod channel_state_view;
+pub mod tx_applier;
 
 pub struct LocalStateStorage<C>
 where
@@ -24,8 +30,8 @@ where
 {
     account: AccountAddress,
     client: Arc<C>,
-    sgdb: Arc<SgDB>,
-    channels: HashMap<AccountAddress, Channel>,
+    sgdb: Arc<SgStorage>,
+    channels: CHashMap<AccountAddress, Channel>,
 }
 
 impl<C> LocalStateStorage<C>
@@ -37,25 +43,25 @@ where
         store_dir: P,
         client: Arc<C>,
     ) -> Result<Self> {
-        let sgdb = Arc::new(SgDB::open(account, store_dir));
+        let sgdb = Arc::new(SgStorage::new(account, store_dir));
         let mut storage = Self {
             account,
             client,
             sgdb,
-            channels: HashMap::new(),
+            channels: CHashMap::new(),
         };
         storage.refresh_channels()?;
         Ok(storage)
     }
 
     fn refresh_channels(&mut self) -> Result<()> {
-        let account_state = self.get_account_state(self.account, None)?;
+        let account_state = self.client.get_account_state(self.account, None)?;
         let my_channel_states = account_state.filter_channel_state(self.account);
         let version = account_state.version();
         for (participant, my_channel_state) in my_channel_states {
             if !self.channels.contains_key(&participant) {
                 let participant_account_state =
-                    self.get_account_state(participant, Some(version))?;
+                    self.client.get_account_state(participant, Some(version))?;
                 let mut participant_channel_states =
                     participant_account_state.filter_channel_state(participant);
                 let participant_channel_state = participant_channel_states
@@ -65,7 +71,7 @@ where
                         self.account,
                         participant
                     ))?;
-                let channel_store = self.sgdb.get_channel_store(participant);
+                let channel_store = self.get_channel_store(participant);
                 let channel =
                     Channel::load(my_channel_state, participant_channel_state, channel_store)?;
                 info!("Init new channel with: {}", participant);
@@ -75,48 +81,43 @@ where
         Ok(())
     }
 
-    pub fn get_account_state(
-        &self,
-        account: AccountAddress,
-        version: Option<Version>,
-    ) -> Result<AccountState> {
-        self.client.get_account_state(account, version)
-    }
-
-    pub fn get_witness_data(&self, participant: AccountAddress) -> Result<WitnessData> {
-        Ok(self
-            .channels
-            .get(&participant)
-            .map(|state| state.witness_data())
-            .unwrap_or(WitnessData::default()))
-    }
-
     pub fn exist_channel(&self, participant: &AccountAddress) -> bool {
         self.channels.contains_key(participant)
     }
 
-    pub fn new_channel(&mut self, participant: AccountAddress) {
-        let channel = Channel::new(
-            self.account,
+    pub fn new_channel(&self, participant: AccountAddress) {
+        self.channels.upsert(
             participant,
-            self.sgdb.get_channel_store(participant),
+            || {
+                Channel::new(
+                    self.account,
+                    participant,
+                    self.get_channel_store(participant),
+                )
+            },
+            |_| {},
         );
-        self.channels.insert(participant, channel);
     }
 
-    pub fn get_channel(&self, participant: &AccountAddress) -> Result<&Channel> {
+    pub fn get_channel(
+        &self,
+        participant: &AccountAddress,
+    ) -> Result<ReadGuard<AccountAddress, Channel>> {
         self.channels
             .get(participant)
             .ok_or(SgError::new_channel_not_exist_error(participant).into())
+        //        self.channels
+        //            .get(participant)
+        //            .ok_or(SgError::new_channel_not_exist_error(participant).into())
     }
 
-    pub fn new_channel_view(
+    pub fn get_channel_mut(
         &self,
-        version: Option<Version>,
         participant: &AccountAddress,
-    ) -> Result<ChannelStateView> {
-        let channel = self.get_channel(participant)?;
-        ChannelStateView::new(channel, version, &*self.client)
+    ) -> Result<WriteGuard<AccountAddress, Channel>> {
+        self.channels
+            .get_mut(participant)
+            .ok_or(SgError::new_channel_not_exist_error(participant).into())
     }
 
     pub fn new_state_view(&self, version: Option<Version>) -> Result<ClientStateView> {
@@ -130,7 +131,7 @@ where
                 channel.get(&AccessPath::new_for_data_path(self.account, path.clone()))
             }))
         } else {
-            let account_state = self.get_account_state(self.account, None)?;
+            let account_state = self.client.get_account_state(self.account, None)?;
             Ok(account_state.get(&path.to_vec()))
         }
     }
@@ -147,10 +148,13 @@ where
     // state.as_slice())?))            }
     //        }
     //    }
+
+    #[inline]
+    fn get_channel_store(&self, participant_address: AccountAddress) -> ChannelStore<ChannelDB> {
+        let channel_db = ChannelDB::new(participant_address, self.sgdb.clone());
+        ChannelStore::new(channel_db)
+    }
 }
 
-pub mod channel;
-mod channel_state_view;
 #[cfg(test)]
-mod local_state_storage_test;
-mod tx_applier;
+mod tests;

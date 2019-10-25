@@ -4,14 +4,7 @@
 use atomic_refcell::AtomicRefCell;
 use crypto::{ed25519::Ed25519Signature, hash::SPARSE_MERKLE_PLACEHOLDER_HASH, HashValue};
 use failure::prelude::*;
-use libra_types::transaction::{ChannelTransactionPayload, ChannelTransactionPayloadBody};
-use libra_types::{
-    access_path::{AccessPath, DataPath},
-    account_address::AccountAddress,
-    channel_account::ChannelAccountResource,
-    transaction::{ChannelWriteSetBody, TransactionOutput},
-    write_set::{WriteOp, WriteSet},
-};
+use libra_types::{access_path::DataPath, account_address::AccountAddress, write_set::WriteSet};
 use std::collections::{BTreeMap, HashSet};
 
 //TODO (jole) need maintain network state?
