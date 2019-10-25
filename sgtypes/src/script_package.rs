@@ -5,6 +5,8 @@ use canonical_serialization::{
     CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
     SimpleDeserializer, SimpleSerializer,
 };
+use crypto::hash::{CryptoHash, CryptoHasher, TestOnlyHasher};
+use crypto::HashValue;
 use failure::prelude::*;
 use libra_types::transaction::{Script, TransactionArgument};
 use serde::{Deserialize, Serialize};
@@ -94,6 +96,20 @@ impl ChannelScriptPackage {
         self.scripts
             .iter()
             .find(|script| script.name.as_str() == name)
+    }
+}
+
+impl CryptoHash for ChannelScriptPackage {
+    type Hasher = TestOnlyHasher;
+
+    fn hash(&self) -> HashValue {
+        let mut state = Self::Hasher::default();
+        state.write(
+            SimpleSerializer::<Vec<u8>>::serialize(self)
+                .expect("Failed to serialize ChannelTransaction")
+                .as_slice(),
+        );
+        state.finish()
     }
 }
 
