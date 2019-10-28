@@ -9,24 +9,59 @@ import "google/api/annotations.proto";
 service Node {
     rpc OpenChannel(OpenChannelRequest) returns (OpenChannelResponse) {
         option (google.api.http) = {
-           post: "/node/openchannel"
+           post: "/node/open_channel"
            body: "*"
         };
     }
   
-    rpc Pay(PayRequest) returns (PayResponse) {}
+    rpc Pay(PayRequest) returns (PayResponse) {
+        option (google.api.http) = {
+           post: "/node/pay"
+           body: "*"
+        };
+    }
 
-    rpc Deposit(DepositRequest) returns (DepositResponse) {}
+    rpc Deposit(DepositRequest) returns (DepositResponse) {
+        option (google.api.http) = {
+           post: "/node/deposit"
+           body: "*"
+        };
+    }
 
-    rpc Withdraw(WithdrawRequest) returns (WithdrawResponse) {}
+    rpc Withdraw(WithdrawRequest) returns (WithdrawResponse) {
+        option (google.api.http) = {
+           post: "/node/withdraw"
+           body: "*"
+        };
+    }
 
-    rpc ChannelBalance(ChannelBalanceRequest) returns (ChannelBalanceResponse) {}
+    rpc ChannelBalance(ChannelBalanceRequest) returns (ChannelBalanceResponse) {
+        option (google.api.http) = {
+           post: "/node/channel_balance"
+           body: "*"
+        };
+    }
 
-    rpc InstallChannelScriptPackage(InstallChannelScriptPackageRequest) returns (InstallChannelScriptPackageResponse) {}
+    rpc InstallChannelScriptPackage(InstallChannelScriptPackageRequest) returns (InstallChannelScriptPackageResponse) {
+        option (google.api.http) = {
+           post: "/node/install_channel_script_package"
+           body: "*"
+        };
+    }
 
-    rpc DeployModule(DeployModuleRequest) returns (DeployModuleResponse){}
+    rpc DeployModule(DeployModuleRequest) returns (DeployModuleResponse){
+        option (google.api.http) = {
+           post: "/node/deploy_module"
+           body: "*"
+        };
+    }
 
-    rpc ExecuteScript(ExecuteScriptRequest) returns (ExecuteScriptResponse) {}
+    rpc ExecuteScript(ExecuteScriptRequest) returns (ExecuteScriptResponse) {
+        option (google.api.http) = {
+           post: "/node/execute_script"
+           body: "*"
+        };
+    }
 }
   
 message OpenChannelRequest {
