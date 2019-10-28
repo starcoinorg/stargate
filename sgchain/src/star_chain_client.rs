@@ -256,6 +256,8 @@ impl MockChainClient {
     pub fn new() -> (Self, StarHandle) {
         let mut config =
             NodeConfigHelpers::get_single_node_test_config(false /* random ports */);
+        // TODO: test the circleci
+        config.storage.address = "127.0.0.1".to_string();
         info!("MockChainClient config: {:?} ", config);
         //        if config.consensus.consensus_peers.peers.len() == 0 {
         //            let (_, single_peer_consensus_config,_) =
