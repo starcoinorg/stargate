@@ -28,7 +28,7 @@
 			<div class="menu">
 <!--				<a href="javascript:;" onclick="restartgui()">重新开始</a>-->
 <!--				<a href="javascript:;" onclick="gb.back();" id="backChessman">悔棋</a>-->
-				<a href="javascript:;" onclick="">重新开始</a>
+				<a href="javascript:;" onclick="restartGame()">重新开始</a>
 				<a href="javascript:;" onclick="" id="backChessman">悔棋</a>
 
 			</div>
@@ -44,8 +44,8 @@
 					<img src="img/logo.png" width="100%" height="140" />
 					<div class="box">
 						<h3>配置信息</h3>
-						<label>节点服务：</label> <input type="text" id="srvAddrInput" value="http://127.0.0.1:7011" />
-						<br><label>对手玩家：</label> <input type="text" id="plname2Input" value="0x0cbf13fc2219e9e63a90bf511b45311986856acf1473a895405113144d67e7f1" />
+						<label>节点服务：</label> <input type="text" id="srvAddrInput" value="请输入REST服务地址" />
+						<br><label>对手玩家：</label> <input type="text" id="plname2Input" value="请输入对手地址" />
 						<label for="openComputer">启用对家为电脑</label> <input type="checkbox" id="openComputer" value="1" />
 					</div>
 					<div class="box">
@@ -98,11 +98,12 @@
 		var pl2addr = null;
 		var joinTxnIdValue = null;
 
+		document.getElementById("openComputer").disabled = true;
+
 		document.getElementById("newgame").addEventListener("click", function() {
 		    srv = document.getElementById("srvAddrInput").value;
 		    pl2addr = document.getElementById("plname2Input").value;
 			sendTxnNew(srv, pl2addr);
-			document.getElementById("newgame").value = "等待对手加入..";
 		});
 		document.getElementById("joingame").addEventListener("click", function() {
 		    srv = document.getElementById("srvAddrInput").value;
@@ -113,7 +114,7 @@
 			startGame(false);
 		});
 
-		function startGame(waiting) {
+		function startGame(startByPly2) {
 
 			function initParams(wait) {
 				var chessTypeValue = 1;
@@ -135,22 +136,31 @@
 						}
 					}
 				}
+
+				var ply1Name = "我";
+				var ply2Name = plname2Input.value.substring(0, 8);
+				if (startByPly2) {
+					ply1Name = ply2Name,
+					ply2Name = "我"
+				}
+
 				return {
 					lineColor: linevalue,
 					chessType: chessTypeValue, //1 色彩棋子 2 仿真棋子
-					playAName: "我",
-					playBName: plname2Input.value,
+					playAName: ply1Name,
+					playBName: ply2Name,
 					backColorORImg: bcorimgvalue,
 					playAImg: "img/playA.png",
 					playBImg: "img/playB.png",
 					playerBIsComputer:openComputer.checked,
 					srvAddr: srvAddrInput.value,
+					ply2Addr: plname2Input.value,
 					isWaiting: wait,
 					joinTxnId: joinTxnIdValue
 				};
 			}
 			document.getElementById("cc").style.display = "block";
-			gb = new gobang(initParams(waiting));
+			gb = new gobang(initParams(startByPly2));
 			/**
 			 * 设置一些界面信息
 			 * @param {Object} opt
@@ -191,7 +201,7 @@
 				} else {
 					var winname = c2d.winer == 1 ? opt.playAName : opt.playBName;
 					var str = "恭喜，【" + winname + "】赢了！"
-					alert(str);
+					//alert(str);
 					winerpnl.style.display = "block";
 					document.getElementById("winerName").innerHTML = "恭喜，【" + winname + "】赢了！";
 					document.getElementById("pl" + c2d.winer).style.backgroundColor = "pink";
@@ -226,6 +236,22 @@
 			}
 		};
 
+		function endGame() {
+			srv = document.getElementById("srvAddrInput").value;
+			pl2addr = document.getElementById("plname2Input").value;
+			sendTxnEnd(srv, pl2addr);
+		}
+
+		function restartGame() {
+			var serveraddr = srvAddrInput.value;
+			var plyer2addr = plname2Input.value;
+		    endGame();
+		    location.reload();
+		    document.getElementById("srvAddrInput").value = serveraddr;
+			document.getElementById("plname2Input").value = plyer2addr;
+		}
+
+
 		function sendTxnNew(server, receiver) {
 			var testURL = server.concat("/exec");
 			var para = {
@@ -245,6 +271,7 @@
 					var txn_exe_success = data.status;
 					if (txn_exe_success) {
 						// 'new()' succeed, waiting for receiver to 'join'
+						document.getElementById("newgame").value = "等待对手加入..";
 						query = setInterval(function(){ queryTxnJoin(server, data.req_id) }, 3000);
 					} else {
 						// 'new()' failed, you are the player2, 'join' the game
@@ -252,7 +279,7 @@
 						setTimeout(function(){
 							document.getElementById("newgame").style.display = "none";
 							document.getElementById("joingame").style.display = "block";
-						}, 1000);
+						}, 1500);
 					}
 				},
 				error: function(err){
@@ -321,7 +348,11 @@
 						document.getElementById("joingame").style.display = "none";
 						startGame(true);
 					} else {
-						// failed, do nothing
+						// failed
+						endGame();
+						document.getElementById("newgame").value = "连接失败，重试";
+						document.getElementById("newgame").style.display = "block";
+						document.getElementById("joingame").style.display = "none";
 					}
 				},
 				error: function(err){
@@ -329,6 +360,35 @@
 				}
 			});
 		}
+
+		function sendTxnEnd(server, receiver) {
+			var testURL = server.concat("/exec");
+			var para = {
+				address: receiver,
+				package_name: "scripts",
+				script_name: "end",
+				args: ""
+			};
+			$.ajax({
+				url: testURL,
+				type: 'Post',
+				data: JSON.stringify(para),
+				dataType: "json",
+				crossDomain: true,
+				success: function(data){
+					console.log(data);
+					var txn_exe_success = data.status;
+					if (txn_exe_success) {
+					} else {
+						// failed
+					}
+				},
+				error: function(err){
+					console.log("请求失败："+err);
+				}
+			});
+		}
+
 	</script>
 
 </html>
