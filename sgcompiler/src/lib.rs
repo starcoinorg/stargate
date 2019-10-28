@@ -299,6 +299,20 @@ mod tests {
         assert!(script.is_some(), "the script named simple should exist.");
         Ok(())
     }
+
+    #[test]
+    fn test_compile_complex_script() -> Result<()> {
+        let address = AccountAddress::random();
+        let module_loader = MockModuleLoader::new();
+
+        let compiler = Compiler::new_with_module_loader(address, &module_loader);
+        let package_path = get_test_package("complex_script");
+        let script_src = std::fs::read_to_string(package_path.join("script.mvir").as_path())?;
+        let first_bytes = compiler.compile_script(script_src.as_str())?;
+        let second_bytes = compiler.compile_script(script_src.as_str())?;
+        assert_eq!(first_bytes, second_bytes);
+        Ok(())
+    }
 }
 
 pub mod mock_module_loader;
