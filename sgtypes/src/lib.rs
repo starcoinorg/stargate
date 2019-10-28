@@ -2,21 +2,21 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod account_resource_ext;
+pub mod account_state;
+pub mod channel;
 pub mod channel_transaction;
+pub mod channel_transaction_sigs;
 #[cfg(test)]
 mod channel_transaction_test;
+pub mod channel_transaction_to_commit;
 pub mod message;
 pub mod proto;
 pub mod resource;
-pub mod sg_error;
-pub mod system_event;
-
-pub mod account_state;
-pub mod channel;
 #[cfg(test)]
 mod resource_test;
 pub mod script_package;
-
+pub mod sg_error;
+pub mod system_event;
 #[cfg(test)]
 mod tests {
     #[test]

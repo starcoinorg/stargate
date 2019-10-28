@@ -8,6 +8,7 @@ use crate::{
 use atomic_refcell::AtomicRefCell;
 use crypto::ed25519::Ed25519Signature;
 use failure::prelude::*;
+use libra_types::transaction::{ChannelTransactionPayload, ChannelTransactionPayloadBody};
 use libra_types::{
     access_path::{AccessPath, DataPath},
     account_address::AccountAddress,
@@ -208,13 +209,20 @@ impl Channel {
         *self.pending_txn_request.borrow_mut() = None
     }
 
-    pub fn apply_witness(
-        &self,
-        witness_payload: ChannelWriteSetBody,
-        signature: Ed25519Signature,
-    ) -> Result<()> {
+    pub fn apply_witness(&self, witness_payload: ChannelTransactionPayload) -> Result<()> {
         self.check_stage(vec![ChannelStage::Opening, ChannelStage::Pending])?;
-        self.update_witness_data(witness_payload, signature);
+        let ChannelTransactionPayload {
+            body,
+            receiver_signature,
+            ..
+        } = witness_payload;
+        let body = match body {
+            ChannelTransactionPayloadBody::WriteSet(body) => body,
+            _ => {
+                bail!("not witness type");
+            }
+        };
+        self.update_witness_data(body, receiver_signature);
         self.reset_pending_txn_request();
         *self.stage.borrow_mut() = ChannelStage::Idle;
         Ok(())
@@ -310,7 +318,7 @@ impl Channel {
         if pending_txn_request.is_some() {
             bail!("exist a pending txn request.");
         }
-        let operator = request.request.operator().clone();
+        let operator = request.request.channel_txn().operator().clone();
         *pending_txn_request = Some(request);
         if operator != ChannelOp::Open {
             *self.stage.borrow_mut() = ChannelStage::Pending;
