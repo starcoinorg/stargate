@@ -3,6 +3,7 @@
 
 use crate::scripts::*;
 use atomic_refcell::AtomicRefCell;
+use channel_manager::{channel::Channel, ChannelManager};
 use chrono::Utc;
 use config::config::VMConfig;
 use crypto::{
@@ -13,11 +14,12 @@ use crypto::{
 };
 use failure::prelude::*;
 use lazy_static::lazy_static;
+use libra_types::access_path::AccessPath;
 use libra_types::{
     access_path::DataPath,
     account_address::AccountAddress,
-    account_config::{account_resource_path, coin_struct_tag, AccountResource},
-    channel_account::{channel_account_resource_path, ChannelAccountResource},
+    account_config::{coin_struct_tag, AccountResource},
+    channel_account::ChannelAccountResource,
     language_storage::StructTag,
     transaction::{
         ChannelScriptBody, ChannelTransactionPayload, ChannelTransactionPayloadBody,
@@ -28,8 +30,6 @@ use libra_types::{
     transaction_helpers::{create_signed_payload_txn, ChannelPayloadSigner, TransactionSigner},
     vm_error::*,
 };
-use local_state_storage::channel::Channel;
-use local_state_storage::LocalStateStorage;
 use logger::prelude::*;
 use sgchain::star_chain_client::{ChainClient, StarChainClient};
 use sgconfig::config::WalletConfig;
@@ -61,7 +61,7 @@ where
     account: AccountAddress,
     keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
     client: Arc<C>,
-    storage: LocalStateStorage<C>,
+    storage: ChannelManager<C>,
     script_registry: PackageRegistry,
     offchain_transactions: Arc<AtomicRefCell<Vec<(HashValue, ChannelTransactionRequest, u8)>>>,
 }
@@ -93,7 +93,7 @@ where
         client: Arc<C>,
         store_dir: P,
     ) -> Result<Self> {
-        let storage = LocalStateStorage::new(account, store_dir, client.clone())?;
+        let storage = ChannelManager::new(account, store_dir, client.clone())?;
         let script_registry = PackageRegistry::build()?;
         Ok(Self {
             account,
@@ -692,15 +692,21 @@ where
         self.script_registry.get_script(package_name, script_name)
     }
 
-    pub fn get(&self, path: &Vec<u8>) -> Result<Option<Vec<u8>>> {
-        let data_path = DataPath::from(path)?;
-        self.storage.get(&data_path)
+    pub fn get(&self, path: &DataPath) -> Result<Option<Vec<u8>>> {
+        if path.is_channel_resource() {
+            let participant = path.participant().expect("participant must exist");
+            let channel = self.storage.get_channel(&participant)?;
+            Ok(channel.get(&AccessPath::new_for_data_path(self.account, path.clone())))
+        } else {
+            let account_state = self.client.get_account_state(self.account, None)?;
+            Ok(account_state.get(&path.to_vec()))
+        }
     }
 
     pub fn account_resource(&self) -> Result<AccountResource> {
         // account_resource must exist.
         //TODO handle unwrap
-        self.get(&account_resource_path())
+        self.get(&DataPath::account_resource_data_path())
             .and_then(|value| account_resource_ext::from_bytes(&value.unwrap()))
     }
 
@@ -708,7 +714,7 @@ where
         &self,
         participant: AccountAddress,
     ) -> Result<Option<ChannelAccountResource>> {
-        self.get(&channel_account_resource_path(participant))
+        self.get(&DataPath::channel_account_path(participant))
             .and_then(|value| match value {
                 Some(value) => Ok(Some(ChannelAccountResource::make_from(value)?)),
                 None => Ok(None),

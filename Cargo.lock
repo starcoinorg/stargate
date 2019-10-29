@@ -514,6 +514,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "channel-manager"
+version = "0.1.0"
+dependencies = [
+ "atomic_refcell 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "canonical-serialization 0.1.0",
+ "chashmap 2.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "crypto 0.1.0",
+ "failure_ext 0.1.0",
+ "itertools 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libra-types 0.1.0",
+ "logger 0.1.0",
+ "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "scratchpad 0.1.0",
+ "sg_config 0.1.0",
+ "sgchain 0.1.0",
+ "sgstorage 0.1.0",
+ "sgtypes 0.1.0",
+ "state-view 0.1.0",
+ "storage_proto 0.1.0",
+ "tokio 0.1.22 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tools 0.1.0",
+ "vm_runtime_types 0.1.0",
+]
+
+[[package]]
 name = "chashmap"
 version = "2.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2367,31 +2392,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "load_file"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "local_state_storage"
-version = "0.1.0"
-dependencies = [
- "atomic_refcell 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "canonical-serialization 0.1.0",
- "chashmap 2.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "crypto 0.1.0",
- "failure_ext 0.1.0",
- "itertools 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "libra-types 0.1.0",
- "logger 0.1.0",
- "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "scratchpad 0.1.0",
- "sg_config 0.1.0",
- "sgchain 0.1.0",
- "sgstorage 0.1.0",
- "sgtypes 0.1.0",
- "state-view 0.1.0",
- "storage_proto 0.1.0",
- "tokio 0.1.22 (registry+https://github.com/rust-lang/crates.io-index)",
- "tools 0.1.0",
- "vm_runtime_types 0.1.0",
-]
 
 [[package]]
 name = "lock_api"
@@ -4286,6 +4286,7 @@ version = "0.1.0"
 dependencies = [
  "atomic_refcell 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "canonical-serialization 0.1.0",
+ "channel-manager 0.1.0",
  "chrono 0.4.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "config 0.1.0",
  "crypto 0.1.0",
@@ -4299,7 +4300,6 @@ dependencies = [
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "libra-types 0.1.0",
  "load_file 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "local_state_storage 0.1.0",
  "logger 0.1.0",
  "prost 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "protobuf 2.7.0 (registry+https://github.com/rust-lang/crates.io-index)",

@@ -20,7 +20,7 @@ sgtypes = { path = "../sgtypes" }
 sgconfig = { path = "../sgconfig", package="sg_config" }
 crypto = { path = "../libra/crypto/crypto" }
 
-local_state_storage = { path = "./local_state_storage"}
+channel-manager = { path = "./channel-manager"}
 sgchain = { path = "../sgchain" }
 vm_genesis = { path = "../libra/language/vm/vm_genesis" }
 logger = { path = "../libra/common/logger"}
