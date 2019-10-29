@@ -58,25 +58,18 @@ commands:
 jobs:
   build:
     executor: build-executor
-    parallelism: 2
+    parallelism: 1
     steps:
       - build_setup
       - run:
           name: Linting
-          command: |
-            [[ $CIRCLE_NODE_INDEX =~ [0] ]] || cargo fmt -- --check
-      - run:
-          name: Build Release
-          command: |
-            [[ $CIRCLE_NODE_INDEX =~ [0] ]] || RUST_BACKTRACE=1 cargo build -j 8 --all --release
+          command: cargo fmt -- --check
       - run:
           name: Build Dev
-          command: |
-            [[ $CIRCLE_NODE_INDEX =~ [1] ]] || RUST_BACKTRACE=1 cargo build -j 8 --all
+          command: RUST_BACKTRACE=1 cargo build -j 8 --all
       - run:
           name: Run All Unit Tests
-          command: |
-            [[ $CIRCLE_NODE_INDEX =~ [1] ]] || RUST_BACKTRACE=full RUST_LOG=debug cargo test -j 8 --all --exclude network-libp2p --exclude sgnetwork -- --test-threads=1 --nocapture
+          command: RUST_BACKTRACE=full RUST_LOG=info cargo test -j 8 --all --exclude network-libp2p --exclude sgnetwork -- --test-threads=1 --nocapture
       - build_teardown
   audit:
     executor: audit-executor
