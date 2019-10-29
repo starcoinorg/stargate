@@ -6,7 +6,7 @@ members = [
     "network-libp2p",
     "network-libp2p/peerset",
     "sgwallet",
-    "sgwallet/local_state_storage",
+    "sgwallet/channel-manager",
     "node",
     "node/node_proto",
     "node/node_client",

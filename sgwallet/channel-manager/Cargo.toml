@@ -1,5 +1,5 @@
 [package]
-name = "local_state_storage"
+name = "channel-manager"
 version = "0.1.0"
 authors = ["Starcoin Core Dev <dev@starcoin.org>"]
 license = "Apache-2.0"

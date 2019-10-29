@@ -5,13 +5,8 @@ use crate::channel::Channel;
 pub use crate::channel_state_view::ChannelStateView;
 use chashmap::{CHashMap, ReadGuard, WriteGuard};
 use failure::prelude::*;
-use libra_types::{
-    access_path::{AccessPath, DataPath},
-    account_address::AccountAddress,
-    transaction::Version,
-};
+use libra_types::account_address::AccountAddress;
 use logger::prelude::*;
-use sgchain::client_state_view::ClientStateView;
 use sgchain::star_chain_client::ChainClient;
 use sgstorage::channel_db::ChannelDB;
 use sgstorage::channel_store::ChannelStore;
@@ -24,7 +19,7 @@ pub mod channel;
 mod channel_state_view;
 pub mod tx_applier;
 
-pub struct LocalStateStorage<C>
+pub struct ChannelManager<C>
 where
     C: ChainClient,
 {
@@ -34,7 +29,7 @@ where
     channels: CHashMap<AccountAddress, Channel>,
 }
 
-impl<C> LocalStateStorage<C>
+impl<C> ChannelManager<C>
 where
     C: ChainClient,
 {
@@ -120,21 +115,6 @@ where
             .ok_or(SgError::new_channel_not_exist_error(participant).into())
     }
 
-    pub fn new_state_view(&self, version: Option<Version>) -> Result<ClientStateView> {
-        Ok(ClientStateView::new(version, &*self.client))
-    }
-
-    pub fn get(&self, path: &DataPath) -> Result<Option<Vec<u8>>> {
-        if path.is_channel_resource() {
-            let participant = path.participant().expect("participant must exist");
-            Ok(self.channels.get(&participant).and_then(|channel| {
-                channel.get(&AccessPath::new_for_data_path(self.account, path.clone()))
-            }))
-        } else {
-            let account_state = self.client.get_account_state(self.account, None)?;
-            Ok(account_state.get(&path.to_vec()))
-        }
-    }
     //TODO(jole) supported generic resource
     //    pub fn get_resource(&self, path: &DataPath) -> Result<Option<Resource>> {
     //        let state = self.get(path)?;
