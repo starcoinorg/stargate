@@ -21,10 +21,13 @@ use libra_types::write_set::WriteSet;
 use schemadb::SchemaBatch;
 use sgtypes::channel_transaction_info::ChannelTransactionInfo;
 use sgtypes::channel_transaction_to_commit::*;
+use sgtypes::proof::signed_channel_transaction_proof::SignedChannelTransactionProof;
+use sgtypes::signed_channel_transaction_with_proof::SignedChannelTransactionWithProof;
 use std::fmt::Formatter;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 use storage_proto::StartupInfo;
+
 #[derive(Clone)]
 pub struct ChannelStore<S> {
     db: S,
@@ -240,6 +243,39 @@ where
             .expect("should get read lock")
             .deref()
             .clone()
+    }
+
+    pub fn get_transaction_by_channel_seq_number(
+        &self,
+        channel_sequence_number: u64,
+        fetch_events: bool,
+    ) -> Result<SignedChannelTransactionWithProof> {
+        // Get the latest ledger info and signatures
+        let ledger_info_with_sigs = self.ledger_store.get_latest_ledger_info()?;
+        let ledger_version = ledger_info_with_sigs.ledger_info().version();
+        self.get_txn_with_proof(channel_sequence_number, ledger_version, fetch_events)
+    }
+
+    fn get_txn_with_proof(
+        &self,
+        version: u64,
+        ledger_version: u64,
+        fetch_events: bool,
+    ) -> Result<SignedChannelTransactionWithProof> {
+        let (txn_info, txn_info_accumulator_proof) = self
+            .ledger_store
+            .get_transaction_info_with_proof(version, ledger_version)?;
+        let proof = SignedChannelTransactionProof::new(txn_info_accumulator_proof, txn_info);
+        let signed_transaction = self.transaction_store.get_transaction(version)?;
+        // TODO(caojiafeng): impl me
+        let events = if fetch_events { None } else { None };
+
+        Ok(SignedChannelTransactionWithProof {
+            version,
+            signed_transaction,
+            events,
+            proof,
+        })
     }
 
     //    /// Returns the account state corresponding to the given version and account address with proof

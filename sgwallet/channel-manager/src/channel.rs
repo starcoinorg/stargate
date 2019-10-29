@@ -21,6 +21,7 @@ use sgtypes::channel_transaction::ChannelTransaction;
 use sgtypes::channel_transaction_sigs::ChannelTransactionSigs;
 use sgtypes::channel_transaction_to_commit::ChannelTransactionToApply;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
+use sgtypes::signed_channel_transaction_with_proof::SignedChannelTransactionWithProof;
 use sgtypes::{
     channel::{ChannelStage, ChannelState},
     channel_transaction::{ChannelOp, ChannelTransactionRequestAndOutput},
@@ -251,5 +252,16 @@ impl Channel {
             return Err(SgError::new_invalid_channel_stage_error(current_stage).into());
         }
         Ok(())
+    }
+}
+
+impl Channel {
+    /// get signed channel transaction by it's channel_sequence_number
+    pub fn get_txn_by_channel_seq_number(
+        &self,
+        channel_seq_number: u64,
+    ) -> Result<SignedChannelTransactionWithProof> {
+        self.store
+            .get_transaction_by_channel_seq_number(channel_seq_number, false)
     }
 }

@@ -1,19 +1,14 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use super::channel_transaction_info::ChannelTransactionInfo;
-use super::hash::ChannelTransactionAccumulatorHasher;
-use libra_types::proof::{AccumulatorProof, SparseMerkleProof};
-#[cfg(any(test, feature = "testing"))]
-use proptest_derive::Arbitrary;
-
-pub type ChannelTransactionAccumulatorProof = AccumulatorProof<ChannelTransactionAccumulatorHasher>;
+use crate::channel_transaction_info::ChannelTransactionInfo;
+use crate::proof::ChannelTransactionAccumulatorProof;
+use libra_types::proof::SparseMerkleProof;
 
 /// The complete proof used to authenticate the state of an account. This structure consists of the
 /// `AccumulatorProof` from `LedgerInfo` to `TransactionInfo`, the `TransactionInfo` object and the
 /// `SparseMerkleProof` from state root to the account.
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct AccountStateProof {
     /// The accumulator proof from ledger info root to leaf that authenticates the hash of the
     /// `TransactionInfo` object.

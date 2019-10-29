@@ -20,6 +20,7 @@ mod resource_test;
 pub mod script_package;
 pub mod sg_error;
 pub mod signed_channel_transaction;
+pub mod signed_channel_transaction_with_proof;
 pub mod system_event;
 pub mod write_set_item;
 #[cfg(test)]

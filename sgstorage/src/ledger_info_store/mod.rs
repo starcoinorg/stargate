@@ -12,7 +12,7 @@ use crate::schema::channel_transaction_accumulator::*;
 use crate::schema::channel_transaction_info::*;
 use crate::schema_db::SchemaDB;
 use accumulator::{HashReader, MerkleAccumulator};
-use arc_swap::ArcSwap;
+
 use crypto::{hash::CryptoHash, HashValue};
 use failure::prelude::*;
 use libra_types::crypto_proxies::LedgerInfoWithSignatures;
@@ -25,14 +25,14 @@ use sgtypes::{
     channel_transaction_info::ChannelTransactionInfo, hash::ChannelTransactionAccumulatorHasher,
     proof::ChannelTransactionAccumulatorProof,
 };
-
 use std::fmt::Formatter;
-use std::{ops::Deref, sync::Arc};
+use std::sync::Arc;
+use std::sync::RwLock;
 
 #[derive(Clone)]
 pub struct LedgerStore<S> {
     db: S,
-    latest_ledger_info: ArcSwap<Option<LedgerInfoWithSignatures>>,
+    latest_ledger_info: Arc<RwLock<Option<LedgerInfoWithSignatures>>>,
 }
 impl<S> core::fmt::Debug for LedgerStore<S>
 where
@@ -51,7 +51,7 @@ impl<S> LedgerStore<S> {
     pub fn new(db: S) -> Self {
         Self {
             db,
-            latest_ledger_info: ArcSwap::from(Arc::new(None)),
+            latest_ledger_info: Arc::new(RwLock::new(None)),
         }
     }
 }
@@ -73,7 +73,9 @@ where
                 .expect("Reading latest ledger info from DB should work.")
                 .map(|kv| kv.1)
         };
-        self.latest_ledger_info.store(Arc::new(ledger_info));
+        if let Some(ledger_info) = ledger_info {
+            self.set_latest_ledger_info(ledger_info);
+        }
     }
 
     /// Return the ledger infos starting from `start_epoch` to
@@ -90,9 +92,8 @@ where
     }
 
     pub fn get_latest_ledger_info_option(&self) -> Option<LedgerInfoWithSignatures> {
-        let ledger_info_ptr = self.latest_ledger_info.load();
-        let ledger_info: &Option<_> = ledger_info_ptr.deref();
-        ledger_info.clone()
+        let ledger_info_ptr = self.latest_ledger_info.read().unwrap();
+        (*ledger_info_ptr).clone()
     }
 
     pub fn get_latest_ledger_info(&self) -> Result<LedgerInfoWithSignatures> {
@@ -101,8 +102,7 @@ where
     }
 
     pub fn set_latest_ledger_info(&self, ledger_info_with_sigs: LedgerInfoWithSignatures) {
-        self.latest_ledger_info
-            .store(Arc::new(Some(ledger_info_with_sigs)));
+        *self.latest_ledger_info.write().unwrap() = Some(ledger_info_with_sigs);
     }
 
     /// Get transaction info given `version`

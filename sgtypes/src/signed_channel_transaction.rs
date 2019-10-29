@@ -9,8 +9,9 @@ use canonical_serialization::{
     CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
 };
 use failure::prelude::*;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct SignedChannelTransaction {
     pub raw_tx: ChannelTransaction,
     pub sender_signature: ChannelTransactionSigs,
