@@ -254,6 +254,18 @@ impl<'a> Compiler<'a> {
         }
         self.compile_package_with_files(package_name, script_files)
     }
+
+    pub fn compile_package_with_output<P: AsRef<Path>>(
+        &self,
+        path: P,
+        output: P,
+    ) -> Result<ChannelScriptPackage> {
+        let csp = self
+            .compile_package(path)
+            .unwrap_or_else(|err| panic!("Unable to open file: {}", err));
+        csp.dump_to(output.as_ref());
+        Ok(csp)
+    }
 }
 
 #[cfg(test)]

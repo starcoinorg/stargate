@@ -109,9 +109,14 @@ A game Rock-Paper-Scissors is used to demonstrate the channel contract.
     ```
 
 2. Install Script to Node
-    Change all {{starlab}} in demo/RockPaperScissors/scripts to alice's address,then in both cli execute
+    Change all {{starlab}} in demo/RockPaperScissors/scripts to alice's address,then in alice's cli execute
     ```
     dev install package demo/RockPaperScissors/scripts
+
+    ```
+    In Bob's cli execute
+    ```
+    dev install package demo/RockPaperScissors/scripts.csp
 
     ```
 

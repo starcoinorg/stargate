@@ -10,9 +10,13 @@ use crypto::HashValue;
 use failure::prelude::*;
 use libra_types::transaction::{Script, TransactionArgument};
 use serde::{Deserialize, Serialize};
+use serde_json;
 use std::{
     convert::TryFrom,
     fmt::{Display, Formatter},
+    fs,
+    io::Write,
+    path::Path,
 };
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
@@ -96,6 +100,14 @@ impl ChannelScriptPackage {
         self.scripts
             .iter()
             .find(|script| script.name.as_str() == name)
+    }
+
+    pub fn dump_to(&self, path: &Path) {
+        let csp_bytes = serde_json::to_vec(&self).expect("Unable to serialize program");
+        let mut f = fs::File::create(path)
+            .unwrap_or_else(|err| panic!("Unable to open output file {:?}: {}", path, err));
+        f.write_all(&csp_bytes)
+            .unwrap_or_else(|err| panic!("Unable to write to output file {:?}: {}", path, err));
     }
 }
 
