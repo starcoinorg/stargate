@@ -9,7 +9,8 @@ use config::config::VMConfig;
 use crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature},
     hash::CryptoHash,
-    test_utils::KeyPair, SigningKey, VerifyingKey,
+    test_utils::KeyPair,
+    SigningKey, VerifyingKey,
 };
 use failure::prelude::*;
 use lazy_static::lazy_static;
