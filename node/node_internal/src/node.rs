@@ -528,17 +528,6 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             .unwrap()
             .get_txn_by_channel_sequence_number(participant_address, channel_seq_number)
     }
-    pub fn find_offchain_txn(
-        &self,
-        hash: Option<HashValue>,
-        count: u32,
-    ) -> Result<Vec<(HashValue, ChannelTransactionRequest, u8)>> {
-        self.node_inner
-            .clone()
-            .lock()
-            .unwrap()
-            .find_offchain_txn(hash, count)
-    }
 
     async fn start(
         node_inner: Arc<Mutex<NodeInner<C>>>,
@@ -821,14 +810,6 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
     ) -> Result<SignedChannelTransaction> {
         self.wallet
             .get_txn_by_channel_sequence_number(partipant_address, channel_seq_number)
-    }
-
-    pub fn find_offchain_txn(
-        &self,
-        hash: Option<HashValue>,
-        count: u32,
-    ) -> Result<Vec<(HashValue, ChannelTransactionRequest, u8)>> {
-        self.wallet.find_offchain_txn(hash, count)
     }
 }
 
