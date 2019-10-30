@@ -93,7 +93,7 @@
 			}
 
 			if (self.Opt.isWaiting) {
-			    my.queryPlay = setInterval(function(){ queryTxnPlay(self.Opt.srvAddr, self.Opt.joinTxnId) }, 3000);
+			    my.queryPlay = setInterval(function(){ queryTxnPlay(self.Opt.srvAddr, self.Opt.ply2Addr, self.Opt.joinTxnId) }, 3000);
 			}
 		};
 
@@ -666,7 +666,7 @@
                     console.log(data);
                     var txn_exe_success = data.status;
                     if (txn_exe_success) {
-                        my.queryPlay = setInterval(function(){ queryTxnPlay(server, data.req_id) }, 3000);
+                        my.queryPlay = setInterval(function(){ queryTxnPlay(server, addr, data.channel_sequence_number) }, 3000);
                     } else {
                         var str = "游戏异常终止！";
                         alert(str);
@@ -679,11 +679,11 @@
             });
 
         }
-        function queryTxnPlay(server, last_id) {
+        function queryTxnPlay(server, receiver, last_id) {
 			var testURL = server.concat("/query");
 			var para = {
-				transation_id: last_id,
-				count: "2"
+				address: receiver,
+				channel_sequence_number: last_id
 			};
 			$.ajax({
 				url: testURL,
@@ -694,26 +694,23 @@
 				success: function(data){
 					//parse txn data, if script name is 'join' then start game.
 					if (data.status) {
-                        len = data.request_list.length;
-                        if (len == 2) {
-                            pkg = data.request_list[1].operator.Execute.package_name;
-                            script = data.request_list[1].operator.Execute.script_name;
+                        pkg = data.txn.raw_tx.operator.Execute.package_name;
+                        script = data.txn.raw_tx.operator.Execute.script_name;
 
-                            if (pkg == "scripts" && script == "play") {
-                                args0 = data.request_list[1].args[0].U64;
-                                args1 = data.request_list[1].args[1].U64;
-                                clearInterval(my.queryPlay);
-                                self.Opt.isWaiting = false;
-                                logic({
-                                    I: args0,
-                                    J: args1
-                                }, true);
-                                console.log(data);
-                            } else if (pkg == "scripts" && (script == "end" || script == "new")) {
-                                var str = "游戏异常终止！";
-                                alert(str);
-                                location.reload();
-                            }
+                        if (pkg == "scripts" && script == "play") {
+                            args0 = data.txn.raw_tx.args[0].U64;
+                            args1 = data.txn.raw_tx.args[1].U64;
+                            clearInterval(my.queryPlay);
+                            self.Opt.isWaiting = false;
+                            logic({
+                                I: args0,
+                                J: args1
+                            }, true);
+                            console.log(data);
+                        } else if (pkg == "scripts" && (script == "end" || script == "new")) {
+                            var str = "游戏异常终止！";
+                            alert(str);
+                            location.reload();
                         }
 					}
 
