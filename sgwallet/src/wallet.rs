@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::scripts::*;
-use atomic_refcell::AtomicRefCell;
+
 use channel_manager::{channel::Channel, ChannelManager};
 use chrono::Utc;
 use config::config::VMConfig;
@@ -10,7 +10,7 @@ use crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature},
     hash::CryptoHash,
     test_utils::KeyPair,
-    HashValue, SigningKey, VerifyingKey,
+    SigningKey, VerifyingKey,
 };
 use failure::prelude::*;
 use lazy_static::lazy_static;
@@ -34,6 +34,7 @@ use logger::prelude::*;
 use sgchain::star_chain_client::{ChainClient, StarChainClient};
 use sgconfig::config::WalletConfig;
 use sgtypes::channel_transaction_sigs::{ChannelTransactionSigs, TxnSignature};
+use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use sgtypes::{
     account_resource_ext,
     channel_transaction::{
@@ -63,7 +64,6 @@ where
     client: Arc<C>,
     storage: ChannelManager<C>,
     script_registry: PackageRegistry,
-    offchain_transactions: Arc<AtomicRefCell<Vec<(HashValue, ChannelTransactionRequest, u8)>>>,
 }
 
 impl<C> Wallet<C>
@@ -101,7 +101,6 @@ where
             client,
             storage,
             script_registry,
-            offchain_transactions: Arc::new(AtomicRefCell::new(Vec::new())),
         })
     }
 
@@ -474,11 +473,6 @@ where
         let channel_txn = request.channel_txn();
 
         let gas = if !output.is_travel_txn() {
-            self.offchain_transactions.borrow_mut().push((
-                response.request_id(),
-                request.clone(),
-                1,
-            ));
             0
         } else {
             let txn_sender = channel_txn.sender();
@@ -591,12 +585,6 @@ where
         };
 
         let gas = if !output.is_travel_txn() {
-            // TODO: remove
-            self.offchain_transactions.borrow_mut().push((
-                response.request_id(),
-                request.clone(),
-                1,
-            ));
             0
         } else {
             // construct onchain tx
@@ -856,43 +844,16 @@ where
         }
     }
 
-    pub fn find_offchain_txn(
+    pub fn get_txn_by_channel_sequence_number(
         &self,
-        hash: Option<HashValue>,
-        count: u32,
-    ) -> Result<Vec<(HashValue, ChannelTransactionRequest, u8)>> {
-        let tnxs = self.offchain_transactions.borrow();
-        let mut count_num = count;
-        let mut find_data = false;
-        let mut data = Vec::new();
-        match hash {
-            Some(hash) => {
-                for (hash_item, request, res) in tnxs.iter() {
-                    debug!("hash_item:{}", hash_item);
-                    if hash.eq(hash_item) {
-                        find_data = true;
-                    }
-                    if find_data && count_num > 0 {
-                        data.push((*hash_item, request.clone(), *res));
-                        count_num = count_num - 1;
-                        if count_num == 0 {
-                            break;
-                        }
-                    }
-                }
-            }
-            None => {
-                for (hash_item, request, res) in tnxs.iter() {
-                    debug!("hash_item:{}", hash_item);
-                    data.push((*hash_item, request.clone(), *res));
-                    count_num = count_num - 1;
-                    if count_num == 0 {
-                        break;
-                    }
-                }
-            }
-        }
-        Ok(data)
+        partipant_address: AccountAddress,
+        channel_seq_number: u64,
+    ) -> Result<SignedChannelTransaction> {
+        let txn = self
+            .storage
+            .get_channel(&partipant_address)
+            .and_then(|channel| channel.get_txn_by_channel_seq_number(channel_seq_number))?;
+        Ok(txn.signed_transaction)
     }
 }
 

@@ -3,7 +3,7 @@
 
 #[macro_use]
 extern crate serde_json;
-use crypto::hash::HashValue;
+
 use futures01::{Future, Stream};
 use hyper::{
     service::{NewService, Service},
@@ -15,8 +15,9 @@ use node_internal::node::Node as Node_Internal;
 use serde_json::Value;
 use sg_config::config::RestConfig;
 use sgchain::star_chain_client::ChainClient;
-use sgtypes::channel_transaction::ChannelTransactionRequest;
-use std::{str::FromStr, sync::Arc, thread};
+
+use sgtypes::signed_channel_transaction::SignedChannelTransaction;
+use std::{sync::Arc, thread};
 
 trait CompoundTrait: ChainClient + Clone + Send + Sync + 'static {}
 
@@ -36,21 +37,21 @@ where
 
 struct ResponseResult {
     state: bool,
-    req_id: HashValue,
+    channel_sequence_number: u64,
     reason: String,
-    transation_requests: Option<Vec<ChannelTransactionRequest>>,
+    txn: Option<SignedChannelTransaction>,
 }
 trait ResponseFormat {
-    fn format(state: bool, req_id: HashValue, reason: String) -> ResponseResult;
+    fn format(state: bool, channel_sequence_number: u64, reason: String) -> ResponseResult;
 }
 
 impl ResponseFormat for ResponseResult {
-    fn format(state: bool, req_id: HashValue, reason: String) -> ResponseResult {
+    fn format(state: bool, channel_sequence_number: u64, reason: String) -> ResponseResult {
         ResponseResult {
             state,
-            req_id,
+            channel_sequence_number,
             reason,
-            transation_requests: None,
+            txn: None,
         }
     }
 }
@@ -94,7 +95,7 @@ impl<C: ChainClient + Clone + 'static> Service for WebServer<C> {
                     let json_args: Value = serde_json::from_slice(body.as_slice()).unwrap();
                     info!("exec interface args is {:?}", json_args);
                     let mut result: ResponseResult =
-                        ResponseResult::format(false, HashValue::zero(), "fail".to_string());
+                        ResponseResult::format(false, 0, "fail".to_string());
                     let address = json_args.get("address").unwrap().as_str().unwrap();
                     let package_name = json_args.get("package_name").unwrap().as_str().unwrap();
                     let script_name = json_args.get("script_name").unwrap().as_str().unwrap();
@@ -134,7 +135,7 @@ impl<C: ChainClient + Clone + 'static> Service for WebServer<C> {
                             Ok(msg_future) => {
                                 result.state = true;
                                 result.reason = "OK".to_string();
-                                result.req_id = msg_future.wait().unwrap();
+                                result.channel_sequence_number = msg_future.wait().unwrap();
                             }
                             Err(e) => {
                                 result.reason = format!("Failed to execute request: {}", e);
@@ -142,12 +143,12 @@ impl<C: ChainClient + Clone + 'static> Service for WebServer<C> {
                         };
                     }
                     //json format
-                    let rqid = hex::encode(result.req_id.to_vec());
+                    //                    let rqid = hex::encode(result.req_id.to_vec());
 
                     *response.body_mut() = Body::from(
                         json!({
                             "status": result.state,
-                            "req_id": rqid,
+                            "channel_sequence_number": result.channel_sequence_number,
                             "reason": result.reason
                         })
                         .to_string(),
@@ -163,42 +164,34 @@ impl<C: ChainClient + Clone + 'static> Service for WebServer<C> {
                     let json_args: Value = serde_json::from_slice(body.as_slice()).unwrap();
                     info!("query interface args is {:?}", json_args);
                     let mut result: ResponseResult =
-                        ResponseResult::format(false, HashValue::zero(), "fail".to_string());
-                    let transation_id = json_args.get("transation_id").unwrap().as_str().unwrap();
-                    let count_str = json_args.get("count").unwrap().as_str().unwrap();
-                    if transation_id.is_empty() {
-                        result.reason = "transation id is null".to_string();
-                    } else {
-                        //                        let count_str: String = form.remove("count").unwrap_or("0".to_string());
-                        let count = u32::from_str(&count_str).unwrap_or_default();
+                        ResponseResult::format(false, 0, "fail".to_string());
+                    let participant_address = json_args.get("address").unwrap().as_str().unwrap();
+                    let participant_address =
+                        AccountAddress::from_hex_literal(&participant_address).unwrap_or_default();
+                    let channel_sequence_number = json_args
+                        .get("channel_sequence_number")
+                        .unwrap()
+                        .as_u64()
+                        .unwrap();
 
-                        let tid_byte_array: Vec<u8> = hex::decode(transation_id).unwrap();
-                        match node_internal
-                            .find_offchain_txn(HashValue::from_slice(&tid_byte_array).ok(), count)
-                        {
-                            Ok(msg_result) => {
-                                result.state = true;
-                                result.reason = "OK".to_string();
-                                let transation_vec: Vec<(
-                                    HashValue,
-                                    ChannelTransactionRequest,
-                                    u8,
-                                )> = msg_result;
-                                let mut trans: Vec<ChannelTransactionRequest> = Vec::new();
-                                for (_, request, _) in &transation_vec {
-                                    trans.push(request.clone());
-                                }
-                                result.transation_requests = Some(trans);
-                            }
-                            Err(e) => {
-                                result.reason = format!("Failed to execute request: {}", e);
-                            }
-                        };
-                    }
+                    match node_internal.get_txn_by_channel_sequence_number(
+                        participant_address,
+                        channel_sequence_number,
+                    ) {
+                        Ok(txn) => {
+                            result.state = true;
+                            result.reason = "OK".to_string();
+                            result.txn = Some(txn);
+                        }
+                        Err(e) => {
+                            result.reason = format!("Failed to execute request: {}", e);
+                        }
+                    };
+
                     *response.body_mut() = Body::from(
                         json!({
                             "status": result.state,
-                            "request_list": &result.transation_requests.unwrap()
+                            "txn": result.txn.clone(),
                         })
                         .to_string(),
                     );

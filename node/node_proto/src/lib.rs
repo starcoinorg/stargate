@@ -4,7 +4,6 @@
 //#[cfg(test)]
 //mod protobuf_conversion_test;
 
-use crypto::HashValue;
 use failure::prelude::*;
 use libra_types::account_address::AccountAddress;
 use libra_types::transaction::SignedTransactionWithProof;
@@ -508,12 +507,12 @@ impl From<ExecuteScriptRequest> for crate::proto::node::ExecuteScriptRequest {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct ExecuteScriptResponse {
-    pub hash_value: HashValue,
+    pub channel_seq_number: u64,
 }
 
 impl ExecuteScriptResponse {
-    pub fn new(hash_value: HashValue) -> Self {
-        Self { hash_value }
+    pub fn new(channel_seq_number: u64) -> Self {
+        Self { channel_seq_number }
     }
 }
 
@@ -521,16 +520,14 @@ impl TryFrom<crate::proto::node::ExecuteScriptResponse> for ExecuteScriptRespons
     type Error = Error;
 
     fn try_from(value: crate::proto::node::ExecuteScriptResponse) -> Result<Self> {
-        Ok(Self::new(HashValue::from_slice(
-            value.hash_value.as_slice(),
-        )?))
+        Ok(Self::new(value.channel_sequence_number))
     }
 }
 
 impl From<ExecuteScriptResponse> for crate::proto::node::ExecuteScriptResponse {
     fn from(value: ExecuteScriptResponse) -> Self {
         Self {
-            hash_value: value.hash_value.to_vec(),
+            channel_sequence_number: value.channel_seq_number,
         }
     }
 }
