@@ -1,16 +1,14 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
-
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
-
 use futures::{
     compat::{Future01CompatExt, Stream01CompatExt},
     prelude::*,
 };
 use futures_timer::Delay;
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use tokio::runtime::TaskExecutor;
 
 use canonical_serialization::{CanonicalDeserializer, SimpleDeserializer};
@@ -646,10 +644,13 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
                         data: msg.to_vec(),
                     })
                     .unwrap();
-                match wallet.apply_txn(sender_addr, &receiver_open_txn).await {
+                match wallet
+                    .receiver_apply_txn(sender_addr, &receiver_open_txn)
+                    .await
+                {
                     Ok(_) => {}
                     Err(e) => {
-                        warn!("apply tx fail");
+                        warn!("apply tx fail, err: {:?}", &e);
                         sender
                             .unbounded_send(NetworkMessage {
                                 peer_id: sender_addr,
@@ -682,10 +683,10 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         let txn_response = open_channel_message.txn_response;
         let mut message_processor = self.message_processor.clone();
         let f = async move {
-            match wallet.apply_txn(receiver_addr, &txn_response).await {
+            match wallet.sender_apply_txn(receiver_addr, &txn_response).await {
                 Ok(_) => {}
-                Err(_e) => {
-                    warn!("apply tx fail");
+                Err(e) => {
+                    warn!("apply tx fail, err: {:?}", e);
                     return;
                 }
             };

@@ -7,6 +7,7 @@ use crypto::{
     Uniform,
 };
 use failure::prelude::*;
+use libra_tools::tempdir::TempPath;
 use libra_types::{account_address::AccountAddress, transaction::TransactionArgument};
 use logger::prelude::*;
 use rand::prelude::*;
@@ -15,6 +16,7 @@ use sgchain::{
     star_chain_client::{faucet_sync, ChainClient},
 };
 use sgcompiler::{Compiler, StateViewModuleLoader};
+use sgtypes::script_package::ChannelScriptPackage;
 use sgwallet::wallet::Wallet;
 use std::time::Duration;
 use std::{
@@ -36,7 +38,7 @@ where
 
     let account = AccountAddress::from_public_key(&account_keypair.public_key);
     faucet_sync(client.as_ref().clone(), account, init_balance)?;
-    let wallet = Wallet::new_with_client(account, account_keypair, client)?;
+    let wallet = Wallet::new_with_client(account, account_keypair, client, TempPath::new())?;
     assert_eq!(init_balance, wallet.balance()?);
     Ok(wallet)
 }
@@ -62,8 +64,8 @@ where
 
         let receiver_open_txn = receiver_wallet.verify_txn(&open_txn).unwrap();
 
-        let sender_future = sender_wallet.apply_txn(receiver, &receiver_open_txn);
-        let receiver_future = receiver_wallet.apply_txn(sender, &receiver_open_txn);
+        let sender_future = sender_wallet.sender_apply_txn(receiver, &receiver_open_txn);
+        let receiver_future = receiver_wallet.receiver_apply_txn(sender, &receiver_open_txn);
 
         let gas_used = sender_future.await.unwrap();
         receiver_future.await.unwrap();
@@ -93,8 +95,8 @@ where
             .unwrap();
         let txn_response = receiver_wallet.verify_txn(&txn_request).unwrap();
 
-        let sender_future = sender_wallet.apply_txn(receiver, &txn_response);
-        let receiver_future = receiver_wallet.apply_txn(sender, &txn_response);
+        let sender_future = sender_wallet.sender_apply_txn(receiver, &txn_response);
+        let receiver_future = receiver_wallet.receiver_apply_txn(sender, &txn_response);
 
         let gas_used = sender_future.await.unwrap();
         receiver_future.await.unwrap();
@@ -142,8 +144,8 @@ where
 
         let receiver_open_txn = receiver_wallet.verify_txn(&open_txn).unwrap();
 
-        let sender_future = sender_wallet.apply_txn(receiver, &receiver_open_txn);
-        let receiver_future = receiver_wallet.apply_txn(sender, &receiver_open_txn);
+        let sender_future = sender_wallet.sender_apply_txn(receiver, &receiver_open_txn);
+        let receiver_future = receiver_wallet.receiver_apply_txn(sender, &receiver_open_txn);
 
         sender_gas_used += sender_future.await.unwrap();
         receiver_future.await.unwrap();
@@ -166,8 +168,8 @@ where
 
         let receiver_deposit_txn = receiver_wallet.verify_txn(&deposit_txn).unwrap();
 
-        let receiver_future = receiver_wallet.apply_txn(sender, &receiver_deposit_txn);
-        let sender_future = sender_wallet.apply_txn(receiver, &receiver_deposit_txn);
+        let receiver_future = receiver_wallet.receiver_apply_txn(sender, &receiver_deposit_txn);
+        let sender_future = sender_wallet.sender_apply_txn(receiver, &receiver_deposit_txn);
 
         sender_gas_used += sender_future.await.unwrap();
         receiver_future.await.unwrap();
@@ -197,8 +199,8 @@ where
 
         let receiver_transfer_txn = receiver_wallet.verify_txn(&transfer_txn).unwrap();
 
-        let receiver_future = receiver_wallet.apply_txn(sender, &receiver_transfer_txn);
-        let sender_future = sender_wallet.apply_txn(receiver, &receiver_transfer_txn);
+        let receiver_future = receiver_wallet.receiver_apply_txn(sender, &receiver_transfer_txn);
+        let sender_future = sender_wallet.sender_apply_txn(receiver, &receiver_transfer_txn);
 
         sender_gas_used += sender_future.await.unwrap();
         receiver_future.await.unwrap();
@@ -227,8 +229,8 @@ where
 
         let receiver_withdraw_txn = receiver_wallet.verify_txn(&withdraw_txn).unwrap();
 
-        let receiver_future = receiver_wallet.apply_txn(sender, &receiver_withdraw_txn);
-        let sender_future = sender_wallet.apply_txn(receiver, &receiver_withdraw_txn);
+        let receiver_future = receiver_wallet.receiver_apply_txn(sender, &receiver_withdraw_txn);
+        let sender_future = sender_wallet.sender_apply_txn(receiver, &receiver_withdraw_txn);
 
         sender_gas_used += sender_future.await.unwrap();
         receiver_future.await.unwrap();
@@ -287,28 +289,45 @@ pub(crate) fn deploy_custom_module_and_script<C>(
 where
     C: ChainClient + Send + Sync + 'static,
 {
+    compile_and_deploy_module(wallet1.clone(), test_case)?;
+    sleep(Duration::from_millis(1000));
+    let package = compile_package(wallet1.clone(), test_case)?;
+    wallet1.install_package(package.clone())?;
+    sleep(Duration::from_millis(1000));
+    wallet2.install_package(package)?;
+    Ok(())
+}
+
+pub fn compile_and_deploy_module<C>(wallet: Arc<Wallet<C>>, test_case: &str) -> Result<()>
+where
+    C: ChainClient + Send + Sync + 'static,
+{
     let path = get_test_case_path(test_case);
     let module_source = std::fs::read_to_string(path.join("module.mvir")).unwrap();
 
-    let client_state_view = ClientStateView::new(None, wallet1.client());
+    let client_state_view = ClientStateView::new(None, wallet.client());
     let module_loader = StateViewModuleLoader::new(&client_state_view);
-    let compiler = Compiler::new_with_module_loader(wallet1.account(), &module_loader);
+    let compiler = Compiler::new_with_module_loader(wallet.account(), &module_loader);
     let module_byte_code = compiler.compile_module(module_source.as_str())?;
 
     let rt = Runtime::new()?;
-    let wallet_clone = wallet1.clone();
     let f = async move {
-        wallet_clone.deploy_module(module_byte_code).await.unwrap();
+        wallet.deploy_module(module_byte_code).await.unwrap();
     };
     rt.block_on(f);
-    sleep(Duration::from_millis(1000));
-    let package = compiler.compile_package(path.join("scripts"))?;
-    wallet1.install_package(package)?;
-    sleep(Duration::from_millis(1000));
-    // ugly, fix with package.clone()
-    let pkg = compiler.compile_package(path.join("scripts"))?;
-    wallet2.install_package(pkg)?;
     Ok(())
+}
+
+pub fn compile_package<C>(wallet: Arc<Wallet<C>>, test_case: &str) -> Result<ChannelScriptPackage>
+where
+    C: ChainClient + Send + Sync + 'static,
+{
+    let path = get_test_case_path(test_case);
+
+    let client_state_view = ClientStateView::new(None, wallet.client());
+    let module_loader = StateViewModuleLoader::new(&client_state_view);
+    let compiler = Compiler::new_with_module_loader(wallet.account(), &module_loader);
+    compiler.compile_package(path.join("scripts"))
 }
 
 pub fn test_deploy_custom_module<C>(chain_client: Arc<C>) -> Result<()>

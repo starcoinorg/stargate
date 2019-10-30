@@ -10,6 +10,7 @@ use crypto::{
     test_utils::KeyPair,
     Uniform,
 };
+use libra_tools::tempdir::TempPath;
 use libra_types::account_address::AccountAddress;
 use sg_config::config::NetworkConfig;
 use sgchain::star_chain_client::{faucet_sync, MockChainClient};
@@ -36,7 +37,10 @@ pub fn gen_node(
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     println!("account_address: {}", account_address);
     faucet_sync(client.as_ref().clone(), account_address, amount).unwrap();
-    let wallet = Wallet::new_with_client(account_address, keypair.clone(), client).unwrap();
+    let store_path = TempPath::new();
+    let wallet =
+        Wallet::new_with_client(account_address, keypair.clone(), client, store_path.path())
+            .unwrap();
     let (network, tx, rx, close_tx) = build_network_service(config, keypair.clone());
     let _identify = network.identify();
     thread::sleep(Duration::from_millis(1000));
