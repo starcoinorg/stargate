@@ -34,6 +34,7 @@ use logger::prelude::*;
 use sgchain::star_chain_client::{ChainClient, StarChainClient};
 use sgconfig::config::WalletConfig;
 use sgtypes::channel_transaction_sigs::{ChannelTransactionSigs, TxnSignature};
+use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use sgtypes::{
     account_resource_ext,
     channel_transaction::{
@@ -854,6 +855,18 @@ where
                 seq_number
             )),
         }
+    }
+
+    pub fn get_txn_by_channel_sequence_number(
+        &self,
+        partipant_address: AccountAddress,
+        channel_seq_number: u64,
+    ) -> Result<SignedChannelTransaction> {
+        let txn = self
+            .storage
+            .get_channel(&partipant_address)
+            .and_then(|channel| channel.get_txn_by_channel_seq_number(channel_seq_number))?;
+        Ok(txn.signed_transaction)
     }
 
     pub fn find_offchain_txn(
