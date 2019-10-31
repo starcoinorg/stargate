@@ -2,6 +2,7 @@
 RockPaperScissors is a smart contract demo written with libra move ir (.mvir). Suppose you've successfully opened the channel according to the [gettingstarted document](../../gettingstarted.md).
 
 1. Deploy Module to Chain
+
     In alice's cli
     ```
     dev dm demo/RockPaperScissors/module/rps.mvir
@@ -9,12 +10,18 @@ RockPaperScissors is a smart contract demo written with libra move ir (.mvir). S
     ```
 
 2. Install Script to Node
-    Change all {{starlab}} in demo/RockPaperScissors/scripts to alice's address,then in both cli execute
+
+    Change all {{starlab}} in demo/RockPaperScissors/scripts to alice's address,
+    then in alice cli execute
     ```
     dev ip demo/RockPaperScissors/scripts
 
     ```
+    then in bob cli execute
+    ```
+    dev ip demo/RockPaperScissors/scripts.csp
 
+    ```
 3. Execute Scripts
 
      Alice plays with secret hand in her cli.
