@@ -1,16 +1,14 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
-
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
-
 use futures::{
     compat::{Future01CompatExt, Stream01CompatExt},
     prelude::*,
 };
 use futures_timer::Delay;
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use tokio::runtime::TaskExecutor;
 
 use canonical_serialization::{CanonicalDeserializer, SimpleDeserializer};
@@ -44,6 +42,7 @@ use futures_01::sync::{
     oneshot,
 };
 use sgtypes::sg_error::SgError;
+use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 
 pub struct Node<C: ChainClient + Send + Sync + 'static> {
     executor: TaskExecutor,
@@ -61,7 +60,7 @@ struct NodeInner<C: ChainClient + Send + Sync + 'static> {
     sender: UnboundedSender<NetworkMessage>,
     receiver: Option<UnboundedReceiver<NetworkMessage>>,
     event_receiver: Option<UnboundedReceiver<Event>>,
-    message_processor: MessageProcessor,
+    message_processor: MessageProcessor<u64>,
     default_future_timeout: u64,
 }
 
@@ -116,11 +115,8 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         receiver_amount: u64,
     ) -> futures::channel::oneshot::Receiver<Result<OpenChannelResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
-        let f: MessageFuture;
-        match self.open_channel_async(receiver, sender_amount, receiver_amount) {
-            Ok(msg_future) => {
-                f = msg_future;
-            }
+        let f = match self.open_channel_async(receiver, sender_amount, receiver_amount) {
+            Ok(msg_future) => msg_future,
             Err(e) => {
                 resp_sender
                     .send(Err(failure::Error::from(e)))
@@ -148,7 +144,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         receiver: AccountAddress,
         sender_amount: u64,
         receiver_amount: u64,
-    ) -> Result<MessageFuture> {
+    ) -> Result<MessageFuture<u64>> {
         if receiver_amount > self.default_max_deposit {
             bail!("deposit coin amount too big")
         }
@@ -187,11 +183,8 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         receiver_amount: u64,
     ) -> futures::channel::oneshot::Receiver<Result<DepositResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
-        let f: MessageFuture;
-        match self.deposit_async(receiver, sender_amount, receiver_amount) {
-            Ok(msg_future) => {
-                f = msg_future;
-            }
+        let f = match self.deposit_async(receiver, sender_amount, receiver_amount) {
+            Ok(msg_future) => msg_future,
             Err(e) => {
                 resp_sender
                     .send(Err(failure::Error::from(e)))
@@ -218,7 +211,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         receiver: AccountAddress,
         sender_amount: u64,
         receiver_amount: u64,
-    ) -> Result<MessageFuture> {
+    ) -> Result<MessageFuture<u64>> {
         if receiver_amount > self.default_max_deposit {
             bail!("deposit coin amount too big")
         }
@@ -241,11 +234,10 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             receiver_amount,
         )?;
         let open_channel_message = ChannelTransactionRequestMessage::new(channel_txn);
-        let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(
+        self.node_inner.clone().lock().unwrap().channel_txn_onchain(
             open_channel_message,
             MessageType::ChannelTransactionRequestMessage,
-        );
-        f
+        )
     }
 
     pub fn withdraw_oneshot(
@@ -255,11 +247,8 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         receiver_amount: u64,
     ) -> futures::channel::oneshot::Receiver<Result<WithdrawResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
-        let f: MessageFuture;
-        match self.withdraw_async(receiver, sender_amount, receiver_amount) {
-            Ok(msg_future) => {
-                f = msg_future;
-            }
+        let f = match self.withdraw_async(receiver, sender_amount, receiver_amount) {
+            Ok(msg_future) => msg_future,
             Err(e) => {
                 resp_sender
                     .send(Err(failure::Error::from(e)))
@@ -287,7 +276,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         receiver: AccountAddress,
         sender_amount: u64,
         receiver_amount: u64,
-    ) -> Result<MessageFuture> {
+    ) -> Result<MessageFuture<u64>> {
         if receiver_amount < sender_amount {
             bail!("sender amount should smaller than receiver amount.")
         }
@@ -326,11 +315,8 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
     ) -> futures::channel::oneshot::Receiver<Result<PayResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
 
-        let f: MessageFuture;
-        match self.off_chain_pay_async(receiver, sender_amount) {
-            Ok(msg_future) => {
-                f = msg_future;
-            }
+        let f = match self.off_chain_pay_async(receiver, sender_amount) {
+            Ok(msg_future) => msg_future,
             Err(e) => {
                 resp_sender
                     .send(Err(failure::Error::from(e)))
@@ -357,7 +343,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         &self,
         receiver_address: AccountAddress,
         amount: u64,
-    ) -> Result<MessageFuture> {
+    ) -> Result<MessageFuture<u64>> {
         let is_receiver_connected = self
             .node_inner
             .clone()
@@ -464,16 +450,13 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
     ) -> futures::channel::oneshot::Receiver<Result<ExecuteScriptResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
 
-        let f: MessageFuture;
-        match self.execute_script_async(
+        let f = match self.execute_script_async(
             receiver_address,
             package_name,
             script_name,
             transaction_args,
         ) {
-            Ok(msg_future) => {
-                f = msg_future;
-            }
+            Ok(msg_future) => msg_future,
             Err(e) => {
                 resp_sender
                     .send(Err(failure::Error::from(e)))
@@ -502,7 +485,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         package_name: String,
         script_name: String,
         transaction_args: Vec<Vec<u8>>,
-    ) -> Result<MessageFuture> {
+    ) -> Result<MessageFuture<u64>> {
         let mut trans_args = Vec::new();
         for arg in transaction_args {
             let mut deserializer = SimpleDeserializer::new(&arg);
@@ -524,7 +507,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         package_name: String,
         script_name: String,
         transaction_args: Vec<TransactionArgument>,
-    ) -> Result<MessageFuture> {
+    ) -> Result<MessageFuture<u64>> {
         let f = self.node_inner.clone().lock().unwrap().execute_script(
             receiver_address,
             package_name,
@@ -533,16 +516,17 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         );
         f
     }
-    pub fn find_offchain_txn(
+
+    pub fn get_txn_by_channel_sequence_number(
         &self,
-        hash: Option<HashValue>,
-        count: u32,
-    ) -> Result<Vec<(HashValue, ChannelTransactionRequest, u8)>> {
+        participant_address: AccountAddress,
+        channel_seq_number: u64,
+    ) -> Result<SignedChannelTransaction> {
         self.node_inner
             .clone()
             .lock()
             .unwrap()
-            .find_offchain_txn(hash, count)
+            .get_txn_by_channel_sequence_number(participant_address, channel_seq_number)
     }
 
     async fn start(
@@ -646,10 +630,13 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
                         data: msg.to_vec(),
                     })
                     .unwrap();
-                match wallet.apply_txn(sender_addr, &receiver_open_txn).await {
+                match wallet
+                    .receiver_apply_txn(sender_addr, &receiver_open_txn)
+                    .await
+                {
                     Ok(_) => {}
                     Err(e) => {
-                        warn!("apply tx fail");
+                        warn!("apply tx fail, err: {:?}", &e);
                         sender
                             .unbounded_send(NetworkMessage {
                                 peer_id: sender_addr,
@@ -682,15 +669,22 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         let txn_response = open_channel_message.txn_response;
         let mut message_processor = self.message_processor.clone();
         let f = async move {
-            match wallet.apply_txn(receiver_addr, &txn_response).await {
+            match wallet.sender_apply_txn(receiver_addr, &txn_response).await {
                 Ok(_) => {}
-                Err(_e) => {
-                    warn!("apply tx fail");
+                Err(e) => {
+                    warn!("apply tx fail, err: {:?}", e);
+                    return;
+                }
+            };
+            let channel_seq_number = match wallet.channel_sequence_number(receiver_addr) {
+                Ok(n) => n,
+                Err(e) => {
+                    error!("fail to get channel sequence number, err: {:?}", e);
                     return;
                 }
             };
             message_processor
-                .send_response(txn_response.request_id())
+                .send_response(txn_response.request_id(), channel_seq_number)
                 .unwrap();
         };
         self.executor.spawn(f);
@@ -727,7 +721,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         &mut self,
         open_channel_message: ChannelTransactionRequestMessage,
         msg_type: MessageType,
-    ) -> Result<MessageFuture> {
+    ) -> Result<MessageFuture<u64>> {
         let hash_value = open_channel_message.txn_request.request_id();
         let addr = open_channel_message.txn_request.receiver().clone();
         let msg = add_message_type(open_channel_message.into_proto_bytes().unwrap(), msg_type);
@@ -747,7 +741,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         &mut self,
         receiver_address: AccountAddress,
         amount: u64,
-    ) -> Result<MessageFuture> {
+    ) -> Result<MessageFuture<u64>> {
         let off_chain_pay_tx = self.wallet.transfer(receiver_address, amount)?;
         self.send_channel_request(receiver_address, off_chain_pay_tx)
     }
@@ -756,7 +750,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         &mut self,
         receiver_address: AccountAddress,
         off_chain_pay_tx: ChannelTransactionRequest,
-    ) -> Result<MessageFuture> {
+    ) -> Result<MessageFuture<u64>> {
         let hash_value = off_chain_pay_tx.request_id();
         let off_chain_pay_msg = ChannelTransactionRequestMessage {
             txn_request: off_chain_pay_tx,
@@ -783,7 +777,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         package_name: String,
         script_name: String,
         transaction_args: Vec<TransactionArgument>,
-    ) -> Result<MessageFuture> {
+    ) -> Result<MessageFuture<u64>> {
         let script_transaction = self.wallet.execute_script(
             receiver_address,
             &package_name,
@@ -809,12 +803,13 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         self.executor.spawn(task);
     }
 
-    pub fn find_offchain_txn(
+    pub fn get_txn_by_channel_sequence_number(
         &self,
-        hash: Option<HashValue>,
-        count: u32,
-    ) -> Result<Vec<(HashValue, ChannelTransactionRequest, u8)>> {
-        self.wallet.find_offchain_txn(hash, count)
+        partipant_address: AccountAddress,
+        channel_seq_number: u64,
+    ) -> Result<SignedChannelTransaction> {
+        self.wallet
+            .get_txn_by_channel_sequence_number(partipant_address, channel_seq_number)
     }
 }
 

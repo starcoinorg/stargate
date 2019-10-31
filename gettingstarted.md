@@ -46,8 +46,8 @@ account state
 ## Run node service
 1. Prepare the node configure
     ```
-    cp config_template/node1.toml alice/node.toml
-    cp config_template/node2.toml bob/node.toml
+    cp config_template/alice.toml alice/node.toml
+    cp config_template/bob.toml bob/node.toml
     ```
 	change last part of net_config.seeds in bob/node.toml to alice's address in hex.
     
@@ -109,9 +109,14 @@ A game Rock-Paper-Scissors is used to demonstrate the channel contract.
     ```
 
 2. Install Script to Node
-    Change all {{starlab}} in demo/RockPaperScissors/scripts to alice's address,then in both cli execute
+    Change all {{starlab}} in demo/RockPaperScissors/scripts to alice's address,then in alice's cli execute
     ```
     dev install package demo/RockPaperScissors/scripts
+
+    ```
+    In Bob's cli execute
+    ```
+    dev install package demo/RockPaperScissors/scripts.csp
 
     ```
 

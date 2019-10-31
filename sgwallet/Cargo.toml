@@ -17,9 +17,10 @@ include_dir = "0.2.1"
 failure = { path = "../libra/common/failure_ext", package = "failure_ext" }
 libra-types = { path = "../libra/types" }
 sgtypes = { path = "../sgtypes" }
+sgconfig = { path = "../sgconfig", package="sg_config" }
 crypto = { path = "../libra/crypto/crypto" }
 
-local_state_storage = { path = "./local_state_storage"}
+channel-manager = { path = "./channel-manager"}
 sgchain = { path = "../sgchain" }
 vm_genesis = { path = "../libra/language/vm/vm_genesis" }
 logger = { path = "../libra/common/logger"}
@@ -41,5 +42,6 @@ chrono = { version = "0.4.7", default-features = false }
 
 [dev-dependencies]
 crypto = { path = "../libra/crypto/crypto", features = ["testing"] }
+libra_tools = { path = "../libra/common/tools", package = "tools" }
 sgchain = { path = "../sgchain" }
 rusty-fork = "0.2.1"

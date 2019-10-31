@@ -272,7 +272,7 @@
 					if (txn_exe_success) {
 						// 'new()' succeed, waiting for receiver to 'join'
 						document.getElementById("newgame").value = "等待对手加入..";
-						query = setInterval(function(){ queryTxnJoin(server, data.req_id) }, 3000);
+						query = setInterval(function(){ queryTxnJoin(server, receiver, data.channel_sequence_number) }, 3000);
 					} else {
 						// 'new()' failed, you are the player2, 'join' the game
 						document.getElementById("newgame").value = "对手已开始";
@@ -289,11 +289,11 @@
 		}
 
 		// query receiver's txn 'join'
-		function queryTxnJoin(server, last_id) {
+		function queryTxnJoin(server, receiver, last_id) {
 			var testURL = server.concat("/query");
 			var para = {
-				transation_id: last_id,
-				count: "2"
+				address: receiver,
+				channel_sequence_number: last_id
 			};
 			$.ajax({
 				url: testURL,
@@ -304,17 +304,14 @@
 				success: function(data){
 					//parse txn data, if script name is 'join' then start game.
 					if (data.status) {
-						len = data.request_list.length;
-						if (len == 2) {
-							pkg = data.request_list[1].operator.Execute.package_name;
-							script = data.request_list[1].operator.Execute.script_name;
+						pkg = data.txn.raw_tx.operator.Execute.package_name;
+						script = data.txn.raw_tx.operator.Execute.script_name;
 
-							if (pkg == "scripts" && script == "join") {
-								document.getElementById("newgame").style.display = "none";
-								//document.getElementById("startgame").style.display = "block";
-								clearInterval(query);
-								startGame(false);
-							}
+						if (pkg == "scripts" && script == "join") {
+							document.getElementById("newgame").style.display = "none";
+							//document.getElementById("startgame").style.display = "block";
+							clearInterval(query);
+							startGame(false);
 						}
 					}
 					console.log(data);
@@ -344,7 +341,7 @@
 					var txn_exe_success = data.status;
 					if (txn_exe_success) {
 						// 'new()' succeed, waiting for receiver to 'join'
-						joinTxnIdValue = data.req_id;
+						joinTxnIdValue = data.channel_sequence_number;
 						document.getElementById("joingame").style.display = "none";
 						startGame(true);
 					} else {
