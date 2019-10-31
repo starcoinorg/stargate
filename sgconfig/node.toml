@@ -11,3 +11,4 @@ seeds = []
 [wallet]
 chain_address = 'localhost'
 chain_port = 8000
+store_dir="wallet"

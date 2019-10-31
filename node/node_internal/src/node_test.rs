@@ -57,6 +57,7 @@ fn node_test() -> Result<()> {
             .await
             .unwrap();
 
+        _delay(Duration::from_millis(500)).await;
         assert_eq!(node2.channel_balance(addr1).unwrap(), fund_amount);
         assert_eq!(node1.channel_balance(addr2).unwrap(), fund_amount);
 
@@ -68,7 +69,8 @@ fn node_test() -> Result<()> {
             .await
             .unwrap();
 
-        _delay(Duration::from_millis(100)).await;
+        // NOTICE: delay longer, give dual some time to save into local store.
+        _delay(Duration::from_millis(500)).await;
         assert_eq!(
             node2.channel_balance(addr1).unwrap(),
             fund_amount + deposit_amount
@@ -87,6 +89,7 @@ fn node_test() -> Result<()> {
             .unwrap();
         debug!("txn:{:#?}", offchain_txn);
 
+        _delay(Duration::from_millis(500)).await;
         assert_eq!(
             node2.channel_balance(addr1).unwrap(),
             fund_amount - transfer_amount + deposit_amount
@@ -104,7 +107,7 @@ fn node_test() -> Result<()> {
             .await
             .unwrap();
 
-        _delay(Duration::from_millis(100)).await;
+        _delay(Duration::from_millis(500)).await;
         assert_eq!(
             node2.channel_balance(addr1).unwrap(),
             fund_amount - transfer_amount - wd_amount + deposit_amount

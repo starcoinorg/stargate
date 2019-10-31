@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::channel_transaction_sigs::ChannelTransactionSigs;
+use crate::hash::ChannelTransactionHasher;
 use canonical_serialization::{
     CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
     SimpleDeserializer, SimpleSerializer,
 };
-use crypto::hash::{CryptoHash, CryptoHasher, TestOnlyHasher};
+use crypto::hash::{CryptoHash, CryptoHasher};
 use crypto::HashValue;
 use failure::prelude::*;
 use libra_types::transaction::{ChannelTransactionPayload, TransactionArgument, Version};
@@ -115,7 +116,7 @@ impl ChannelTransaction {
 }
 
 impl CryptoHash for ChannelTransaction {
-    type Hasher = TestOnlyHasher;
+    type Hasher = ChannelTransactionHasher;
 
     fn hash(&self) -> HashValue {
         let mut state = Self::Hasher::default();

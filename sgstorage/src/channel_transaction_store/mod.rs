@@ -3,29 +3,25 @@
 
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
-// Copyright (c) The SG Core Contributors
 
 //! This file defines transaction store APIs that are related to committed signed transactions.
 
 use crate::error::SgStorageError;
+use crate::schema::channel_transaction_schema::*;
 use crate::schema_db::SchemaDB;
 use failure::prelude::*;
-use libra_types::transaction::SignedTransaction;
-use libra_types::{
-    account_address::AccountAddress,
-    transaction::{Transaction, TransactionPayload, Version},
-};
-use libradb::schema::transaction::*;
+use libra_types::{account_address::AccountAddress, transaction::Version};
 use libradb::schema::transaction_by_account::*;
 use schemadb::SchemaBatch;
-use std::sync::Arc;
+use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 
+#[derive(Clone)]
 pub struct ChannelTransactionStore<S> {
-    db: Arc<S>,
+    db: S,
 }
 
 impl<S> ChannelTransactionStore<S> {
-    pub fn new(db: Arc<S>) -> Self {
+    pub fn new(db: S) -> Self {
         Self { db }
     }
 }
@@ -52,40 +48,29 @@ where
     }
 
     /// Get signed transaction given `version`
-    pub fn get_transaction(&self, version: Version) -> Result<SignedTransaction> {
+    pub fn get_transaction(&self, version: Version) -> Result<SignedChannelTransaction> {
         let txn = self
             .db
-            .get::<TransactionSchema>(&version)?
+            .get::<SignedChannelTransactionSchema>(&version)?
             .ok_or_else(|| SgStorageError::NotFound(format!("Txn {}", version)))?;
 
-        match txn {
-            Transaction::UserTransaction(user_txn) => Ok(user_txn),
-            // TODO: support other variants after API change
-            _ => unreachable!("Currently only supports user transactions."),
-        }
+        Ok(txn)
     }
 
     /// Save signed transaction at `version`
     pub fn put_transaction(
         &self,
         version: Version,
-        transaction: &Transaction,
+        transaction: SignedChannelTransaction,
         cs: &mut SchemaBatch,
     ) -> Result<()> {
-        if let Transaction::UserTransaction(txn) = transaction {
-            let channel_seq_number = match txn.raw_txn().payload() {
-                TransactionPayload::Channel(csp) => csp.channel_sequence_number(),
-                _ => bail!("only support channel transaction"),
-            };
-            cs.put::<TransactionByAccountSchema>(&(txn.sender(), channel_seq_number), &version)?;
-        }
+        let channel_seq_number = transaction.raw_tx.channel_sequence_number();
+        let sender = transaction.raw_tx.sender();
+        let _receiver = transaction.raw_tx.receiver();
+        cs.put::<TransactionByAccountSchema>(&(sender, channel_seq_number), &version)?;
 
-        cs.put::<TransactionSchema>(&version, &transaction)?;
+        cs.put::<SignedChannelTransactionSchema>(&version, &transaction)?;
 
         Ok(())
     }
 }
-
-//
-//#[cfg(test)]
-//mod test;

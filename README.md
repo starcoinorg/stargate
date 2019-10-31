@@ -34,6 +34,18 @@ TODO
 
 [Getting Started](./gettingstarted.md)
 
+## Development
+
+You can use `cargo` directly.
+Or if you want docker, there is [Dockerfile](./docker/build.Dockerfile) which install the necessary requirements, 
+and you can just mount the code, and run `cargo` in a linux docker container.
+
+```shell script
+> docker build -t stargate-base -f docker/build.Dockerfile ./docker
+> ./docker-run.sh cargo build
+```
+
+
 ## License
 
 Stargate is licensed as [Apache 2.0](https://github.com/libra/libra/blob/master/LICENSE).
