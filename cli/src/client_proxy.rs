@@ -1,7 +1,6 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use canonical_serialization::{CanonicalSerialize, SimpleSerializer};
 use cli_wallet::cli_wallet::WalletLibrary;
 use failure::prelude::*;
 use grpcio::EnvBuilder;
@@ -9,9 +8,9 @@ use libra_types::{
     account_address::AccountAddress,
     proof::SparseMerkleProof,
     transaction::{
-        parse_as_transaction_argument, Script, SignedTransaction, TransactionPayload, Version,
+        helpers::create_signed_payload_txn, parse_as_transaction_argument, Script,
+        SignedTransaction, TransactionPayload, Version,
     },
-    transaction_helpers::create_signed_txn,
 };
 use node_client::NodeClient;
 use node_proto::{
@@ -298,10 +297,9 @@ impl ClientProxy {
         let arguments: Vec<_> = space_delim_strings[4..]
             .iter()
             .filter_map(|arg| {
-                let mut serializer = SimpleSerializer::<Vec<u8>>::new();
                 let arg = parse_as_transaction_argument(arg).ok().unwrap();
-                arg.serialize(&mut serializer).unwrap();
-                Some(serializer.get_output())
+                let data = lcs::to_bytes(&arg).expect("Failed to serialize.");
+                Some(data)
             })
             .collect();
 
@@ -324,7 +322,7 @@ impl ClientProxy {
         gas_unit_price: Option<u64>,
     ) -> Result<SignedTransaction> {
         let addr = self.wallet.get_address();
-        return create_signed_txn(
+        return create_signed_payload_txn(
             *Box::new(&self.wallet),
             program,
             addr,

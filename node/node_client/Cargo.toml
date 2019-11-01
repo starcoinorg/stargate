@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 grpcio = { version = "=0.5.0-alpha.4", default-features = false }
 
-failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
+failure = { path = "../../libra/common/failure-ext", package = "libra-failure-ext"  }
 sgtypes = { path = "../../sgtypes" }
 node_proto = { path = "../node_proto" }
 prost = "0.5.0"

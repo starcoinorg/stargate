@@ -17,7 +17,6 @@
 
 use crate::schema::{ensure_slice_len_eq, SIGNED_CHANNEL_TRANSACTION_CF_NAME};
 use byteorder::{BigEndian, ReadBytesExt};
-use canonical_serialization::{SimpleDeserializer, SimpleSerializer};
 use failure::prelude::*;
 use libra_types::transaction::Version;
 use schemadb::{
@@ -47,10 +46,10 @@ impl KeyCodec<SignedChannelTransactionSchema> for Version {
 
 impl ValueCodec<SignedChannelTransactionSchema> for SignedChannelTransaction {
     fn encode_value(&self) -> Result<Vec<u8>> {
-        SimpleSerializer::<Vec<u8>>::serialize(self)
+        lcs::to_bytes(self).map_err(Into::into)
     }
 
     fn decode_value(data: &[u8]) -> Result<Self> {
-        SimpleDeserializer::deserialize(data)
+        lcs::from_bytes(data).map_err(Into::into)
     }
 }

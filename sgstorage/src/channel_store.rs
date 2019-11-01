@@ -8,9 +8,9 @@ use crate::channel_write_set_store::ChannelWriteSetStore;
 use crate::ledger_info_store::LedgerStore;
 use crate::schema_db::SchemaDB;
 
-use crypto::hash::CryptoHash;
-use crypto::HashValue;
 use failure::prelude::*;
+use libra_crypto::hash::CryptoHash;
+use libra_crypto::HashValue;
 use libra_types::account_address::AccountAddress;
 use libra_types::account_state_blob::AccountStateBlob;
 use libra_types::crypto_proxies::LedgerInfoWithSignatures;

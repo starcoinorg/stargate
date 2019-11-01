@@ -21,7 +21,7 @@ mod tests {
         timer::{Delay, Interval},
     };
 
-    use crypto::{
+    use libra_crypto::{
         ed25519::{compat, Ed25519PrivateKey, Ed25519PublicKey},
         test_utils::KeyPair,
         Uniform,
@@ -95,7 +95,7 @@ mod tests {
 
     #[test]
     fn test_send_receive_1() {
-        ::logger::try_init_for_testing();
+        ::libra_logger::try_init_for_testing();
         env_logger::init();
 
         let rt = Builder::new().core_threads(1).build().unwrap();
@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn test_send_receive_2() {
-        ::logger::try_init_for_testing();
+        ::libra_logger::try_init_for_testing();
         let rt = Runtime::new().unwrap();
         let executor = rt.executor();
         let ((service1, _tx1, rx1, _close_tx1), (mut service2, _tx2, _rx2, _close_tx2)) =

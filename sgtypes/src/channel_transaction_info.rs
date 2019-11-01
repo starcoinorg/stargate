@@ -4,21 +4,13 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 use crate::{hash::ChannelTransactionInfoHasher, impl_hash};
-use canonical_serialization::{
-    CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
-};
-use crypto::HashValue;
-use failure::prelude::*;
+use libra_crypto::HashValue;
 use libra_types::vm_error::StatusCode;
-#[cfg(any(test, feature = "testing"))]
-use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
 
 /// `ChannelTransactionInfo` is the object we store in the transaction accumulator.
 /// It consists of the transaction as well as the execution result of this transaction.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct ChannelTransactionInfo {
     /// The hash of this transaction.
     signed_transaction_hash: HashValue,
@@ -83,35 +75,6 @@ impl ChannelTransactionInfo {
 
     pub fn major_status(&self) -> StatusCode {
         self.major_status
-    }
-}
-
-impl CanonicalSerialize for ChannelTransactionInfo {
-    fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
-        serializer
-            .encode_bytes(self.signed_transaction_hash.as_ref())?
-            .encode_bytes(self.write_set_root_hash.as_ref())?
-            .encode_bytes(self.state_root_hash.as_ref())?
-            .encode_bytes(self.event_root_hash.as_ref())?
-            .encode_u64(self.major_status.into())?;
-        Ok(())
-    }
-}
-
-impl CanonicalDeserialize for ChannelTransactionInfo {
-    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
-    where
-        Self: Sized,
-    {
-        Ok(Self {
-            signed_transaction_hash: HashValue::from_slice(
-                deserializer.decode_bytes()?.as_slice(),
-            )?,
-            write_set_root_hash: HashValue::from_slice(deserializer.decode_bytes()?.as_slice())?,
-            state_root_hash: HashValue::from_slice(deserializer.decode_bytes()?.as_slice())?,
-            event_root_hash: HashValue::from_slice(deserializer.decode_bytes()?.as_slice())?,
-            major_status: StatusCode::try_from(deserializer.decode_u64()?)?,
-        })
     }
 }
 

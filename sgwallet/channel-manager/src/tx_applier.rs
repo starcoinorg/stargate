@@ -1,17 +1,20 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crypto::hash::{CryptoHash, EventAccumulatorHasher, HashValue, SPARSE_MERKLE_PLACEHOLDER_HASH};
 use failure::prelude::*;
+use itertools::Itertools;
+use libra_crypto::hash::{
+    CryptoHash, EventAccumulatorHasher, HashValue, SPARSE_MERKLE_PLACEHOLDER_HASH,
+};
+use libra_logger::prelude::*;
 use libra_types::account_address::AccountAddress;
 use libra_types::account_state_blob::AccountStateBlob;
 use libra_types::crypto_proxies::LedgerInfoWithSignatures;
 use libra_types::ledger_info::LedgerInfo;
-use libra_types::proof::accumulator::Accumulator;
+use libra_types::proof::accumulator::InMemoryAccumulator;
 use libra_types::proof::SparseMerkleProof;
 use libra_types::transaction::Version;
 use libra_types::write_set::WriteSet;
-use logger::prelude::*;
 use scratchpad::{ProofRead, SparseMerkleTree};
 use sgstorage::channel_db::{ChannelAddressProvider, ChannelDB};
 use sgstorage::channel_store::ChannelStore;
@@ -36,7 +39,7 @@ pub struct AppliedStateCache {
 pub struct AppliedTrees {
     epoch: u64,
     state_tree: SparseMerkleTree,
-    tx_accumulator: Accumulator<ChannelTransactionAccumulatorHasher>,
+    tx_accumulator: InMemoryAccumulator<ChannelTransactionAccumulatorHasher>,
 }
 
 impl AppliedTrees {
@@ -97,7 +100,7 @@ impl TxApplier {
                     info.account_state_root_hash,
                     info.ledger_frozen_subtree_hashes,
                     info.latest_version + 1,
-                    ledger_info.epoch_num(),
+                    ledger_info.epoch(),
                     ledger_info.timestamp_usecs(),
                 )
             }
@@ -109,7 +112,7 @@ impl TxApplier {
         let applied_trees = AppliedTrees {
             epoch,
             state_tree: SparseMerkleTree::new(state_root_hash),
-            tx_accumulator: Accumulator::new(
+            tx_accumulator: InMemoryAccumulator::new(
                 frozen_subtrees_in_accumulator,
                 num_leaves_in_accumulator,
             )
@@ -146,13 +149,14 @@ impl TxApplier {
             &self.applied_trees.state_tree,
             &self.applied_state_cache.account_to_proof_cache,
         )?;
-        let _event_tree = Accumulator::<EventAccumulatorHasher>::default()
-            .append(events.iter().map(CryptoHash::hash).collect());
-        let write_set_tree = Accumulator::<WriteSetAccumulatorHasher>::default().append(
+        let _event_tree = InMemoryAccumulator::<EventAccumulatorHasher>::default()
+            .append(events.iter().map(CryptoHash::hash).collect_vec().as_slice());
+        let write_set_tree = InMemoryAccumulator::<WriteSetAccumulatorHasher>::default().append(
             write_set
                 .iter()
                 .map(|(ap, wp)| WriteSetItem(ap.clone(), wp.clone()).hash())
-                .collect(),
+                .collect_vec()
+                .as_slice(),
         );
         let txn_info = ChannelTransactionInfo::new(
             signed_channel_txn.hash(),
@@ -165,7 +169,7 @@ impl TxApplier {
         let new_txn_accumulator = self
             .applied_trees
             .tx_accumulator
-            .append(vec![txn_info.hash()]);
+            .append(vec![txn_info.hash()].as_slice());
 
         debug_assert!(new_txn_accumulator.num_leaves() == channel_seq_number + 1);
         let new_epoch = if travel {

@@ -8,26 +8,25 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
+failure = { path = "../../libra/common/failure-ext", package = "libra-failure-ext"  }
 itertools = "0.8.0"
-crypto = { path = "../../libra/crypto/crypto" }
+libra-crypto = { path = "../../libra/crypto/crypto" }
 libra-types = { path = "../../libra/types"}
-libra_tools = { path = "../../libra/common/tools", package="tools"}
 sgtypes = { path = "../../sgtypes" }
 sgchain = { path = "../../sgchain" }
-state-view = {path = "../../libra/storage/state-view"}
-logger = { path = "../../libra/common/logger"}
+libra-state-view = {path = "../../libra/storage/state-view"}
+libra-logger = { path = "../../libra/common/logger"}
 atomic_refcell = "0.1.3"
-vm_runtime_types = { path = "../../libra/language/vm/vm_runtime/vm_runtime_types"}
+vm-runtime-types = { path = "../../libra/language/vm/vm-runtime/vm-runtime-types"}
 tokio = "0.1.22"
 sgstorage = { path = "../../sgstorage" }
 
-canonical-serialization = { path = "../../libra/common/canonical-serialization"}
+lcs = { path = "../../libra/common/lcs", package = "libra-canonical-serialization"}
 scratchpad = { path = "../../libra/storage/scratchpad" }
-storage_proto = { path = "../../libra/storage/storage_proto" }
+storage-proto = { path = "../../libra/storage/storage-proto" }
 chashmap = "2.2"
+
 [dev-dependencies]
-crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }
-sgchain = { path = "../../sgchain" }
+libra-tools = { path = "../../libra/common/tools"}
 sgconfig = { path = "../../sgconfig", package = "sg_config"}
 rand = "0.6.5"

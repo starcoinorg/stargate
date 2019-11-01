@@ -7,7 +7,7 @@ use std::thread::spawn;
 
 #[test]
 fn test_mock_chain_client_faucet() {
-    ::logger::try_init_for_testing();
+    ::libra_logger::try_init_for_testing();
     let (client, _handle) = MockChainClient::new();
     for _i in 1..2 {
         let addr = AccountAddress::random();

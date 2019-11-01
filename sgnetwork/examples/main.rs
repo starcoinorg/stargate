@@ -1,12 +1,12 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crypto::{
+use futures::{future::Future, stream::Stream};
+use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
     traits::Uniform,
 };
-use futures::{future::Future, stream::Stream};
 use libra_types::account_address::AccountAddress;
 use rand::prelude::*;
 use sgnetwork::NetworkMessage;
@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use tokio::{runtime::Runtime, timer::Interval};
 fn main() {
     env_logger::init();
-    ::logger::try_init_for_testing();
+    ::libra_logger::try_init_for_testing();
     let mut peer_id = "".to_string();
     let (seeds, port) = match std::env::args().nth(1) {
         Some(seed) => {

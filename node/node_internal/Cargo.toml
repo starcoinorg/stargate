@@ -20,7 +20,7 @@ tokio = "=0.2.0-alpha.6"
 bytes = "0.4.12"
 rand = "0.6.5"
 
-logger = { path = "../../libra/common/logger" }
+libra-logger = { path = "../../libra/common/logger" }
 sg_config = { path = "../../sgconfig"}
 sgwallet = { path="../../sgwallet"}
 sgchain = { path = "../../sgchain"}
@@ -28,13 +28,12 @@ libra-types = { path = "../../libra/types" }
 sgtypes = { path = "../../sgtypes" }
 node_proto = { path = "../node_proto"}
 
-crypto = { path = "../../libra/crypto/crypto", features = ["testing"] }
+libra-crypto = { path = "../../libra/crypto/crypto"}
 prost = "0.5.0"
-failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
+failure = { path = "../../libra/common/failure-ext", package = "libra-failure-ext"  }
 hex = { version = "0.3.2", default-features = false }
-canonical-serialization = { path = "../../libra/common/canonical-serialization" }
-libra_tools = {path ="../../libra/common/tools", package = "tools"}
+lcs = { path = "../../libra/common/lcs", package = "libra-canonical-serialization" }
+libra-tools = {path ="../../libra/common/tools", package = "libra-tools"}
 
 [dev-dependencies]
 env_logger = { version = "0.6" }
-prost-ext = { path = "../../libra/common/prost-ext" }

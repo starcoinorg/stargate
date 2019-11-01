@@ -8,11 +8,11 @@ use super::schema::{
 };
 use crate::rocksdb_utils::FixedPrefixSliceTransform;
 use failure::prelude::*;
+use libra_logger::prelude::*;
 use libra_types::account_address::{AccountAddress, ADDRESS_LENGTH};
 use libradb::schema::{
     JELLYFISH_MERKLE_NODE_CF_NAME, STALE_NODE_INDEX_CF_NAME, TRANSACTION_BY_ACCOUNT_CF_NAME,
 };
-use logger::prelude::*;
 use rocksdb::{rocksdb_options::ColumnFamilyDescriptor, CFHandle, DBOptions, DB};
 use schemadb::{ColumnFamilyOptions, ColumnFamilyOptionsMap, DEFAULT_CF_NAME};
 use std::collections::BTreeMap;

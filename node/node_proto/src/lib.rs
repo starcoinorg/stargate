@@ -6,7 +6,7 @@
 
 use failure::prelude::*;
 use libra_types::account_address::AccountAddress;
-use libra_types::transaction::SignedTransactionWithProof;
+use libra_types::transaction::TransactionWithProof;
 #[cfg(any(test, feature = "testing"))]
 use proptest_derive::Arbitrary;
 use sgtypes::script_package::ChannelScriptPackage;
@@ -424,11 +424,11 @@ impl From<DeployModuleRequest> for crate::proto::node::DeployModuleRequest {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct DeployModuleResponse {
-    pub transaction_with_proof: SignedTransactionWithProof,
+    pub transaction_with_proof: TransactionWithProof,
 }
 
 impl DeployModuleResponse {
-    pub fn new(transaction_with_proof: SignedTransactionWithProof) -> Self {
+    pub fn new(transaction_with_proof: TransactionWithProof) -> Self {
         Self {
             transaction_with_proof,
         }

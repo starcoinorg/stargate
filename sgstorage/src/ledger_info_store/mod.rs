@@ -13,8 +13,8 @@ use crate::schema::channel_transaction_info::*;
 use crate::schema_db::SchemaDB;
 use accumulator::{HashReader, MerkleAccumulator};
 
-use crypto::{hash::CryptoHash, HashValue};
 use failure::prelude::*;
+use libra_crypto::{hash::CryptoHash, HashValue};
 use libra_types::crypto_proxies::LedgerInfoWithSignatures;
 use libra_types::proof::position::Position;
 use libra_types::proof::AccumulatorConsistencyProof;
@@ -191,7 +191,7 @@ where
         cs: &mut SchemaBatch,
     ) -> Result<()> {
         cs.put::<LedgerInfoSchema>(
-            &ledger_info_with_sigs.ledger_info().epoch_num(),
+            &ledger_info_with_sigs.ledger_info().epoch(),
             ledger_info_with_sigs,
         )
     }

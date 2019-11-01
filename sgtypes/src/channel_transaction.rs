@@ -3,13 +3,9 @@
 
 use crate::channel_transaction_sigs::ChannelTransactionSigs;
 use crate::hash::ChannelTransactionHasher;
-use canonical_serialization::{
-    CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
-    SimpleDeserializer, SimpleSerializer,
-};
-use crypto::hash::{CryptoHash, CryptoHasher};
-use crypto::HashValue;
 use failure::prelude::*;
+use libra_crypto::hash::{CryptoHash, CryptoHasher};
+use libra_crypto::HashValue;
 use libra_types::transaction::{ChannelTransactionPayload, TransactionArgument, Version};
 use libra_types::{account_address::AccountAddress, transaction::TransactionOutput};
 use serde::{Deserialize, Serialize};
@@ -121,53 +117,11 @@ impl CryptoHash for ChannelTransaction {
     fn hash(&self) -> HashValue {
         let mut state = Self::Hasher::default();
         state.write(
-            SimpleSerializer::<Vec<u8>>::serialize(self)
+            lcs::to_bytes(self)
                 .expect("Failed to serialize ChannelTransaction")
                 .as_slice(),
         );
         state.finish()
-    }
-}
-
-impl CanonicalSerialize for ChannelTransaction {
-    fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
-        serializer
-            .encode_u64(self.version)?
-            .encode_struct(&self.operator)?
-            .encode_struct(&self.sender)?
-            .encode_u64(self.sequence_number)?
-            .encode_struct(&self.receiver)?
-            .encode_u64(self.channel_sequence_number)?
-            .encode_u64(self.expiration_time.as_secs())?
-            .encode_vec(&self.args)?;
-
-        Ok(())
-    }
-}
-
-impl CanonicalDeserialize for ChannelTransaction {
-    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
-    where
-        Self: Sized,
-    {
-        let version = deserializer.decode_u64()?;
-        let operator = deserializer.decode_struct()?;
-        let sender = deserializer.decode_struct()?;
-        let sequence_number = deserializer.decode_u64()?;
-        let receiver = deserializer.decode_struct()?;
-        let channel_sequence_number = deserializer.decode_u64()?;
-        let expiration_time = Duration::from_secs(deserializer.decode_u64()?);
-        let args = deserializer.decode_vec()?;
-        Ok(ChannelTransaction::new(
-            version,
-            operator,
-            sender,
-            sequence_number,
-            receiver,
-            channel_sequence_number,
-            expiration_time,
-            args,
-        ))
     }
 }
 
@@ -194,54 +148,6 @@ impl ChannelOp {
     }
 }
 
-impl CanonicalSerialize for ChannelOp {
-    fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
-        match self {
-            ChannelOp::Open => {
-                serializer.encode_u32(ChannelOpType::Open as u32)?;
-            }
-            ChannelOp::Execute {
-                package_name,
-                script_name,
-            } => {
-                serializer.encode_u32(ChannelOpType::Execute as u32)?;
-                serializer.encode_string(package_name.as_str())?;
-                serializer.encode_string(script_name.as_str())?;
-            }
-            ChannelOp::Close => {
-                serializer.encode_u32(ChannelOpType::Close as u32)?;
-            }
-        }
-        Ok(())
-    }
-}
-
-impl CanonicalDeserialize for ChannelOp {
-    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
-    where
-        Self: Sized,
-    {
-        let decoded_channel_op_type = deserializer.decode_u32()?;
-        let channel_op_type = ChannelOpType::from_u32(decoded_channel_op_type);
-        match channel_op_type {
-            Some(ChannelOpType::Open) => Ok(ChannelOp::Open),
-            Some(ChannelOpType::Execute) => {
-                let package_name = deserializer.decode_string()?;
-                let script_name = deserializer.decode_string()?;
-                Ok(ChannelOp::Execute {
-                    package_name,
-                    script_name,
-                })
-            }
-            Some(ChannelOpType::Close) => Ok(ChannelOp::Close),
-            None => Err(format_err!(
-                "ParseError: Unable to decode ChannelOpType, found {}",
-                decoded_channel_op_type
-            )),
-        }
-    }
-}
-
 impl Display for ChannelOp {
     fn fmt(&self, f: &mut Formatter) -> ::std::fmt::Result {
         match self {
@@ -251,23 +157,6 @@ impl Display for ChannelOp {
                 script_name,
             } => write!(f, "{}.{}", package_name, script_name),
             ChannelOp::Close => write!(f, "close"),
-        }
-    }
-}
-
-enum ChannelOpType {
-    Open = 0,
-    Execute = 1,
-    Close = 2,
-}
-
-impl ChannelOpType {
-    fn from_u32(value: u32) -> Option<ChannelOpType> {
-        match value {
-            0 => Some(ChannelOpType::Open),
-            1 => Some(ChannelOpType::Execute),
-            2 => Some(ChannelOpType::Close),
-            _ => None,
         }
     }
 }
@@ -376,71 +265,19 @@ impl ChannelTransactionResponse {
     }
 }
 
-impl CanonicalSerialize for ChannelTransactionRequest {
-    fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
-        serializer
-            .encode_bytes(self.request_id.to_vec().as_slice())?
-            .encode_struct(&self.channel_txn)?
-            .encode_struct(&self.channel_txn_sigs)?
-            .encode_bool(self.travel)?;
-        Ok(())
-    }
-}
-
-impl CanonicalDeserialize for ChannelTransactionRequest {
-    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
-    where
-        Self: Sized,
-    {
-        let request_id = HashValue::from_slice(deserializer.decode_bytes()?.as_slice())?;
-        let channel_txn = deserializer.decode_struct()?;
-        let channel_txn_sigs = deserializer.decode_struct()?;
-        let travel = deserializer.decode_bool()?;
-        Ok(Self {
-            request_id,
-            channel_txn,
-            channel_txn_sigs,
-            travel,
-        })
-    }
-}
-
 impl TryFrom<crate::proto::sgtypes::ChannelTransactionRequest> for ChannelTransactionRequest {
     type Error = Error;
 
     fn try_from(value: crate::proto::sgtypes::ChannelTransactionRequest) -> Result<Self> {
-        SimpleDeserializer::deserialize(value.payload.as_slice())
+        lcs::from_bytes(value.payload.as_slice()).map_err(Into::into)
     }
 }
 
 impl From<ChannelTransactionRequest> for crate::proto::sgtypes::ChannelTransactionRequest {
     fn from(value: ChannelTransactionRequest) -> Self {
         Self {
-            payload: SimpleSerializer::serialize(&value).expect("Serialization should not fail."),
+            payload: lcs::to_bytes(&value).expect("Serialization should not fail."),
         }
-    }
-}
-
-impl CanonicalSerialize for ChannelTransactionResponse {
-    fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
-        serializer
-            .encode_bytes(self.request_id.to_vec().as_slice())?
-            .encode_struct(&self.channel_txn_sigs)?;
-        Ok(())
-    }
-}
-
-impl CanonicalDeserialize for ChannelTransactionResponse {
-    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
-    where
-        Self: Sized,
-    {
-        let request_id = HashValue::from_slice(deserializer.decode_bytes()?.as_slice())?;
-        let channel_txn_sigs = deserializer.decode_struct()?;
-        Ok(Self {
-            request_id,
-            channel_txn_sigs,
-        })
     }
 }
 
@@ -448,14 +285,14 @@ impl TryFrom<crate::proto::sgtypes::ChannelTransactionResponse> for ChannelTrans
     type Error = Error;
 
     fn try_from(value: crate::proto::sgtypes::ChannelTransactionResponse) -> Result<Self> {
-        SimpleDeserializer::deserialize(value.payload.as_slice())
+        lcs::from_bytes(value.payload.as_slice()).map_err(Into::into)
     }
 }
 
 impl From<ChannelTransactionResponse> for crate::proto::sgtypes::ChannelTransactionResponse {
     fn from(value: ChannelTransactionResponse) -> Self {
         Self {
-            payload: SimpleSerializer::serialize(&value).expect("Serialization should not fail."),
+            payload: lcs::to_bytes(&value).expect("Serialization should not fail."),
         }
     }
 }

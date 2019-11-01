@@ -21,17 +21,17 @@ rand = "0.6.5"
 grpcio = { version = "=0.5.0-alpha.4", default-features = false, features = ["prost-codec"] }
 hex = "0.3.2"
 
-logger = { path = "../libra/common/logger" }
+libra-logger = { path = "../libra/common/logger" }
 node_service = { path = "./node_service"}
 node_rest_api = {path = "./node_rest_api"}
 sg_config = { path = "../sgconfig"}
 sgwallet = { path="../sgwallet"}
-sgchain = { path = "../sgchain"}
 libra-types = { path = "../libra/types" }
 sgtypes = { path = "../sgtypes" }
+sgchain = { path = "../sgchain"}
+libra-crypto = { path = "../libra/crypto/crypto"}
 
-crypto = { path = "../libra/crypto/crypto", features = ["testing"] }
 prost = "0.5.0"
-failure = { path = "../libra/common/failure_ext", package = "failure_ext" }
+failure = { path = "../libra/common/failure-ext", package = "libra-failure-ext"  }
 node_internal = { path = "./node_internal" }
 env_logger = { version = "0.6" }
