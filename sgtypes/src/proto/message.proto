@@ -18,14 +18,6 @@ message OpenChannelNodeNegotiateMessage {
     bytes receiver_sign = 3 ;
 }
 
-message ChannelTransactionRequestMessage {
-    sgtypes.ChannelTransactionRequest txn_request = 1;
-}
-
-message ChannelTransactionResponseMessage {
-    sgtypes.ChannelTransactionResponse txn_response = 1;
-}
-
 message AddressMessage {
     bytes addr = 1;
     bytes ip_addr = 2;
