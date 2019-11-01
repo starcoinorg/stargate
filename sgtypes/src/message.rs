@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    channel_transaction::{ChannelTransactionRequest, ChannelTransactionResponse},
     sg_error::SgError,
 };
 use bytes::IntoBuf;
@@ -214,105 +213,105 @@ impl From<StructTag> for crate::proto::sgtypes::StructTag {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ChannelTransactionRequestMessage {
-    pub txn_request: ChannelTransactionRequest,
-}
-
-impl ChannelTransactionRequestMessage {
-    pub fn new(txn_request: ChannelTransactionRequest) -> Self {
-        Self { txn_request }
-    }
-
-    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
-    where
-        B: IntoBuf,
-    {
-        crate::proto::sgtypes::ChannelTransactionRequestMessage::decode(buf)?.try_into()
-    }
-
-    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
-        Ok(
-            TryInto::<crate::proto::sgtypes::ChannelTransactionRequestMessage>::try_into(self)?
-                .to_vec()?,
-        )
-    }
-}
-
-impl TryFrom<crate::proto::sgtypes::ChannelTransactionRequestMessage>
-    for ChannelTransactionRequestMessage
-{
-    type Error = Error;
-
-    fn try_from(value: crate::proto::sgtypes::ChannelTransactionRequestMessage) -> Result<Self> {
-        Ok(Self {
-            txn_request: value
-                .txn_request
-                .ok_or_else(|| format_err!("Missing resource_type"))?
-                .try_into()?,
-        })
-    }
-}
-
-impl From<ChannelTransactionRequestMessage>
-    for crate::proto::sgtypes::ChannelTransactionRequestMessage
-{
-    fn from(value: ChannelTransactionRequestMessage) -> Self {
-        Self {
-            txn_request: Some(value.txn_request.into()),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ChannelTransactionResponseMessage {
-    pub txn_response: ChannelTransactionResponse,
-}
-
-impl ChannelTransactionResponseMessage {
-    pub fn new(txn_response: ChannelTransactionResponse) -> Self {
-        Self { txn_response }
-    }
-    //TODO generate by derive
-    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
-    where
-        B: IntoBuf,
-    {
-        crate::proto::sgtypes::ChannelTransactionResponseMessage::decode(buf)?.try_into()
-    }
-
-    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
-        Ok(
-            TryInto::<crate::proto::sgtypes::ChannelTransactionResponseMessage>::try_into(self)?
-                .to_vec()?,
-        )
-    }
-}
-
-impl TryFrom<crate::proto::sgtypes::ChannelTransactionResponseMessage>
-    for ChannelTransactionResponseMessage
-{
-    type Error = Error;
-
-    fn try_from(value: crate::proto::sgtypes::ChannelTransactionResponseMessage) -> Result<Self> {
-        Ok(Self {
-            txn_response: value
-                .txn_response
-                .ok_or_else(|| format_err!("Missing resource_type"))?
-                .try_into()?,
-        })
-    }
-}
-
-impl From<ChannelTransactionResponseMessage>
-    for crate::proto::sgtypes::ChannelTransactionResponseMessage
-{
-    fn from(value: ChannelTransactionResponseMessage) -> Self {
-        Self {
-            txn_response: Some(value.txn_response.into()),
-        }
-    }
-}
+//#[derive(Clone, Debug, Eq, PartialEq)]
+//pub struct ChannelTransactionRequestMessage {
+//    pub txn_request: ChannelTransactionRequest,
+//}
+//
+//impl ChannelTransactionRequestMessage {
+//    pub fn new(txn_request: ChannelTransactionRequest) -> Self {
+//        Self { txn_request }
+//    }
+//
+//    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+//    where
+//        B: IntoBuf,
+//    {
+//        crate::proto::sgtypes::ChannelTransactionRequestMessage::decode(buf)?.try_into()
+//    }
+//
+//    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+//        Ok(
+//            TryInto::<crate::proto::sgtypes::ChannelTransactionRequestMessage>::try_into(self)?
+//                .to_vec()?,
+//        )
+//    }
+//}
+//
+//impl TryFrom<crate::proto::sgtypes::ChannelTransactionRequestMessage>
+//    for ChannelTransactionRequestMessage
+//{
+//    type Error = Error;
+//
+//    fn try_from(value: crate::proto::sgtypes::ChannelTransactionRequestMessage) -> Result<Self> {
+//        Ok(Self {
+//            txn_request: value
+//                .txn_request
+//                .ok_or_else(|| format_err!("Missing resource_type"))?
+//                .try_into()?,
+//        })
+//    }
+//}
+//
+//impl From<ChannelTransactionRequestMessage>
+//    for crate::proto::sgtypes::ChannelTransactionRequestMessage
+//{
+//    fn from(value: ChannelTransactionRequestMessage) -> Self {
+//        Self {
+//            txn_request: Some(value.txn_request.into()),
+//        }
+//    }
+//}
+//
+//#[derive(Clone, Debug, Eq, PartialEq)]
+//pub struct ChannelTransactionResponseMessage {
+//    pub txn_response: ChannelTransactionResponse,
+//}
+//
+//impl ChannelTransactionResponseMessage {
+//    pub fn new(txn_response: ChannelTransactionResponse) -> Self {
+//        Self { txn_response }
+//    }
+//    //TODO generate by derive
+//    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+//    where
+//        B: IntoBuf,
+//    {
+//        crate::proto::sgtypes::ChannelTransactionResponseMessage::decode(buf)?.try_into()
+//    }
+//
+//    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+//        Ok(
+//            TryInto::<crate::proto::sgtypes::ChannelTransactionResponseMessage>::try_into(self)?
+//                .to_vec()?,
+//        )
+//    }
+//}
+//
+//impl TryFrom<crate::proto::sgtypes::ChannelTransactionResponseMessage>
+//    for ChannelTransactionResponseMessage
+//{
+//    type Error = Error;
+//
+//    fn try_from(value: crate::proto::sgtypes::ChannelTransactionResponseMessage) -> Result<Self> {
+//        Ok(Self {
+//            txn_response: value
+//                .txn_response
+//                .ok_or_else(|| format_err!("Missing resource_type"))?
+//                .try_into()?,
+//        })
+//    }
+//}
+//
+//impl From<ChannelTransactionResponseMessage>
+//    for crate::proto::sgtypes::ChannelTransactionResponseMessage
+//{
+//    fn from(value: ChannelTransactionResponseMessage) -> Self {
+//        Self {
+//            txn_response: Some(value.txn_response.into()),
+//        }
+//    }
+//}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AddressMessage {
@@ -401,8 +400,8 @@ impl From<ErrorMessage> for crate::proto::sgtypes::ErrorMessage {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MessageType {
     OpenChannelNodeNegotiateMessage,
-    ChannelTransactionRequestMessage,
-    ChannelTransactionResponseMessage,
+    ChannelTransactionRequest,
+    ChannelTransactionResponse,
     ErrorMessage,
 }
 
@@ -410,8 +409,8 @@ impl MessageType {
     pub fn get_type(self) -> u16 {
         match self {
             MessageType::OpenChannelNodeNegotiateMessage => 1,
-            MessageType::ChannelTransactionRequestMessage => 2,
-            MessageType::ChannelTransactionResponseMessage => 3,
+            MessageType::ChannelTransactionRequest => 2,
+            MessageType::ChannelTransactionResponse => 3,
             MessageType::ErrorMessage => 4,
         }
     }
@@ -419,8 +418,8 @@ impl MessageType {
     pub fn from_type(msg_type: u16) -> Result<Self> {
         match msg_type {
             1 => Ok(MessageType::OpenChannelNodeNegotiateMessage),
-            2 => Ok(MessageType::ChannelTransactionRequestMessage),
-            3 => Ok(MessageType::ChannelTransactionResponseMessage),
+            2 => Ok(MessageType::ChannelTransactionRequest),
+            3 => Ok(MessageType::ChannelTransactionResponse),
             4 => Ok(MessageType::ErrorMessage),
             _ => bail!("no such type"),
         }

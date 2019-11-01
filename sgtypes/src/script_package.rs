@@ -3,7 +3,6 @@
 
 use canonical_serialization::{
     CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
-    SimpleDeserializer, SimpleSerializer,
 };
 use failure::prelude::*;
 use libra_types::transaction::{Script, TransactionArgument};
@@ -58,8 +57,8 @@ impl CanonicalSerialize for ScriptCode {
 
 impl CanonicalDeserialize for ScriptCode {
     fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
-    where
-        Self: Sized,
+        where
+            Self: Sized,
     {
         let name = deserializer.decode_string()?;
         let source_code = deserializer.decode_string()?;
@@ -69,6 +68,28 @@ impl CanonicalDeserialize for ScriptCode {
             source_code,
             byte_code,
         })
+    }
+}
+
+impl TryFrom<crate::proto::sgtypes::ScriptCode> for ScriptCode {
+    type Error = Error;
+
+    fn try_from(proto: crate::proto::sgtypes::ScriptCode) -> Result<Self> {
+        Ok(Self {
+            name: proto.name,
+            source_code: proto.source_code,
+            byte_code: proto.byte_code.as_slice().to_vec(),
+        })
+    }
+}
+
+impl From<ScriptCode> for crate::proto::sgtypes::ScriptCode {
+    fn from(script_code: ScriptCode) -> Self {
+        Self {
+            name: script_code.name,
+            source_code: script_code.source_code,
+            byte_code: script_code.byte_code.to_vec(),
+        }
     }
 }
 
@@ -122,8 +143,8 @@ impl CanonicalSerialize for ChannelScriptPackage {
 
 impl CanonicalDeserialize for ChannelScriptPackage {
     fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
-    where
-        Self: Sized,
+        where
+            Self: Sized,
     {
         let package_name = deserializer.decode_string()?;
         let scripts = deserializer.decode_vec()?;
@@ -136,15 +157,23 @@ impl CanonicalDeserialize for ChannelScriptPackage {
 
 impl TryFrom<crate::proto::sgtypes::ChannelScriptPackage> for ChannelScriptPackage {
     type Error = Error;
-    fn try_from(value: crate::proto::sgtypes::ChannelScriptPackage) -> Result<Self> {
-        SimpleDeserializer::deserialize(value.payload.as_slice())
+    fn try_from(proto_package: crate::proto::sgtypes::ChannelScriptPackage) -> Result<Self> {
+        Ok(Self {
+            package_name: proto_package.package_name,
+            scripts: proto_package
+                .scripts
+                .into_iter()
+                .map(ScriptCode::try_from)
+                .collect::<Result<Vec<_>>>()?,
+        })
     }
 }
 
 impl From<ChannelScriptPackage> for crate::proto::sgtypes::ChannelScriptPackage {
-    fn from(value: ChannelScriptPackage) -> Self {
+    fn from(package: ChannelScriptPackage) -> Self {
         Self {
-            payload: SimpleSerializer::serialize(&value).expect("serialize must success."),
+            package_name: package.package_name,
+            scripts: package.scripts.into_iter().map(Into::into).collect(),
         }
     }
 }

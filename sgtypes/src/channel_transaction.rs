@@ -2,10 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::channel_transaction_sigs::ChannelTransactionSigs;
-use canonical_serialization::{
-    CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
-    SimpleSerializer,
-};
+use canonical_serialization::{CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer, SimpleSerializer, SimpleDeserializer};
 use crypto::hash::{CryptoHash, CryptoHasher, TestOnlyHasher};
 use crypto::HashValue;
 use failure::prelude::*;
@@ -17,6 +14,9 @@ use std::{
     convert::TryFrom,
     fmt::{Display, Formatter},
 };
+use bytes::{Buf, IntoBuf};
+use prost_ext::MessageExt;
+use std::convert::TryInto;
 
 /// sender (init channel transaction):
 /// 1. constructs ChannelTransaction, (sign on it if offchain)
@@ -419,6 +419,20 @@ impl ChannelTransactionRequest {
     pub fn is_travel_txn(&self) -> bool {
         self.travel
     }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+    where
+        B: IntoBuf,
+    {
+        SimpleDeserializer::deserialize(buf.into_buf().bytes())
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(
+            TryInto::<crate::proto::sgtypes::ChannelTransactionRequest>::try_into(self)?
+                .to_vec()?,
+        )
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -461,6 +475,20 @@ impl ChannelTransactionResponse {
     }
     pub fn channel_txn_sigs(&self) -> &ChannelTransactionSigs {
         &self.channel_txn_sigs
+    }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+    where
+        B: IntoBuf,
+    {
+        SimpleDeserializer::deserialize(buf.into_buf().bytes())
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(
+            TryInto::<crate::proto::sgtypes::ChannelTransactionResponse>::try_into(self)?
+                .to_vec()?,
+        )
     }
 }
 
