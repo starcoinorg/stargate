@@ -30,7 +30,7 @@ pub trait SchemaIterator<S: Schema>: Iterator<Item = Result<(S::Key, S::Value)>>
     /// Seeks to the first key.
     fn seek_to_first(&mut self) -> bool;
 
-    /// Seeks to the lasy key.
+    /// Seeks to the last key.
     fn seek_to_last(&mut self) -> bool;
 
     /// Seeks to the first key whose binary representation is equal to or greater than that of the

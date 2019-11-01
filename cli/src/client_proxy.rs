@@ -269,15 +269,22 @@ impl ClientProxy {
     }
 
     pub fn install_script(&mut self, space_delim_strings: &[&str]) -> Result<()> {
-        let dir_path = space_delim_strings[1];
+        let path = Path::new(space_delim_strings[1]);
+        let csp_ext = "csp";
+        let package;
 
-        let path = Path::new(dir_path);
-        let account = self.get_account().unwrap().clone();
-        let client_state_view = ClientStateView::new(None, &self.chain_client);
-        let module_loader = StateViewModuleLoader::new(&client_state_view);
-        let compiler = Compiler::new_with_module_loader(account, &module_loader);
+        if path.is_file() && path.extension().unwrap() == csp_ext {
+            package = serde_json::from_slice(&fs::read(path)?)?;
+        } else {
+            let output_path = path.with_extension(csp_ext);
+            let account = self.get_account().unwrap().clone();
+            let client_state_view = ClientStateView::new(None, &self.chain_client);
+            let module_loader = StateViewModuleLoader::new(&client_state_view);
+            let compiler = Compiler::new_with_module_loader(account, &module_loader);
 
-        let package = compiler.compile_package(path)?;
+            package = compiler.compile_package_with_output(path, &output_path)?;
+        }
+
         self.node_client
             .install_channel_script_package(InstallChannelScriptPackageRequest::new(package))?;
         Ok(())

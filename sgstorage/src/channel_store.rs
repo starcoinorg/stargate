@@ -4,45 +4,95 @@
 use crate::channel_db::ChannelAddressProvider;
 use crate::channel_state_store::ChannelStateStore;
 use crate::channel_transaction_store::ChannelTransactionStore;
+use crate::channel_write_set_store::ChannelWriteSetStore;
 use crate::ledger_info_store::LedgerStore;
 use crate::schema_db::SchemaDB;
+
 use crypto::hash::CryptoHash;
 use crypto::HashValue;
 use failure::prelude::*;
 use libra_types::account_address::AccountAddress;
-use libra_types::account_state_blob::AccountStateWithProof;
+use libra_types::account_state_blob::AccountStateBlob;
 use libra_types::crypto_proxies::LedgerInfoWithSignatures;
-use libra_types::proof::AccountStateProof;
-use libra_types::transaction::{TransactionInfo, TransactionToCommit, Version};
+use libra_types::proof::SparseMerkleProof;
+use libra_types::transaction::Version;
+use libra_types::write_set::WriteSet;
+
 use schemadb::SchemaBatch;
-use std::sync::Arc;
+use sgtypes::channel_transaction_info::ChannelTransactionInfo;
+use sgtypes::channel_transaction_to_commit::*;
+use sgtypes::proof::signed_channel_transaction_proof::SignedChannelTransactionProof;
+use sgtypes::signed_channel_transaction_with_proof::SignedChannelTransactionWithProof;
+use std::fmt::Formatter;
+use std::ops::Deref;
+use std::sync::{Arc, RwLock};
 use storage_proto::StartupInfo;
 
+#[derive(Clone)]
 pub struct ChannelStore<S> {
-    db: Arc<S>,
+    db: S,
     state_store: ChannelStateStore<S>,
     ledger_store: LedgerStore<S>,
     transaction_store: ChannelTransactionStore<S>,
+    write_set_store: ChannelWriteSetStore<S>,
+    latest_write_set: Arc<RwLock<Option<WriteSet>>>,
+}
+
+impl<S> core::fmt::Debug for ChannelStore<S>
+where
+    S: core::fmt::Debug,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "db: {:?}", self.db)
+    }
+}
+
+impl<S> ChannelStore<S> {
+    fn set_write_set(&self, write_set: Option<WriteSet>) -> Result<()> {
+        let mut write_guard = self
+            .latest_write_set
+            .try_write()
+            .map_err(|_| format_err!("try to get write lock error"))?;
+        *write_guard = write_set;
+        Ok(())
+    }
 }
 
 impl<S> ChannelStore<S>
 where
-    S: SchemaDB,
+    S: SchemaDB + Clone,
 {
-    pub fn new(db: Arc<S>, owner_address: AccountAddress) -> Self {
+    pub fn new(db: S) -> Self {
         let store = ChannelStore {
             db: db.clone(),
-            state_store: ChannelStateStore::new(db.clone(), owner_address),
+            state_store: ChannelStateStore::new(db.clone()),
             ledger_store: LedgerStore::new(db.clone()),
             transaction_store: ChannelTransactionStore::new(db.clone()),
+            write_set_store: ChannelWriteSetStore::new(db.clone()),
+            latest_write_set: Arc::new(RwLock::new(None)),
         };
+
+        // TODO refactor this
         store.ledger_store.bootstrap();
+        let write_set_option = match store.ledger_store.get_latest_ledger_info_option() {
+            None => None,
+            Some(ledger_info) => {
+                let version = ledger_info.ledger_info().version();
+                let ws = store
+                    .write_set_store
+                    .get_write_set_by_version(version)
+                    .expect("read lastest writeset from db shold work");
+                Some(ws)
+            }
+        };
+        store
+            .set_write_set(write_set_option)
+            .expect("set write set should be ok");
         store
     }
 
-    #[cfg(test)]
     #[inline]
-    pub fn db(&self) -> Arc<S> {
+    pub fn db(&self) -> S {
         self.db.clone()
     }
     #[cfg(test)]
@@ -66,7 +116,7 @@ where
 {
     pub fn save_tx(
         &self,
-        txn_to_commit: &TransactionToCommit,
+        txn_to_commit: ChannelTransactionToCommit,
         version: Version,
         ledger_info_with_sigs: &Option<LedgerInfoWithSignatures>,
     ) -> Result<()> {
@@ -79,6 +129,8 @@ where
                 claimed_last_version,
             );
         }
+        let write_set = txn_to_commit.write_set().clone();
+
         // get write batch
         let mut schema_batch = SchemaBatch::default();
         let new_ledger_hash = self.save_tx_impl(txn_to_commit, version, &mut schema_batch)?;
@@ -100,38 +152,46 @@ where
         if let Some(x) = ledger_info_with_sigs {
             self.ledger_store.set_latest_ledger_info(x.clone());
         }
-
+        // and cache the write set
+        self.set_write_set(Some(write_set))?;
         // TODO: wake pruner
         Ok(())
     }
 
     fn save_tx_impl(
         &self,
-        tx: &TransactionToCommit,
+        tx: ChannelTransactionToCommit,
         version: Version,
         mut schema_batch: &mut SchemaBatch,
     ) -> Result<HashValue> {
-        let state_root_hash = self.state_store.put_channel_state_set(
-            tx.account_states().clone(),
-            version,
-            &mut schema_batch,
-        )?;
+        let (signed_txn, write_set, witness_states, _events, major_status) = tx.into();
+        let state_root_hash =
+            self.state_store
+                .put_channel_state_set(witness_states, version, &mut schema_batch)?;
+        // TODO: save write set
+        let write_set_root_hash =
+            self.write_set_store
+                .put_write_set(version, write_set, &mut schema_batch)?;
         // TODO: save events
+        //        let events_root_hash = self
+        //            .event_store
+        //            .put_events(version, _events, &mut schema_batch)?;
 
+        let tx_hash: HashValue = signed_txn.hash();
         self.transaction_store
-            .put_transaction(version, tx.transaction(), &mut schema_batch)?;
+            .put_transaction(version, signed_txn, &mut schema_batch)?;
 
-        let tx_info = TransactionInfo::new(
-            tx.transaction().as_signed_user_txn()?.hash(),
+        let tx_info = ChannelTransactionInfo::new(
+            tx_hash,
+            write_set_root_hash,
             state_root_hash,
             HashValue::default(),
-            tx.gas_used(),
-            tx.major_status(),
+            major_status,
         );
         // TODO: save to ledger store
         let new_ledger_root_hash =
             self.ledger_store
-                .put_tx_info(version, &tx_info, &mut schema_batch)?;
+                .put_tx_info(version, tx_info, &mut schema_batch)?;
         Ok(new_ledger_root_hash)
     }
 
@@ -173,47 +233,106 @@ where
         }))
     }
 
-    /// Returns the account state corresponding to the given version and account address with proof
-    /// based on `ledger_version`
-    pub fn get_account_state_with_proof(
-        &self,
-        address: AccountAddress,
-        version: Version,
-        ledger_version: Version,
-    ) -> Result<AccountStateWithProof> {
-        ensure!(
-            version <= ledger_version,
-            "The queried version {} should be equal to or older than ledger version {}.",
-            version,
-            ledger_version
-        );
-        let latest_version = self.get_latest_version()?;
-        ensure!(
-            ledger_version <= latest_version,
-            "The ledger version {} is greater than the latest version currently in ledger: {}",
-            ledger_version,
-            latest_version
-        );
+    pub fn get_write_set_by_version(&self, version: u64) -> Result<WriteSet> {
+        self.write_set_store.get_write_set_by_version(version)
+    }
 
+    pub fn get_latest_write_set(&self) -> Option<WriteSet> {
+        self.latest_write_set
+            .read()
+            .expect("should get read lock")
+            .deref()
+            .clone()
+    }
+
+    pub fn get_transaction_by_channel_seq_number(
+        &self,
+        channel_sequence_number: u64,
+        fetch_events: bool,
+    ) -> Result<SignedChannelTransactionWithProof> {
+        // Get the latest ledger info and signatures
+        let ledger_info_with_sigs = self.ledger_store.get_latest_ledger_info()?;
+        let ledger_version = ledger_info_with_sigs.ledger_info().version();
+        self.get_txn_with_proof(channel_sequence_number, ledger_version, fetch_events)
+    }
+
+    fn get_txn_with_proof(
+        &self,
+        version: u64,
+        ledger_version: u64,
+        fetch_events: bool,
+    ) -> Result<SignedChannelTransactionWithProof> {
         let (txn_info, txn_info_accumulator_proof) = self
             .ledger_store
             .get_transaction_info_with_proof(version, ledger_version)?;
-        let (account_state_blob, sparse_merkle_proof) = self
-            .state_store
-            .get_account_state_with_proof_by_version(address, version)?;
-        Ok(AccountStateWithProof::new(
+        let proof = SignedChannelTransactionProof::new(txn_info_accumulator_proof, txn_info);
+        let signed_transaction = self.transaction_store.get_transaction(version)?;
+        // TODO(caojiafeng): impl me
+        let events = if fetch_events { None } else { None };
+
+        Ok(SignedChannelTransactionWithProof {
             version,
-            account_state_blob,
-            AccountStateProof::new(txn_info_accumulator_proof, txn_info, sparse_merkle_proof),
-        ))
+            signed_transaction,
+            events,
+            proof,
+        })
     }
 
-    /// Gets the latest version number available in the ledger.
-    fn get_latest_version(&self) -> Result<Version> {
-        Ok(self
-            .ledger_store
-            .get_latest_ledger_info()?
-            .ledger_info()
-            .version())
+    //    /// Returns the account state corresponding to the given version and account address with proof
+    //    /// based on `ledger_version`
+    //    pub fn get_account_state_with_proof(
+    //        &self,
+    //        address: AccountAddress,
+    //        version: Version,
+    //        ledger_version: Version,
+    //    ) -> Result<AccountStateWithProof> {
+    //        ensure!(
+    //            version <= ledger_version,
+    //            "The queried version {} should be equal to or older than ledger version {}.",
+    //            version,
+    //            ledger_version
+    //        );
+    //        let latest_version = self.get_latest_version()?;
+    //        ensure!(
+    //            ledger_version <= latest_version,
+    //            "The ledger version {} is greater than the latest version currently in ledger: {}",
+    //            ledger_version,
+    //            latest_version
+    //        );
+    //
+    //        let (txn_info, txn_info_accumulator_proof) = self
+    //            .ledger_store
+    //            .get_transaction_info_with_proof(version, ledger_version)?;
+    //        let (account_state_blob, sparse_merkle_proof) = self
+    //            .state_store
+    //            .get_account_state_with_proof_by_version(address, version)?;
+    //        Ok(AccountStateWithProof::new(
+    //            version,
+    //            account_state_blob,
+    //            AccountStateProof::new(txn_info_accumulator_proof, txn_info, sparse_merkle_proof),
+    //        ))
+    //    }
+    //
+
+    /// Gets an account state by account address, out of the ledger state indicated by the state
+    /// Merkle tree root hash.
+    ///
+    /// This is used by tx applier internally.
+    pub fn get_account_state_with_proof_by_version(
+        &self,
+        address: AccountAddress,
+        version: Version,
+    ) -> Result<(Option<AccountStateBlob>, SparseMerkleProof)> {
+        self.state_store
+            .get_account_state_with_proof_by_version(address, version)
     }
+
+    // Gets the latest version number available in the ledger.
+    //    fn get_latest_version(&self) -> Result<Version> {
+    //        Ok(self
+    //            .ledger_store
+    //            .get_latest_ledger_info()?
+    //            .ledger_info()
+    //            .version())
+    //    }
 }

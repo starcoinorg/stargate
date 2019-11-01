@@ -33,6 +33,7 @@ prost = "0.5.0"
 failure = { path = "../../libra/common/failure_ext", package = "failure_ext" }
 hex = { version = "0.3.2", default-features = false }
 canonical-serialization = { path = "../../libra/common/canonical-serialization" }
+libra_tools = {path ="../../libra/common/tools", package = "tools"}
 
 [dev-dependencies]
 env_logger = { version = "0.6" }

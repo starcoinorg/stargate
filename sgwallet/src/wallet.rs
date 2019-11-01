@@ -2,22 +2,24 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::scripts::*;
-use atomic_refcell::AtomicRefCell;
+
+use channel_manager::{channel::Channel, ChannelManager};
 use chrono::Utc;
 use config::config::VMConfig;
 use crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature},
     hash::CryptoHash,
     test_utils::KeyPair,
-    HashValue, SigningKey, VerifyingKey,
+    SigningKey, VerifyingKey,
 };
 use failure::prelude::*;
 use lazy_static::lazy_static;
+use libra_types::access_path::AccessPath;
 use libra_types::{
     access_path::DataPath,
     account_address::AccountAddress,
-    account_config::{account_resource_path, coin_struct_tag, AccountResource},
-    channel_account::{channel_account_resource_path, ChannelAccountResource},
+    account_config::{coin_struct_tag, AccountResource},
+    channel_account::ChannelAccountResource,
     language_storage::StructTag,
     transaction::{
         ChannelScriptBody, ChannelTransactionPayload, ChannelTransactionPayloadBody,
@@ -28,13 +30,13 @@ use libra_types::{
     transaction_helpers::{create_signed_payload_txn, ChannelPayloadSigner, TransactionSigner},
     vm_error::*,
 };
-use local_state_storage::LocalStateStorage;
 use logger::prelude::*;
 use sgchain::star_chain_client::{ChainClient, StarChainClient};
+use sgconfig::config::WalletConfig;
 use sgtypes::channel_transaction_sigs::{ChannelTransactionSigs, TxnSignature};
+use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use sgtypes::{
     account_resource_ext,
-    channel::{Channel, WitnessData},
     channel_transaction::{
         ChannelOp, ChannelTransaction, ChannelTransactionRequest,
         ChannelTransactionRequestAndOutput, ChannelTransactionResponse,
@@ -43,6 +45,7 @@ use sgtypes::{
     script_package::{ChannelScriptPackage, ScriptCode},
 };
 use state_view::StateView;
+use std::path::Path;
 use std::{sync::Arc, time::Duration};
 use vm::gas_schedule::GasAlgebra;
 use vm_runtime::{MoveVM, VMExecutor};
@@ -59,9 +62,8 @@ where
     account: AccountAddress,
     keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
     client: Arc<C>,
-    storage: Arc<AtomicRefCell<LocalStateStorage<C>>>,
+    storage: ChannelManager<C>,
     script_registry: PackageRegistry,
-    offchain_transactions: Arc<AtomicRefCell<Vec<(HashValue, ChannelTransactionRequest, u8)>>>,
 }
 
 impl<C> Wallet<C>
@@ -82,18 +84,16 @@ where
     ) -> Result<Wallet<StarChainClient>> {
         let chain_client = StarChainClient::new(rpc_host, rpc_port as u32);
         let client = Arc::new(chain_client);
-        Wallet::new_with_client(account, keypair, client)
+        Wallet::new_with_client(account, keypair, client, WalletConfig::default().store_dir)
     }
 
-    pub fn new_with_client(
+    pub fn new_with_client<P: AsRef<Path>>(
         account: AccountAddress,
         keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
         client: Arc<C>,
+        store_dir: P,
     ) -> Result<Self> {
-        let storage = Arc::new(AtomicRefCell::new(LocalStateStorage::new(
-            account,
-            client.clone(),
-        )?));
+        let storage = ChannelManager::new(account, store_dir, client.clone())?;
         let script_registry = PackageRegistry::build()?;
         Ok(Self {
             account,
@@ -101,7 +101,6 @@ where
             client,
             storage,
             script_registry,
-            offchain_transactions: Arc::new(AtomicRefCell::new(Vec::new())),
         })
     }
 
@@ -156,12 +155,12 @@ where
     fn execute(
         &self,
         channel_op: ChannelOp,
-        channel: &Channel,
         receiver: AccountAddress,
         args: Vec<TransactionArgument>,
     ) -> Result<ChannelTransactionRequest> {
-        let storage = self.storage.borrow();
-        let state_view = storage.new_channel_view(None, &receiver)?;
+        let channel = self.storage.get_channel(&receiver)?;
+        let state_view = channel.channel_view(None, &*self.client)?;
+
         // build channel_transaction first
         let channel_transaction = ChannelTransaction::new(
             state_view.version(),
@@ -295,28 +294,29 @@ where
         );
         let sender = channel_txn.sender();
         if channel_txn.operator().is_open() {
-            if self.storage.borrow().exist_channel(&sender) {
+            if self.storage.exist_channel(&sender) {
                 bail!("Channel with address {} exist.", sender);
             }
-            self.storage.borrow_mut().new_channel(sender);
+            self.storage.new_channel(sender);
         }
 
-        let storage = self.storage.borrow();
-        let channel = storage.get_channel(&sender)?;
+        let channel = self.storage.get_channel(&sender)?;
 
-        self.verify_channel_txn(channel, channel_txn, channel_txn_sigs)?;
+        self.verify_channel_txn(&channel, channel_txn, channel_txn_sigs)?;
 
-        let signed_txn = self.create_mocked_signed_script_txn(channel, channel_txn)?;
+        let signed_txn = self.create_mocked_signed_script_txn(&channel, channel_txn)?;
         let txn_payload_signature = signed_txn
             .receiver_signature()
             .expect("signature must exist.");
 
         let version = channel_txn.version();
-        let state_view = storage.new_channel_view(Some(version), &sender)?;
-        let output = Self::execute_transaction(&state_view, signed_txn)?;
+        let output = {
+            let state_view = channel.channel_view(Some(version), &*self.client)?;
+            Self::execute_transaction(&state_view, signed_txn)?
+        };
 
         let verified_participant_witness_payload =
-            self.verify_channel_witness(channel, &output, channel_txn_sigs)?;
+            self.verify_channel_witness(&channel, &output, channel_txn_sigs)?;
 
         channel.append_txn_request(ChannelTransactionRequestAndOutput::new(
             txn_request.clone(),
@@ -358,15 +358,13 @@ where
             "wallet.open receiver:{}, sender_amount:{}, receiver_amount:{}",
             receiver, sender_amount, receiver_amount
         );
-        if self.storage.borrow().exist_channel(&receiver) {
+        if self.storage.exist_channel(&receiver) {
             bail!("Channel with address {} exist.", receiver);
         }
-        self.storage.borrow_mut().new_channel(receiver);
-        let storage = self.storage.borrow();
-        let channel = storage.get_channel(&receiver)?;
+        self.storage.new_channel(receiver);
+
         self.execute(
             ChannelOp::Open,
-            channel,
             receiver,
             vec![
                 TransactionArgument::U64(sender_amount),
@@ -385,14 +383,11 @@ where
             "wallet.deposit receiver:{}, sender_amount:{}, receiver_amount:{}",
             receiver, sender_amount, receiver_amount
         );
-        let storage = self.storage.borrow();
-        let channel = storage.get_channel(&receiver)?;
         self.execute(
             ChannelOp::Execute {
                 package_name: DEFAULT_PACKAGE.to_owned(),
                 script_name: "deposit".to_string(),
             },
-            channel,
             receiver,
             vec![
                 TransactionArgument::U64(sender_amount),
@@ -407,14 +402,12 @@ where
         amount: u64,
     ) -> Result<ChannelTransactionRequest> {
         info!("wallet.transfer receiver:{}, amount:{}", receiver, amount);
-        let storage = self.storage.borrow();
-        let channel = storage.get_channel(&receiver)?;
+
         self.execute(
             ChannelOp::Execute {
                 package_name: DEFAULT_PACKAGE.to_owned(),
                 script_name: "transfer".to_string(),
             },
-            channel,
             receiver,
             vec![TransactionArgument::U64(amount)],
         )
@@ -430,14 +423,11 @@ where
             "wallet.withdraw receiver:{}, sender_amount:{}, receiver_amount:{}",
             receiver, sender_amount, receiver_amount
         );
-        let storage = self.storage.borrow();
-        let channel = storage.get_channel(&receiver)?;
         self.execute(
             ChannelOp::Execute {
                 package_name: DEFAULT_PACKAGE.to_owned(),
                 script_name: "withdraw".to_string(),
             },
-            channel,
             receiver,
             vec![
                 TransactionArgument::U64(sender_amount),
@@ -447,9 +437,7 @@ where
     }
 
     pub fn close(&self, receiver: AccountAddress) -> Result<ChannelTransactionRequest> {
-        let storage = self.storage.borrow();
-        let channel = storage.get_channel(&receiver)?;
-        self.execute(ChannelOp::Close, channel, receiver, vec![])
+        self.execute(ChannelOp::Close, receiver, vec![])
     }
 
     pub async fn receiver_apply_txn(
@@ -457,9 +445,8 @@ where
         participant: AccountAddress,
         response: &ChannelTransactionResponse,
     ) -> Result<u64> {
-        let storage = self.storage.borrow();
-        let channel = storage.get_channel(&participant)?;
-        let (request, output, verified_participant_witness_payload) =
+        let (request, output, verified_participant_witness_payload) = {
+            let channel = self.storage.get_channel(&participant)?;
             match channel.pending_txn_request() {
                 Some(ChannelTransactionRequestAndOutput {
                     request,
@@ -473,7 +460,8 @@ where
                     "pending_txn_request must exist at stage:{:?}",
                     channel.stage()
                 ),
-            };
+            }
+        };
         ensure!(
             request.request_id() == response.request_id(),
             "request id mismatch, request: {}, response: {}",
@@ -485,13 +473,6 @@ where
         let channel_txn = request.channel_txn();
 
         let gas = if !output.is_travel_txn() {
-            channel.apply_witness(
-                verified_participant_witness_payload
-                    .expect("receiver should have verified participant witness data"),
-            )?;
-            self.offchain_transactions
-                .borrow_mut()
-                .push((response.request_id(), request, 1));
             0
         } else {
             let txn_sender = channel_txn.sender();
@@ -502,9 +483,21 @@ where
             let txn_with_proof = watch_future.await?.0.expect("proof is none.");
 
             let gas = txn_with_proof.proof.transaction_info().gas_used();
-            channel.apply_output(output)?;
             gas
         };
+
+        {
+            let mut channel = self.storage.get_channel_mut(&participant)?;
+            // save to db
+            channel.apply(
+                channel_txn,
+                request.channel_txn_sigs(),
+                response.channel_txn_sigs(),
+                &output,
+                verified_participant_witness_payload
+                    .expect("receiver should have verified participant witness data"),
+            )?;
+        }
 
         info!("success apply channel request: {}", request_id);
         Ok(gas)
@@ -561,20 +554,22 @@ where
         participant: AccountAddress,
         response: &ChannelTransactionResponse,
     ) -> Result<u64> {
-        let storage = self.storage.borrow();
-        let channel = storage.get_channel(&participant)?;
-        let (request, output) = match channel.pending_txn_request() {
-            Some(ChannelTransactionRequestAndOutput {
-                request, output, ..
-            }) => (request, output),
-            //TODO(jole) can not find request has such reason:
-            // 1. txn is expire.
-            // 2. txn is invalid.
-            None => bail!(
-                "pending_txn_request must exist at stage:{:?}",
-                channel.stage()
-            ),
+        let (request, output) = {
+            let channel = self.storage.get_channel(&participant)?;
+            match channel.pending_txn_request() {
+                Some(ChannelTransactionRequestAndOutput {
+                    request, output, ..
+                }) => (request, output),
+                //TODO(jole) can not find request has such reason:
+                // 1. txn is expire.
+                // 2. txn is invalid.
+                None => bail!(
+                    "pending_txn_request must exist at stage:{:?}",
+                    channel.stage()
+                ),
+            }
         };
+
         ensure!(
             request.request_id() == response.request_id(),
             "request id mismatch, request: {}, response: {}",
@@ -584,13 +579,12 @@ where
         let request_id = request.request_id();
 
         let channel_txn = request.channel_txn();
-        let (verified_participant_script_payload, verified_participant_witness_payload) =
-            self.verify_response(channel, channel_txn, &output, response)?;
+        let (verified_participant_script_payload, verified_participant_witness_payload) = {
+            let channel = self.storage.get_channel(&participant)?;
+            self.verify_response(&channel, channel_txn, &output, response)?
+        };
+
         let gas = if !output.is_travel_txn() {
-            channel.apply_witness(verified_participant_witness_payload)?;
-            self.offchain_transactions
-                .borrow_mut()
-                .push((response.request_id(), request, 1));
             0
         } else {
             // construct onchain tx
@@ -614,10 +608,21 @@ where
                 // sender submit transaction to chain.
                 self.submit_transaction(signed_txn).await?
             };
-            channel.apply_output(output)?;
             let gas = txn_with_proof.proof.transaction_info().gas_used();
             gas
         };
+
+        {
+            let mut channel = self.storage.get_channel_mut(&participant)?;
+            // save to db
+            channel.apply(
+                channel_txn,
+                request.channel_txn_sigs(),
+                response.channel_txn_sigs(),
+                &output,
+                verified_participant_witness_payload,
+            )?;
+        }
 
         info!("success apply channel request: {}", request_id);
         Ok(gas)
@@ -634,14 +639,12 @@ where
             "wallet.execute_script receiver:{}, package_name:{}, script_name:{}, args:{:?}",
             receiver, package_name, script_name, args
         );
-        let storage = self.storage.borrow();
-        let channel = storage.get_channel(&receiver)?;
+
         self.execute(
             ChannelOp::Execute {
                 package_name: package_name.to_string(),
                 script_name: script_name.to_string(),
             },
-            channel,
             receiver,
             args,
         )
@@ -677,15 +680,21 @@ where
         self.script_registry.get_script(package_name, script_name)
     }
 
-    pub fn get(&self, path: &Vec<u8>) -> Result<Option<Vec<u8>>> {
-        let data_path = DataPath::from(path)?;
-        self.storage.borrow().get(&data_path)
+    pub fn get(&self, path: &DataPath) -> Result<Option<Vec<u8>>> {
+        if path.is_channel_resource() {
+            let participant = path.participant().expect("participant must exist");
+            let channel = self.storage.get_channel(&participant)?;
+            Ok(channel.get(&AccessPath::new_for_data_path(self.account, path.clone())))
+        } else {
+            let account_state = self.client.get_account_state(self.account, None)?;
+            Ok(account_state.get(&path.to_vec()))
+        }
     }
 
     pub fn account_resource(&self) -> Result<AccountResource> {
         // account_resource must exist.
         //TODO handle unwrap
-        self.get(&account_resource_path())
+        self.get(&DataPath::account_resource_data_path())
             .and_then(|value| account_resource_ext::from_bytes(&value.unwrap()))
     }
 
@@ -693,7 +702,7 @@ where
         &self,
         participant: AccountAddress,
     ) -> Result<Option<ChannelAccountResource>> {
-        self.get(&channel_account_resource_path(participant))
+        self.get(&DataPath::channel_account_path(participant))
             .and_then(|value| match value {
                 Some(value) => Ok(Some(ChannelAccountResource::make_from(value)?)),
                 None => Ok(None),
@@ -755,7 +764,7 @@ where
     ) -> Result<RawTransaction> {
         let script =
             self.channel_op_to_script(channel_txn.operator(), channel_txn.args().to_vec())?;
-        let WitnessData { write_set, .. } = channel.witness_data();
+        let write_set = channel.witness_data().unwrap_or_default();
         let channel_script = ChannelScriptBody::new(
             channel_txn.channel_sequence_number(),
             write_set,
@@ -835,43 +844,16 @@ where
         }
     }
 
-    pub fn find_offchain_txn(
+    pub fn get_txn_by_channel_sequence_number(
         &self,
-        hash: Option<HashValue>,
-        count: u32,
-    ) -> Result<Vec<(HashValue, ChannelTransactionRequest, u8)>> {
-        let tnxs = self.offchain_transactions.borrow();
-        let mut count_num = count;
-        let mut find_data = false;
-        let mut data = Vec::new();
-        match hash {
-            Some(hash) => {
-                for (hash_item, request, res) in tnxs.iter() {
-                    debug!("hash_item:{}", hash_item);
-                    if hash.eq(hash_item) {
-                        find_data = true;
-                    }
-                    if find_data && count_num > 0 {
-                        data.push((*hash_item, request.clone(), *res));
-                        count_num = count_num - 1;
-                        if count_num == 0 {
-                            break;
-                        }
-                    }
-                }
-            }
-            None => {
-                for (hash_item, request, res) in tnxs.iter() {
-                    debug!("hash_item:{}", hash_item);
-                    data.push((*hash_item, request.clone(), *res));
-                    count_num = count_num - 1;
-                    if count_num == 0 {
-                        break;
-                    }
-                }
-            }
-        }
-        Ok(data)
+        partipant_address: AccountAddress,
+        channel_seq_number: u64,
+    ) -> Result<SignedChannelTransaction> {
+        let txn = self
+            .storage
+            .get_channel(&partipant_address)
+            .and_then(|channel| channel.get_txn_by_channel_seq_number(channel_seq_number))?;
+        Ok(txn.signed_transaction)
     }
 }
 

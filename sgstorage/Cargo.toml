@@ -36,12 +36,13 @@ libradb = { path = "../libra/storage/libradb" }
 schemadb = { path = "../libra/storage/schemadb" }
 state-view = {path = "../libra/storage/state-view"}
 storage_proto = {path = "../libra/storage/storage_proto"}
+libra_tools = { path = "../libra/common/tools", package = "tools" }
 
 # sg deps
 
+sgtypes = { path = "../sgtypes"}
 [dependencies.rocksdb]
 git = "https://github.com/pingcap/rust-rocksdb.git"
 rev = "3cd18c44d160a3cdba586d6502d51b7cc67efc59"
 
 [dev-dependencies]
-libra_tools = { path = "../libra/common/tools", package = "tools" }

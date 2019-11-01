@@ -254,6 +254,18 @@ impl<'a> Compiler<'a> {
         }
         self.compile_package_with_files(package_name, script_files)
     }
+
+    pub fn compile_package_with_output<P: AsRef<Path>>(
+        &self,
+        path: P,
+        output: P,
+    ) -> Result<ChannelScriptPackage> {
+        let csp = self
+            .compile_package(path)
+            .unwrap_or_else(|err| panic!("Unable to open file: {}", err));
+        csp.dump_to(output.as_ref());
+        Ok(csp)
+    }
 }
 
 #[cfg(test)]
@@ -297,6 +309,20 @@ mod tests {
         let package = compiler.compile_package(package_path)?;
         let script = package.get_script("simple");
         assert!(script.is_some(), "the script named simple should exist.");
+        Ok(())
+    }
+
+    #[test]
+    fn test_compile_complex_script() -> Result<()> {
+        let address = AccountAddress::random();
+        let module_loader = MockModuleLoader::new();
+
+        let compiler = Compiler::new_with_module_loader(address, &module_loader);
+        let package_path = get_test_package("complex_script");
+        let script_src = std::fs::read_to_string(package_path.join("script.mvir").as_path())?;
+        let first_bytes = compiler.compile_script(script_src.as_str())?;
+        let second_bytes = compiler.compile_script(script_src.as_str())?;
+        assert_eq!(first_bytes, second_bytes);
         Ok(())
     }
 }

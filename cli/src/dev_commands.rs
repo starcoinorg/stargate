@@ -148,11 +148,11 @@ impl Command for DevCommandInstallPackage {
     }
 
     fn get_params_help(&self) -> &'static str {
-        "<dir_path>"
+        "<package_file_path> | <dir_path>"
     }
 
     fn get_description(&self) -> &'static str {
-        "Install move package"
+        "Install package from package_file_path, or compile and install the package from dir_path"
     }
 
     fn execute(&self, client: &mut ClientProxy, params: &[&str]) {

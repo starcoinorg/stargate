@@ -8,32 +8,50 @@
 //! root(LedgerInfo) to leaf(TransactionInfo).
 
 use crate::error::SgStorageError;
+use crate::schema::channel_transaction_accumulator::*;
+use crate::schema::channel_transaction_info::*;
 use crate::schema_db::SchemaDB;
 use accumulator::{HashReader, MerkleAccumulator};
-use arc_swap::ArcSwap;
-use crypto::{
-    hash::{CryptoHash, TransactionAccumulatorHasher},
-    HashValue,
-};
+
+use crypto::{hash::CryptoHash, HashValue};
 use failure::prelude::*;
 use libra_types::crypto_proxies::LedgerInfoWithSignatures;
 use libra_types::proof::position::Position;
-use libra_types::proof::{AccumulatorConsistencyProof, TransactionAccumulatorProof};
-use libra_types::transaction::{TransactionInfo, Version};
-use libradb::schema::{ledger_info::*, transaction_accumulator::*, transaction_info::*};
+use libra_types::proof::AccumulatorConsistencyProof;
+use libra_types::transaction::Version;
+use libradb::schema::ledger_info::*;
 use schemadb::{ReadOptions, SchemaBatch};
-use std::{ops::Deref, sync::Arc};
+use sgtypes::{
+    channel_transaction_info::ChannelTransactionInfo, hash::ChannelTransactionAccumulatorHasher,
+    proof::ChannelTransactionAccumulatorProof,
+};
+use std::fmt::Formatter;
+use std::sync::Arc;
+use std::sync::RwLock;
 
+#[derive(Clone)]
 pub struct LedgerStore<S> {
-    db: Arc<S>,
-    latest_ledger_info: ArcSwap<Option<LedgerInfoWithSignatures>>,
+    db: S,
+    latest_ledger_info: Arc<RwLock<Option<LedgerInfoWithSignatures>>>,
+}
+impl<S> core::fmt::Debug for LedgerStore<S>
+where
+    S: core::fmt::Debug,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "db: {:?}, latest_ledger_info: {:?}",
+            self.db, self.latest_ledger_info
+        )
+    }
 }
 
 impl<S> LedgerStore<S> {
-    pub fn new(db: Arc<S>) -> Self {
+    pub fn new(db: S) -> Self {
         Self {
             db,
-            latest_ledger_info: ArcSwap::from(Arc::new(None)),
+            latest_ledger_info: Arc::new(RwLock::new(None)),
         }
     }
 }
@@ -44,21 +62,23 @@ where
 {
     // Upon restart, read the latest ledger info and signatures and cache them in memory.
     pub fn bootstrap(&self) {
-        //        let ledger_info = {
-        //            let mut iter = self
-        //                .db
-        //                .iter::<LedgerInfoSchema>(ReadOptions::default())
-        //                .expect("Constructing iterator should work.");
-        //            iter.seek_to_last();
-        //            iter.next()
-        //                .transpose()
-        //                .expect("Reading latest ledger info from DB should work.")
-        //                .map(|kv| kv.1)
-        //        };
-        //        self.latest_ledger_info.store(Arc::new(ledger_info));
+        let ledger_info = {
+            let mut iter = self
+                .db
+                .iter::<LedgerInfoSchema>(ReadOptions::default())
+                .expect("Constructing iterator should work.");
+            iter.seek_to_last();
+            iter.next()
+                .transpose()
+                .expect("Reading latest ledger info from DB should work.")
+                .map(|kv| kv.1)
+        };
+        if let Some(ledger_info) = ledger_info {
+            self.set_latest_ledger_info(ledger_info);
+        }
     }
 
-    /// Return the ledger infos with their least 2f+1 signatures starting from `start_epoch` to
+    /// Return the ledger infos starting from `start_epoch` to
     /// the most recent one.
     /// Note: ledger infos and signatures are only available at the last version of each earlier
     /// epoch and at the latest version of current epoch.
@@ -72,9 +92,8 @@ where
     }
 
     pub fn get_latest_ledger_info_option(&self) -> Option<LedgerInfoWithSignatures> {
-        let ledger_info_ptr = self.latest_ledger_info.load();
-        let ledger_info: &Option<_> = ledger_info_ptr.deref();
-        ledger_info.clone()
+        let ledger_info_ptr = self.latest_ledger_info.read().unwrap();
+        (*ledger_info_ptr).clone()
     }
 
     pub fn get_latest_ledger_info(&self) -> Result<LedgerInfoWithSignatures> {
@@ -83,28 +102,29 @@ where
     }
 
     pub fn set_latest_ledger_info(&self, ledger_info_with_sigs: LedgerInfoWithSignatures) {
-        self.latest_ledger_info
-            .store(Arc::new(Some(ledger_info_with_sigs)));
+        *self.latest_ledger_info.write().unwrap() = Some(ledger_info_with_sigs);
     }
 
     /// Get transaction info given `version`
-    pub fn get_transaction_info(&self, version: Version) -> Result<TransactionInfo> {
+    pub fn get_transaction_info(&self, version: Version) -> Result<ChannelTransactionInfo> {
         self.db
-            .get::<TransactionInfoSchema>(&version)?
+            .get::<ChannelTransactionInfoSchema>(&version)?
             .ok_or_else(|| format_err!("No TransactionInfo at version {}", version))
     }
 
-    pub fn get_latest_transaction_info_option(&self) -> Result<Option<(Version, TransactionInfo)>> {
+    pub fn get_latest_transaction_info_option(
+        &self,
+    ) -> Result<Option<(Version, ChannelTransactionInfo)>> {
         let mut iter = self
             .db
-            .iter::<TransactionInfoSchema>(ReadOptions::default())?;
+            .iter::<ChannelTransactionInfoSchema>(ReadOptions::default())?;
         iter.seek_to_last();
         iter.next().transpose()
     }
 
     /// Get latest transaction info together with its version. Note that during node syncing, this
     /// version can be greater than what's in the latest LedgerInfo.
-    pub fn get_latest_transaction_info(&self) -> Result<(Version, TransactionInfo)> {
+    pub fn get_latest_transaction_info(&self) -> Result<(Version, ChannelTransactionInfo)> {
         self.get_latest_transaction_info_option()?.ok_or_else(|| {
             SgStorageError::NotFound(String::from("Genesis TransactionInfo.")).into()
         })
@@ -115,7 +135,7 @@ where
         &self,
         version: Version,
         ledger_version: Version,
-    ) -> Result<(TransactionInfo, TransactionAccumulatorProof)> {
+    ) -> Result<(ChannelTransactionInfo, ChannelTransactionAccumulatorProof)> {
         Ok((
             self.get_transaction_info(version)?,
             self.get_transaction_proof(version, ledger_version)?,
@@ -127,7 +147,7 @@ where
         &self,
         version: Version,
         ledger_version: Version,
-    ) -> Result<TransactionAccumulatorProof> {
+    ) -> Result<ChannelTransactionAccumulatorProof> {
         Accumulator::get_proof(self, ledger_version + 1 /* num_leaves */, version)
     }
 
@@ -150,16 +170,15 @@ where
     pub fn put_tx_info(
         &self,
         version: Version,
-        tx_info: &TransactionInfo,
+        tx_info: ChannelTransactionInfo,
         batch: &mut SchemaBatch,
     ) -> Result<HashValue> {
-        batch.put::<TransactionInfoSchema>(&version, tx_info)?;
-
         let tx_info_hash = tx_info.hash();
         let (root_hash, writes) = Accumulator::append(self, version, &[tx_info_hash])?;
 
+        batch.put::<ChannelTransactionInfoSchema>(&version, &tx_info)?;
         for (pos, hash) in writes.iter() {
-            batch.put::<TransactionAccumulatorSchema>(pos, hash)?;
+            batch.put::<ChannelTransactionAccumulatorSchema>(pos, hash)?;
         }
 
         Ok(root_hash)
@@ -178,7 +197,7 @@ where
     }
 }
 
-type Accumulator<T> = MerkleAccumulator<LedgerStore<T>, TransactionAccumulatorHasher>;
+type Accumulator<T> = MerkleAccumulator<LedgerStore<T>, ChannelTransactionAccumulatorHasher>;
 
 impl<S> HashReader for LedgerStore<S>
 where
@@ -186,7 +205,7 @@ where
 {
     fn get(&self, position: Position) -> Result<HashValue> {
         self.db
-            .get::<TransactionAccumulatorSchema>(&position)?
+            .get::<ChannelTransactionAccumulatorSchema>(&position)?
             .ok_or_else(|| format_err!("{} does not exist.", position))
     }
 }

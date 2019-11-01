@@ -2,8 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::channel_transaction_sigs::ChannelTransactionSigs;
-use canonical_serialization::{CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer, SimpleSerializer, SimpleDeserializer};
-use crypto::hash::{CryptoHash, CryptoHasher, TestOnlyHasher};
+use crate::hash::ChannelTransactionHasher;
+use canonical_serialization::{
+    CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
+    SimpleDeserializer, SimpleSerializer,
+};
+use crypto::hash::{CryptoHash, CryptoHasher};
 use crypto::HashValue;
 use failure::prelude::*;
 use libra_types::transaction::{ChannelTransactionPayload, TransactionArgument, Version};
@@ -36,6 +40,7 @@ use std::convert::TryInto;
 /// 2. if onchian, sender constructs signed transaction of onchain, submit it to onchain.
 ///    receiver waits the onchain tx.
 /// 3. if offchain, sender and receiver apply the tx to their local storage.  
+
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ChannelTransaction {
     /// The global status version on this tx executed.
@@ -114,7 +119,7 @@ impl ChannelTransaction {
 }
 
 impl CryptoHash for ChannelTransaction {
-    type Hasher = TestOnlyHasher;
+    type Hasher = ChannelTransactionHasher;
 
     fn hash(&self) -> HashValue {
         let mut state = Self::Hasher::default();
@@ -358,7 +363,6 @@ impl ChannelOpType {
         }
     }
 }
-
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ChannelTransactionRequest {
