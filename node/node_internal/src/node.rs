@@ -12,11 +12,7 @@ use std::{
 use tokio::runtime::TaskExecutor;
 
 use failure::prelude::*;
-use libra_crypto::{
-    ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
-    test_utils::KeyPair,
-    HashValue,
-};
+use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_types::transaction::TransactionArgument;
 use libra_types::{account_address::AccountAddress, account_config::AccountResource};

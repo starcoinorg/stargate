@@ -5,11 +5,7 @@ use network::build_network_service;
 use rand::prelude::*;
 
 use crate::node::Node;
-use libra_crypto::{
-    ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
-    test_utils::KeyPair,
-    Uniform,
-};
+use libra_crypto::{test_utils::KeyPair, Uniform};
 use libra_tools::tempdir::TempPath;
 use libra_types::account_address::AccountAddress;
 use sg_config::config::NetworkConfig;
