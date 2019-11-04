@@ -24,11 +24,8 @@ jobs:
           command: fmt
           args: -- --check
 
-      - name: install protobuf
-        env:
-          PROTOC_VERSION: 3.8.0
-          PROTOC_ZIP: protoc-3.8.0-linux-x86_64.zip
-        run: curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v$PROTOC_VERSION/$PROTOC_ZIP && sudo unzip -o $PROTOC_ZIP -d /usr/local bin/protoc && sudo unzip -o $PROTOC_ZIP -d /usr/local include/* && rm -f $PROTOC_ZIP && echo "protoc is installed to /usr/local/bin/"
+      - name: dev setup
+        run: bash ./scripts/dev_setup.sh
 
       - name: build
         uses: actions-rs/cargo@v1
