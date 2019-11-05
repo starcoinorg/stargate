@@ -16,16 +16,14 @@ serde = { version = "1.0.96", features = ["derive"] }
 tempfile = "3.1.0"
 toml = "0.4"
 
-crypto = { path = "../libra/crypto/crypto" }
+libra-crypto = { path = "../libra/crypto/crypto" }
 prost = "0.5.0"
-logger = { path = "../libra/common/logger" }
-failure = { path = "../libra/common/failure_ext", package = "failure_ext" }
+libra-logger = { path = "../libra/common/logger" }
+failure = { path = "../libra/common/failure-ext", package = "libra-failure-ext"  }
 libra-types = { path = "../libra/types" }
 
 [dev-dependencies]
-libra-types = { path = "../libra/types", features = ["testing"] }
-crypto = { path = "../libra/crypto/crypto", features = ["testing"] }
 
 [features]
 default = []
-testing = ["crypto/testing", "libra-types/testing"]
+fuzzing = ["libra-crypto/fuzzing", "libra-types/fuzzing"]

@@ -3,13 +3,9 @@
 
 use crate::channel_transaction_sigs::ChannelTransactionSigs;
 use crate::hash::ChannelTransactionHasher;
-use canonical_serialization::{
-    CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
-    SimpleDeserializer, SimpleSerializer,
-};
-use crypto::hash::{CryptoHash, CryptoHasher};
-use crypto::HashValue;
 use failure::prelude::*;
+use libra_crypto::hash::{CryptoHash, CryptoHasher};
+use libra_crypto::HashValue;
 use libra_types::transaction::{ChannelTransactionPayload, TransactionArgument, Version};
 use libra_types::{account_address::AccountAddress, transaction::TransactionOutput};
 use serde::{Deserialize, Serialize};
@@ -19,7 +15,8 @@ use std::{
     fmt::{Display, Formatter},
 };
 use bytes::{Buf, IntoBuf};
-use prost_ext::MessageExt;
+use prost::Message;
+use libra_prost_ext::MessageExt;
 use std::convert::TryInto;
 
 /// sender (init channel transaction):
@@ -124,53 +121,11 @@ impl CryptoHash for ChannelTransaction {
     fn hash(&self) -> HashValue {
         let mut state = Self::Hasher::default();
         state.write(
-            SimpleSerializer::<Vec<u8>>::serialize(self)
+            lcs::to_bytes(self)
                 .expect("Failed to serialize ChannelTransaction")
                 .as_slice(),
         );
         state.finish()
-    }
-}
-
-impl CanonicalSerialize for ChannelTransaction {
-    fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
-        serializer
-            .encode_u64(self.version)?
-            .encode_struct(&self.operator)?
-            .encode_struct(&self.sender)?
-            .encode_u64(self.sequence_number)?
-            .encode_struct(&self.receiver)?
-            .encode_u64(self.channel_sequence_number)?
-            .encode_u64(self.expiration_time.as_secs())?
-            .encode_vec(&self.args)?;
-
-        Ok(())
-    }
-}
-
-impl CanonicalDeserialize for ChannelTransaction {
-    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
-        where
-            Self: Sized,
-    {
-        let version = deserializer.decode_u64()?;
-        let operator = deserializer.decode_struct()?;
-        let sender = deserializer.decode_struct()?;
-        let sequence_number = deserializer.decode_u64()?;
-        let receiver = deserializer.decode_struct()?;
-        let channel_sequence_number = deserializer.decode_u64()?;
-        let expiration_time = Duration::from_secs(deserializer.decode_u64()?);
-        let args = deserializer.decode_vec()?;
-        Ok(ChannelTransaction::new(
-            version,
-            operator,
-            sender,
-            sequence_number,
-            receiver,
-            channel_sequence_number,
-            expiration_time,
-            args,
-        ))
     }
 }
 
@@ -238,54 +193,6 @@ impl ChannelOp {
 
     pub fn to_string(&self) -> String {
         format!("{}", self)
-    }
-}
-
-impl CanonicalSerialize for ChannelOp {
-    fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
-        match self {
-            ChannelOp::Open => {
-                serializer.encode_u32(ChannelOpType::Open as u32)?;
-            }
-            ChannelOp::Execute {
-                package_name,
-                script_name,
-            } => {
-                serializer.encode_u32(ChannelOpType::Execute as u32)?;
-                serializer.encode_string(package_name.as_str())?;
-                serializer.encode_string(script_name.as_str())?;
-            }
-            ChannelOp::Close => {
-                serializer.encode_u32(ChannelOpType::Close as u32)?;
-            }
-        }
-        Ok(())
-    }
-}
-
-impl CanonicalDeserialize for ChannelOp {
-    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
-        where
-            Self: Sized,
-    {
-        let decoded_channel_op_type = deserializer.decode_u32()?;
-        let channel_op_type = ChannelOpType::from_u32(decoded_channel_op_type);
-        match channel_op_type {
-            Some(ChannelOpType::Open) => Ok(ChannelOp::Open),
-            Some(ChannelOpType::Execute) => {
-                let package_name = deserializer.decode_string()?;
-                let script_name = deserializer.decode_string()?;
-                Ok(ChannelOp::Execute {
-                    package_name,
-                    script_name,
-                })
-            }
-            Some(ChannelOpType::Close) => Ok(ChannelOp::Close),
-            None => Err(format_err!(
-                "ParseError: Unable to decode ChannelOpType, found {}",
-                decoded_channel_op_type
-            )),
-        }
     }
 }
 
@@ -363,7 +270,6 @@ impl ChannelOpType {
         }
     }
 }
-
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ChannelTransactionRequest {
     /// The id of request
@@ -428,7 +334,7 @@ impl ChannelTransactionRequest {
     where
         B: IntoBuf,
     {
-        SimpleDeserializer::deserialize(buf.into_buf().bytes())
+        crate::proto::sgtypes::ChannelTransactionRequest::decode(buf)?.try_into()
     }
 
     pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
@@ -485,7 +391,7 @@ impl ChannelTransactionResponse {
     where
         B: IntoBuf,
     {
-        SimpleDeserializer::deserialize(buf.into_buf().bytes())
+        crate::proto::sgtypes::ChannelTransactionResponse::decode(buf)?.try_into()
     }
 
     pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
@@ -493,35 +399,6 @@ impl ChannelTransactionResponse {
             TryInto::<crate::proto::sgtypes::ChannelTransactionResponse>::try_into(self)?
                 .to_vec()?,
         )
-    }
-}
-
-impl CanonicalSerialize for ChannelTransactionRequest {
-    fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
-        serializer
-            .encode_bytes(self.request_id.to_vec().as_slice())?
-            .encode_struct(&self.channel_txn)?
-            .encode_struct(&self.channel_txn_sigs)?
-            .encode_bool(self.travel)?;
-        Ok(())
-    }
-}
-
-impl CanonicalDeserialize for ChannelTransactionRequest {
-    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
-        where
-            Self: Sized,
-    {
-        let request_id = HashValue::from_slice(deserializer.decode_bytes()?.as_slice())?;
-        let channel_txn = deserializer.decode_struct()?;
-        let channel_txn_sigs = deserializer.decode_struct()?;
-        let travel = deserializer.decode_bool()?;
-        Ok(Self {
-            request_id,
-            channel_txn,
-            channel_txn_sigs,
-            travel,
-        })
     }
 }
 
@@ -553,28 +430,6 @@ impl From<ChannelTransactionRequest> for crate::proto::sgtypes::ChannelTransacti
     }
 }
 
-impl CanonicalSerialize for ChannelTransactionResponse {
-    fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
-        serializer
-            .encode_bytes(self.request_id.to_vec().as_slice())?
-            .encode_struct(&self.channel_txn_sigs)?;
-        Ok(())
-    }
-}
-
-impl CanonicalDeserialize for ChannelTransactionResponse {
-    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
-        where
-            Self: Sized,
-    {
-        let request_id = HashValue::from_slice(deserializer.decode_bytes()?.as_slice())?;
-        let channel_txn_sigs = deserializer.decode_struct()?;
-        Ok(Self {
-            request_id,
-            channel_txn_sigs,
-        })
-    }
-}
 
 impl TryFrom<crate::proto::sgtypes::ChannelTransactionResponse> for ChannelTransactionResponse {
     type Error = Error;

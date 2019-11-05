@@ -1,15 +1,15 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crypto::{
+use failure::prelude::*;
+use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
     Uniform,
 };
-use failure::prelude::*;
+use libra_logger::prelude::*;
 use libra_tools::tempdir::TempPath;
 use libra_types::{account_address::AccountAddress, transaction::TransactionArgument};
-use logger::prelude::*;
 use rand::prelude::*;
 use sgchain::{
     client_state_view::ClientStateView,
@@ -33,8 +33,8 @@ where
     let mut seed_rng = rand::rngs::OsRng::new().expect("can't access OsRng");
     let seed_buf: [u8; 32] = seed_rng.gen();
     let mut rng0: StdRng = SeedableRng::from_seed(seed_buf);
-    let account_keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey> =
-        KeyPair::generate_for_testing(&mut rng0);
+    let account_keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>> =
+        Arc::new(KeyPair::generate_for_testing(&mut rng0));
 
     let account = AccountAddress::from_public_key(&account_keypair.public_key);
     faucet_sync(client.as_ref().clone(), account, init_balance)?;
@@ -110,7 +110,7 @@ pub fn test_wallet<C>(chain_client: Arc<C>) -> Result<()>
 where
     C: ChainClient + Clone + Send + Sync + 'static,
 {
-    //::logger::try_init_for_testing();
+    //::libra_logger::try_init_for_testing();
     let sender_amount: u64 = 10_000_000;
     let receiver_amount: u64 = 10_000_000;
     let sender_fund_amount: u64 = 0;
@@ -334,7 +334,7 @@ pub fn test_deploy_custom_module<C>(chain_client: Arc<C>) -> Result<()>
 where
     C: ChainClient + Clone + Send + Sync + 'static,
 {
-    //::logger::try_init_for_testing();
+    //::libra_logger::try_init_for_testing();
     let init_balance = 1000000;
 
     let alice = Arc::new(setup_wallet(chain_client.clone(), init_balance)?);

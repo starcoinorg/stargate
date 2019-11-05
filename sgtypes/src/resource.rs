@@ -1,7 +1,6 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use canonical_serialization::SimpleSerializer;
 use failure::prelude::*;
 use libra_types::{
     account_config::{account_struct_tag, AccountResource},
@@ -31,18 +30,14 @@ impl Resource {
 
     pub fn new_from_account_resource(account_resource: AccountResource) -> Self {
         //this serialize and decode should never fail, so use unwrap.
-        let out: Vec<u8> = SimpleSerializer::serialize(&account_resource).unwrap();
+        let out: Vec<u8> = lcs::to_bytes(&account_resource).unwrap();
         Self::decode(account_struct_tag(), get_account_struct_def(), &out).expect("decode fail.")
     }
 
     pub fn decode(tag: StructTag, def: StructDef, bytes: &[u8]) -> Result<Self> {
         let struct_value = Value::simple_deserialize(bytes, def)
             .map_err(|vm_error| format_err!("decode resource fail:{:?}", vm_error))
-            .and_then(|value| {
-                value
-                    .value_as()
-                    .ok_or(format_err!("value is not struct type"))
-            })?;
+            .and_then(|value| value.value_as().map_err(Into::into))?;
         Ok(Self::new(tag, struct_value))
     }
 

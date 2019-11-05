@@ -5,12 +5,12 @@ use crate::{
     sg_error::SgError,
 };
 use bytes::IntoBuf;
-use crypto::{ed25519::Ed25519Signature, HashValue};
 use failure::prelude::*;
+use libra_crypto::{ed25519::Ed25519Signature, HashValue};
+use libra_prost_ext::MessageExt;
 use libra_types::account_address::AccountAddress;
 use parity_multiaddr::Multiaddr;
 use prost::Message;
-use prost_ext::MessageExt;
 use std::convert::{TryFrom, TryInto};
 
 #[derive(Clone, Debug, Eq, PartialEq)]

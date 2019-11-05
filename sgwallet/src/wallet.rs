@@ -5,16 +5,19 @@ use crate::scripts::*;
 
 use channel_manager::{channel::Channel, ChannelManager};
 use chrono::Utc;
-use config::config::VMConfig;
-use crypto::{
+use failure::prelude::*;
+use lazy_static::lazy_static;
+use libra_config::config::VMConfig;
+use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature},
     hash::CryptoHash,
     test_utils::KeyPair,
     SigningKey, VerifyingKey,
 };
-use failure::prelude::*;
-use lazy_static::lazy_static;
+use libra_logger::prelude::*;
+use libra_state_view::StateView;
 use libra_types::access_path::AccessPath;
+use libra_types::transaction::Transaction;
 use libra_types::{
     access_path::DataPath,
     account_address::AccountAddress,
@@ -22,15 +25,14 @@ use libra_types::{
     channel_account::ChannelAccountResource,
     language_storage::StructTag,
     transaction::{
+        helpers::{create_signed_payload_txn, ChannelPayloadSigner, TransactionSigner},
         ChannelScriptBody, ChannelTransactionPayload, ChannelTransactionPayloadBody,
         ChannelWriteSetBody, Module, RawTransaction, Script, SignedTransaction,
-        SignedTransactionWithProof, TransactionArgument, TransactionOutput, TransactionPayload,
-        TransactionStatus,
+        TransactionArgument, TransactionOutput, TransactionPayload, TransactionStatus,
+        TransactionWithProof,
     },
-    transaction_helpers::{create_signed_payload_txn, ChannelPayloadSigner, TransactionSigner},
     vm_error::*,
 };
-use logger::prelude::*;
 use sgchain::star_chain_client::{ChainClient, StarChainClient};
 use sgconfig::config::WalletConfig;
 use sgtypes::channel_transaction_sigs::{ChannelTransactionSigs, TxnSignature};
@@ -44,7 +46,6 @@ use sgtypes::{
     resource::Resource,
     script_package::{ChannelScriptPackage, ScriptCode},
 };
-use state_view::StateView;
 use std::path::Path;
 use std::{sync::Arc, time::Duration};
 use vm::gas_schedule::GasAlgebra;
@@ -60,7 +61,7 @@ where
     C: ChainClient + Send + Sync + 'static,
 {
     account: AccountAddress,
-    keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
+    keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
     client: Arc<C>,
     storage: ChannelManager<C>,
     script_registry: PackageRegistry,
@@ -78,7 +79,7 @@ where
 
     pub fn new(
         account: AccountAddress,
-        keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
+        keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
         rpc_host: &str,
         rpc_port: u32,
     ) -> Result<Wallet<StarChainClient>> {
@@ -89,7 +90,7 @@ where
 
     pub fn new_with_client<P: AsRef<Path>>(
         account: AccountAddress,
-        keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
+        keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
         client: Arc<C>,
         store_dir: P,
     ) -> Result<Self> {
@@ -121,9 +122,13 @@ where
         transaction: SignedTransaction,
     ) -> Result<TransactionOutput> {
         let tx_hash = transaction.raw_txn().hash();
-        let output = MoveVM::execute_block(vec![transaction], &VM_CONFIG, state_view)
-            .pop()
-            .unwrap();
+        let output = MoveVM::execute_block(
+            vec![Transaction::UserTransaction(transaction)],
+            &VM_CONFIG,
+            state_view,
+        )?
+        .pop()
+        .expect("at least return 1 output.");
         debug!("execute txn:{} output: {}", tx_hash, output);
         match output.status() {
             TransactionStatus::Discard(vm_status) => {
@@ -657,10 +662,7 @@ where
     }
 
     /// Deploy a module to Chain
-    pub async fn deploy_module(
-        &self,
-        module_byte_code: Vec<u8>,
-    ) -> Result<SignedTransactionWithProof> {
+    pub async fn deploy_module(&self, module_byte_code: Vec<u8>) -> Result<TransactionWithProof> {
         let payload = TransactionPayload::Module(Module::new(module_byte_code));
         //TODO pre execute deploy module txn on local , and get real gas used to set max_gas_amount.
         let txn = create_signed_payload_txn(
@@ -826,7 +828,7 @@ where
     pub async fn submit_transaction(
         &self,
         signed_transaction: SignedTransaction,
-    ) -> Result<SignedTransactionWithProof> {
+    ) -> Result<TransactionWithProof> {
         let raw_txn_hash = signed_transaction.raw_txn().hash();
         debug!("submit_transaction {}", raw_txn_hash);
         let seq_number = signed_transaction.sequence_number();

@@ -11,16 +11,11 @@ use std::{
 };
 use tokio::runtime::TaskExecutor;
 
-use canonical_serialization::{CanonicalDeserializer, SimpleDeserializer};
-use crypto::{
-    ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
-    test_utils::KeyPair,
-    HashValue,
-};
 use failure::prelude::*;
+use libra_crypto::HashValue;
+use libra_logger::prelude::*;
 use libra_types::transaction::TransactionArgument;
 use libra_types::{account_address::AccountAddress, account_config::AccountResource};
-use logger::prelude::*;
 use network::{NetworkMessage, NetworkService};
 use node_proto::{
     DeployModuleResponse, DepositResponse, ExecuteScriptResponse, OpenChannelResponse, PayResponse,
@@ -54,7 +49,6 @@ pub struct Node<C: ChainClient + Send + Sync + 'static> {
 struct NodeInner<C: ChainClient + Send + Sync + 'static> {
     wallet: Arc<Wallet<C>>,
     executor: TaskExecutor,
-    _keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
     network_service: NetworkService,
     network_service_close_tx: Option<oneshot::Sender<()>>,
     sender: UnboundedSender<NetworkMessage>,
@@ -68,7 +62,6 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
     pub fn new(
         executor: TaskExecutor,
         wallet: Wallet<C>,
-        keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
         network_service: NetworkService,
         sender: UnboundedSender<NetworkMessage>,
         receiver: UnboundedReceiver<NetworkMessage>,
@@ -79,7 +72,6 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
 
         let node_inner = NodeInner {
             executor: executor_clone,
-            _keypair: keypair,
             wallet: Arc::new(wallet),
             network_service,
             network_service_close_tx: Some(net_close_tx),
@@ -486,8 +478,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
     ) -> Result<MessageFuture<u64>> {
         let mut trans_args = Vec::new();
         for arg in transaction_args {
-            let mut deserializer = SimpleDeserializer::new(&arg);
-            let transaction_arg = deserializer.decode_struct::<TransactionArgument>()?;
+            let transaction_arg = lcs::from_bytes(arg.as_slice())?;
             trans_args.push(transaction_arg);
         }
         let f = self.node_inner.clone().lock().unwrap().execute_script(

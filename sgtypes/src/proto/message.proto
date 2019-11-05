@@ -36,7 +36,7 @@ enum ErrorCode {
     TIMEOUT=2;
 }
 
-message ErrorMessage{
+message ErrorMessage {
     bytes raw_transaction_hash = 1;
     uint32 error_code=2;
     string error_message =3 ;

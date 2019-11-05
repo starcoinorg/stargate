@@ -12,9 +12,9 @@ use futures_01::{
     Async, Future, Poll, Stream,
 };
 
-use crypto::HashValue;
 use failure::prelude::*;
-use logger::prelude::*;
+use libra_crypto::HashValue;
+use libra_logger::prelude::*;
 use sgtypes::{message::ErrorMessage, sg_error::SgError};
 
 pub struct MessageFuture<T> {

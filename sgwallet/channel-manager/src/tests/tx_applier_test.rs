@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::tx_applier::TxApplier;
-use crypto::hash::CryptoHash;
+use libra_crypto::hash::CryptoHash;
 use sgstorage::channel_db::ChannelAddressProvider;
 use sgstorage::generate_random_channel_store;
 #[test]
 fn test_tx_applier() {
-    logger::try_init_for_testing();
+    libra_logger::try_init_for_testing();
     let store = generate_random_channel_store();
     let mut tx_applier = TxApplier::new(store.clone());
 

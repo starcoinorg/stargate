@@ -1,12 +1,9 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use canonical_serialization::{
-    CanonicalDeserialize, CanonicalDeserializer, CanonicalSerialize, CanonicalSerializer,
-};
-use crypto::hash::{CryptoHash, CryptoHasher, TestOnlyHasher};
-use crypto::HashValue;
 use failure::prelude::*;
+use libra_crypto::hash::{CryptoHash, CryptoHasher, TestOnlyHasher};
+use libra_crypto::HashValue;
 use libra_types::transaction::{Script, TransactionArgument};
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -48,32 +45,6 @@ impl ScriptCode {
 
     pub fn encode_script(self, args: Vec<TransactionArgument>) -> Script {
         Script::new(self.byte_code, args)
-    }
-}
-
-impl CanonicalSerialize for ScriptCode {
-    fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
-        serializer
-            .encode_string(self.name.as_str())?
-            .encode_string(self.source_code.as_str())?
-            .encode_bytes(self.byte_code.as_slice())?;
-        Ok(())
-    }
-}
-
-impl CanonicalDeserialize for ScriptCode {
-    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
-        where
-            Self: Sized,
-    {
-        let name = deserializer.decode_string()?;
-        let source_code = deserializer.decode_string()?;
-        let byte_code = deserializer.decode_bytes()?;
-        Ok(Self {
-            name,
-            source_code,
-            byte_code,
-        })
     }
 }
 
@@ -138,7 +109,7 @@ impl CryptoHash for ChannelScriptPackage {
     fn hash(&self) -> HashValue {
         let mut state = Self::Hasher::default();
         state.write(
-            SimpleSerializer::<Vec<u8>>::serialize(self)
+            lcs::to_bytes(self)
                 .expect("Failed to serialize ChannelTransaction")
                 .as_slice(),
         );
@@ -157,29 +128,6 @@ impl Display for ChannelScriptPackage {
             writeln!(f, "---------------------------")?;
         }
         Ok(())
-    }
-}
-
-impl CanonicalSerialize for ChannelScriptPackage {
-    fn serialize(&self, serializer: &mut impl CanonicalSerializer) -> Result<()> {
-        serializer
-            .encode_string(self.package_name.as_str())?
-            .encode_vec(&self.scripts)?;
-        Ok(())
-    }
-}
-
-impl CanonicalDeserialize for ChannelScriptPackage {
-    fn deserialize(deserializer: &mut impl CanonicalDeserializer) -> Result<Self>
-        where
-            Self: Sized,
-    {
-        let package_name = deserializer.decode_string()?;
-        let scripts = deserializer.decode_vec()?;
-        Ok(Self {
-            package_name,
-            scripts,
-        })
     }
 }
 

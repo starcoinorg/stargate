@@ -1,13 +1,12 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
-use crypto::test_utils::KeyPair;
-use crypto::{HashValue, Uniform};
+use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
+use libra_crypto::test_utils::KeyPair;
+use libra_crypto::{HashValue, Uniform};
 use libra_types::access_path::AccessPath;
 use libra_types::account_address::AccountAddress;
-use libra_types::transaction::{ChannelScriptBody, Script};
-use libra_types::transaction_helpers::ChannelPayloadSigner;
+use libra_types::transaction::{helpers::ChannelPayloadSigner, ChannelScriptBody, Script};
 use libra_types::vm_error::StatusCode;
 use libra_types::write_set::{WriteOp, WriteSet, WriteSetMut};
 use rand::prelude::*;

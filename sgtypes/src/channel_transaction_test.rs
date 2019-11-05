@@ -3,10 +3,7 @@
 
 use crate::channel_transaction::*;
 use crate::channel_transaction_sigs::*;
-use canonical_serialization::{
-    CanonicalDeserializer, CanonicalSerializer, SimpleDeserializer, SimpleSerializer,
-};
-use crypto::{
+use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     hash::CryptoHash,
     test_utils::KeyPair,
@@ -14,8 +11,7 @@ use crypto::{
 };
 use libra_types::{
     account_address::AccountAddress,
-    transaction::{ChannelScriptBody, ChannelWriteSetBody, Script},
-    transaction_helpers::ChannelPayloadSigner,
+    transaction::{helpers::ChannelPayloadSigner, ChannelScriptBody, ChannelWriteSetBody, Script},
     write_set::WriteSet,
 };
 use rand::prelude::*;
@@ -86,12 +82,10 @@ fn request_roundtrip_canonical_serialization() {
         ),
     ];
     for request in requests {
-        let mut serializer = SimpleSerializer::<Vec<u8>>::new();
-        serializer.encode_struct(&request).unwrap();
-        let serialized_bytes = serializer.get_output();
+        let serialized_bytes = lcs::to_bytes(&request).unwrap();
 
-        let mut deserializer = SimpleDeserializer::new(&serialized_bytes);
-        let output: ChannelTransactionRequest = deserializer.decode_struct().unwrap();
+        let output: ChannelTransactionRequest =
+            lcs::from_bytes(serialized_bytes.as_slice()).unwrap();
         assert_eq!(request, output);
     }
 }

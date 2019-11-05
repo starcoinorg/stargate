@@ -10,6 +10,7 @@ use libra_types::transaction::TransactionArgument;
 use sgchain::star_chain_client::MockChainClient;
 use sgtypes::script_package::ChannelScriptPackage;
 use std::sync::Arc;
+use std::time::Duration;
 
 pub mod wallet_test_helper;
 
@@ -39,13 +40,15 @@ fn test_gobang() {
 }
 
 fn run_test_wallet_with_mock_client() -> Result<()> {
+    libra_logger::try_init_for_testing();
     let (mock_chain_service, _handle) = MockChainClient::new();
+    std::thread::sleep(Duration::from_millis(1500));
     let chain_client = Arc::new(mock_chain_service);
     test_wallet(chain_client)
 }
 
 fn run_test_wallet_install_package() -> Result<()> {
-    ::logger::try_init_for_testing();
+    libra_logger::try_init_for_testing();
     let init_balance = 1000000;
 
     let (mock_chain_service, _handle) = MockChainClient::new();
@@ -72,14 +75,14 @@ fn run_test_wallet_install_package() -> Result<()> {
 }
 
 fn run_test_deploy_custom_module_by_mock_client() -> Result<()> {
-    ::logger::try_init_for_testing();
+    ::libra_logger::try_init_for_testing();
     let (mock_chain_service, _handle) = MockChainClient::new();
     let chain_client = Arc::new(mock_chain_service);
     test_deploy_custom_module(chain_client)
 }
 
 fn run_test_vector() -> Result<()> {
-    ::logger::try_init_for_testing();
+    ::libra_logger::try_init_for_testing();
     let init_balance = 1000000;
 
     let (mock_chain_service, _handle) = MockChainClient::new();
@@ -124,7 +127,7 @@ fn run_test_vector() -> Result<()> {
 }
 
 fn run_test_gobang() -> Result<()> {
-    ::logger::try_init_for_testing();
+    ::libra_logger::try_init_for_testing();
     let init_balance = 1000000;
 
     let (mock_chain_service, _handle) = MockChainClient::new();

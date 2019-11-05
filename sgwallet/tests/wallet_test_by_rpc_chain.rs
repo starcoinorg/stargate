@@ -4,7 +4,7 @@ extern crate rusty_fork;
 use std::sync::Arc;
 
 use failure::prelude::*;
-use logger::prelude::*;
+use libra_logger::prelude::*;
 
 use sgchain::star_chain_client::StarChainClient;
 
