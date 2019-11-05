@@ -22,8 +22,8 @@ fn node_test() -> Result<()> {
     use std::sync::Arc;
     use tokio::runtime::Runtime;
 
-    ::libra_logger::try_init_for_testing();
-    //env_logger::init();
+    ::libra_logger::init_for_e2e_testing();
+    env_logger::init();
     let rt = Runtime::new().unwrap();
     let executor = rt.executor();
 
@@ -46,9 +46,6 @@ fn node_test() -> Result<()> {
     node2.start_server();
 
     let f = async move {
-        let neg_msg = _create_negotiate_message(addr2, addr1, keypair2.private_key);
-        node2.open_channel_negotiate(neg_msg).unwrap();
-
         let fund_amount = 1000000;
         node2
             .open_channel_async(addr1, fund_amount, fund_amount)
