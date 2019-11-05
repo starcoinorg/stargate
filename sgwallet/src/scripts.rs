@@ -9,7 +9,7 @@ use include_dir::Dir;
 use failure::prelude::*;
 
 use lazy_static::lazy_static;
-use logger::prelude::*;
+use libra_logger::prelude::*;
 use sgcompiler::{Compiler, ScriptFile};
 use sgtypes::{
     channel_transaction::ChannelOp,
@@ -124,7 +124,7 @@ fn get_file_contents(path: &str) -> Result<&str> {
 
 #[cfg(test)]
 mod tests {
-    use logger::try_init_for_testing;
+    use libra_logger::try_init_for_testing;
 
     use super::*;
 

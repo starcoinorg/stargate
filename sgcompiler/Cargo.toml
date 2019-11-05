@@ -9,13 +9,12 @@ edition = "2018"
 
 [dependencies]
 walkdir = "2"
-failure = { path = "../libra/common/failure_ext", package = "failure_ext" }
+failure = { path = "../libra/common/failure-ext", package = "libra-failure-ext"  }
 libra-types = { path = "../libra/types" }
 sgtypes = { path = "../sgtypes" }
 stdlib = { path = "../libra/language/stdlib" }
-ir_to_bytecode = { path = "../libra/language/compiler/ir_to_bytecode" }
+ir-to-bytecode = { path = "../libra/language/compiler/ir-to-bytecode" }
 vm = { path = "../libra/language/vm" }
 bytecode-verifier = { path = "../libra/language/bytecode-verifier"}
-logger = { path = "../libra/common/logger"}
-state-view = {path = "../libra/storage/state-view"}
-sgchain = { path = "../sgchain"}
+libra-logger = { path = "../libra/common/logger"}
+libra-state-view = {path = "../libra/storage/state-view"}

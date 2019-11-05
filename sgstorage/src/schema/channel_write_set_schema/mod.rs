@@ -3,7 +3,6 @@
 
 use crate::schema::{ensure_slice_len_eq, CHANNEL_WRITE_SET_CF_NAME};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use canonical_serialization::{SimpleDeserializer, SimpleSerializer};
 use failure::prelude::*;
 use libra_types::transaction::Version;
 use schemadb::{
@@ -46,10 +45,10 @@ impl KeyCodec<ChannelWriteSetSchema> for Key {
 
 impl ValueCodec<ChannelWriteSetSchema> for WriteSetItem {
     fn encode_value(&self) -> Result<Vec<u8>> {
-        SimpleSerializer::<Vec<u8>>::serialize(self)
+        lcs::to_bytes(self).map_err(Into::into)
     }
 
     fn decode_value(data: &[u8]) -> Result<Self> {
-        SimpleDeserializer::deserialize(data)
+        lcs::from_bytes(data).map_err(Into::into)
     }
 }

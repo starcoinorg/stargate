@@ -16,7 +16,6 @@
 //! numeric value.
 use crate::schema::CHANNEL_TRANSACTION_INFO_CF_NAME;
 use byteorder::{BigEndian, ReadBytesExt};
-use canonical_serialization::{SimpleDeserializer, SimpleSerializer};
 use failure::prelude::*;
 use libra_types::transaction::Version;
 use schemadb::{
@@ -50,11 +49,11 @@ impl KeyCodec<ChannelTransactionInfoSchema> for Version {
 
 impl ValueCodec<ChannelTransactionInfoSchema> for ChannelTransactionInfo {
     fn encode_value(&self) -> Result<Vec<u8>> {
-        SimpleSerializer::serialize(self)
+        lcs::to_bytes(self).map_err(Into::into)
     }
 
     fn decode_value(data: &[u8]) -> Result<Self> {
-        SimpleDeserializer::deserialize(data)
+        lcs::from_bytes(data).map_err(Into::into)
     }
 }
 

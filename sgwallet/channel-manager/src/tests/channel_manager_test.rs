@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::*;
+use libra_logger::try_init_for_testing;
+use libra_state_view::StateView;
 use libra_tools::tempdir::TempPath;
 use libra_types::access_path::AccessPath;
-use logger::try_init_for_testing;
 use sgchain::client_state_view::ClientStateView;
 use sgchain::star_chain_client::{faucet_sync, MockChainClient};
-use state_view::StateView;
 
 #[test]
 fn test_channel_manager() -> Result<()> {

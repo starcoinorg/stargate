@@ -9,19 +9,19 @@ use libra_crypto::{
 };
 use libra_types::{
     account_address::AccountAddress,
-    transaction::{RawTransaction, SignedTransaction},
-    transaction_helpers::TransactionSigner,
+    transaction::{helpers::TransactionSigner, RawTransaction, SignedTransaction},
 };
 use rand::prelude::*;
 use std::{
     convert::TryFrom,
     fs,
+    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 pub struct WalletLibrary {
     addr: Option<AccountAddress>,
-    key_pair: Option<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
+    key_pair: Option<Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>>,
 }
 
 fn path_exists(path: &str) -> bool {
@@ -73,7 +73,7 @@ impl WalletLibrary {
                 let account_address = AccountAddress::from_public_key(&keypair.public_key);
 
                 self.addr = Some(account_address);
-                self.key_pair = Some(keypair);
+                self.key_pair = Some(Arc::new(keypair));
             }
             Err(e) => {
                 panic!(
@@ -101,7 +101,7 @@ impl WalletLibrary {
             KeyPair::generate_for_testing(&mut rng);
         let account_address = AccountAddress::from_public_key(&keypair.public_key);
         self.addr = Some(account_address);
-        self.key_pair = Some(keypair);
+        self.key_pair = Some(Arc::new(keypair));
         account_address
     }
 

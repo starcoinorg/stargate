@@ -9,12 +9,12 @@ use ir_to_bytecode::parser::{
     ast::{ImportDefinition, ModuleIdent},
     parse_module, parse_program, parse_script,
 };
+use libra_logger::prelude::*;
+use libra_state_view::StateView;
 use libra_types::{
     access_path::AccessPath, account_address::AccountAddress, language_storage::ModuleId,
 };
-use logger::prelude::*;
 use sgtypes::script_package::{ChannelScriptPackage, ScriptCode};
-use state_view::StateView;
 use std::collections::HashSet;
 use stdlib::stdlib_modules;
 use vm::{access::ModuleAccess, file_format::CompiledModule};
@@ -272,8 +272,8 @@ impl<'a> Compiler<'a> {
 mod tests {
     use std::path::{Path, PathBuf};
 
+    use libra_logger::try_init_for_testing;
     use libra_types::identifier::{IdentStr, Identifier};
-    use logger::try_init_for_testing;
 
     use crate::mock_module_loader::MockModuleLoader;
 

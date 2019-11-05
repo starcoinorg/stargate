@@ -84,7 +84,7 @@ message DeployModuleRequest{
 }
 
 message DeployModuleResponse{
-    types.SignedTransactionWithProof transaction_with_proof = 1;
+    types.TransactionWithProof transaction_with_proof = 1;
 }
 
 message ExecuteScriptRequest{

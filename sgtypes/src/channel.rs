@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use atomic_refcell::AtomicRefCell;
-use crypto::{ed25519::Ed25519Signature, hash::SPARSE_MERKLE_PLACEHOLDER_HASH, HashValue};
 use failure::prelude::*;
+use libra_crypto::{ed25519::Ed25519Signature, hash::SPARSE_MERKLE_PLACEHOLDER_HASH, HashValue};
 use libra_types::{access_path::DataPath, account_address::AccountAddress, write_set::WriteSet};
 use std::collections::{BTreeMap, HashSet};
 

@@ -3,13 +3,13 @@
 
 use crate::rocksdb_utils::FixedPrefixSliceTransform;
 use libra_tools::tempdir::TempPath;
-//use logger::prelude::*;
+//use libra_logger::prelude::*;
 use rocksdb::{ColumnFamilyOptions, DBOptions, ReadOptions, SeekKey, Writable};
 use std::iter::Iterator;
 
 #[test]
 fn test_rocksdb_prefix_seek() {
-    logger::try_init_for_testing();
+    libra_logger::try_init_for_testing();
     let tmp_dir = TempPath::new();
     let mut db_opts = DBOptions::default();
     db_opts.create_if_missing(true);

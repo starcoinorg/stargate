@@ -1,9 +1,9 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crypto::define_hasher;
-use crypto::hash::{CryptoHasher, DefaultHasher, HashValue};
 use lazy_static::lazy_static;
+use libra_crypto::define_hasher;
+use libra_crypto::hash::{CryptoHasher, DefaultHasher, HashValue};
 
 define_hasher! {
 /// The hasher used to compute the hash of an ChannelTransactionInfo object.
@@ -41,17 +41,16 @@ define_hasher! { (WriteSetItemHasher, WRITE_SET_ITEM_HASHER, b"WriteSetItem") }
 #[macro_export]
 macro_rules! impl_hash {
     ($struct_type: ident, $hasher_type: ident) => {
-        impl crypto::hash::CryptoHash for $struct_type {
+        impl libra_crypto::hash::CryptoHash for $struct_type {
             type Hasher = $hasher_type;
 
-            fn hash(&self) -> crypto::hash::HashValue {
+            fn hash(&self) -> libra_crypto::hash::HashValue {
                 let mut state = Self::Hasher::default();
-                crypto::hash::CryptoHasher::write(
+                libra_crypto::hash::CryptoHasher::write(
                     &mut state,
-                    &canonical_serialization::SimpleSerializer::<Vec<u8>>::serialize(self)
-                        .expect("Serialization should work."),
+                    &lcs::to_bytes(self).expect("Serialization should work."),
                 );
-                crypto::hash::CryptoHasher::finish(state)
+                libra_crypto::hash::CryptoHasher::finish(state)
             }
         }
     };
