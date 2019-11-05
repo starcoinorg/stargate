@@ -21,27 +21,27 @@ itertools = "0.8.0"
 prost = "0.5.0"
 
 # deps on libra common types
-failure = { path = "../libra/common/failure_ext", package = "failure_ext" }
-crypto = { path = "../libra/crypto/crypto" }
+failure = { path = "../libra/common/failure-ext", package = "libra-failure-ext"  }
+libra-crypto = { path = "../libra/crypto/crypto" }
 libra-types = { path = "../libra/types", package = "libra-types" }
-logger = { path = "../libra/common/logger"}
-metrics = { path = "../libra/common/metrics" }
-canonical-serialization = { path = "../libra/common/canonical-serialization" }
-prost-ext = { path = "../libra/common/prost-ext" }
+libra-logger = { path = "../libra/common/logger"}
+libra-metrics = { path = "../libra/common/metrics" }
+lcs = { path = "../libra/common/lcs", package = "libra-canonical-serialization" }
 
 # deps on libra storage
 accumulator = { path = "../libra/storage/accumulator" }
 jellyfish-merkle = { path = "../libra/storage/jellyfish-merkle" }
 libradb = { path = "../libra/storage/libradb" }
 schemadb = { path = "../libra/storage/schemadb" }
-state-view = {path = "../libra/storage/state-view"}
-storage_proto = {path = "../libra/storage/storage_proto"}
+libra-state-view = {path = "../libra/storage/state-view"}
+storage-proto = {path = "../libra/storage/storage-proto"}
+libra-tools = { path = "../libra/common/tools", package = "libra-tools" }
 
 # sg deps
 
+sgtypes = { path = "../sgtypes"}
 [dependencies.rocksdb]
 git = "https://github.com/pingcap/rust-rocksdb.git"
 rev = "3cd18c44d160a3cdba586d6502d51b7cc67efc59"
 
 [dev-dependencies]
-libra_tools = { path = "../libra/common/tools", package = "tools" }

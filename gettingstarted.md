@@ -1,11 +1,10 @@
 # Getting started
 
-## Required
-+ Rust >= "1.35.0"
-+ Cargo >= "1.35.0"
-
 ## Compile project
 ```
+cd stargage
+./libra/scripts/dev_setup.sh
+source ~/.cargo/env
 cargo build
 ```
 
@@ -37,18 +36,18 @@ Start client for bob:
 ```
 Then the mint coin for bob.
 ```
-a m 10000000
+account mint 10000000
 ```
 You could use such command to check account state:
 ```
-a s
+account state
 ```
 
 ## Run node service
 1. Prepare the node configure
     ```
-    cp config_template/node1.toml alice/node.toml
-    cp config_template/node2.toml bob/node.toml
+    cp config_template/alice.toml alice/node.toml
+    cp config_template/bob.toml bob/node.toml
     ```
 	change last part of net_config.seeds in bob/node.toml to alice's address in hex.
     
@@ -63,40 +62,40 @@ a s
 1. Open Channel
     In alice's cli
     ```
-	node oc {bob address in hex} 10000 10000
+	node open channel {bob address in hex} 10000 10000
     ```
 2. Channel Balance
 
 	For Alice
     ```
-    node cb {bob}
+    node channel balance {bob}
     ```
 	For Bob
     ```
-    node cb {alice}
+    node channel balance {alice}
     ```
 3. Channel pay
 
 	For Alice
     ```
     node pay {bob} 100
-    node cb {bob}
+    node channel balance {bob}
     ```
 	For Bob
     ```
-    node cb {alice}
+    node channel balance {alice}
     ```
 4. Withdraw from channel 
 
 	For Alice
     ```
-    node wd {bob} 1000 1000
-    node cb {bob}
+    node withdraw {bob} 1000 1000
+    node channel balance {bob}
     ```
 	
 	For Bob
     ```
-    node cb {alice}
+    node channel balance {alice}
 
     ```
 ## Channel Contract
@@ -105,14 +104,19 @@ A game Rock-Paper-Scissors is used to demonstrate the channel contract.
 1. Deploy Module to Chain
     In alice's cli
     ```
-    dev dm demo/RockPaperScissors/module/rps.mvir
+    dev deploy module demo/RockPaperScissors/module/rps.mvir
 
     ```
 
 2. Install Script to Node
-    Change all {{starlab}} in demo/RockPaperScissors/scripts to alice's address,then in both cli execute
+    Change all {{starlab}} in demo/RockPaperScissors/scripts to alice's address,then in alice's cli execute
     ```
-    dev ip demo/RockPaperScissors/scripts
+    dev install package demo/RockPaperScissors/scripts
+
+    ```
+    In Bob's cli execute
+    ```
+    dev install package demo/RockPaperScissors/scripts.csp
 
     ```
 
@@ -121,14 +125,14 @@ A game Rock-Paper-Scissors is used to demonstrate the channel contract.
    Before the game begin,you could check channel balance,remember the both balance.  
    In Alice:
    ```
-   dev pe {bob} scripts rps_player_1 b"bde750abcf1d176a34cce61b607107092413100c9195b08f13d6e7d46980cf1c" 20
+   dev package execute {bob} scripts rps_player_1 b"bde750abcf1d176a34cce61b607107092413100c9195b08f13d6e7d46980cf1c" 20
    ```
    Then ,for Bob
    ```
-   dev pe {alice} scripts rps_player_2 b"70" 10
+   dev package execute {alice} scripts rps_player_2 b"70" 10
    ```
    Then ,end game ,in alice
    ```
-   dev pe {bob} scripts rps_end_game b"72" b"616263"
+   dev package execute {bob} scripts rps_end_game b"72" b"616263"
    ```
    After the game end,you could check channel balance.Alice lose the game,so balance of her should be origin balance minus 10,balance of bob should be his origin balance plus 10. A detailed description of the contract can be found [here](./demo/RockPaperScissors/README.md).

@@ -1,22 +1,28 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
-
 pub mod account_resource_ext;
-pub mod channel_transaction;
-#[cfg(test)]
-mod channel_transaction_test;
-pub mod message;
-pub mod proto;
-pub mod resource;
-pub mod sg_error;
-pub mod system_event;
-
 pub mod account_state;
 pub mod channel;
+pub mod channel_transaction;
+pub mod channel_transaction_info;
+pub mod channel_transaction_sigs;
+#[cfg(test)]
+mod channel_transaction_test;
+pub mod channel_transaction_to_commit;
+#[macro_use]
+pub mod hash;
+pub mod message;
+pub mod proof;
+pub mod proto;
+pub mod resource;
 #[cfg(test)]
 mod resource_test;
 pub mod script_package;
-
+pub mod sg_error;
+pub mod signed_channel_transaction;
+pub mod signed_channel_transaction_with_proof;
+pub mod system_event;
+pub mod write_set_item;
 #[cfg(test)]
 mod tests {
     #[test]

@@ -2,21 +2,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::resource::Resource;
-use hex;
 
-use canonical_serialization::SimpleSerializer;
 use libra_types::account_address::AccountAddress;
 use libra_types::identifier::{IdentStr, Identifier};
 use libra_types::language_storage::StructTag;
+#[cfg(feature = "fuzzing")]
 use libra_types::{account_config::AccountResource, event::EventHandle};
 
 use proptest::std_facade::VecDeque;
 use vm_runtime_types::loaded_data::types::Type;
-use vm_runtime_types::native_functions::dispatch::NativeReturnStatus;
 use vm_runtime_types::native_structs::vector::NativeVector;
 use vm_runtime_types::value::{Struct, Value};
 
 #[test]
+#[cfg(feature = "fuzzing")]
 fn test_account_resource() {
     let account_resource = AccountResource::new(
         100,
@@ -28,7 +27,7 @@ fn test_account_resource() {
         EventHandle::random_handle(0),
     );
 
-    let out: Vec<u8> = SimpleSerializer::serialize(&account_resource).unwrap();
+    let out: Vec<u8> = lcs::to_bytes(&account_resource).unwrap();
     println!("resource hex: {}", hex::encode(&out));
 
     let resource = Resource::new_from_account_resource(account_resource);
@@ -45,15 +44,8 @@ fn test_vector_resource() {
         name: Identifier::from(IdentStr::new("T").unwrap()),
         type_params: vec![],
     };
-    let field0 = match NativeVector::native_empty(VecDeque::new()) {
-        NativeReturnStatus::Success {
-            cost: _cost,
-            mut return_values,
-        } => return_values.pop().unwrap(),
-        _ => {
-            panic!("create native vector fail.");
-        }
-    };
+    let native_result = NativeVector::native_empty(VecDeque::new()).unwrap();
+    let field0 = native_result.result.unwrap().pop().unwrap();
     let s: Struct = Struct::new(vec![field0]);
     let value = Value::struct_(s.clone());
     let struct_def = match value.to_type_FOR_TESTING() {

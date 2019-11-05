@@ -1,26 +1,21 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use canonical_serialization::{
-    CanonicalDeserializer, CanonicalSerializer, SimpleDeserializer, SimpleSerializer,
-};
-use crypto::{
+use crate::channel_transaction::*;
+use crate::channel_transaction_sigs::*;
+use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
+    hash::CryptoHash,
     test_utils::KeyPair,
-    Uniform,
+    HashValue, Uniform,
 };
 use libra_types::{
     account_address::AccountAddress,
-    transaction::{ChannelScriptPayload, ChannelWriteSetPayload, Script},
-    transaction_helpers::ChannelPayloadSigner,
+    transaction::{helpers::ChannelPayloadSigner, ChannelScriptBody, ChannelWriteSetBody, Script},
     write_set::WriteSet,
 };
 use rand::prelude::*;
-
-use crate::channel_transaction::{
-    ChannelOp, ChannelTransactionRequest, ChannelTransactionRequestPayload, Witness,
-};
-use failure::_core::time::Duration;
+use std::time::Duration;
 
 //TODO(jole) use Arbitrary
 #[test]
@@ -31,8 +26,7 @@ fn request_roundtrip_canonical_serialization() {
     let sender = AccountAddress::from_public_key(&keypair.public_key);
     let receiver = AccountAddress::random();
     let script = Script::new(vec![], vec![]);
-    let channel_script_payload =
-        ChannelScriptPayload::new(0, WriteSet::default(), receiver, script);
+    let channel_script_payload = ChannelScriptBody::new(0, WriteSet::default(), receiver, script);
     let signature = keypair
         .sign_script_payload(&channel_script_payload)
         .unwrap();
@@ -41,52 +35,57 @@ fn request_roundtrip_canonical_serialization() {
 
     let requests = vec![
         ChannelTransactionRequest::new(
-            rng0.next_u64(),
-            ChannelOp::Open,
-            sender,
-            sequence_number,
-            receiver,
-            channel_sequence_number,
-            Duration::from_secs(rng0.next_u64()),
-            ChannelTransactionRequestPayload::Offchain(Witness {
-                witness_payload: ChannelWriteSetPayload::new(
-                    channel_sequence_number,
-                    WriteSet::default(),
-                    receiver,
-                ),
-                witness_signature: signature.clone(),
-            }),
-            keypair.public_key.clone(),
-            Vec::new(),
+            ChannelTransaction::new(
+                rng0.next_u64(),
+                ChannelOp::Open,
+                sender,
+                sequence_number,
+                receiver,
+                channel_sequence_number,
+                Duration::from_secs(rng0.next_u64()),
+                Vec::new(),
+            ),
+            ChannelTransactionSigs::new(
+                keypair.public_key.clone(),
+                TxnSignature::SenderSig {
+                    channel_txn_signature: signature.clone(),
+                },
+                ChannelWriteSetBody::new(channel_sequence_number, WriteSet::default(), receiver)
+                    .hash(),
+                signature.clone(),
+            ),
+            true,
         ),
         ChannelTransactionRequest::new(
-            rng0.next_u64(),
-            ChannelOp::Execute {
-                package_name: "Test".to_string(),
-                script_name: "Test".to_string(),
-            },
-            sender,
-            sequence_number,
-            receiver,
-            channel_sequence_number,
-            Duration::from_secs(rng0.next_u64()),
-            ChannelTransactionRequestPayload::Travel {
-                max_gas_amount: rng0.next_u64(),
-                gas_unit_price: rng0.next_u64(),
-                txn_write_set_hash: Default::default(),
-                txn_signature: signature,
-            },
-            keypair.public_key.clone(),
-            Vec::new(),
+            ChannelTransaction::new(
+                rng0.next_u64(),
+                ChannelOp::Execute {
+                    package_name: "Test".to_string(),
+                    script_name: "Test".to_string(),
+                },
+                sender,
+                sequence_number,
+                receiver,
+                channel_sequence_number,
+                Duration::from_secs(rng0.next_u64()),
+                Vec::new(),
+            ),
+            ChannelTransactionSigs::new(
+                keypair.public_key.clone(),
+                TxnSignature::ReceiverSig {
+                    channel_script_body_signature: signature.clone(),
+                },
+                HashValue::default(),
+                signature.clone(),
+            ),
+            false,
         ),
     ];
     for request in requests {
-        let mut serializer = SimpleSerializer::<Vec<u8>>::new();
-        serializer.encode_struct(&request).unwrap();
-        let serialized_bytes = serializer.get_output();
+        let serialized_bytes = lcs::to_bytes(&request).unwrap();
 
-        let mut deserializer = SimpleDeserializer::new(&serialized_bytes);
-        let output: ChannelTransactionRequest = deserializer.decode_struct().unwrap();
+        let output: ChannelTransactionRequest =
+            lcs::from_bytes(serialized_bytes.as_slice()).unwrap();
         assert_eq!(request, output);
     }
 }

@@ -10,7 +10,7 @@ edition = "2018"
 futures = { version = "=0.3.0-alpha.19", package = "futures-preview", features = ["async-await", "io-compat", "compat"] }
 
 bincode = "1.1.1"
-grpcio = { version = "=0.5.0-alpha.4", default-features = false }
+grpcio = { version = "=0.5.0-alpha.4", default-features = false, features = ["prost-codec"] }
 hex = "0.3.2"
 hyper = "0.12.33"
 itertools = "0.8.0"
@@ -24,25 +24,21 @@ serde_json = "1.0.40"
 structopt = "0.2.15"
 tempfile = "3.1.0"
 
-config = { path = "../libra/config" }
-crypto = { path = "../libra/crypto/crypto" }
-failure = { package = "failure_ext", path = "../libra/common/failure_ext" }
+libra-config = { path = "../libra/config" }
+libra-crypto = { path = "../libra/crypto/crypto" }
+failure = { package = "libra-failure-ext" , path = "../libra/common/failure-ext" }
 libc = "0.2.60"
-logger =  { path = "../libra/common/logger" }
-metrics = { path = "../libra/common/metrics" }
+libra-logger =  { path = "../libra/common/logger" }
 prost = "0.5.0"
 libra-types = { path = "../libra/types" }
-vm_genesis = { path = "../libra/language/vm/vm_genesis" }
+vm-genesis = { path = "../libra/language/vm/vm-genesis" }
 node_proto = { path = "../node/node_proto"}
 node_client = { path = "../node/node_client"}
 cli_wallet = { path = "./cli_wallet" }
-admission-control-service = { path = "../libra/admission_control/admission-control-service" }
 admission-control-proto = { path = "../libra/admission_control/admission-control-proto" }
 sgchain = { path = "../sgchain" }
 sgtypes = { path = "../sgtypes" }
 sgcompiler = { path = "../sgcompiler" }
-canonical-serialization = { path = "../libra/common/canonical-serialization" }
+lcs = { path = "../libra/common/lcs", package = "libra-canonical-serialization" }
 
 [dev-dependencies]
-crypto = { path = "../libra/crypto/crypto", features = ["testing"] }
-libra-types = { path = "../libra/types" }

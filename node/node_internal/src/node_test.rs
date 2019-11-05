@@ -3,7 +3,7 @@
 
 use failure::prelude::*;
 
-use crypto::{
+use libra_crypto::{
     ed25519::Ed25519PrivateKey,
     hash::{CryptoHasher, TestOnlyHasher},
     traits::SigningKey,
@@ -17,20 +17,19 @@ use std::time::{Duration, Instant};
 fn node_test() -> Result<()> {
     use crate::test_helper::*;
     use futures::compat::Future01CompatExt;
-    use logger::prelude::*;
+    use libra_logger::prelude::*;
     use sgchain::star_chain_client::MockChainClient;
     use std::sync::Arc;
     use tokio::runtime::Runtime;
 
-    ::logger::init_for_e2e_testing();
-    //env_logger::init();
+    libra_logger::init_for_e2e_testing();
     let rt = Runtime::new().unwrap();
     let executor = rt.executor();
 
     let (mock_chain_service, _handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
     let network_config1 = create_node_network_config("/ip4/127.0.0.1/tcp/5000".to_string(), vec![]);
-    let (node1, addr1, _keypair1) = gen_node(executor.clone(), &network_config1, client.clone());
+    let (node1, addr1) = gen_node(executor.clone(), &network_config1, client.clone());
     node1.start_server();
 
     let addr1_hex = hex::encode(addr1);
@@ -42,13 +41,10 @@ fn node_test() -> Result<()> {
     );
     let network_config2 =
         create_node_network_config("/ip4/127.0.0.1/tcp/5001".to_string(), vec![seed]);
-    let (node2, addr2, keypair2) = gen_node(executor.clone(), &network_config2, client.clone());
+    let (node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone());
     node2.start_server();
 
     let f = async move {
-        let neg_msg = _create_negotiate_message(addr2, addr1, keypair2.private_key);
-        node2.open_channel_negotiate(neg_msg).unwrap();
-
         let fund_amount = 1000000;
         node2
             .open_channel_async(addr1, fund_amount, fund_amount)
@@ -57,6 +53,7 @@ fn node_test() -> Result<()> {
             .await
             .unwrap();
 
+        _delay(Duration::from_millis(500)).await;
         assert_eq!(node2.channel_balance(addr1).unwrap(), fund_amount);
         assert_eq!(node1.channel_balance(addr2).unwrap(), fund_amount);
 
@@ -68,7 +65,8 @@ fn node_test() -> Result<()> {
             .await
             .unwrap();
 
-        _delay(Duration::from_millis(100)).await;
+        // NOTICE: delay longer, give dual some time to save into local store.
+        _delay(Duration::from_millis(500)).await;
         assert_eq!(
             node2.channel_balance(addr1).unwrap(),
             fund_amount + deposit_amount
@@ -87,6 +85,7 @@ fn node_test() -> Result<()> {
             .unwrap();
         debug!("txn:{:#?}", offchain_txn);
 
+        _delay(Duration::from_millis(500)).await;
         assert_eq!(
             node2.channel_balance(addr1).unwrap(),
             fund_amount - transfer_amount + deposit_amount
@@ -104,7 +103,7 @@ fn node_test() -> Result<()> {
             .await
             .unwrap();
 
-        _delay(Duration::from_millis(100)).await;
+        _delay(Duration::from_millis(500)).await;
         assert_eq!(
             node2.channel_balance(addr1).unwrap(),
             fund_amount - transfer_amount - wd_amount + deposit_amount
@@ -131,10 +130,9 @@ async fn _delay(duration: Duration) {
 
 #[test]
 fn error_test() -> Result<()> {
-    use logger::prelude::*;
+    use libra_logger::prelude::*;
 
-    ::logger::init_for_e2e_testing();
-    env_logger::init();
+    ::libra_logger::try_init_for_testing();
 
     match _new_error() {
         Err(e) => {

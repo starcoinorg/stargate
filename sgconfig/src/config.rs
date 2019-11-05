@@ -18,6 +18,17 @@ pub struct NodeConfig {
 pub struct WalletConfig {
     pub chain_address: String,
     pub chain_port: u16,
+    pub store_dir: String,
+}
+
+impl Default for WalletConfig {
+    fn default() -> Self {
+        WalletConfig {
+            chain_address: "localhost".to_string(),
+            chain_port: 8000,
+            store_dir: "sgstore".to_string(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -62,12 +73,13 @@ pub fn get_test_config(addr: String, port: u16, rest_port: u16) -> (NodeConfig) 
         port: rest_port,
     };
     let node_network = NetworkConfig {
-        listen: String::from("127.0.0.1:8000"),
-        seeds: vec![String::from("127.0.0.1:8001")],
+        listen: String::from("/ip4/127.0.0.1/tcp/8000"),
+        seeds: vec![],
     };
     let wallet_config = WalletConfig {
         chain_address: addr,
         chain_port: port,
+        ..WalletConfig::default()
     };
     NodeConfig {
         rpc_config: network,

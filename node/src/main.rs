@@ -3,14 +3,14 @@
 
 use std::{convert::TryFrom, fs, sync::Arc};
 
-use crypto::{
+use failure::*;
+use futures_01::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
 };
-use failure::*;
-use futures_01::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use libra_logger::prelude::*;
 use libra_types::account_address::AccountAddress;
-use logger::prelude::*;
 use network::{build_network_service, NetworkMessage, NetworkService};
 use node::client;
 use node_internal::node::Node;
@@ -74,7 +74,7 @@ fn load_from_file(faucet_account_file: &str) -> KeyPair<Ed25519PrivateKey, Ed255
 
 fn gen_node(
     executor: TaskExecutor,
-    keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
+    keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
     wallet_config: &WalletConfig,
     network_service: NetworkService,
     sender: UnboundedSender<NetworkMessage>,
@@ -88,14 +88,18 @@ fn gen_node(
     );
 
     info!("account addr is {:?}", hex::encode(account_address));
-    let wallet =
-        Wallet::new_with_client(account_address, keypair.clone(), Arc::new(client)).unwrap();
+    let wallet = Wallet::new_with_client(
+        account_address,
+        keypair.clone(),
+        Arc::new(client),
+        &wallet_config.store_dir,
+    )
+    .unwrap();
 
     info!("account resource is {:?}", wallet.account_resource());
     Node::new(
         executor.clone(),
         wallet,
-        keypair.clone(),
         network_service,
         sender,
         receiver,
@@ -104,7 +108,7 @@ fn gen_node(
 }
 
 fn main() {
-    let _g = logger::set_default_global_logger(false /* async */, Some(25600));
+    let _g = libra_logger::set_default_global_logger(false /* async */, Some(25600));
     env_logger::init();
 
     let args = Args::from_args();
@@ -114,7 +118,7 @@ fn main() {
     let rt = Runtime::new().unwrap();
     let executor = rt.executor();
 
-    let keypair = load_from_file(&args.faucet_key_path);
+    let keypair = Arc::new(load_from_file(&args.faucet_key_path));
     let (network_service, tx, rx, close_tx) =
         build_network_service(&swarm.config.net_config, keypair.clone());
 

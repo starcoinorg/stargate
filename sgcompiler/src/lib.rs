@@ -9,12 +9,12 @@ use ir_to_bytecode::parser::{
     ast::{ImportDefinition, ModuleIdent},
     parse_module, parse_program, parse_script,
 };
+use libra_logger::prelude::*;
+use libra_state_view::StateView;
 use libra_types::{
     access_path::AccessPath, account_address::AccountAddress, language_storage::ModuleId,
 };
-use logger::prelude::*;
 use sgtypes::script_package::{ChannelScriptPackage, ScriptCode};
-use state_view::StateView;
 use std::collections::HashSet;
 use stdlib::stdlib_modules;
 use vm::{access::ModuleAccess, file_format::CompiledModule};
@@ -254,14 +254,26 @@ impl<'a> Compiler<'a> {
         }
         self.compile_package_with_files(package_name, script_files)
     }
+
+    pub fn compile_package_with_output<P: AsRef<Path>>(
+        &self,
+        path: P,
+        output: P,
+    ) -> Result<ChannelScriptPackage> {
+        let csp = self
+            .compile_package(path)
+            .unwrap_or_else(|err| panic!("Unable to open file: {}", err));
+        csp.dump_to(output.as_ref());
+        Ok(csp)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::path::{Path, PathBuf};
 
+    use libra_logger::try_init_for_testing;
     use libra_types::identifier::{IdentStr, Identifier};
-    use logger::init_for_e2e_testing;
 
     use crate::mock_module_loader::MockModuleLoader;
 
@@ -274,7 +286,7 @@ mod tests {
 
     #[test]
     fn test_compile() -> Result<()> {
-        init_for_e2e_testing();
+        try_init_for_testing();
         let compiler = Compiler::new(AccountAddress::default());
         let package1_path = get_test_package("package1");
         let package = compiler.compile_package(package1_path)?;
@@ -285,7 +297,7 @@ mod tests {
 
     #[test]
     fn test_with_module_loader() -> Result<()> {
-        init_for_e2e_testing();
+        try_init_for_testing();
         let address = AccountAddress::random();
         let module_loader = MockModuleLoader::new();
         let module_id = ModuleId::new(address, Identifier::from(IdentStr::new("Mock")?));
@@ -297,6 +309,20 @@ mod tests {
         let package = compiler.compile_package(package_path)?;
         let script = package.get_script("simple");
         assert!(script.is_some(), "the script named simple should exist.");
+        Ok(())
+    }
+
+    #[test]
+    fn test_compile_complex_script() -> Result<()> {
+        let address = AccountAddress::random();
+        let module_loader = MockModuleLoader::new();
+
+        let compiler = Compiler::new_with_module_loader(address, &module_loader);
+        let package_path = get_test_package("complex_script");
+        let script_src = std::fs::read_to_string(package_path.join("script.mvir").as_path())?;
+        let first_bytes = compiler.compile_script(script_src.as_str())?;
+        let second_bytes = compiler.compile_script(script_src.as_str())?;
+        assert_eq!(first_bytes, second_bytes);
         Ok(())
     }
 }

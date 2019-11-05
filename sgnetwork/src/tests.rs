@@ -21,7 +21,7 @@ mod tests {
         timer::{Delay, Interval},
     };
 
-    use crypto::{
+    use libra_crypto::{
         ed25519::{compat, Ed25519PrivateKey, Ed25519PublicKey},
         test_utils::KeyPair,
         Uniform,
@@ -37,6 +37,7 @@ mod tests {
 
     use crate::message::NetworkMessage;
     use futures::sync::oneshot;
+    use std::sync::Arc;
 
     fn build_test_network_pair() -> (NetworkComponent, NetworkComponent) {
         let mut l = build_test_network_services(2, 50400).into_iter();
@@ -65,7 +66,9 @@ mod tests {
             let mut boot_nodes = Vec::new();
             let key_pair = {
                 let mut rng: StdRng = SeedableRng::seed_from_u64(index as u64);
-                KeyPair::<Ed25519PrivateKey, Ed25519PublicKey>::generate_for_testing(&mut rng)
+                Arc::new(
+                    KeyPair::<Ed25519PrivateKey, Ed25519PublicKey>::generate_for_testing(&mut rng),
+                )
             };
 
             if let Some(first_addr) = first_addr.as_ref() {
@@ -95,8 +98,7 @@ mod tests {
 
     #[test]
     fn test_send_receive_1() {
-        ::logger::init_for_e2e_testing();
-        env_logger::init();
+        ::libra_logger::try_init_for_testing();
 
         let rt = Builder::new().core_threads(1).build().unwrap();
         let executor = rt.executor();
@@ -151,7 +153,7 @@ mod tests {
 
     #[test]
     fn test_send_receive_2() {
-        ::logger::init_for_e2e_testing();
+        ::libra_logger::try_init_for_testing();
         let rt = Runtime::new().unwrap();
         let executor = rt.executor();
         let ((service1, _tx1, rx1, _close_tx1), (mut service2, _tx2, _rx2, _close_tx2)) =

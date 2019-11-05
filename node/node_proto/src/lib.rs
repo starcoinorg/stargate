@@ -4,19 +4,15 @@
 //#[cfg(test)]
 //mod protobuf_conversion_test;
 
-use crypto::HashValue;
 use failure::prelude::*;
 use libra_types::account_address::AccountAddress;
-use libra_types::transaction::SignedTransactionWithProof;
-#[cfg(any(test, feature = "testing"))]
-use proptest_derive::Arbitrary;
+use libra_types::transaction::TransactionWithProof;
 use sgtypes::script_package::ChannelScriptPackage;
 use std::convert::{TryFrom, TryInto};
 
 pub mod proto;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct OpenChannelRequest {
     pub remote_addr: AccountAddress,
     pub local_amount: u64,
@@ -56,7 +52,6 @@ impl From<OpenChannelRequest> for crate::proto::node::OpenChannelRequest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct OpenChannelResponse {}
 
 impl OpenChannelResponse {
@@ -80,7 +75,6 @@ impl From<OpenChannelResponse> for crate::proto::node::OpenChannelResponse {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct PayRequest {
     pub remote_addr: AccountAddress,
     pub amount: u64,
@@ -116,7 +110,6 @@ impl From<PayRequest> for crate::proto::node::PayRequest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct PayResponse {}
 
 impl PayResponse {
@@ -140,7 +133,6 @@ impl From<PayResponse> for crate::proto::node::PayResponse {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct DepositRequest {
     pub remote_addr: AccountAddress,
     pub local_amount: u64,
@@ -180,7 +172,6 @@ impl From<DepositRequest> for crate::proto::node::DepositRequest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct DepositResponse {}
 
 impl DepositResponse {
@@ -204,7 +195,6 @@ impl From<DepositResponse> for crate::proto::node::DepositResponse {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct WithdrawRequest {
     pub remote_addr: AccountAddress,
     pub local_amount: u64,
@@ -244,7 +234,6 @@ impl From<WithdrawRequest> for crate::proto::node::WithdrawRequest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct WithdrawResponse {}
 
 impl WithdrawResponse {
@@ -268,7 +257,6 @@ impl From<WithdrawResponse> for crate::proto::node::WithdrawResponse {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct ChannelBalanceRequest {
     pub remote_addr: AccountAddress,
 }
@@ -298,7 +286,6 @@ impl From<ChannelBalanceRequest> for crate::proto::node::ChannelBalanceRequest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct ChannelBalanceResponse {
     pub balance: u64,
 }
@@ -366,7 +353,6 @@ impl From<InstallChannelScriptPackageRequest>
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct InstallChannelScriptPackageResponse {}
 
 impl InstallChannelScriptPackageResponse {
@@ -423,13 +409,12 @@ impl From<DeployModuleRequest> for crate::proto::node::DeployModuleRequest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct DeployModuleResponse {
-    pub transaction_with_proof: SignedTransactionWithProof,
+    pub transaction_with_proof: TransactionWithProof,
 }
 
 impl DeployModuleResponse {
-    pub fn new(transaction_with_proof: SignedTransactionWithProof) -> Self {
+    pub fn new(transaction_with_proof: TransactionWithProof) -> Self {
         Self {
             transaction_with_proof,
         }
@@ -506,14 +491,13 @@ impl From<ExecuteScriptRequest> for crate::proto::node::ExecuteScriptRequest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "testing"), derive(Arbitrary))]
 pub struct ExecuteScriptResponse {
-    pub hash_value: HashValue,
+    pub channel_seq_number: u64,
 }
 
 impl ExecuteScriptResponse {
-    pub fn new(hash_value: HashValue) -> Self {
-        Self { hash_value }
+    pub fn new(channel_seq_number: u64) -> Self {
+        Self { channel_seq_number }
     }
 }
 
@@ -521,16 +505,14 @@ impl TryFrom<crate::proto::node::ExecuteScriptResponse> for ExecuteScriptRespons
     type Error = Error;
 
     fn try_from(value: crate::proto::node::ExecuteScriptResponse) -> Result<Self> {
-        Ok(Self::new(HashValue::from_slice(
-            value.hash_value.as_slice(),
-        )?))
+        Ok(Self::new(value.channel_sequence_number))
     }
 }
 
 impl From<ExecuteScriptResponse> for crate::proto::node::ExecuteScriptResponse {
     fn from(value: ExecuteScriptResponse) -> Self {
         Self {
-            hash_value: value.hash_value.to_vec(),
+            channel_sequence_number: value.channel_seq_number,
         }
     }
 }

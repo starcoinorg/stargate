@@ -5,7 +5,7 @@ use crate::{
     convert_account_address_to_peer_id, convert_peer_id_to_account_address,
     helper::convert_boot_nodes,
 };
-use crypto::{
+use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
 };
@@ -20,8 +20,8 @@ use futures::{
     },
     try_ready, Async, Future,
 };
+use libra_logger::prelude::*;
 use libra_types::account_address::AccountAddress;
-use logger::prelude::*;
 use network_libp2p::{
     identity, start_service, NetworkConfiguration, NodeKeyConfig, Secret, Service as Libp2pService,
     ServiceEvent,
@@ -39,7 +39,7 @@ pub struct NetworkService {
 
 pub fn build_network_service(
     cfg: &NetworkConfig,
-    key_pair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
+    key_pair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
 ) -> (
     NetworkService,
     mpsc::UnboundedSender<NetworkMessage>,

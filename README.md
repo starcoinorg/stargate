@@ -2,6 +2,7 @@ Stargate
 
 ---
 
+[![CircleCI](https://circleci.com/gh/starcoinorg/stargate.svg?style=shield)](https://circleci.com/gh/starcoinorg/stargate)
 [![License](https://img.shields.io/badge/license-Apache-green.svg)](LICENSE)
 
 Stargate is the layer2 state channel protocol and implements of Starcoin. 
@@ -32,6 +33,18 @@ TODO
 ## Getting Started
 
 [Getting Started](./gettingstarted.md)
+
+## Development
+
+You can use `cargo` directly.
+Or if you want docker, there is [Dockerfile](./docker/build.Dockerfile) which install the necessary requirements, 
+and you can just mount the code, and run `cargo` in a linux docker container.
+
+```shell script
+> docker build -t stargate-base -f docker/build.Dockerfile ./docker
+> ./docker-run.sh cargo build
+```
+
 
 ## License
 

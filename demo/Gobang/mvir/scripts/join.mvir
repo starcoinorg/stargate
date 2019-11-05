@@ -1,0 +1,9 @@
+import 0x0.ChannelAccount;
+import {{starlab}}.TheFive;
+
+main(){
+    let result: u64;
+    result = TheFive.join();
+    assert(move(result) == 0, 61);
+    return;
+}

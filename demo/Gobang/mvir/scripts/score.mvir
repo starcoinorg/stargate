@@ -1,0 +1,11 @@
+import 0x0.ChannelAccount;
+import {{starlab}}.TheFive;
+
+main(x: u64) {
+    let result: u64;
+
+    result = TheFive.get_score();
+    assert(move(result) == move(x), 55);
+
+    return;
+}

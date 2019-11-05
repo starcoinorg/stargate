@@ -11,14 +11,15 @@ libp2p = "0.7.0"
 tokio = {version = "0.1"}
 futures = "0.1"
 sg_config = { path = "../sgconfig" }
-crypto = { path = "../libra/crypto/crypto", features = ["testing"] }
+
 network_libp2p = { package = "network-libp2p", path = "../network-libp2p" }
 libra-types = { path = "../libra/types" }
 rand = "0.6.5"
-failure = {package = "failure_ext", path = "../libra/common/failure_ext"}
-logger = { path = "../libra/common/logger" }
+failure = {package = "libra-failure-ext" , path = "../libra/common/failure-ext"}
+libra-logger = { path = "../libra/common/logger" }
 hex = { version = "0.3.2", default-features = false }
 parking_lot = "0.7.1"
 parity-codec = { version = "3.2", features = ["derive"] }
 env_logger = { version = "0.6" }
+libra-crypto = { path = "../libra/crypto/crypto" }
 

@@ -12,23 +12,23 @@ use futures_01::{
     Async, Future, Poll, Stream,
 };
 
-use crypto::HashValue;
 use failure::prelude::*;
-use logger::prelude::*;
+use libra_crypto::HashValue;
+use libra_logger::prelude::*;
 use sgtypes::{message::ErrorMessage, sg_error::SgError};
 
-pub struct MessageFuture {
-    rx: Receiver<Result<HashValue>>,
+pub struct MessageFuture<T> {
+    rx: Receiver<Result<T>>,
 }
 
-impl MessageFuture {
-    pub fn new(rx: Receiver<Result<HashValue>>) -> Self {
+impl<T> MessageFuture<T> {
+    pub fn new(rx: Receiver<Result<T>>) -> Self {
         Self { rx }
     }
 }
 
-impl Future for MessageFuture {
-    type Item = HashValue;
+impl<T> Future for MessageFuture<T> {
+    type Item = T;
     type Error = SgError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -56,18 +56,21 @@ impl Future for MessageFuture {
 }
 
 #[derive(Clone)]
-pub struct MessageProcessor {
-    tx_map: Arc<Mutex<HashMap<HashValue, Sender<Result<HashValue>>>>>,
+pub struct MessageProcessor<T> {
+    tx_map: Arc<Mutex<HashMap<HashValue, Sender<Result<T>>>>>,
 }
 
-impl MessageProcessor {
+impl<T> MessageProcessor<T>
+where
+    T: Send + Sync + 'static,
+{
     pub fn new() -> Self {
         Self {
             tx_map: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    pub fn add_future(&self, hash: HashValue, sender: Sender<Result<HashValue>>) {
+    pub fn add_future(&self, hash: HashValue, sender: Sender<Result<T>>) {
         self.tx_map
             .lock()
             .unwrap()
@@ -75,11 +78,11 @@ impl MessageProcessor {
             .or_insert(sender.clone());
     }
 
-    pub fn send_response(&mut self, hash: HashValue) -> Result<()> {
+    pub fn send_response(&mut self, hash: HashValue, value: T) -> Result<()> {
         let mut tx_map = self.tx_map.lock().unwrap();
         match tx_map.get(&hash) {
             Some(tx) => {
-                match tx.clone().send(Ok(hash)).wait() {
+                match tx.clone().send(Ok(value)).wait() {
                     Ok(_new_tx) => {
                         info!("send message succ");
                         tx_map.remove(&hash);

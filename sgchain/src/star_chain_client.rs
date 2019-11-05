@@ -7,12 +7,15 @@ use admission_control_proto::proto::admission_control::{
 };
 use admission_control_service::admission_control_mock_client::AdmissionControlMockClient;
 use async_trait::async_trait;
-use config::config::NodeConfig;
-use config::config::NodeConfigHelpers;
 use core::borrow::Borrow;
 use failure::prelude::*;
 use futures::channel::oneshot::Sender;
 use grpcio::{ChannelBuilder, EnvBuilder};
+use libra_config::config::NodeConfig;
+use libra_config::config::NodeConfigHelpers;
+use libra_config::trusted_peers::ConfigHelpers;
+use libra_logger::prelude::*;
+use libra_prost_ext::MessageExt;
 use libra_types::get_with_proof::ResponseItem;
 use libra_types::{
     account_address::AccountAddress,
@@ -21,10 +24,8 @@ use libra_types::{
     get_with_proof::RequestItem,
     proof::SparseMerkleProof,
     proto::types::{UpdateToLatestLedgerRequest, UpdateToLatestLedgerResponse},
-    transaction::{RawTransaction, SignedTransaction, SignedTransactionWithProof, Version},
+    transaction::{RawTransaction, SignedTransaction, TransactionWithProof, Version},
 };
-use logger::prelude::*;
-use prost_ext::MessageExt;
 use sgtypes::account_state::AccountState;
 use std::{
     convert::TryInto,
@@ -36,7 +37,7 @@ use std::{
 use tokio::runtime::Runtime;
 use tokio::timer::delay;
 use transaction_builder::{encode_create_account_script, encode_transfer_script};
-use vm_genesis::{encode_genesis_transaction, GENESIS_KEYPAIR};
+use vm_genesis::{encode_genesis_transaction_with_validator, GENESIS_KEYPAIR};
 
 #[async_trait]
 pub trait ChainClient: Send + Sync {
@@ -107,7 +108,7 @@ pub trait ChainClient: Send + Sync {
 
     fn submit_signed_transaction(&self, signed_transaction: SignedTransaction) -> Result<()> {
         let mut req = SubmitTransactionRequest::default();
-        req.signed_txn = Some(signed_transaction.into());
+        req.transaction = Some(signed_transaction.into());
         self.submit_transaction(&req).expect("submit txn err.");
         Ok(())
     }
@@ -116,10 +117,7 @@ pub trait ChainClient: Send + Sync {
         &self,
         address: &AccountAddress,
         seq: u64,
-    ) -> Result<(
-        Option<SignedTransactionWithProof>,
-        Option<AccountStateWithProof>,
-    )> {
+    ) -> Result<(Option<TransactionWithProof>, Option<AccountStateWithProof>)> {
         let end_time = Instant::now() + Duration::from_millis(10_000);
         loop {
             let timeout_time = Instant::now() + Duration::from_millis(1000);
@@ -145,10 +143,7 @@ pub trait ChainClient: Send + Sync {
         &self,
         account_address: &AccountAddress,
         seq_num: u64,
-    ) -> Result<(
-        Option<SignedTransactionWithProof>,
-        Option<AccountStateWithProof>,
-    )> {
+    ) -> Result<(Option<TransactionWithProof>, Option<AccountStateWithProof>)> {
         let req = RequestItem::GetAccountTransactionBySequenceNumber {
             account: account_address.clone(),
             sequence_number: seq_num,
@@ -256,13 +251,9 @@ impl MockChainClient {
     pub fn new() -> (Self, StarHandle) {
         let mut config =
             NodeConfigHelpers::get_single_node_test_config(false /* random ports */);
+        // TODO: test the circleci
+        config.storage.address = "127.0.0.1".to_string();
         info!("MockChainClient config: {:?} ", config);
-        //        if config.consensus.consensus_peers.peers.len() == 0 {
-        //            let (_, single_peer_consensus_config,_) =
-        //                ConfigHelpers::gen_validator_nodes(1, None);
-        //            config.consensus.consensus_peers = single_peer_consensus_config;
-        //            genesis_blob(&config.execution.genesis_file_location);
-        //        }
         genesis_blob(&config);
 
         let (_handle, shutdown_sender, ac) = setup_environment(&mut config);
@@ -315,8 +306,13 @@ fn parse_response(mut resp: UpdateToLatestLedgerResponse) -> ResponseItem {
 pub fn genesis_blob(config: &NodeConfig) {
     let path = config.get_genesis_transaction_file();
     info!("Write genesis_blob to {}", path.as_path().to_string_lossy());
-    let genesis_checked_txn =
-        encode_genesis_transaction(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone());
+    let (_validator_keys, test_consensus_peers, test_network_peers) =
+        ConfigHelpers::gen_validator_nodes(1, None);
+    let genesis_checked_txn = encode_genesis_transaction_with_validator(
+        &GENESIS_KEYPAIR.0,
+        GENESIS_KEYPAIR.1.clone(),
+        test_consensus_peers.get_validator_set(&test_network_peers),
+    );
     let genesis_txn = genesis_checked_txn.into_inner();
     let mut genesis_file = File::create(path).expect("open genesis file err.");
     genesis_file

@@ -1,18 +1,32 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use super::schema::{
+    CHANNEL_TRANSACTION_ACCUMULATOR_CF_NAME, CHANNEL_TRANSACTION_INFO_CF_NAME,
+    CHANNEL_WRITE_SET_ACCUMULATOR_CF_NAME, CHANNEL_WRITE_SET_CF_NAME,
+    SIGNED_CHANNEL_TRANSACTION_CF_NAME,
+};
+use crate::rocksdb_utils::FixedPrefixSliceTransform;
 use failure::prelude::*;
-use libra_types::account_address::AccountAddress;
+use libra_logger::prelude::*;
+use libra_types::account_address::{AccountAddress, ADDRESS_LENGTH};
+use libradb::schema::{
+    JELLYFISH_MERKLE_NODE_CF_NAME, STALE_NODE_INDEX_CF_NAME, TRANSACTION_BY_ACCOUNT_CF_NAME,
+};
 use rocksdb::{rocksdb_options::ColumnFamilyDescriptor, CFHandle, DBOptions, DB};
-use schemadb::ColumnFamilyOptionsMap;
-use schemadb::DEFAULT_CF_NAME;
+use schemadb::{ColumnFamilyOptions, ColumnFamilyOptionsMap, DEFAULT_CF_NAME};
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::time::Instant;
 
+#[derive(Debug)]
 pub struct SgStorage {
     inner: rocksdb::DB,
     owner: AccountAddress,
 }
+
+unsafe impl Send for SgStorage {}
+unsafe impl Sync for SgStorage {}
 
 impl AsMut<rocksdb::DB> for SgStorage {
     fn as_mut(&mut self) -> &mut rocksdb::DB {
@@ -40,6 +54,58 @@ impl core::ops::DerefMut for SgStorage {
 }
 
 impl SgStorage {
+    pub fn new<P: AsRef<Path>>(owner: AccountAddress, path: P) -> Self {
+        let cfs = [
+            (DEFAULT_CF_NAME, ColumnFamilyOptions::default()),
+            (
+                JELLYFISH_MERKLE_NODE_CF_NAME,
+                default_column_family_options(),
+            ),
+            (STALE_NODE_INDEX_CF_NAME, default_column_family_options()),
+            //            (EVENT_ACCUMULATOR_CF_NAME, default_column_family_options()),
+            //            (EVENT_BY_KEY_CF_NAME, default_column_family_options()),
+            //            (EVENT_CF_NAME, default_column_family_options()),
+            //            (LEDGER_COUNTERS_CF_NAME, default_column_family_options()),
+            (
+                CHANNEL_TRANSACTION_INFO_CF_NAME,
+                default_column_family_options(),
+            ),
+            (
+                CHANNEL_TRANSACTION_ACCUMULATOR_CF_NAME,
+                default_column_family_options(),
+            ),
+            (
+                TRANSACTION_BY_ACCOUNT_CF_NAME,
+                default_column_family_options(),
+            ),
+            (CHANNEL_WRITE_SET_CF_NAME, default_column_family_options()),
+            (
+                CHANNEL_WRITE_SET_ACCUMULATOR_CF_NAME,
+                default_column_family_options(),
+            ),
+            (
+                SIGNED_CHANNEL_TRANSACTION_CF_NAME,
+                default_column_family_options(),
+            ),
+        ]
+        .iter()
+        .cloned()
+        .collect();
+
+        let path = path.as_ref().join("stargatedb");
+        let instant = Instant::now();
+        let storage =
+            Self::open(owner, &path, cfs).unwrap_or_else(|e| panic!("SG DB open failed: {:?}", e));
+
+        info!(
+            "Opened SG Storage at {:?} in {} ms",
+            path,
+            instant.elapsed().as_millis()
+        );
+
+        storage
+    }
+
     /// Create db with all the column families provided if it doesn't exist at `path`; Otherwise,
     /// try to open it with all the column families.
     pub fn open<P: AsRef<Path>>(
@@ -76,6 +142,7 @@ impl SgStorage {
             .collect::<Result<Vec<_>>>()?;
         Ok(storage)
     }
+
     pub fn get_cf_handle(&self, cf_name: &str) -> Result<&CFHandle> {
         self.inner.cf_handle(cf_name).ok_or_else(|| {
             format_err!(
@@ -146,4 +213,22 @@ fn db_exists(path: &Path) -> bool {
 /// `failure::Result<T>`, manual conversion is needed.
 fn convert_rocksdb_err(msg: String) -> failure::Error {
     format_err!("RocksDB internal error: {}.", msg)
+}
+
+/// default column family options.
+/// it use prefix_extractor.
+/// See https://github.com/facebook/rocksdb/wiki/Prefix-Seek-API-Changes for more details
+fn default_column_family_options() -> ColumnFamilyOptions {
+    let mut opt = ColumnFamilyOptions::default();
+    let _ = opt
+        .set_prefix_extractor(
+            "FixedPrefixSliceTransform",
+            Box::new(FixedPrefixSliceTransform::new(ADDRESS_LENGTH)),
+        )
+        .unwrap_or_else(|e| panic!("set prefix extractor for column family failed: {:?}", e));
+
+    // TODO(caojiafeng): optimise the options about prefix scan
+    //    options.memtable_prefix_bloom_bits = 100000000;
+    //    options.memtable_prefix_bloom_probes = 6;
+    opt
 }
