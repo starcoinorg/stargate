@@ -22,8 +22,7 @@ fn node_test() -> Result<()> {
     use std::sync::Arc;
     use tokio::runtime::Runtime;
 
-    ::libra_logger::init_for_e2e_testing();
-    env_logger::init();
+    libra_logger::init_for_e2e_testing();
     let rt = Runtime::new().unwrap();
     let executor = rt.executor();
 
@@ -134,7 +133,6 @@ fn error_test() -> Result<()> {
     use libra_logger::prelude::*;
 
     ::libra_logger::try_init_for_testing();
-    env_logger::init();
 
     match _new_error() {
         Err(e) => {

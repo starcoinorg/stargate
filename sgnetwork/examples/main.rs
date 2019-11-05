@@ -11,8 +11,10 @@ use libra_types::account_address::AccountAddress;
 use rand::prelude::*;
 use sgnetwork::NetworkMessage;
 pub use sgnetwork::{build_network_service, get_unix_ts, NetworkComponent, NetworkService};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::{runtime::Runtime, timer::Interval};
+
 fn main() {
     env_logger::init();
     ::libra_logger::try_init_for_testing();
@@ -30,7 +32,7 @@ fn main() {
     };
     let key_pair = {
         let mut rng: StdRng = SeedableRng::seed_from_u64(get_unix_ts() as u64);
-        KeyPair::<Ed25519PrivateKey, Ed25519PublicKey>::generate_for_testing(&mut rng)
+        Arc::new(KeyPair::<Ed25519PrivateKey, Ed25519PublicKey>::generate_for_testing(&mut rng))
     };
     let (net_srv, tx, rx, _close_tx) = build_network_service(&config, key_pair);
 

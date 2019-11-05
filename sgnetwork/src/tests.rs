@@ -37,6 +37,7 @@ mod tests {
 
     use crate::message::NetworkMessage;
     use futures::sync::oneshot;
+    use std::sync::Arc;
 
     fn build_test_network_pair() -> (NetworkComponent, NetworkComponent) {
         let mut l = build_test_network_services(2, 50400).into_iter();
@@ -65,7 +66,9 @@ mod tests {
             let mut boot_nodes = Vec::new();
             let key_pair = {
                 let mut rng: StdRng = SeedableRng::seed_from_u64(index as u64);
-                KeyPair::<Ed25519PrivateKey, Ed25519PublicKey>::generate_for_testing(&mut rng)
+                Arc::new(
+                    KeyPair::<Ed25519PrivateKey, Ed25519PublicKey>::generate_for_testing(&mut rng),
+                )
             };
 
             if let Some(first_addr) = first_addr.as_ref() {
@@ -96,7 +99,6 @@ mod tests {
     #[test]
     fn test_send_receive_1() {
         ::libra_logger::try_init_for_testing();
-        env_logger::init();
 
         let rt = Builder::new().core_threads(1).build().unwrap();
         let executor = rt.executor();
