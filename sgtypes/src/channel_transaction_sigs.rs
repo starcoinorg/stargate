@@ -1,8 +1,8 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
+use failure::prelude::*;
 use libra_crypto::ed25519::{Ed25519PublicKey, Ed25519Signature};
 use libra_crypto::HashValue;
-use failure::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
@@ -24,14 +24,16 @@ impl TryFrom<crate::proto::sgtypes::TxnSignature> for TxnSignature {
     fn try_from(proto: crate::proto::sgtypes::TxnSignature) -> Result<Self> {
         use crate::proto::sgtypes::TxnSignatureType as ProtoTxnSignatureType;
         let ret = match proto.sign_type() {
-            ProtoTxnSignatureType::SenderSig => {
-                TxnSignature::SenderSig { channel_txn_signature: Ed25519Signature::try_from(
-                    proto.channel_txn_signature.as_slice())? }
-            }
-            ProtoTxnSignatureType::ReceiverSig => {
-                TxnSignature::ReceiverSig { channel_script_body_signature: Ed25519Signature::
-                try_from(proto.channel_script_body_signature.as_slice())? }
-            }
+            ProtoTxnSignatureType::SenderSig => TxnSignature::SenderSig {
+                channel_txn_signature: Ed25519Signature::try_from(
+                    proto.channel_txn_signature.as_slice(),
+                )?,
+            },
+            ProtoTxnSignatureType::ReceiverSig => TxnSignature::ReceiverSig {
+                channel_script_body_signature: Ed25519Signature::try_from(
+                    proto.channel_script_body_signature.as_slice(),
+                )?,
+            },
         };
         Ok(ret)
     }
@@ -43,19 +45,23 @@ impl From<TxnSignature> for crate::proto::sgtypes::TxnSignature {
         let mut txn_sign = Self::default();
 
         match sign {
-            TxnSignature::SenderSig { channel_txn_signature } => {
+            TxnSignature::SenderSig {
+                channel_txn_signature,
+            } => {
                 txn_sign.set_sign_type(ProtoTxnSignatureType::SenderSig);
                 txn_sign.channel_txn_signature = channel_txn_signature.to_bytes().to_vec();
             }
-            TxnSignature::ReceiverSig { channel_script_body_signature } => {
+            TxnSignature::ReceiverSig {
+                channel_script_body_signature,
+            } => {
                 txn_sign.set_sign_type(ProtoTxnSignatureType::ReceiverSig);
-                txn_sign.channel_script_body_signature = channel_script_body_signature.to_bytes().to_vec();
+                txn_sign.channel_script_body_signature =
+                    channel_script_body_signature.to_bytes().to_vec();
             }
         };
         txn_sign
     }
 }
-
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ChannelTransactionSigs {
@@ -93,8 +99,8 @@ impl TryFrom<crate::proto::sgtypes::ChannelTransactionSigs> for ChannelTransacti
         let signature = TxnSignature::try_from(proto.signature.unwrap())?;
         let write_set_payload_hash =
             HashValue::from_slice(proto.write_set_payload_hash.as_slice())?;
-        let write_set_payload_signature = Ed25519Signature::try_from(
-            proto.write_set_payload_signature.as_slice())?;
+        let write_set_payload_signature =
+            Ed25519Signature::try_from(proto.write_set_payload_signature.as_slice())?;
         Ok(ChannelTransactionSigs {
             public_key,
             signature,

@@ -619,19 +619,19 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
                 match wallet
                     .receiver_apply_txn(sender_addr, &receiver_open_txn)
                     .await
-                {
-                    Ok(_) => {}
-                    Err(e) => {
-                        warn!("apply tx fail, err: {:?}", &e);
-                        sender
-                            .unbounded_send(NetworkMessage {
-                                peer_id: sender_addr,
-                                data: error_message(e, request_id).to_vec(),
-                            })
-                            .unwrap();
-                        return;
-                    }
-                };
+                    {
+                        Ok(_) => {}
+                        Err(e) => {
+                            warn!("apply tx fail, err: {:?}", &e);
+                            sender
+                                .unbounded_send(NetworkMessage {
+                                    peer_id: sender_addr,
+                                    data: error_message(e, request_id).to_vec(),
+                                })
+                                .unwrap();
+                            return;
+                        }
+                    };
             };
             self.executor.spawn(f);
         }
@@ -830,7 +830,6 @@ fn error_message(e: Error, hash_value: HashValue) -> bytes::Bytes {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use tokio::runtime::Runtime;
 

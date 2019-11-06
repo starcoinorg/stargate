@@ -1,9 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{
-    sg_error::SgError,
-};
+use crate::sg_error::SgError;
 use bytes::IntoBuf;
 use failure::prelude::*;
 use libra_crypto::{ed25519::Ed25519Signature, HashValue};
@@ -428,7 +426,6 @@ impl MessageType {
 
 #[cfg(test)]
 mod tests {
-
     #[test]
     fn test_compile() {
         println!("it work");
