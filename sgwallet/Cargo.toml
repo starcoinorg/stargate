@@ -39,8 +39,6 @@ libra-config = { path = "../libra/config"}
 lcs = { path = "../libra/common/lcs", package = "libra-canonical-serialization"}
 sgcompiler = { path = "../sgcompiler"}
 chrono = { version = "0.4.7", default-features = false }
-chashmap = "2.2"
-evmap = "7.1"
 [dev-dependencies]
 
 libra-tools = { path = "../libra/common/tools"}
