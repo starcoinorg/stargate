@@ -902,6 +902,15 @@ where
         Ok(txn.signed_transaction)
     }
 
+    /// return all channels' state infos
+    pub fn channel_infos(&self) -> HashMap<AccountAddress, ChannelAccountResource> {
+        let channels = self.channels.read().unwrap();
+        channels
+            .iter()
+            .map(|(ap, channel)| (ap.clone(), channel.account_resource()))
+            .collect::<HashMap<_, _>>()
+    }
+
     fn exist_channel(&self, participant: &AccountAddress) -> bool {
         self.channels
             .read()
