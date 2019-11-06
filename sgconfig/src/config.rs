@@ -63,7 +63,7 @@ pub fn load_from(config_file: &str) -> Result<NodeConfig> {
     Ok(node_config)
 }
 
-pub fn get_test_config(addr: String, port: u16, rest_port: u16) -> (NodeConfig) {
+pub fn get_test_config(addr: String, port: u16, rest_port: u16) -> NodeConfig {
     let network = RpcConfig {
         address: addr.clone(),
         port,
