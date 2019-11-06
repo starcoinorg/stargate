@@ -14,7 +14,7 @@ use std::{
     convert::TryFrom,
     fmt::{Display, Formatter},
 };
-use bytes::{Buf, IntoBuf};
+use bytes::{IntoBuf};
 use prost::Message;
 use libra_prost_ext::MessageExt;
 use std::convert::TryInto;
@@ -254,22 +254,6 @@ impl From<ChannelOp> for crate::proto::sgtypes::ChannelOp {
     }
 }
 
-enum ChannelOpType {
-    Open = 0,
-    Execute = 1,
-    Close = 2,
-}
-
-impl ChannelOpType {
-    fn from_u32(value: u32) -> Option<ChannelOpType> {
-        match value {
-            0 => Some(ChannelOpType::Open),
-            1 => Some(ChannelOpType::Execute),
-            2 => Some(ChannelOpType::Close),
-            _ => None,
-        }
-    }
-}
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ChannelTransactionRequest {
     /// The id of request
