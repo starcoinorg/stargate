@@ -79,6 +79,5 @@ fn generate_txn_to_apply(
     txn_to_apply
 }
 
-mod channel_manager_test;
 mod channel_test;
 mod tx_applier_test;

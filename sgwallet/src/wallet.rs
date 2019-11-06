@@ -3,7 +3,8 @@
 
 use crate::scripts::*;
 
-use channel_manager::{channel::Channel, ChannelManager};
+use channel_manager::{channel::Channel};
+use chashmap::{CHashMap, ReadGuard, WriteGuard};
 use chrono::Utc;
 use failure::prelude::*;
 use lazy_static::lazy_static;
@@ -35,7 +36,11 @@ use libra_types::{
 };
 use sgchain::star_chain_client::{ChainClient, StarChainClient};
 use sgconfig::config::WalletConfig;
+use sgstorage::channel_db::ChannelDB;
+use sgstorage::channel_store::ChannelStore;
+use sgstorage::storage::SgStorage;
 use sgtypes::channel_transaction_sigs::{ChannelTransactionSigs, TxnSignature};
+use sgtypes::sg_error::SgError;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use sgtypes::{
     account_resource_ext,
@@ -63,8 +68,10 @@ where
     account: AccountAddress,
     keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
     client: Arc<C>,
-    storage: ChannelManager<C>,
+    //    storage: ChannelManager<C>,
     script_registry: PackageRegistry,
+    channels: CHashMap<AccountAddress, Channel>,
+    sgdb: Arc<SgStorage>,
 }
 
 impl<C> Wallet<C>
@@ -94,15 +101,48 @@ where
         client: Arc<C>,
         store_dir: P,
     ) -> Result<Self> {
-        let storage = ChannelManager::new(account, store_dir, client.clone())?;
+        //        let storage = ChannelManager::new(account, store_dir, client.clone())?;
+        let sgdb = Arc::new(SgStorage::new(account, store_dir));
+
         let script_registry = PackageRegistry::build()?;
-        Ok(Self {
+        let mut wallet = Self {
             account,
             keypair,
             client,
-            storage,
+            //            storage,
             script_registry,
-        })
+            channels: CHashMap::new(),
+            sgdb,
+        };
+        wallet.refresh_channels()?;
+        Ok(wallet)
+    }
+
+    fn refresh_channels(&mut self) -> Result<()> {
+        let account_state = self.client.get_account_state(self.account, None)?;
+        let my_channel_states = account_state.filter_channel_state(self.account);
+        let version = account_state.version();
+        for (participant, my_channel_state) in my_channel_states {
+            if !self.channels.contains_key(&participant) {
+                let participant_account_state =
+                    self.client.get_account_state(participant, Some(version))?;
+                let mut participant_channel_states =
+                    participant_account_state.filter_channel_state(participant);
+                let participant_channel_state = participant_channel_states
+                    .remove(&self.account)
+                    .ok_or(format_err!(
+                        "Can not find channel {} in {}",
+                        self.account,
+                        participant
+                    ))?;
+                let channel_store = self.get_channel_store(participant);
+                let channel =
+                    Channel::load(my_channel_state, participant_channel_state, channel_store)?;
+                info!("Init new channel with: {}", participant);
+                self.channels.insert(participant, channel);
+            }
+        }
+        Ok(())
     }
 
     pub fn account(&self) -> AccountAddress {
@@ -163,7 +203,7 @@ where
         receiver: AccountAddress,
         args: Vec<TransactionArgument>,
     ) -> Result<ChannelTransactionRequest> {
-        let channel = self.storage.get_channel(&receiver)?;
+        let channel = self.get_channel(&receiver)?;
         let state_view = channel.channel_view(None, &*self.client)?;
 
         // build channel_transaction first
@@ -299,13 +339,13 @@ where
         );
         let sender = channel_txn.sender();
         if channel_txn.operator().is_open() {
-            if self.storage.exist_channel(&sender) {
+            if self.exist_channel(&sender) {
                 bail!("Channel with address {} exist.", sender);
             }
-            self.storage.new_channel(sender);
+            self.new_channel(sender);
         }
 
-        let channel = self.storage.get_channel(&sender)?;
+        let channel = self.get_channel(&sender)?;
 
         self.verify_channel_txn(&channel, channel_txn, channel_txn_sigs)?;
 
@@ -363,10 +403,10 @@ where
             "wallet.open receiver:{}, sender_amount:{}, receiver_amount:{}",
             receiver, sender_amount, receiver_amount
         );
-        if self.storage.exist_channel(&receiver) {
+        if self.exist_channel(&receiver) {
             bail!("Channel with address {} exist.", receiver);
         }
-        self.storage.new_channel(receiver);
+        self.new_channel(receiver);
 
         self.execute(
             ChannelOp::Open,
@@ -451,7 +491,7 @@ where
         response: &ChannelTransactionResponse,
     ) -> Result<u64> {
         let (request, output, verified_participant_witness_payload) = {
-            let channel = self.storage.get_channel(&participant)?;
+            let channel = self.get_channel(&participant)?;
             match channel.pending_txn_request() {
                 Some(ChannelTransactionRequestAndOutput {
                     request,
@@ -492,7 +532,7 @@ where
         };
 
         {
-            let mut channel = self.storage.get_channel_mut(&participant)?;
+            let mut channel = self.get_channel_mut(&participant)?;
             // save to db
             channel.apply(
                 channel_txn,
@@ -560,7 +600,7 @@ where
         response: &ChannelTransactionResponse,
     ) -> Result<u64> {
         let (request, output) = {
-            let channel = self.storage.get_channel(&participant)?;
+            let channel = self.get_channel(&participant)?;
             match channel.pending_txn_request() {
                 Some(ChannelTransactionRequestAndOutput {
                     request, output, ..
@@ -585,7 +625,7 @@ where
 
         let channel_txn = request.channel_txn();
         let (verified_participant_script_payload, verified_participant_witness_payload) = {
-            let channel = self.storage.get_channel(&participant)?;
+            let channel = self.get_channel(&participant)?;
             self.verify_response(&channel, channel_txn, &output, response)?
         };
 
@@ -618,7 +658,7 @@ where
         };
 
         {
-            let mut channel = self.storage.get_channel_mut(&participant)?;
+            let mut channel = self.get_channel_mut(&participant)?;
             // save to db
             channel.apply(
                 channel_txn,
@@ -685,7 +725,7 @@ where
     pub fn get(&self, path: &DataPath) -> Result<Option<Vec<u8>>> {
         if path.is_channel_resource() {
             let participant = path.participant().expect("participant must exist");
-            let channel = self.storage.get_channel(&participant)?;
+            let channel = self.get_channel(&participant)?;
             Ok(channel.get(&AccessPath::new_for_data_path(self.account, path.clone())))
         } else {
             let account_state = self.client.get_account_state(self.account, None)?;
@@ -852,10 +892,54 @@ where
         channel_seq_number: u64,
     ) -> Result<SignedChannelTransaction> {
         let txn = self
-            .storage
             .get_channel(&partipant_address)
             .and_then(|channel| channel.get_txn_by_channel_seq_number(channel_seq_number))?;
         Ok(txn.signed_transaction)
+    }
+
+    fn exist_channel(&self, participant: &AccountAddress) -> bool {
+        self.channels.contains_key(participant)
+    }
+
+    fn new_channel(&self, participant: AccountAddress) {
+        self.channels.upsert(
+            participant,
+            || {
+                Channel::new(
+                    self.account,
+                    participant,
+                    self.get_channel_store(participant),
+                )
+            },
+            |_| {},
+        );
+    }
+
+    fn get_channel(
+        &self,
+        participant: &AccountAddress,
+    ) -> Result<ReadGuard<AccountAddress, Channel>> {
+        self.channels
+            .get(participant)
+            .ok_or(SgError::new_channel_not_exist_error(participant).into())
+        //        self.channels
+        //            .get(participant)
+        //            .ok_or(SgError::new_channel_not_exist_error(participant).into())
+    }
+
+    fn get_channel_mut(
+        &self,
+        participant: &AccountAddress,
+    ) -> Result<WriteGuard<AccountAddress, Channel>> {
+        self.channels
+            .get_mut(participant)
+            .ok_or(SgError::new_channel_not_exist_error(participant).into())
+    }
+
+    #[inline]
+    fn get_channel_store(&self, participant_address: AccountAddress) -> ChannelStore<ChannelDB> {
+        let channel_db = ChannelDB::new(participant_address, self.sgdb.clone());
+        ChannelStore::new(channel_db)
     }
 }
 

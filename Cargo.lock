@@ -4228,6 +4228,7 @@ version = "0.1.0"
 dependencies = [
  "atomic_refcell 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "channel-manager 0.1.0",
+ "chashmap 2.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures-locks 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -4252,6 +4253,7 @@ dependencies = [
  "sg_config 0.1.0",
  "sgchain 0.1.0",
  "sgcompiler 0.1.0",
+ "sgstorage 0.1.0",
  "sgtypes 0.1.0",
  "stdlib 0.1.0",
  "tokio 0.2.0-alpha.6 (registry+https://github.com/rust-lang/crates.io-index)",
