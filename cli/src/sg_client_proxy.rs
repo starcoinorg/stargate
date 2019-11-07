@@ -1,17 +1,15 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
-
-use cli_wallet::cli_wallet::WalletLibrary;
+use crate::commands::*;
 use failure::prelude::*;
 use grpcio::EnvBuilder;
 use libra_types::{
-    account_address::AccountAddress,
+    account_address::{AccountAddress, ADDRESS_LENGTH},
     proof::SparseMerkleProof,
-    transaction::{
-        helpers::create_signed_payload_txn, parse_as_transaction_argument, Script,
-        SignedTransaction, TransactionPayload, Version,
-    },
+    transaction::{parse_as_transaction_argument, Version},
 };
+use libra_wallet::key_factory::ChildNumber;
+use libra_wallet::wallet_library::WalletLibrary;
 use node_client::NodeClient;
 use node_proto::{
     ChannelBalanceRequest, ChannelBalanceResponse, DeployModuleRequest, DeployModuleResponse,
@@ -24,53 +22,46 @@ use sgchain::{
     star_chain_client::{faucet_sync, ChainClient, StarChainClient},
 };
 use sgcompiler::{Compiler, StateViewModuleLoader};
-use std::{
-    fs,
-    io::{stdout, Write},
-    path::Path,
-    process::Command,
-    sync::Arc,
-    thread, time,
-};
-use tempfile::{NamedTempFile, TempPath};
+use std::{convert::TryFrom, fs, path::Path, sync::Arc};
 
-const GAS_UNIT_PRICE: u64 = 0;
-const MAX_GAS_AMOUNT: u64 = 100_000;
-const TX_EXPIRATION: i64 = 100;
+/// Enum used for error formatting.
+#[derive(Debug)]
+enum InputType {
+    Usize,
+}
 
-pub struct ClientProxy {
+pub struct SGClientProxy {
     node_client: NodeClient,
     wallet: WalletLibrary,
     chain_client: StarChainClient,
-    temp_files: Vec<TempPath>,
 }
 
-impl ClientProxy {
+impl SGClientProxy {
     /// Construct a new TestClient.
     pub fn new(
         host: &str,
         port: u16,
         chain_host: &str,
         chain_port: u16,
-        faucet_account_file: &str,
+        _faucet_account_file: &str,
     ) -> Result<Self> {
         let env_builder_arc = Arc::new(EnvBuilder::new().build());
         let node_client = NodeClient::new(env_builder_arc, host, port);
         let chain_client = StarChainClient::new(chain_host, chain_port as u32);
-        Ok(ClientProxy {
+        Ok(SGClientProxy {
             node_client,
-            wallet: WalletLibrary::new(faucet_account_file),
+            wallet: WalletLibrary::new(),
             chain_client,
-            temp_files: vec![],
         })
     }
 
-    pub fn get_account(&mut self) -> Result<AccountAddress> {
-        Ok(self.wallet.get_address())
+    pub fn create_account(&mut self) -> Result<(AccountAddress, ChildNumber)> {
+        Ok(self.wallet.new_address()?)
     }
 
-    pub fn faucet(&mut self, amount: u64) -> Result<()> {
-        faucet_sync(self.chain_client.clone(), self.wallet.get_address(), amount)
+    pub fn faucet(&mut self, amount: u64, account_str: &str) -> Result<()> {
+        let address = self.get_account_address_from_parameter(account_str)?;
+        faucet_sync(self.chain_client.clone(), address, amount)
     }
 
     pub fn open_channel(
@@ -155,109 +146,26 @@ impl ClientProxy {
         Ok(response)
     }
 
-    pub fn account_state(&mut self) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)> {
+    pub fn account_state(
+        &mut self,
+        account_str: &str,
+    ) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)> {
+        let address = self.get_account_address_from_parameter(account_str)?;
         Ok(self
             .chain_client
-            .get_account_state_with_proof(&self.wallet.get_address(), None)?)
-    }
-
-    /// Compile move program
-    pub fn compile_program(&mut self, space_delim_strings: &[&str]) -> Result<String> {
-        let file_path = space_delim_strings[1];
-        let is_module = match space_delim_strings[2] {
-            "module" => true,
-            "script" => false,
-            _ => bail!(
-                "Invalid program type: {}. Available options: module, script",
-                space_delim_strings[3]
-            ),
-        };
-        let output_path = {
-            if space_delim_strings.len() == 4 {
-                space_delim_strings[3].to_string()
-            } else {
-                let tmp_path = NamedTempFile::new()?.into_temp_path();
-                let path = tmp_path.to_str().unwrap().to_string();
-                self.temp_files.push(tmp_path);
-                path
-            }
-        };
-
-        let tmp_source_path = NamedTempFile::new()?;
-        let mut tmp_source_file = std::fs::File::create(tmp_source_path.as_ref())?;
-        let mut code = fs::read_to_string(file_path)?;
-        code = code.replace("{{sender}}", &format!("0x{}", self.wallet.get_address()));
-        writeln!(tmp_source_file, "{}", code)?;
-
-        let args = format!(
-            "run -p compiler -- {} -a {} -o {}{}",
-            tmp_source_path.path().display(),
-            self.wallet.get_address(),
-            output_path,
-            if is_module { " -m" } else { "" },
-        );
-
-        let status = Command::new("cargo")
-            .args(args.split(' '))
-            .spawn()?
-            .wait()?;
-        if !status.success() {
-            return Err(format_err!("compilation failed"));
-        }
-
-        Ok(output_path)
-    }
-
-    fn submit_program(
-        &mut self,
-        _space_delim_strings: &[&str],
-        program: TransactionPayload,
-    ) -> Result<()> {
-        let addr = self.wallet.get_address();
-        let sequence_number = self
-            .chain_client
-            .account_sequence_number(&addr)
-            .expect("should have seq number");
-
-        let txn = self.create_submit_transaction(program, sequence_number, None, None)?;
-
-        self.chain_client.submit_signed_transaction(txn)?;
-
-        self.wait_for_transaction(&addr, sequence_number);
-
-        Ok(())
-    }
-
-    /// Publish move module
-    pub fn publish_module(&mut self, space_delim_strings: &[&str]) -> Result<()> {
-        let program = serde_json::from_slice(&fs::read(space_delim_strings[1])?)?;
-        self.submit_program(space_delim_strings, TransactionPayload::Module(program))
-    }
-
-    /// Execute custom script
-    pub fn execute_script(&mut self, space_delim_strings: &[&str]) -> Result<()> {
-        let script: Script = serde_json::from_slice(&fs::read(space_delim_strings[1])?)?;
-        let (script_bytes, _) = script.into_inner();
-        let arguments: Vec<_> = space_delim_strings[2..]
-            .iter()
-            .filter_map(|arg| parse_as_transaction_argument(arg).ok())
-            .collect();
-        self.submit_program(
-            space_delim_strings,
-            TransactionPayload::Script(Script::new(script_bytes, arguments)),
-        )
+            .get_account_state_with_proof(&address, None)?)
     }
 
     pub fn deploy_module(&mut self, space_delim_strings: &[&str]) -> Result<DeployModuleResponse> {
-        let dir_path = space_delim_strings[1];
+        let address = self.get_account_address_from_parameter(space_delim_strings[1])?;
+        let dir_path = space_delim_strings[2];
 
         let path = Path::new(dir_path);
         let module_source = std::fs::read_to_string(path).unwrap();
 
-        let account = self.get_account().unwrap().clone();
         let client_state_view = ClientStateView::new(None, &self.chain_client);
         let module_loader = StateViewModuleLoader::new(&client_state_view);
-        let compiler = Compiler::new_with_module_loader(account, &module_loader);
+        let compiler = Compiler::new_with_module_loader(address, &module_loader);
         let module_byte_code = compiler.compile_module(module_source.as_str())?;
 
         let response = self
@@ -268,7 +176,8 @@ impl ClientProxy {
     }
 
     pub fn install_script(&mut self, space_delim_strings: &[&str]) -> Result<()> {
-        let path = Path::new(space_delim_strings[1]);
+        let address = self.get_account_address_from_parameter(space_delim_strings[1])?;
+        let path = Path::new(space_delim_strings[2]);
         let csp_ext = "csp";
         let package;
 
@@ -276,10 +185,9 @@ impl ClientProxy {
             package = serde_json::from_slice(&fs::read(path)?)?;
         } else {
             let output_path = path.with_extension(csp_ext);
-            let account = self.get_account().unwrap().clone();
             let client_state_view = ClientStateView::new(None, &self.chain_client);
             let module_loader = StateViewModuleLoader::new(&client_state_view);
-            let compiler = Compiler::new_with_module_loader(account, &module_loader);
+            let compiler = Compiler::new_with_module_loader(address, &module_loader);
 
             package = compiler.compile_package_with_output(path, &output_path)?;
         }
@@ -313,50 +221,96 @@ impl ClientProxy {
         Ok(())
     }
 
-    /// Craft a transaction request.
-    fn create_submit_transaction(
-        &mut self,
-        program: TransactionPayload,
-        seq: u64,
-        max_gas_amount: Option<u64>,
-        gas_unit_price: Option<u64>,
-    ) -> Result<SignedTransaction> {
-        let addr = self.wallet.get_address();
-        return create_signed_payload_txn(
-            *Box::new(&self.wallet),
-            program,
-            addr,
-            seq,
-            max_gas_amount.unwrap_or(MAX_GAS_AMOUNT),
-            gas_unit_price.unwrap_or(GAS_UNIT_PRICE),
-            TX_EXPIRATION,
-        );
+    pub fn get_account_address_from_parameter(&self, para: &str) -> Result<AccountAddress> {
+        match is_address(para) {
+            true => SGClientProxy::address_from_strings(para),
+            false => {
+                let account_ref_id = para.parse::<usize>().map_err(|error| {
+                    format_parse_data_error(
+                        "account_reference_id/account_address",
+                        InputType::Usize,
+                        para,
+                        error,
+                    )
+                })?;
+                //                let account_data = self.accounts.get(account_ref_id).ok_or_else(|| {
+                //                    format_err!(
+                //                        "Unable to find account by account reference id: {}, to see all existing \
+                //                         accounts, run: 'account list'",
+                //                        account_ref_id
+                //                    )
+                //                })?;
+                Ok(self
+                    .wallet
+                    .get_addresses()?
+                    .get(account_ref_id)
+                    .unwrap()
+                    .clone())
+            }
+        }
     }
 
-    /// Waits for the next transaction for a specific address and prints it
-    pub fn wait_for_transaction(&mut self, account: &AccountAddress, sequence_number: u64) {
-        let mut max_iterations = 5000;
-        print!("[waiting ");
-        loop {
-            stdout().flush().unwrap();
-            max_iterations -= 1;
+    fn address_from_strings(data: &str) -> Result<AccountAddress> {
+        let account_vec: Vec<u8> = hex::decode(data.parse::<String>()?)?;
+        ensure!(
+            account_vec.len() == ADDRESS_LENGTH,
+            "The address {:?} is of invalid length. Addresses must be 32-bytes long"
+        );
+        let account = AccountAddress::try_from(&account_vec[..]).map_err(|error| {
+            format_err!(
+                "The address {:?} is invalid, error: {:?}",
+                &account_vec,
+                error,
+            )
+        })?;
+        Ok(account)
+    }
 
-            if let Ok((Some(_), _)) = self
-                .chain_client
-                .get_transaction_by_seq_num(&account, sequence_number)
-            {
-                println!("transaction is stored!");
-                break;
-            } else if max_iterations == 0 {
-                panic!("wait_for_transaction timeout");
-            } else {
-                print!(".");
-            }
-            thread::sleep(time::Duration::from_millis(10));
-        }
+    /// Write mnemonic recover to the file specified.
+    pub fn write_recovery(&self, space_delim_strings: &[&str]) -> Result<()> {
+        ensure!(
+            space_delim_strings.len() == 2,
+            "Invalid number of arguments for writing recovery"
+        );
+
+        self.wallet
+            .write_recovery(&Path::new(space_delim_strings[1]))?;
+        Ok(())
+    }
+
+    /// Recover wallet accounts from file and return vec<(account_address, index)>.
+    pub fn recover_wallet_accounts(
+        &mut self,
+        space_delim_strings: &[&str],
+    ) -> Result<Vec<AccountAddress>> {
+        ensure!(
+            space_delim_strings.len() == 2,
+            "Invalid number of arguments for recovering wallets"
+        );
+
+        let wallet = WalletLibrary::recover(&Path::new(space_delim_strings[1]))?;
+        let address_list = wallet.get_addresses()?;
+        self.wallet = wallet;
+        Ok(address_list)
     }
 }
 
 fn _parse_bool(para: &str) -> Result<bool> {
     Ok(para.to_lowercase().parse::<bool>()?)
+}
+
+fn format_parse_data_error<T: std::fmt::Debug>(
+    field: &str,
+    input_type: InputType,
+    value: &str,
+    error: T,
+) -> Error {
+    format_err!(
+        "Unable to parse input for {} - \
+         please enter an {:?}.  Input was: {}, error: {:?}",
+        field,
+        input_type,
+        value,
+        error
+    )
 }

@@ -1,7 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{client_proxy::ClientProxy, commands::*};
+use crate::{commands::*, sg_client_proxy::SGClientProxy};
 use sgtypes::account_state::AccountState;
 
 /// Major command for account related operations.
@@ -14,11 +14,13 @@ impl Command for AccountCommand {
     fn get_description(&self) -> &'static str {
         "Account operations"
     }
-    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
         let commands: Vec<Box<dyn Command>> = vec![
             Box::new(AccountCommandCreate {}),
             Box::new(AccountCommandMint {}),
             Box::new(AccountCommandState {}),
+            Box::new(AccountCommandRecoverWallet {}),
+            Box::new(AccountCommandWriteRecovery {}),
         ];
 
         subcommand_execute(&params[0], commands, client, &params[1..]);
@@ -35,10 +37,14 @@ impl Command for AccountCommandCreate {
     fn get_description(&self) -> &'static str {
         "Create an account. Returns reference ID to use in other operations"
     }
-    fn execute(&self, client: &mut ClientProxy, _params: &[&str]) {
+    fn execute(&self, client: &mut SGClientProxy, _params: &[&str]) {
         println!(">> Creating/retrieving next account from wallet");
-        match client.get_account() {
-            Ok(addr) => println!("Created/retrieved address {}", hex::encode(addr)),
+        match client.create_account() {
+            Ok((addr, index)) => println!(
+                "Created/retrieved address {},index {:?}",
+                hex::encode(addr),
+                index
+            ),
             Err(e) => report_error("Error creating account", e),
         }
     }
@@ -56,13 +62,13 @@ impl Command for AccountCommandMint {
     fn get_description(&self) -> &'static str {
         "Mint coins to the account. Suffix 'b' is for blocking"
     }
-    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-        if params.len() < 2 {
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
+        if params.len() < 3 {
             println!("Invalid number of arguments for mint");
             return;
         }
 
-        match client.faucet(params[1].parse::<u64>().unwrap()) {
+        match client.faucet(params[1].parse::<u64>().unwrap(), params[2]) {
             Ok(_result) => println!("mint success"),
             Err(e) => report_error("Error mint account", e),
         }
@@ -81,11 +87,11 @@ impl Command for AccountCommandState {
     fn get_description(&self) -> &'static str {
         "get state of account"
     }
-    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-        if params.len() != 1 {
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
+        if params.len() != 2 {
             println!("Invalid number of arguments for state");
         }
-        match client.account_state() {
+        match client.account_state(params[1]) {
             Ok((version, result, proof)) => match result {
                 Some(data) => {
                     let account_resource =
@@ -106,6 +112,58 @@ impl Command for AccountCommandState {
                 }
             },
             Err(e) => report_error("Error mint account", e),
+        }
+    }
+}
+
+/// Sub command to recover wallet from the file specified.
+pub struct AccountCommandRecoverWallet {}
+
+impl Command for AccountCommandRecoverWallet {
+    fn get_aliases(&self) -> Vec<&'static str> {
+        vec!["recover", "r"]
+    }
+    fn get_params_help(&self) -> &'static str {
+        "<file_path>"
+    }
+    fn get_description(&self) -> &'static str {
+        "Recover Libra wallet from the file path"
+    }
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
+        println!(">> Recovering Wallet");
+        match client.recover_wallet_accounts(&params) {
+            Ok(account_data) => {
+                println!(
+                    "Wallet recovered and the first {} child accounts were derived",
+                    account_data.len()
+                );
+                for (index, address) in account_data.iter().enumerate() {
+                    println!("#{} address {}", index, hex::encode(address));
+                }
+            }
+            Err(e) => report_error("Error recovering Libra wallet", e),
+        }
+    }
+}
+
+/// Sub command to backup wallet to the file specified.
+pub struct AccountCommandWriteRecovery {}
+
+impl Command for AccountCommandWriteRecovery {
+    fn get_aliases(&self) -> Vec<&'static str> {
+        vec!["write", "w"]
+    }
+    fn get_params_help(&self) -> &'static str {
+        "<file_path>"
+    }
+    fn get_description(&self) -> &'static str {
+        "Save Libra wallet mnemonic recovery seed to disk"
+    }
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
+        println!(">> Saving Libra wallet mnemonic recovery seed to disk");
+        match client.write_recovery(&params) {
+            Ok(_) => println!("Saved mnemonic seed to disk"),
+            Err(e) => report_error("Error writing mnemonic recovery seed to file", e),
         }
     }
 }

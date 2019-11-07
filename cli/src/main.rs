@@ -1,7 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use cli::{client_proxy::ClientProxy, commands::*};
+use cli::{commands::*, sg_client_proxy::SGClientProxy};
 use libra_logger::set_default_global_logger;
 use rustyline::{config::CompletionType, error::ReadlineError, Config, Editor};
 use structopt::StructOpt;
@@ -46,7 +46,7 @@ fn main() -> std::io::Result<()> {
     let args = Args::from_args();
     //let faucet_account_file = args.faucet_account_file.unwrap_or_else(|| "".to_string());
 
-    let mut client_proxy = ClientProxy::new(
+    let mut sg_client_proxy = SGClientProxy::new(
         &args.host,
         args.port,
         &args.chain_host,
@@ -71,7 +71,7 @@ fn main() -> std::io::Result<()> {
             Ok(line) => {
                 let params = parse_cmd(&line);
                 match alias_to_cmd.get(params[0]) {
-                    Some(cmd) => cmd.execute(&mut client_proxy, &params),
+                    Some(cmd) => cmd.execute(&mut sg_client_proxy, &params),
                     None => match params[0] {
                         "quit" | "q!" => break,
                         "help" | "h" => print_help(&cli_info, &commands),
