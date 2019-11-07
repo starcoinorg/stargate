@@ -4,30 +4,70 @@ package node;
 
 import "script_package.proto";
 import "transaction.proto";
-import "get_with_proof.proto";
+import "google/api/annotations.proto";
 
 service Node {
-    rpc OpenChannel(OpenChannelRequest) returns (OpenChannelResponse) {}
-  
-    rpc Pay(PayRequest) returns (PayResponse) {}
+    rpc OpenChannel (OpenChannelRequest) returns (OpenChannelResponse) {
+        option (google.api.http) = {
+           post: "/node/open_channel"
+           body: "*"
+        };
+    }
 
-    rpc Deposit(DepositRequest) returns (DepositResponse) {}
+    rpc Pay (PayRequest) returns (PayResponse) {
+        option (google.api.http) = {
+           post: "/node/pay"
+           body: "*"
+        };
+    }
 
-    rpc Withdraw(WithdrawRequest) returns (WithdrawResponse) {}
+    rpc Deposit (DepositRequest) returns (DepositResponse) {
+        option (google.api.http) = {
+           post: "/node/deposit"
+           body: "*"
+        };
+    }
 
-    rpc ChannelBalance(ChannelBalanceRequest) returns (ChannelBalanceResponse) {}
+    rpc Withdraw (WithdrawRequest) returns (WithdrawResponse) {
+        option (google.api.http) = {
+           post: "/node/withdraw"
+           body: "*"
+        };
+    }
 
-    rpc InstallChannelScriptPackage(InstallChannelScriptPackageRequest) returns (InstallChannelScriptPackageResponse) {}
+    rpc ChannelBalance (ChannelBalanceRequest) returns (ChannelBalanceResponse) {
+        option (google.api.http) = {
+           post: "/node/channel_balance"
+           body: "*"
+        };
+    }
 
-    rpc DeployModule(DeployModuleRequest) returns (DeployModuleResponse){}
+    rpc InstallChannelScriptPackage (InstallChannelScriptPackageRequest) returns (InstallChannelScriptPackageResponse) {
+        option (google.api.http) = {
+           post: "/node/install_channel_script_package"
+           body: "*"
+        };
+    }
 
-    rpc ExecuteScript(ExecuteScriptRequest) returns (ExecuteScriptResponse) {}
+    rpc DeployModule (DeployModuleRequest) returns (DeployModuleResponse) {
+        option (google.api.http) = {
+           post: "/node/deploy_module"
+           body: "*"
+        };
+    }
+
+    rpc ExecuteScript (ExecuteScriptRequest) returns (ExecuteScriptResponse) {
+        option (google.api.http) = {
+           post: "/node/execute_script"
+           body: "*"
+        };
+    }
 }
-  
+
 message OpenChannelRequest {
-    bytes remote_addr=1;
-    uint64 local_amount=2;
-    uint64 remote_amount=3;
+    bytes remote_addr = 1;
+    uint64 local_amount = 2;
+    uint64 remote_amount = 3;
 }
 
 message OpenChannelResponse {
@@ -35,9 +75,9 @@ message OpenChannelResponse {
 }
 
 message DepositRequest {
-    bytes remote_addr=1;
-    uint64 local_amount=2;
-    uint64 remote_amount=3;
+    bytes remote_addr = 1;
+    uint64 local_amount = 2;
+    uint64 remote_amount = 3;
 }
 
 message DepositResponse {
@@ -45,9 +85,9 @@ message DepositResponse {
 }
 
 message WithdrawRequest {
-    bytes remote_addr=1;
-    uint64 local_amount=2;
-    uint64 remote_amount=3;
+    bytes remote_addr = 1;
+    uint64 local_amount = 2;
+    uint64 remote_amount = 3;
 }
 
 message WithdrawResponse {
@@ -55,45 +95,45 @@ message WithdrawResponse {
 }
 
 message PayRequest {
-    bytes remote_addr=1;
-    uint64 amount=2;
+    bytes remote_addr = 1;
+    uint64 amount = 2;
 }
 
 message PayResponse {
 
 }
 
-message ChannelBalanceRequest{
-    bytes remote_addr=1;
+message ChannelBalanceRequest {
+    bytes remote_addr = 1;
 }
 
-message ChannelBalanceResponse{
-        uint64 balance=1;        
+message ChannelBalanceResponse {
+    uint64 balance = 1;
 }
 
-message InstallChannelScriptPackageRequest{
-    sgtypes.ChannelScriptPackage channel_script_package=1;
+message InstallChannelScriptPackageRequest {
+    sgtypes.ChannelScriptPackage channel_script_package = 1;
 }
 
-message InstallChannelScriptPackageResponse{
+message InstallChannelScriptPackageResponse {
 
 }
 
-message DeployModuleRequest{
-    bytes module_bytes=1;
+message DeployModuleRequest {
+    bytes module_bytes = 1;
 }
 
-message DeployModuleResponse{
+message DeployModuleResponse {
     types.TransactionWithProof transaction_with_proof = 1;
 }
 
-message ExecuteScriptRequest{
-    bytes remote_addr=1;
-    string package_name=2;
-    string script_name=3;
-    repeated bytes args=4;
+message ExecuteScriptRequest {
+    bytes remote_addr = 1;
+    string package_name = 2;
+    string script_name = 3;
+    repeated bytes args = 4;
 }
 
-message ExecuteScriptResponse{
+message ExecuteScriptResponse {
     uint64 channel_sequence_number = 1;
 }
