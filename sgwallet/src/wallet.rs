@@ -37,6 +37,7 @@ use sgconfig::config::WalletConfig;
 use sgstorage::channel_db::ChannelDB;
 use sgstorage::channel_store::ChannelStore;
 use sgstorage::storage::SgStorage;
+use sgtypes::channel::ChannelInfo;
 use sgtypes::channel_transaction_sigs::{ChannelTransactionSigs, TxnSignature};
 use sgtypes::sg_error::SgError;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
@@ -903,11 +904,11 @@ where
     }
 
     /// return all channels' state infos
-    pub fn channel_infos(&self) -> HashMap<AccountAddress, ChannelAccountResource> {
+    pub fn channel_infos(&self) -> HashMap<AccountAddress, ChannelInfo> {
         let channels = self.channels.read().unwrap();
         channels
             .iter()
-            .map(|(ap, channel)| (ap.clone(), channel.account_resource()))
+            .map(|(ap, channel)| (ap.clone(), channel.channel_info()))
             .collect::<HashMap<_, _>>()
     }
 

@@ -3,7 +3,8 @@
 
 use atomic_refcell::AtomicRefCell;
 use failure::prelude::*;
-use libra_crypto::{ed25519::Ed25519Signature, hash::SPARSE_MERKLE_PLACEHOLDER_HASH, HashValue};
+use libra_crypto::ed25519::Ed25519Signature;
+use libra_types::channel_account::ChannelAccountResource;
 use libra_types::{access_path::DataPath, account_address::AccountAddress, write_set::WriteSet};
 use std::collections::{BTreeMap, HashSet};
 
@@ -100,19 +101,17 @@ impl WitnessData {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct ChannelInfo {
-    pub state_root_hash: HashValue,
-    pub num_leaves_in_accumulator: u64,
-    pub frozen_subtrees_in_accumulator: Vec<HashValue>,
+    pub stage: ChannelStage,
+    pub channel_account: ChannelAccountResource,
 }
 
-impl Default for ChannelInfo {
-    fn default() -> Self {
+impl ChannelInfo {
+    pub fn new(stage: ChannelStage, channel_account: ChannelAccountResource) -> Self {
         Self {
-            num_leaves_in_accumulator: 0,
-            frozen_subtrees_in_accumulator: vec![],
-            state_root_hash: *SPARSE_MERKLE_PLACEHOLDER_HASH,
+            stage,
+            channel_account,
         }
     }
 }
