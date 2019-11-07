@@ -4,6 +4,7 @@ package node;
 
 import "script_package.proto";
 import "transaction.proto";
+import "channel_transaction.proto";
 import "google/api/annotations.proto";
 
 service Node {
@@ -62,6 +63,17 @@ service Node {
            body: "*"
         };
     }
+    rpc QueryTransaction (QueryTransactionQuest) returns (sgtypes.SignedChannelTransaction) {
+        option (google.api.http) = {
+               post: "/node/query"
+               body: "*"
+            };
+    }
+}
+
+message QueryTransactionQuest {
+     bytes partipant_address = 1;
+     uint64 channel_seq_number = 2;
 }
 
 message OpenChannelRequest {

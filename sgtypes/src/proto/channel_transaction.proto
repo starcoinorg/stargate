@@ -23,6 +23,12 @@ message ChannelTransactionSigs {
     bytes write_set_payload_signature = 4;
 }
 
+message SignedChannelTransaction {
+    ChannelTransaction raw_tx = 1;
+    ChannelTransactionSigs sender_signature = 2;
+    ChannelTransactionSigs receiver_signature = 3;
+}
+
 message TxnSignature {
     // The channel txn signature. Empty if `type` is ReceiverSig.
     bytes channel_txn_signature = 1;
