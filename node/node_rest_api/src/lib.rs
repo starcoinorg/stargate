@@ -142,8 +142,6 @@ impl<C: ChainClient + Clone + 'static> Service for WebServer<C> {
                             }
                         };
                     }
-                    //json format
-                    //                    let rqid = hex::encode(result.req_id.to_vec());
 
                     *response.body_mut() = Body::from(
                         json!({
