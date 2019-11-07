@@ -517,6 +517,39 @@ impl From<ExecuteScriptResponse> for crate::proto::node::ExecuteScriptResponse {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QueryTransactionQuest {
+    pub partipant_address: AccountAddress,
+    pub channel_seq_number: u64,
+}
+
+impl QueryTransactionQuest {
+    pub fn new(partipant_address: AccountAddress, channel_seq_number: u64) -> Self {
+        Self {
+            partipant_address,
+            channel_seq_number,
+        }
+    }
+}
+
+impl TryFrom<crate::proto::node::QueryTransactionQuest> for QueryTransactionQuest {
+    type Error = Error;
+
+    fn try_from(request: crate::proto::node::QueryTransactionQuest) -> Result<Self> {
+        let participant_address = AccountAddress::try_from(request.partipant_address)?;
+        Ok(Self::new(participant_address, request.channel_seq_number))
+    }
+}
+
+impl From<QueryTransactionQuest> for crate::proto::node::QueryTransactionQuest {
+    fn from(request: QueryTransactionQuest) -> Self {
+        Self {
+            partipant_address: request.partipant_address.to_vec(),
+            channel_seq_number: request.channel_seq_number,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
