@@ -116,7 +116,6 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
                 return resp_receiver;
             }
         };
-
         let f_to_channel = async {
             match f.compat().await {
                 Ok(_sender) => resp_sender
@@ -160,10 +159,12 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             receiver_amount,
         )?;
         info!("get open channel txn");
-        let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(
-            channel_txn,
-            MessageType::ChannelTransactionRequest,
-        );
+        let f = self
+            .node_inner
+            .clone()
+            .lock()
+            .unwrap()
+            .channel_txn_onchain(channel_txn, MessageType::ChannelTransactionRequest);
         f
     }
 
@@ -224,10 +225,12 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             sender_amount,
             receiver_amount,
         )?;
-        let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(
-            channel_txn,
-            MessageType::ChannelTransactionRequest,
-        );
+        let f = self
+            .node_inner
+            .clone()
+            .lock()
+            .unwrap()
+            .channel_txn_onchain(channel_txn, MessageType::ChannelTransactionRequest);
         f
     }
 
@@ -291,10 +294,12 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             sender_amount,
             receiver_amount,
         )?;
-        let f = self.node_inner.clone().lock().unwrap().channel_txn_onchain(
-            channel_txn,
-            MessageType::ChannelTransactionRequest,
-        );
+        let f = self
+            .node_inner
+            .clone()
+            .lock()
+            .unwrap()
+            .channel_txn_onchain(channel_txn, MessageType::ChannelTransactionRequest);
         f
     }
 
@@ -654,7 +659,10 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         let wallet = self.wallet.clone();
         let mut message_processor = self.message_processor.clone();
         let f = async move {
-            match wallet.sender_apply_txn(receiver_addr, &open_channel_message).await {
+            match wallet
+                .sender_apply_txn(receiver_addr, &open_channel_message)
+                .await
+            {
                 Ok(_) => {}
                 Err(e) => {
                     warn!("apply tx fail, err: {:?}", e);
@@ -830,7 +838,6 @@ fn error_message(e: Error, hash_value: HashValue) -> bytes::Bytes {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use tokio::runtime::Runtime;
 

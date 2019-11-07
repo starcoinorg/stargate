@@ -3,21 +3,21 @@
 
 use crate::channel_transaction_sigs::ChannelTransactionSigs;
 use crate::hash::ChannelTransactionHasher;
+use bytes::IntoBuf;
 use failure::prelude::*;
 use libra_crypto::hash::{CryptoHash, CryptoHasher};
 use libra_crypto::HashValue;
+use libra_prost_ext::MessageExt;
 use libra_types::transaction::{ChannelTransactionPayload, TransactionArgument, Version};
 use libra_types::{account_address::AccountAddress, transaction::TransactionOutput};
+use prost::Message;
 use serde::{Deserialize, Serialize};
+use std::convert::TryInto;
 use std::time::Duration;
 use std::{
     convert::TryFrom,
     fmt::{Display, Formatter},
 };
-use bytes::{IntoBuf};
-use prost::Message;
-use libra_prost_ext::MessageExt;
-use std::convert::TryInto;
 
 /// sender (init channel transaction):
 /// 1. constructs ChannelTransaction, (sign on it if offchain)
@@ -37,7 +37,6 @@ use std::convert::TryInto;
 /// 2. if onchian, sender constructs signed transaction of onchain, submit it to onchain.
 ///    receiver waits the onchain tx.
 /// 3. if offchain, sender and receiver apply the tx to their local storage.  
-
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ChannelTransaction {
     /// The global status version on this tx executed.
@@ -221,7 +220,10 @@ impl TryFrom<crate::proto::sgtypes::ChannelOp> for ChannelOp {
             ProtoChannelOpType::Execute => {
                 let package_name = proto.package_name;
                 let script_name = proto.script_name;
-                ChannelOp::Execute {package_name, script_name}
+                ChannelOp::Execute {
+                    package_name,
+                    script_name,
+                }
             }
             ProtoChannelOpType::Close => ChannelOp::Close,
         };
@@ -414,21 +416,24 @@ impl From<ChannelTransactionRequest> for crate::proto::sgtypes::ChannelTransacti
     }
 }
 
-
 impl TryFrom<crate::proto::sgtypes::ChannelTransactionResponse> for ChannelTransactionResponse {
     type Error = Error;
 
     fn try_from(response: crate::proto::sgtypes::ChannelTransactionResponse) -> Result<Self> {
         let request_id = HashValue::from_slice(&response.request_id)?;
-        let channel_txn_sigs = ChannelTransactionSigs::try_from(response.channel_txn_sigs.unwrap())?;
-        Ok(Self{request_id, channel_txn_sigs})
+        let channel_txn_sigs =
+            ChannelTransactionSigs::try_from(response.channel_txn_sigs.unwrap())?;
+        Ok(Self {
+            request_id,
+            channel_txn_sigs,
+        })
     }
 }
 
 impl From<ChannelTransactionResponse> for crate::proto::sgtypes::ChannelTransactionResponse {
     fn from(response: ChannelTransactionResponse) -> Self {
         Self {
-            request_id:response.request_id.to_vec(),
+            request_id: response.request_id.to_vec(),
             channel_txn_sigs: Some(response.channel_txn_sigs.into()),
         }
     }
