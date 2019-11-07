@@ -1,23 +1,26 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::channel::{pending_txn_to_onchain_txn, PendingTransaction};
+use crate::channel::ChannelMsg;
 use crate::{channel::Channel, scripts::*};
 use chrono::Utc;
 use failure::prelude::*;
+use futures::{
+    channel::{mpsc, oneshot},
+    StreamExt,
+};
 use lazy_static::lazy_static;
 use libra_config::config::VMConfig;
 use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature},
     hash::CryptoHash,
     test_utils::KeyPair,
-    HashValue, SigningKey, VerifyingKey,
 };
 use libra_logger::prelude::*;
 use libra_state_view::StateView;
-use libra_types::access_path::AccessPath;
+
 use libra_types::transaction::Transaction;
-use libra_types::write_set::WriteSet;
+
 use libra_types::{
     access_path::DataPath,
     account_address::AccountAddress,
@@ -35,23 +38,24 @@ use libra_types::{
 use sgchain::star_chain_client::{ChainClient, StarChainClient};
 use sgconfig::config::WalletConfig;
 use sgstorage::channel_db::ChannelDB;
+use sgstorage::channel_store::ChannelStore;
 use sgstorage::storage::SgStorage;
-use sgtypes::channel::ChannelInfo;
+use sgtypes::channel::{ChannelInfo, ChannelState};
 use sgtypes::sg_error::SgError;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use sgtypes::{
     account_resource_ext,
-    channel_transaction::{
-        ChannelOp, ChannelTransaction, ChannelTransactionRequest, ChannelTransactionResponse,
-    },
-    resource::Resource,
+    channel_transaction::{ChannelOp, ChannelTransactionRequest, ChannelTransactionResponse},
     script_package::{ChannelScriptPackage, ScriptCode},
 };
 use std::collections::HashMap;
-use std::ops::{Deref, DerefMut};
+
 use std::path::Path;
-use std::sync::RwLock;
+
+use libra_types::access_path::AccessPath;
+use libra_types::channel_account::channel_account_struct_tag;
 use std::{sync::Arc, time::Duration};
+use tokio::runtime;
 use vm_runtime::{MoveVM, VMExecutor};
 
 lazy_static! {
@@ -65,53 +69,488 @@ pub(crate) const MAX_GAS_AMOUNT_OFFCHAIN: u64 = std::u64::MAX;
 pub(crate) const MAX_GAS_AMOUNT_ONCHAIN: u64 = 1_000_000;
 pub(crate) const GAS_UNIT_PRICE: u64 = 1;
 
-pub struct Wallet<C>
-where
-    C: ChainClient + Send + Sync + 'static,
-{
-    inner: WalletInner<C>,
-    channels: RwLock<HashMap<AccountAddress, Channel>>,
+pub struct Wallet {
+    mailbox_sender: mpsc::Sender<WalletCmd>,
+    shared: Shared,
     sgdb: Arc<SgStorage>,
+    inner: Option<Inner>,
 }
 
-impl<C> Wallet<C>
-where
-    C: ChainClient + Send + Sync + 'static,
-{
+impl Wallet {
     pub fn new(
         account: AccountAddress,
         keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
         rpc_host: &str,
         rpc_port: u32,
-    ) -> Result<Wallet<StarChainClient>> {
+    ) -> Result<Self> {
         let chain_client = StarChainClient::new(rpc_host, rpc_port as u32);
         let client = Arc::new(chain_client);
-        Wallet::new_with_client(account, keypair, client, WalletConfig::default().store_dir)
+        Self::new_with_client(account, keypair, client, WalletConfig::default().store_dir)
     }
 
     pub fn new_with_client<P: AsRef<Path>>(
         account: AccountAddress,
         keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
-        client: Arc<C>,
+        client: Arc<dyn ChainClient>,
         store_dir: P,
     ) -> Result<Self> {
+        let (mail_sender, mailbox) = mpsc::channel(1000);
         let sgdb = Arc::new(SgStorage::new(account, store_dir));
 
         let script_registry = Arc::new(PackageRegistry::build()?);
-        let inner = WalletInner {
+
+        let mut builder = runtime::Builder::new();
+        let runtime = builder.name_prefix("wallet").core_threads(4).build()?;
+
+        let inner1 = Shared {
             account,
             keypair,
             client,
             script_registry,
         };
-        let mut wallet = Self {
-            inner,
-            channels: RwLock::new(HashMap::new()),
-            sgdb,
+
+        let inner = Inner {
+            inner: inner1.clone(),
+            channels: HashMap::new(),
+            sgdb: sgdb.clone(),
+            runtime,
+            mailbox,
+            mail_sender: mail_sender.clone(),
         };
-        wallet.refresh_channels()?;
+        let wallet = Wallet {
+            mailbox_sender: mail_sender.clone(),
+            shared: inner1,
+            sgdb: sgdb.clone(),
+            inner: Some(inner),
+        };
         Ok(wallet)
     }
+    pub fn start(&mut self, executor: runtime::TaskExecutor) -> Result<()> {
+        let inner = self.inner.take().expect("wallet already started");
+        executor.spawn(inner.start());
+        Ok(())
+    }
+
+    pub fn get_txn_by_channel_sequence_number(
+        &self,
+        participant_address: AccountAddress,
+        channel_seq_number: u64,
+    ) -> Result<SignedChannelTransaction> {
+        let channel_db = ChannelDB::new(participant_address, self.sgdb.clone());
+        let txn = ChannelStore::new(channel_db)
+            .get_transaction_by_channel_seq_number(channel_seq_number, false)?;
+        Ok(txn.signed_transaction)
+    }
+    pub fn account(&self) -> AccountAddress {
+        self.shared.account
+    }
+
+    pub fn client(&self) -> &dyn ChainClient {
+        self.shared.client.as_ref()
+    }
+
+    /// TODO: use async version of cient
+    pub fn account_resource(&self) -> Result<AccountResource> {
+        // account_resource must exist.
+        //TODO handle unwrap
+        let account_state = self
+            .shared
+            .client
+            .get_account_state(self.shared.account, None)?;
+        let account_resource_bytes = account_state
+            .get(&DataPath::account_resource_data_path().to_vec())
+            .unwrap();
+        account_resource_ext::from_bytes(&account_resource_bytes)
+    }
+    pub fn sequence_number(&self) -> Result<u64> {
+        Ok(self.account_resource()?.sequence_number())
+    }
+    //TODO support more asset type
+    pub fn balance(&self) -> Result<u64> {
+        Ok(self.account_resource()?.balance())
+    }
+}
+
+impl Wallet {
+    pub async fn channel_account_resource(
+        &self,
+        participant: AccountAddress,
+    ) -> Result<Option<ChannelAccountResource>> {
+        let (tx, rx) = oneshot::channel();
+        let cmd = WalletCmd::GetChannelResource {
+            participant,
+            struct_tag: channel_account_struct_tag(),
+            responder: tx,
+        };
+
+        let resp = self.call(cmd, rx).await?;
+        resp?
+            .map(|blob| ChannelAccountResource::make_from(blob))
+            .transpose()
+    }
+
+    pub async fn channel_sequence_number(&self, participant: AccountAddress) -> Result<u64> {
+        Ok(self
+            .channel_account_resource(participant)
+            .await?
+            .map(|account| account.channel_sequence_number())
+            .unwrap_or(0))
+    }
+
+    pub async fn channel_balance(&self, participant: AccountAddress) -> Result<u64> {
+        Ok(self
+            .channel_account_resource(participant)
+            .await?
+            .map(|account| account.balance())
+            .unwrap_or(0))
+    }
+
+    /// Open channel and deposit default asset.
+    pub async fn open(
+        &self,
+        receiver: AccountAddress,
+        sender_amount: u64,
+        receiver_amount: u64,
+    ) -> Result<ChannelTransactionRequest> {
+        info!(
+            "wallet.open receiver:{}, sender_amount:{}, receiver_amount:{}",
+            receiver, sender_amount, receiver_amount
+        );
+
+        self.execute_async(
+            receiver,
+            ChannelOp::Open,
+            vec![
+                TransactionArgument::U64(sender_amount),
+                TransactionArgument::U64(receiver_amount),
+            ],
+        )
+        .await
+    }
+
+    pub async fn deposit(
+        &mut self,
+        receiver: AccountAddress,
+        sender_amount: u64,
+        receiver_amount: u64,
+    ) -> Result<ChannelTransactionRequest> {
+        info!(
+            "wallet.deposit receiver:{}, sender_amount:{}, receiver_amount:{}",
+            receiver, sender_amount, receiver_amount
+        );
+
+        self.execute_async(
+            receiver,
+            ChannelOp::Execute {
+                package_name: DEFAULT_PACKAGE.to_owned(),
+                script_name: "deposit".to_string(),
+            },
+            vec![
+                TransactionArgument::U64(sender_amount),
+                TransactionArgument::U64(receiver_amount),
+            ],
+        )
+        .await
+    }
+
+    pub async fn transfer(
+        &mut self,
+        receiver: AccountAddress,
+        amount: u64,
+    ) -> Result<ChannelTransactionRequest> {
+        info!("wallet.transfer receiver:{}, amount:{}", receiver, amount);
+
+        self.execute_async(
+            receiver,
+            ChannelOp::Execute {
+                package_name: DEFAULT_PACKAGE.to_owned(),
+                script_name: "transfer".to_string(),
+            },
+            vec![TransactionArgument::U64(amount)],
+        )
+        .await
+    }
+
+    pub async fn withdraw(
+        &mut self,
+        receiver: AccountAddress,
+        sender_amount: u64,
+        receiver_amount: u64,
+    ) -> Result<ChannelTransactionRequest> {
+        info!(
+            "wallet.withdraw receiver:{}, sender_amount:{}, receiver_amount:{}",
+            receiver, sender_amount, receiver_amount
+        );
+
+        self.execute_async(
+            receiver,
+            ChannelOp::Execute {
+                package_name: DEFAULT_PACKAGE.to_owned(),
+                script_name: "withdraw".to_string(),
+            },
+            vec![
+                TransactionArgument::U64(sender_amount),
+                TransactionArgument::U64(receiver_amount),
+            ],
+        )
+        .await
+    }
+
+    pub async fn close(&mut self, receiver: AccountAddress) -> Result<ChannelTransactionRequest> {
+        self.execute_async(receiver, ChannelOp::Close, vec![]).await
+    }
+
+    pub async fn execute_script(
+        &self,
+        receiver: AccountAddress,
+        package_name: &str,
+        script_name: &str,
+        args: Vec<TransactionArgument>,
+    ) -> Result<ChannelTransactionRequest> {
+        info!(
+            "wallet.execute_script receiver:{}, package_name:{}, script_name:{}, args:{:?}",
+            receiver, package_name, script_name, args
+        );
+        self.execute_async(
+            receiver,
+            ChannelOp::Execute {
+                package_name: package_name.to_string(),
+                script_name: script_name.to_string(),
+            },
+            args,
+        )
+        .await
+    }
+
+    async fn execute_async(
+        &self,
+        receiver: AccountAddress,
+        channel_op: ChannelOp,
+        args: Vec<TransactionArgument>,
+    ) -> Result<ChannelTransactionRequest> {
+        let (tx, rx) = oneshot::channel();
+        let cmd = WalletCmd::Execute {
+            participant: receiver,
+            channel_op,
+            args,
+            responder: tx,
+        };
+        let resp = self.call(cmd, rx).await?;
+        resp
+    }
+
+    pub async fn verify_txn(
+        &self,
+        txn_request: &ChannelTransactionRequest,
+    ) -> Result<ChannelTransactionResponse> {
+        let (tx, rx) = oneshot::channel();
+        let cmd = WalletCmd::VerifyTxnRequest {
+            txn_request: txn_request.clone(),
+            responder: tx,
+        };
+        let resp = self.call(cmd, rx).await?;
+        resp
+    }
+
+    pub async fn apply_txn(
+        &self,
+        participant: AccountAddress,
+        txn_response: &ChannelTransactionResponse,
+    ) -> Result<u64> {
+        let (tx, rx) = oneshot::channel();
+        let cmd = WalletCmd::ApplyTxnResponse {
+            participant,
+            txn_response: txn_response.clone(),
+            responder: tx,
+        };
+
+        let resp = self.call(cmd, rx).await?;
+        resp
+    }
+
+    pub async fn install_package(&self, package: ChannelScriptPackage) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        let cmd = WalletCmd::InstallPackage {
+            package,
+            responder: tx,
+        };
+
+        let resp = self.call(cmd, rx).await?;
+        resp
+    }
+    pub async fn deploy_module(&self, module_byte_code: Vec<u8>) -> Result<TransactionWithProof> {
+        let (tx, rx) = oneshot::channel();
+        let cmd = WalletCmd::DeployModule {
+            module_byte_code,
+            responder: tx,
+        };
+
+        let resp = self.call(cmd, rx).await?;
+        resp
+    }
+    pub async fn get_script(
+        &self,
+        package_name: String,
+        script_name: String,
+    ) -> Result<Option<ScriptCode>> {
+        let (tx, rx) = oneshot::channel();
+        let cmd = WalletCmd::GetScriptCode {
+            package_name,
+            script_name,
+            responder: tx,
+        };
+
+        let resp = self.call(cmd, rx).await?;
+        resp
+    }
+
+    async fn call<T>(&self, cmd: WalletCmd, rx: oneshot::Receiver<T>) -> Result<T> {
+        if let Err(_e) = self.mailbox_sender.clone().try_send(cmd) {
+            bail!("wallet mailbox is full or close");
+        }
+        match rx.await {
+            Ok(result) => Ok(result),
+            Err(_) => bail!("sender dropped"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum WalletCmd {
+    Execute {
+        participant: AccountAddress,
+        channel_op: ChannelOp,
+        args: Vec<TransactionArgument>,
+        responder: oneshot::Sender<Result<ChannelTransactionRequest>>,
+    },
+    VerifyTxnRequest {
+        txn_request: ChannelTransactionRequest,
+        responder: oneshot::Sender<Result<ChannelTransactionResponse>>,
+    },
+    ApplyTxnResponse {
+        participant: AccountAddress,
+        txn_response: ChannelTransactionResponse,
+        responder: oneshot::Sender<Result<u64>>,
+    },
+    InstallPackage {
+        package: ChannelScriptPackage,
+        responder: oneshot::Sender<Result<()>>,
+    },
+    DeployModule {
+        module_byte_code: Vec<u8>,
+        responder: oneshot::Sender<Result<TransactionWithProof>>,
+    },
+    GetScriptCode {
+        package_name: String,
+        script_name: String,
+        responder: oneshot::Sender<Result<Option<ScriptCode>>>,
+    },
+    GetChannelResource {
+        participant: AccountAddress,
+        struct_tag: StructTag,
+        responder: oneshot::Sender<Result<Option<Vec<u8>>>>,
+    },
+}
+
+pub struct Inner {
+    inner: Shared,
+    channels: HashMap<AccountAddress, Channel>,
+    sgdb: Arc<SgStorage>,
+    runtime: tokio::runtime::Runtime,
+    mailbox: mpsc::Receiver<WalletCmd>,
+    mail_sender: mpsc::Sender<WalletCmd>,
+    //    channel_event_receiver: mpsc::Receiver<ChannelEvent>,
+}
+
+impl Inner {
+    //    async fn start_channel_manager(channel_event_receiver: mpsc::Receiver<ChannelEvent>) {
+    //        loop {
+    //            ::futures::select! {
+    //                maybe_channel_event = channel_event_receiver.next() => {
+    //                    if let Some(event) = maybe_channel_event {
+    //                        Self::handle_channel_event(event).await
+    //                    }
+    //                }
+    //            }
+    //        }
+    //    }
+    //    async fn handle_channel_event(event: ChannelEvent) {}
+
+    async fn start(mut self) {
+        if let Err(e) = self.refresh_channels() {
+            error!("fail to start all channels, err: {:?}", e);
+            return ();
+        }
+        loop {
+            ::futures::select! {
+               maybe_external_cmd = self.mailbox.next() => {
+                   if let Some(cmd) = maybe_external_cmd {
+                       self.handle_external_cmd(cmd).await;
+                   }
+               }
+               complete => {
+                   break;
+               }
+            }
+        }
+        crit!("wallet dispatcher task terminated");
+    }
+
+    async fn handle_external_cmd(&mut self, cmd: WalletCmd) {
+        match cmd {
+            WalletCmd::Execute {
+                participant,
+                channel_op,
+                args,
+                responder,
+            } => self.execute(channel_op, participant, args, responder).await,
+            WalletCmd::VerifyTxnRequest {
+                txn_request,
+                responder,
+            } => self.verify_txn(&txn_request, responder).await,
+            WalletCmd::ApplyTxnResponse {
+                participant,
+                txn_response,
+                responder,
+            } => self.apply_txn(participant, &txn_response, responder).await,
+            WalletCmd::InstallPackage { package, responder } => {
+                let result = self.install_package(package);
+                respond_with(responder, result);
+            }
+            WalletCmd::DeployModule {
+                module_byte_code,
+                responder,
+            } => {
+                let response = self.deploy_module(module_byte_code).await;
+                respond_with(responder, response);
+            }
+            WalletCmd::GetScriptCode {
+                package_name,
+                script_name,
+                responder,
+            } => {
+                let resp = self
+                    .inner
+                    .script_registry
+                    .get_script(&package_name, &script_name);
+                respond_with(responder, Ok(resp));
+            }
+            WalletCmd::GetChannelResource {
+                participant,
+                struct_tag,
+                responder,
+            } => {
+                self.get_channel_resource(participant, struct_tag, responder)
+                    .await;
+            }
+        }
+    }
+    //    fn ensure_channel_not_exists(&self, participant: AccountAddress) -> Result<()> {
+    //        if self.channels.contains_key(&participant) {
+    //            bail!("Channel with address {} exist.", participant);
+    //        }
+    //        Ok(())
+    //    }
 
     fn refresh_channels(&mut self) -> Result<()> {
         let account_state = self
@@ -135,291 +574,220 @@ where
                         self.inner.account,
                         participant
                     ))?;
-                let channel_db = self.get_channel_db(participant);
-                let channel =
-                    Channel::load(my_channel_state, participant_channel_state, channel_db)?;
-                info!("Init new channel with: {}", participant);
-                self.channels.write().unwrap().insert(participant, channel);
+                self.spawn_channel(my_channel_state, participant_channel_state);
             }
         }
         Ok(())
     }
 
-    pub fn account(&self) -> AccountAddress {
-        self.inner.account
-    }
-
-    pub fn client(&self) -> &dyn ChainClient {
-        self.inner.client()
-    }
-
-    pub fn default_asset() -> StructTag {
-        DEFAULT_ASSET.clone()
-    }
-
-    pub fn get_resources() -> Vec<Resource> {
-        unimplemented!()
-    }
-
-    /// Open channel and deposit default asset.
-    pub fn open(
-        &self,
-        receiver: AccountAddress,
-        sender_amount: u64,
-        receiver_amount: u64,
-    ) -> Result<ChannelTransactionRequest> {
-        info!(
-            "wallet.open receiver:{}, sender_amount:{}, receiver_amount:{}",
-            receiver, sender_amount, receiver_amount
-        );
-        if self.exist_channel(&receiver) {
-            bail!("Channel with address {} exist.", receiver);
-        }
-        self.new_channel(receiver);
-
-        self.execute(
-            ChannelOp::Open,
-            receiver,
-            vec![
-                TransactionArgument::U64(sender_amount),
-                TransactionArgument::U64(receiver_amount),
-            ],
-        )
-    }
-
-    pub fn deposit(
-        &self,
-        receiver: AccountAddress,
-        sender_amount: u64,
-        receiver_amount: u64,
-    ) -> Result<ChannelTransactionRequest> {
-        info!(
-            "wallet.deposit receiver:{}, sender_amount:{}, receiver_amount:{}",
-            receiver, sender_amount, receiver_amount
-        );
-        self.execute(
-            ChannelOp::Execute {
-                package_name: DEFAULT_PACKAGE.to_owned(),
-                script_name: "deposit".to_string(),
-            },
-            receiver,
-            vec![
-                TransactionArgument::U64(sender_amount),
-                TransactionArgument::U64(receiver_amount),
-            ],
-        )
-    }
-
-    pub fn transfer(
-        &self,
-        receiver: AccountAddress,
-        amount: u64,
-    ) -> Result<ChannelTransactionRequest> {
-        info!("wallet.transfer receiver:{}, amount:{}", receiver, amount);
-
-        self.execute(
-            ChannelOp::Execute {
-                package_name: DEFAULT_PACKAGE.to_owned(),
-                script_name: "transfer".to_string(),
-            },
-            receiver,
-            vec![TransactionArgument::U64(amount)],
-        )
-    }
-
-    pub fn withdraw(
-        &self,
-        receiver: AccountAddress,
-        sender_amount: u64,
-        receiver_amount: u64,
-    ) -> Result<ChannelTransactionRequest> {
-        info!(
-            "wallet.withdraw receiver:{}, sender_amount:{}, receiver_amount:{}",
-            receiver, sender_amount, receiver_amount
-        );
-        self.execute(
-            ChannelOp::Execute {
-                package_name: DEFAULT_PACKAGE.to_owned(),
-                script_name: "withdraw".to_string(),
-            },
-            receiver,
-            vec![
-                TransactionArgument::U64(sender_amount),
-                TransactionArgument::U64(receiver_amount),
-            ],
-        )
-    }
-
-    pub fn close(&self, receiver: AccountAddress) -> Result<ChannelTransactionRequest> {
-        self.execute(ChannelOp::Close, receiver, vec![])
-    }
-
-    pub fn execute_script(
-        &self,
-        receiver: AccountAddress,
-        package_name: &str,
-        script_name: &str,
-        args: Vec<TransactionArgument>,
-    ) -> Result<ChannelTransactionRequest> {
-        info!(
-            "wallet.execute_script receiver:{}, package_name:{}, script_name:{}, args:{:?}",
-            receiver, package_name, script_name, args
-        );
-
-        self.execute(
-            ChannelOp::Execute {
-                package_name: package_name.to_string(),
-                script_name: script_name.to_string(),
-            },
-            receiver,
-            args,
-        )
-    }
-
-    fn execute(
-        &self,
+    //    pub fn default_asset() -> StructTag {
+    //        DEFAULT_ASSET.clone()
+    //    }
+    //
+    //    pub fn get_resources() -> Vec<Resource> {
+    //        unimplemented!()
+    //    }
+    //
+    async fn execute(
+        &mut self,
         channel_op: ChannelOp,
         receiver: AccountAddress,
         args: Vec<TransactionArgument>,
-    ) -> Result<ChannelTransactionRequest> {
-        let channels = self.channels.read().unwrap();
-        let channel = channels
-            .deref()
-            .get(&receiver)
-            .ok_or::<Error>(SgError::new_channel_not_exist_error(&receiver).into())?;
-        channel.execute(&self.inner, channel_op, args)
+        responder: oneshot::Sender<Result<ChannelTransactionRequest>>,
+    ) {
+        if channel_op.is_open() {
+            if self.exist_channel(&receiver) {
+                let err = format_err!("Channel with address {} exist.", &receiver);
+                respond_with(responder, Err(err));
+                return ();
+            }
+            self.spawn_new_channel(receiver);
+        }
+
+        let channel = match self.channels.get_mut(&receiver) {
+            Some(channel) => channel,
+            None => {
+                let e: Error = SgError::new_channel_not_exist_error(&receiver).into();
+                if let Err(_) = responder.send(Err(e)) {
+                    error!(
+                        "fail to send back response of op({:?}) , receiver is dropped",
+                        &channel_op
+                    );
+                };
+                return ();
+            }
+        };
+
+        let msg = ChannelMsg::Execute {
+            channel_op,
+            args,
+            responder,
+        };
+        if let Err(err) = channel.mail_sender().try_send(msg) {
+            let err_status = if err.is_disconnected() {
+                "closed"
+            } else {
+                "full"
+            };
+            if let ChannelMsg::Execute { responder, .. } = err.into_inner() {
+                let resp_err = format_err!("channel {:?} mailbox {:?}", &receiver, err_status);
+                respond_with(responder, Err(resp_err));
+            }
+        };
     }
 
     /// Verify channel participant's txn
-    pub fn verify_txn(
-        &self,
+    async fn verify_txn(
+        &mut self,
         txn_request: &ChannelTransactionRequest,
-    ) -> Result<ChannelTransactionResponse> {
+        responder: oneshot::Sender<Result<ChannelTransactionResponse>>,
+    ) -> () {
         let request_id = txn_request.request_id();
         let channel_txn = txn_request.channel_txn();
-        let _channel_txn_sender_sigs = txn_request.channel_txn_sigs();
 
         // get channel
         debug!("verify_txn id:{}", request_id);
-        ensure!(
-            channel_txn.receiver() == self.inner.account,
-            "check receiver fail."
-        );
-        let sender = channel_txn.sender();
+
+        let participant = channel_txn.sender();
         if channel_txn.operator().is_open() {
-            if self.exist_channel(&sender) {
-                bail!("Channel with address {} exist.", sender);
+            if self.exist_channel(&participant) {
+                respond_with(
+                    responder,
+                    Err(format_err!("Channel with address {} exist.", &participant)),
+                );
+                return ();
             }
-            self.new_channel(sender);
+            self.spawn_new_channel(participant);
         }
 
-        let channels = self.channels.read().unwrap();
-        let channel = channels
-            .deref()
-            .get(&sender)
-            .ok_or::<Error>(SgError::new_channel_not_exist_error(&sender).into())?;
-        channel.verify_txn_request(&self.inner, txn_request)
-    }
-
-    pub async fn receiver_apply_txn(
-        &self,
-        participant: AccountAddress,
-        response: &ChannelTransactionResponse,
-    ) -> Result<u64> {
-        let txn_to_watch = self.with_channel(&participant, |channel| {
-            let (channel_txn, output) = match channel.pending_txn() {
-                Some(PendingTransaction::WaitForApply { raw_tx, output, .. }) => (raw_tx, output),
-                Some(_) => bail!("invalid state of receiver apply txn"),
-                //TODO(jole) can not find request has such reason:
-                // 1. txn is expire.
-                // 2. txn is invalid.
-                None => bail!(
-                    "pending_txn_request must exist at stage:{:?}",
-                    channel.stage()
-                ),
-            };
-            Ok(if output.is_travel_txn() {
-                Some((channel_txn.sender(), channel_txn.sequence_number()))
-            } else {
-                None
-            })
-        })?;
-
-        let gas = match txn_to_watch {
-            Some((address, seq_number)) => {
-                let watch_future = self.inner.client().watch_transaction(&address, seq_number);
-                // FIXME: should not panic here, handle timeout situation.
-                let txn_with_proof = watch_future.await?.0.expect("proof is none.");
-
-                txn_with_proof.proof.transaction_info().gas_used()
+        let channel = match self.channels.get_mut(&participant) {
+            Some(channel) => channel,
+            None => {
+                let e: Error = SgError::new_channel_not_exist_error(&participant).into();
+                respond_with(responder, Err(e));
+                return ();
             }
-            None => 0,
         };
 
-        self.with_channel_mut(&participant, |channel| channel.apply())?;
-
-        info!("success apply channel request: {}", response.request_id());
-
-        Ok(gas)
+        let msg = ChannelMsg::VerifyTxnRequest {
+            txn_request: txn_request.clone(),
+            responder,
+        };
+        if let Err(err) = channel.mail_sender().try_send(msg) {
+            let err_status = if err.is_disconnected() {
+                "closed"
+            } else {
+                "full"
+            };
+            if let ChannelMsg::VerifyTxnRequest { responder, .. } = err.into_inner() {
+                let resp_err = format_err!("channel {:?} mailbox {:?}", &participant, err_status);
+                respond_with(responder, Err(resp_err));
+            }
+        }
     }
 
-    pub async fn sender_apply_txn(
+    async fn apply_txn(
+        &mut self,
+        participant: AccountAddress,
+        txn_response: &ChannelTransactionResponse,
+        responder: oneshot::Sender<Result<u64>>,
+    ) {
+        let channel = match self.channels.get_mut(&participant) {
+            Some(channel) => channel,
+            None => {
+                let e: Error = SgError::new_channel_not_exist_error(&participant).into();
+                respond_with(responder, Err(e));
+                return ();
+            }
+        };
+
+        // first validate response
+        let (tx, rx) = oneshot::channel();
+        let msg = ChannelMsg::VerifyTxnResponse {
+            txn_response: txn_response.clone(),
+            responder: tx,
+        };
+        if let Err(err) = channel.mail_sender().try_send(msg) {
+            let err_status = if err.is_disconnected() {
+                "closed"
+            } else {
+                "full"
+            };
+            let resp_err = format_err!("channel {:?} mailbox {:?}", &participant, err_status);
+            if let Err(_) = responder.send(Err(resp_err)) {
+                error!("fail to send back response , receiver is dropped");
+            }
+            return ();
+        };
+
+        let resp = rx.await;
+        if let Some(err) = resp
+            .map_err(|_| format_err!("sender dropped"))
+            .and_then(|r| r)
+            .err()
+        {
+            if let Err(_) = responder.send(Err(err)) {
+                error!("fail to send back response , receiver is dropped");
+            }
+            return ();
+        }
+
+        //        info!("success apply channel request: {}", response.request_id());
+        let msg = ChannelMsg::ApplyPendingTxn { responder };
+        if let Err(err) = channel.mail_sender().try_send(msg) {
+            let err_status = if err.is_disconnected() {
+                "closed"
+            } else {
+                "full"
+            };
+            if let ChannelMsg::ApplyPendingTxn { responder, .. } = err.into_inner() {
+                let resp_err = format_err!("channel {:?} mailbox {:?}", &participant, err_status);
+                respond_with(responder, Err(resp_err));
+            }
+        };
+    }
+
+    /// get channel account resource data from channel task
+    async fn get_channel_resource(
         &self,
         participant: AccountAddress,
-        response: &ChannelTransactionResponse,
-    ) -> Result<u64> {
-        let onchain_txn_to_submit = self.with_channel(&participant, |channel| {
-            //verify response
-            let (verified_participant_script_payload, _verified_participant_witness_payload) =
-                channel.verify_txn_response(&self.inner, response)?;
-            let signed_txn = match channel.pending_txn() {
-                //TODO(jole) can not find request has such reason:
-                // 1. txn is expire.
-                // 2. txn is invalid.
-                None => bail!(
-                    "pending_txn_request must exist at stage:{:?}",
-                    channel.stage()
-                ),
-                Some(pending_txn) => {
-                    match pending_txn_to_onchain_txn(
-                        pending_txn,
-                        verified_participant_script_payload,
-                    )? {
-                        Some(raw_txn) => Some(self.inner.mock_signature(raw_txn)?),
-                        None => None,
-                    }
-                }
-            };
-            Ok(signed_txn)
-        })?;
-
-        // then, submit txn to chain
-        let gas = if let Some(signed_txn) = onchain_txn_to_submit {
-            let txn_with_proof = self.inner.submit_transaction(signed_txn).await?;
-            txn_with_proof.proof.transaction_info().gas_used()
-        } else {
-            0
+        struct_tag: StructTag,
+        responder: oneshot::Sender<Result<Option<Vec<u8>>>>,
+    ) {
+        let channel = match self.channels.get(&participant) {
+            Some(channel) => channel,
+            None => {
+                let e: Error = SgError::new_channel_not_exist_error(&participant).into();
+                respond_with(responder, Err(e));
+                return ();
+            }
         };
-
-        // if ok, apply the channel txn to db
-        self.with_channel_mut(&participant, |channel| channel.apply())?;
-
-        info!("success apply channel request: {}", response.request_id());
-        Ok(gas)
+        let data_path = DataPath::channel_resource_path(participant, struct_tag);
+        let msg = ChannelMsg::AccessPath {
+            path: AccessPath::new_for_data_path(self.inner.account, data_path),
+            responder,
+        };
+        if let Err(err) = channel.mail_sender().try_send(msg) {
+            let _err_status = if err.is_disconnected() {
+                "closed"
+            } else {
+                "full"
+            };
+        }
     }
 
-    pub fn install_package(&self, package: ChannelScriptPackage) -> Result<()> {
+    fn install_package(&self, package: ChannelScriptPackage) -> Result<()> {
         //TODO(jole) package should limit channel?
         self.inner.script_registry.install_package(package)?;
         Ok(())
     }
 
     /// Deploy a module to Chain
-    pub async fn deploy_module(&self, module_byte_code: Vec<u8>) -> Result<TransactionWithProof> {
+    async fn deploy_module(&self, module_byte_code: Vec<u8>) -> Result<TransactionWithProof> {
         let payload = TransactionPayload::Module(Module::new(module_byte_code));
         //TODO pre execute deploy module txn on local , and get real gas used to set max_gas_amount.
         let txn = create_signed_payload_txn(
-            self,
+            self.inner.keypair.as_ref(),
             payload,
             self.inner.account,
             self.sequence_number()?,
@@ -428,130 +796,93 @@ where
             TXN_EXPIRATION.as_secs() as i64,
         )?;
         //TODO need execute at local vm for check?
-        self.inner.submit_transaction(txn).await
+        let address = txn.sender();
+        let seq_number = txn.sequence_number();
+        submit_transaction(self.inner.client.as_ref(), txn).await?;
+        watch_transaction(self.inner.client.as_ref(), address, seq_number).await
     }
 
-    pub fn get_script(&self, package_name: &str, script_name: &str) -> Option<ScriptCode> {
-        self.inner
-            .script_registry
-            .get_script(package_name, script_name)
+    /// TODO: use async version of cient
+    /// this will block executor's thread
+    fn account_resource(&self) -> Result<AccountResource> {
+        // account_resource must exist.
+        //TODO handle unwrap
+        let account_state = self
+            .inner
+            .client
+            .get_account_state(self.inner.account, None)?;
+        let account_resource_bytes = account_state
+            .get(&DataPath::account_resource_data_path().to_vec())
+            .unwrap();
+        account_resource_ext::from_bytes(&account_resource_bytes)
+    }
+    fn sequence_number(&self) -> Result<u64> {
+        Ok(self.account_resource()?.sequence_number())
     }
 
-    pub fn get(&self, path: &DataPath) -> Result<Option<Vec<u8>>> {
-        if path.is_channel_resource() {
-            let participant = path.participant().expect("participant must exist");
-            self.with_channel(&participant, |channel| {
-                Ok(channel.get(&AccessPath::new_for_data_path(
-                    self.inner.account,
-                    path.clone(),
-                )))
-            })
-        } else {
-            let account_state = self
-                .inner
-                .client
-                .get_account_state(self.inner.account, None)?;
-            Ok(account_state.get(&path.to_vec()))
-        }
-    }
-
-    pub fn account_resource(&self) -> Result<AccountResource> {
-        self.inner.account_resource()
-    }
-    pub fn sequence_number(&self) -> Result<u64> {
-        self.inner.sequence_number()
-    }
-    //TODO support more asset type
-    pub fn balance(&self) -> Result<u64> {
-        self.inner.balance()
-    }
-
-    pub fn channel_account_resource(
-        &self,
-        participant: AccountAddress,
-    ) -> Result<Option<ChannelAccountResource>> {
-        self.get(&DataPath::channel_account_path(participant))
-            .and_then(|value| match value {
-                Some(value) => Ok(Some(ChannelAccountResource::make_from(value)?)),
-                None => Ok(None),
-            })
-    }
-
-    pub fn channel_sequence_number(&self, participant: AccountAddress) -> Result<u64> {
-        Ok(self
-            .channel_account_resource(participant)?
-            .map(|account| account.channel_sequence_number())
-            .unwrap_or(0))
-    }
-
-    pub fn channel_balance(&self, participant: AccountAddress) -> Result<u64> {
-        Ok(self
-            .channel_account_resource(participant)?
-            .map(|account| account.balance())
-            .unwrap_or(0))
-    }
-
-    pub fn get_txn_by_channel_sequence_number(
-        &self,
-        participant_address: AccountAddress,
-        channel_seq_number: u64,
-    ) -> Result<SignedChannelTransaction> {
-        let txn = self.with_channel(&participant_address, |channel| {
-            channel.get_txn_by_channel_seq_number(channel_seq_number)
-        })?;
-        Ok(txn.signed_transaction)
+    pub fn get(&self, _path: &DataPath) -> Result<Option<Vec<u8>>> {
+        //        if path.is_channel_resource() {
+        //            let participant = path.participant().expect("participant must exist");
+        //            self.with_channel(&participant, |channel| {
+        //                Ok(channel.get(&AccessPath::new_for_data_path(
+        //                    self.inner.account,
+        //                    path.clone(),
+        //                )))
+        //            })
+        //        } else {
+        //            let account_state = self
+        //                .inner
+        //                .client
+        //                .get_account_state(self.inner.account, None)?;
+        //            Ok(account_state.get(&path.to_vec()))
+        //        }
+        unimplemented!()
     }
 
     /// return all channels' state infos
     pub fn channel_infos(&self) -> HashMap<AccountAddress, ChannelInfo> {
-        let channels = self.channels.read().unwrap();
-        channels
-            .iter()
-            .map(|(ap, channel)| (ap.clone(), channel.channel_info()))
-            .collect::<HashMap<_, _>>()
+        //        let channels = self.channels.read().unwrap();
+        //        channels
+        //            .iter()
+        //            .map(|(ap, channel)| (ap.clone(), channel.channel_info()))
+        //            .collect::<HashMap<_, _>>()
+        unimplemented!()
     }
 
     fn exist_channel(&self, participant: &AccountAddress) -> bool {
-        self.channels
-            .read()
-            .unwrap()
-            .deref()
-            .contains_key(participant)
+        self.channels.contains_key(participant)
     }
 
-    fn new_channel(&self, participant: AccountAddress) {
-        let mut channels = self.channels.write().unwrap();
-        channels.insert(
-            participant,
-            Channel::new(
-                self.inner.account,
-                participant,
-                self.get_channel_db(participant),
-            ),
+    fn spawn_new_channel(&mut self, participant: AccountAddress) {
+        self.spawn_channel(
+            ChannelState::empty(self.inner.account),
+            ChannelState::empty(participant),
         );
     }
 
-    fn with_channel<T, F>(&self, participant: &AccountAddress, action: F) -> Result<T>
-    where
-        F: FnOnce(&Channel) -> Result<T>,
-    {
-        let channels = self.channels.read().unwrap();
-        let channel = channels
-            .deref()
-            .get(participant)
-            .ok_or::<Error>(SgError::new_channel_not_exist_error(participant).into())?;
-        action(channel)
-    }
-    fn with_channel_mut<T, F>(&self, participant: &AccountAddress, action: F) -> Result<T>
-    where
-        F: FnOnce(&mut Channel) -> Result<T>,
-    {
-        let mut channels = self.channels.write().unwrap();
-        let channel = channels
-            .deref_mut()
-            .get_mut(participant)
-            .ok_or::<Error>(SgError::new_channel_not_exist_error(participant).into())?;
-        action(channel)
+    fn spawn_channel(
+        &mut self,
+        account_channel_state: ChannelState,
+        participant_channel_state: ChannelState,
+    ) {
+        let participant = participant_channel_state.address();
+        let (channel_msg_sender, channel_msg_receiver) = mpsc::channel(1000);
+
+        let mut channel = Channel::load(
+            account_channel_state,
+            participant_channel_state,
+            self.get_channel_db(participant),
+            channel_msg_sender,
+            channel_msg_receiver,
+            self.inner.keypair.clone(),
+            self.inner.script_registry.clone(),
+            self.inner.client.clone(),
+        );
+        channel.start(self.runtime.executor().clone());
+
+        // TODO: should wait signal of channel saying it's started
+        self.channels.insert(participant, channel);
+        info!("Init new channel with: {}", participant);
     }
 
     #[inline]
@@ -560,33 +891,27 @@ where
     }
 }
 
-impl<C> TransactionSigner for Wallet<C>
-where
-    C: ChainClient + Send + Sync + 'static,
-{
+impl TransactionSigner for Wallet {
     fn sign_txn(&self, raw_txn: RawTransaction) -> Result<SignedTransaction> {
-        self.inner.keypair.sign_txn(raw_txn)
+        self.shared.keypair.sign_txn(raw_txn)
     }
 }
 
-impl<C> ChannelPayloadSigner for Wallet<C>
-where
-    C: ChainClient + Send + Sync + 'static,
-{
+impl ChannelPayloadSigner for Wallet {
     fn sign_bytes(&self, bytes: Vec<u8>) -> Result<Ed25519Signature> {
-        self.inner.keypair.sign_bytes(bytes)
+        self.shared.keypair.sign_bytes(bytes)
     }
 }
 
-pub struct WalletInner<C> {
+pub struct Shared {
     account: AccountAddress,
     keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
-    client: Arc<C>,
+    client: Arc<dyn ChainClient>,
     script_registry: Arc<PackageRegistry>,
 }
 
 // NOTICE: need to manually implement clone, due to https://github.com/rust-lang/rust/issues/26925
-impl<C> Clone for WalletInner<C> {
+impl Clone for Shared {
     fn clone(&self) -> Self {
         Self {
             account: self.account.clone(),
@@ -594,145 +919,6 @@ impl<C> Clone for WalletInner<C> {
             client: Arc::clone(&self.client),
             script_registry: Arc::clone(&self.script_registry),
         }
-    }
-}
-
-impl<C> WalletInner<C>
-where
-    C: ChainClient + Send + Sync + 'static,
-{
-    pub fn client(&self) -> &dyn ChainClient {
-        &*self.client
-    }
-
-    pub fn public_key(&self) -> &Ed25519PublicKey {
-        &self.keypair.public_key
-    }
-    pub fn sequence_number(&self) -> Result<u64> {
-        Ok(self.account_resource()?.sequence_number())
-    }
-
-    //TODO support more asset type
-    pub fn balance(&self) -> Result<u64> {
-        self.account_resource().map(|r| r.balance())
-    }
-
-    pub fn account_resource(&self) -> Result<AccountResource> {
-        // account_resource must exist.
-        //TODO handle unwrap
-        let account_state = self.client.get_account_state(self.account, None)?;
-        let account_resource_bytes = account_state
-            .get(&DataPath::account_resource_data_path().to_vec())
-            .unwrap();
-        account_resource_ext::from_bytes(&account_resource_bytes)
-    }
-
-    fn channel_op_to_script(
-        &self,
-        channel_op: &ChannelOp,
-        args: Vec<TransactionArgument>,
-    ) -> Result<Script> {
-        let script_code = match channel_op {
-            ChannelOp::Open => self.script_registry.open_script(),
-            ChannelOp::Close => self.script_registry.close_script(),
-            ChannelOp::Execute {
-                package_name,
-                script_name,
-            } => self
-                .script_registry
-                .get_script(package_name, script_name)
-                .ok_or(format_err!(
-                    "Can not find script by package {} and script name {}",
-                    package_name,
-                    script_name
-                ))?,
-        };
-        let script = script_code.encode_script(args);
-        Ok(script)
-    }
-
-    pub(crate) fn build_raw_txn_from_channel_txn(
-        &self,
-        channel_witness_data: Option<WriteSet>,
-        channel_txn: &ChannelTransaction,
-        payload_key_and_signature: Option<(Ed25519PublicKey, Ed25519Signature)>,
-    ) -> Result<RawTransaction> {
-        let script =
-            self.channel_op_to_script(channel_txn.operator(), channel_txn.args().to_vec())?;
-        let write_set = channel_witness_data.unwrap_or_default();
-        let channel_script = ChannelScriptBody::new(
-            channel_txn.channel_sequence_number(),
-            write_set,
-            channel_txn.receiver(),
-            script,
-        );
-        let channel_txn_payload = match payload_key_and_signature {
-            Some((public_key, signature)) => {
-                // verify first
-                public_key.verify_signature(&channel_script.hash(), &signature)?;
-                ChannelTransactionPayload::new_with_script(channel_script, public_key, signature)
-            }
-            None => {
-                self.mock_payload_signature(ChannelTransactionPayloadBody::Script(channel_script))
-            }
-        };
-        Ok(RawTransaction::new_payload_txn(
-            channel_txn.sender(),
-            channel_txn.sequence_number(),
-            TransactionPayload::Channel(channel_txn_payload),
-            MAX_GAS_AMOUNT_OFFCHAIN,
-            GAS_UNIT_PRICE,
-            channel_txn.expiration_time(),
-        ))
-    }
-    /// Craft a mocked transaction request.
-    pub(crate) fn create_mocked_signed_script_txn(
-        &self,
-        channel_witness_data: Option<WriteSet>,
-        channel_txn: &ChannelTransaction,
-    ) -> Result<SignedTransaction> {
-        let txn = self.build_raw_txn_from_channel_txn(channel_witness_data, channel_txn, None)?;
-        let signed_txn = self.mock_signature(txn)?;
-        Ok(signed_txn)
-    }
-
-    pub(crate) fn mock_signature(&self, txn: RawTransaction) -> Result<SignedTransaction> {
-        // execute txn on offchain vm, should mock sender and receiver signature with a local
-        // keypair. the vm will skip signature check on offchain vm.
-        let signed_txn = self.keypair.sign_txn(txn)?;
-        Ok(signed_txn)
-    }
-
-    fn mock_payload_signature(
-        &self,
-        payload_body: ChannelTransactionPayloadBody,
-    ) -> ChannelTransactionPayload {
-        payload_body.sign(&self.keypair.private_key, self.keypair.public_key.clone())
-    }
-
-    pub async fn submit_transaction(
-        &self,
-        signed_transaction: SignedTransaction,
-    ) -> Result<TransactionWithProof> {
-        let raw_txn_hash = signed_transaction.raw_txn().hash();
-        debug!("submit_transaction {}", raw_txn_hash);
-        let seq_number = signed_transaction.sequence_number();
-        let sender = &signed_transaction.sender();
-        let _resp = self.client.submit_signed_transaction(signed_transaction)?;
-        let watch_future = self.client.watch_transaction(sender, seq_number);
-        let (tx_proof, _account_proof) = watch_future.await?;
-        match tx_proof {
-            Some(proof) => Ok(proof),
-            None => Err(format_err!(
-                "proof not found by address {:?} and seq num {} .",
-                sender,
-                seq_number
-            )),
-        }
-    }
-
-    pub fn sign_message(&self, message: &HashValue) -> Ed25519Signature {
-        self.keypair.private_key.sign_message(message)
     }
 }
 
@@ -777,4 +963,37 @@ pub(crate) fn get_channel_transaction_payload_body(
         TransactionPayload::Channel(payload) => Ok(payload.body.clone()),
         _ => bail!("raw txn must a Channel Transaction"),
     }
+}
+
+pub async fn submit_transaction(
+    client: &dyn ChainClient,
+    signed_transaction: SignedTransaction,
+) -> Result<()> {
+    let raw_txn_hash = signed_transaction.raw_txn().hash();
+    debug!("submit_transaction {}", raw_txn_hash);
+    // TODO: should use async version
+    client.submit_signed_transaction(signed_transaction)
+}
+
+pub async fn watch_transaction(
+    client: &dyn ChainClient,
+    sender: AccountAddress,
+    seq_number: u64,
+) -> Result<TransactionWithProof> {
+    let watch_future = client.watch_transaction(&sender, seq_number);
+    let (tx_proof, _account_proof) = watch_future.await?;
+    match tx_proof {
+        Some(proof) => Ok(proof),
+        None => Err(format_err!(
+            "proof not found by address {:?} and seq num {} .",
+            sender,
+            seq_number
+        )),
+    }
+}
+
+pub fn respond_with<T>(responder: oneshot::Sender<T>, msg: T) {
+    if let Err(_t) = responder.send(msg) {
+        error!("fail to send back response, receiver is dropped",);
+    };
 }
