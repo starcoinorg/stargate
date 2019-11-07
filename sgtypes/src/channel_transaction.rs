@@ -3,12 +3,16 @@
 
 use crate::channel_transaction_sigs::ChannelTransactionSigs;
 use crate::hash::ChannelTransactionHasher;
+use bytes::IntoBuf;
 use failure::prelude::*;
 use libra_crypto::hash::{CryptoHash, CryptoHasher};
 use libra_crypto::HashValue;
+use libra_prost_ext::MessageExt;
 use libra_types::transaction::{ChannelTransactionPayload, TransactionArgument, Version};
 use libra_types::{account_address::AccountAddress, transaction::TransactionOutput};
+use prost::Message;
 use serde::{Deserialize, Serialize};
+use std::convert::TryInto;
 use std::time::Duration;
 use std::{
     convert::TryFrom,
@@ -33,7 +37,6 @@ use std::{
 /// 2. if onchian, sender constructs signed transaction of onchain, submit it to onchain.
 ///    receiver waits the onchain tx.
 /// 3. if offchain, sender and receiver apply the tx to their local storage.  
-
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ChannelTransaction {
     /// The global status version on this tx executed.
@@ -125,6 +128,50 @@ impl CryptoHash for ChannelTransaction {
     }
 }
 
+impl TryFrom<crate::proto::sgtypes::ChannelTransaction> for ChannelTransaction {
+    type Error = Error;
+
+    fn try_from(value: crate::proto::sgtypes::ChannelTransaction) -> Result<Self> {
+        let version = value.version;
+        let operator = ChannelOp::try_from(value.operator.unwrap())?;
+        let sender = AccountAddress::try_from(value.sender)?;
+        let sequence_number = value.sequence_number;
+        let receiver = AccountAddress::try_from(value.receiver)?;
+        let channel_sequence_number = value.channel_sequence_number;
+        let expiration_time = Duration::from_secs(value.expiration_time);
+        let args = value
+            .args
+            .into_iter()
+            .map(TransactionArgument::try_from)
+            .collect::<Result<Vec<_>>>()?;
+        Ok(ChannelTransaction {
+            version,
+            operator,
+            sender,
+            sequence_number,
+            receiver,
+            channel_sequence_number,
+            expiration_time,
+            args,
+        })
+    }
+}
+
+impl From<ChannelTransaction> for crate::proto::sgtypes::ChannelTransaction {
+    fn from(value: ChannelTransaction) -> Self {
+        Self {
+            version: value.version.to_owned(),
+            operator: Some(value.operator.into()),
+            sender: value.sender.into(),
+            sequence_number: value.sequence_number.into(),
+            receiver: value.receiver.into(),
+            channel_sequence_number: value.channel_sequence_number,
+            expiration_time: value.expiration_time.as_secs(),
+            args: value.args.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ChannelOp {
     Open,
@@ -158,6 +205,54 @@ impl Display for ChannelOp {
             } => write!(f, "{}.{}", package_name, script_name),
             ChannelOp::Close => write!(f, "close"),
         }
+    }
+}
+
+impl std::error::Error for ChannelOp {}
+
+impl TryFrom<crate::proto::sgtypes::ChannelOp> for ChannelOp {
+    type Error = Error;
+
+    fn try_from(proto: crate::proto::sgtypes::ChannelOp) -> Result<Self> {
+        use crate::proto::sgtypes::ChannelOpType as ProtoChannelOpType;
+        let ret = match proto.op_type() {
+            ProtoChannelOpType::Open => ChannelOp::Open,
+            ProtoChannelOpType::Execute => {
+                let package_name = proto.package_name;
+                let script_name = proto.script_name;
+                ChannelOp::Execute {
+                    package_name,
+                    script_name,
+                }
+            }
+            ProtoChannelOpType::Close => ChannelOp::Close,
+        };
+        Ok(ret)
+    }
+}
+
+impl From<ChannelOp> for crate::proto::sgtypes::ChannelOp {
+    fn from(cop: ChannelOp) -> Self {
+        use crate::proto::sgtypes::ChannelOpType as ProtoChannelOpType;
+        let mut channel_op = Self::default();
+
+        match cop {
+            ChannelOp::Open => {
+                channel_op.set_op_type(ProtoChannelOpType::Open);
+            }
+            ChannelOp::Execute {
+                package_name,
+                script_name,
+            } => {
+                channel_op.package_name = package_name;
+                channel_op.script_name = script_name;
+                channel_op.set_op_type(ProtoChannelOpType::Execute);
+            }
+            ChannelOp::Close => {
+                channel_op.set_op_type(ProtoChannelOpType::Close);
+            }
+        };
+        channel_op
     }
 }
 
@@ -220,6 +315,20 @@ impl ChannelTransactionRequest {
     pub fn is_travel_txn(&self) -> bool {
         self.travel
     }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+    where
+        B: IntoBuf,
+    {
+        crate::proto::sgtypes::ChannelTransactionRequest::decode(buf)?.try_into()
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(
+            TryInto::<crate::proto::sgtypes::ChannelTransactionRequest>::try_into(self)?
+                .to_vec()?,
+        )
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -263,20 +372,46 @@ impl ChannelTransactionResponse {
     pub fn channel_txn_sigs(&self) -> &ChannelTransactionSigs {
         &self.channel_txn_sigs
     }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+    where
+        B: IntoBuf,
+    {
+        crate::proto::sgtypes::ChannelTransactionResponse::decode(buf)?.try_into()
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(
+            TryInto::<crate::proto::sgtypes::ChannelTransactionResponse>::try_into(self)?
+                .to_vec()?,
+        )
+    }
 }
 
 impl TryFrom<crate::proto::sgtypes::ChannelTransactionRequest> for ChannelTransactionRequest {
     type Error = Error;
 
     fn try_from(value: crate::proto::sgtypes::ChannelTransactionRequest) -> Result<Self> {
-        lcs::from_bytes(value.payload.as_slice()).map_err(Into::into)
+        let request_id = HashValue::from_slice(&value.request_id)?;
+        let channel_txn = ChannelTransaction::try_from(value.channel_txn.unwrap())?;
+        let channel_txn_sigs = ChannelTransactionSigs::try_from(value.channel_txn_sigs.unwrap())?;
+        let travel = value.travel;
+        Ok(ChannelTransactionRequest {
+            request_id,
+            channel_txn,
+            channel_txn_sigs,
+            travel,
+        })
     }
 }
 
 impl From<ChannelTransactionRequest> for crate::proto::sgtypes::ChannelTransactionRequest {
     fn from(value: ChannelTransactionRequest) -> Self {
         Self {
-            payload: lcs::to_bytes(&value).expect("Serialization should not fail."),
+            request_id: value.request_id.to_vec(),
+            channel_txn: Some(value.channel_txn.into()),
+            channel_txn_sigs: Some(value.channel_txn_sigs.into()),
+            travel: value.travel,
         }
     }
 }
@@ -284,15 +419,22 @@ impl From<ChannelTransactionRequest> for crate::proto::sgtypes::ChannelTransacti
 impl TryFrom<crate::proto::sgtypes::ChannelTransactionResponse> for ChannelTransactionResponse {
     type Error = Error;
 
-    fn try_from(value: crate::proto::sgtypes::ChannelTransactionResponse) -> Result<Self> {
-        lcs::from_bytes(value.payload.as_slice()).map_err(Into::into)
+    fn try_from(response: crate::proto::sgtypes::ChannelTransactionResponse) -> Result<Self> {
+        let request_id = HashValue::from_slice(&response.request_id)?;
+        let channel_txn_sigs =
+            ChannelTransactionSigs::try_from(response.channel_txn_sigs.unwrap())?;
+        Ok(Self {
+            request_id,
+            channel_txn_sigs,
+        })
     }
 }
 
 impl From<ChannelTransactionResponse> for crate::proto::sgtypes::ChannelTransactionResponse {
-    fn from(value: ChannelTransactionResponse) -> Self {
+    fn from(response: ChannelTransactionResponse) -> Self {
         Self {
-            payload: lcs::to_bytes(&value).expect("Serialization should not fail."),
+            request_id: response.request_id.to_vec(),
+            channel_txn_sigs: Some(response.channel_txn_sigs.into()),
         }
     }
 }
