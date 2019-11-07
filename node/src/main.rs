@@ -1,8 +1,10 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
+mod wallet_utils;
 
-use std::{convert::TryFrom, fs, sync::Arc};
+use std::sync::Arc;
 
+use crate::wallet_utils::WalletLibrary;
 use failure::*;
 use futures_01::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use libra_crypto::{
@@ -37,6 +39,8 @@ struct Args {
     pub config_dir: String,
     #[structopt(short = "f", long = "faucet_key_path", default_value = "wallet/key")]
     pub faucet_key_path: String,
+    #[structopt(short = "n", long = "child_number", default_value = "1")]
+    pub child_num: u64,
 }
 
 pub struct Swarm {
@@ -52,24 +56,12 @@ fn launch_swarm(args: &Args) -> Result<Swarm> {
     })
 }
 
-fn load_from_file(faucet_account_file: &str) -> KeyPair<Ed25519PrivateKey, Ed25519PublicKey> {
-    match fs::read(faucet_account_file) {
-        Ok(data) => {
-            let private_key = Ed25519PrivateKey::try_from(&data[0..32]).unwrap();
-            let public_key = Ed25519PublicKey::try_from(&data[32..]).unwrap();
-            let keypair = KeyPair {
-                private_key,
-                public_key,
-            };
-            keypair
-        }
-        Err(e) => {
-            panic!(
-                "Unable to read faucet account file: {}, {}",
-                faucet_account_file, e
-            );
-        }
-    }
+fn load_from_keyfile(
+    faucet_account_file: &str,
+    child_num: u64,
+) -> KeyPair<Ed25519PrivateKey, Ed25519PublicKey> {
+    let wallet_library = WalletLibrary::recover(faucet_account_file).unwrap();
+    wallet_library.get_keypair(child_num).unwrap()
 }
 
 fn gen_node(
@@ -118,7 +110,7 @@ fn main() {
     let rt = Runtime::new().unwrap();
     let executor = rt.executor();
 
-    let keypair = Arc::new(load_from_file(&args.faucet_key_path));
+    let keypair = Arc::new(load_from_keyfile(&args.faucet_key_path, args.child_num));
     let (network_service, tx, rx, close_tx) =
         build_network_service(&swarm.config.net_config, keypair.clone());
 

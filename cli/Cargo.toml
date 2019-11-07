@@ -22,7 +22,6 @@ num-traits = "0.2"
 serde = { version = "1.0.96", features = ["derive"] }
 serde_json = "1.0.40"
 structopt = "0.2.15"
-tempfile = "3.1.0"
 
 libra-config = { path = "../libra/config" }
 libra-crypto = { path = "../libra/crypto/crypto" }
@@ -34,7 +33,7 @@ libra-types = { path = "../libra/types" }
 vm-genesis = { path = "../libra/language/vm/vm-genesis" }
 node_proto = { path = "../node/node_proto"}
 node_client = { path = "../node/node_client"}
-cli_wallet = { path = "./cli_wallet" }
+libra-wallet = { path = "../libra/client/libra_wallet"}
 admission-control-proto = { path = "../libra/admission_control/admission-control-proto" }
 sgchain = { path = "../sgchain" }
 sgtypes = { path = "../sgtypes" }

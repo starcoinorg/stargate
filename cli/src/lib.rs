@@ -10,10 +10,10 @@ use libra_types::account_address::AccountAddress;
 use serde::{Deserialize, Serialize};
 
 mod account_commands;
-pub mod client_proxy;
 pub mod commands;
 mod dev_commands;
 mod node_commands;
+pub mod sg_client_proxy;
 
 /// Struct used to store data for each created account.  We track the sequence number
 /// so we can create new transactions easily

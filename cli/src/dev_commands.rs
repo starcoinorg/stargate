@@ -4,7 +4,7 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{client_proxy::ClientProxy, commands::*};
+use crate::{commands::*, sg_client_proxy::SGClientProxy};
 
 /// Major command for account related operations.
 pub struct DevCommand {}
@@ -16,98 +16,13 @@ impl Command for DevCommand {
     fn get_description(&self) -> &'static str {
         "Local move development"
     }
-    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
         let commands: Vec<Box<dyn Command>> = vec![
-            Box::new(DevCommandCompile {}),
-            Box::new(DevCommandPublish {}),
-            Box::new(DevCommandExecute {}),
             Box::new(DevCommandDeployModule {}),
             Box::new(DevCommandInstallPackage {}),
             Box::new(DevCommandExecuteInstalledScript {}),
         ];
         subcommand_execute(&params[0], commands, client, &params[1..]);
-    }
-}
-
-/// Sub command to compile move program
-pub struct DevCommandCompile {}
-
-impl Command for DevCommandCompile {
-    fn get_aliases(&self) -> Vec<&'static str> {
-        vec!["compile", "c"]
-    }
-    fn get_params_help(&self) -> &'static str {
-        "<file_path> [is_module (default=false)] [output_file_path (compile into tmp file by default)]"
-    }
-    fn get_description(&self) -> &'static str {
-        "Compile move program"
-    }
-    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-        if params.len() < 2 || params.len() > 4 {
-            println!("Invalid number of arguments for compilation");
-            return;
-        }
-        println!(">> Compiling program");
-        match client.compile_program(params) {
-            Ok(path) => println!("Successfully compiled a program at {}", path),
-            Err(e) => println!("{}", e),
-        }
-    }
-}
-
-/// Sub command to publish move resource
-pub struct DevCommandPublish {}
-
-impl Command for DevCommandPublish {
-    fn get_aliases(&self) -> Vec<&'static str> {
-        vec!["publish", "p"]
-    }
-
-    fn get_params_help(&self) -> &'static str {
-        "<compiled_module_path>"
-    }
-
-    fn get_description(&self) -> &'static str {
-        "Publish move module on-chain"
-    }
-
-    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-        if params.len() != 2 {
-            println!("Invalid number of arguments to publish module");
-            return;
-        }
-        match client.publish_module(params) {
-            Ok(_) => println!("Successfully published module"),
-            Err(e) => println!("{}", e),
-        }
-    }
-}
-
-/// Sub command to execute custom move script
-pub struct DevCommandExecute {}
-
-impl Command for DevCommandExecute {
-    fn get_aliases(&self) -> Vec<&'static str> {
-        vec!["execute", "e"]
-    }
-
-    fn get_params_help(&self) -> &'static str {
-        "<compiled_module_path> [parameters]"
-    }
-
-    fn get_description(&self) -> &'static str {
-        "Execute custom move script"
-    }
-
-    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-        if params.len() < 2 {
-            println!("Invalid number of arguments to execute script");
-            return;
-        }
-        match client.execute_script(params) {
-            Ok(_) => println!("Successfully finished execution"),
-            Err(e) => println!("{}", e),
-        }
     }
 }
 
@@ -127,8 +42,8 @@ impl Command for DevCommandDeployModule {
         "Deploy move package"
     }
 
-    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
-        if params.len() < 2 {
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
+        if params.len() < 3 {
             println!("Invalid number of arguments for compilation");
             return;
         }
@@ -155,7 +70,7 @@ impl Command for DevCommandInstallPackage {
         "Install package from package_file_path, or compile and install the package from dir_path"
     }
 
-    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
         if params.len() < 2 {
             println!("Invalid number of arguments for compilation");
             return;
@@ -184,7 +99,7 @@ impl Command for DevCommandExecuteInstalledScript {
         "Deploy move package"
     }
 
-    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
         if params.len() < 3 {
             println!("Invalid number of arguments for compilation");
             return;
