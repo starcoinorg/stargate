@@ -17,6 +17,7 @@ use libra_types::{
 use sgchain::star_chain_client::ChainClient;
 use sgstorage::channel_db::ChannelDB;
 use sgstorage::channel_store::ChannelStore;
+use sgtypes::channel::ChannelInfo;
 use sgtypes::channel_transaction::ChannelTransaction;
 use sgtypes::channel_transaction_sigs::ChannelTransactionSigs;
 use sgtypes::channel_transaction_to_commit::ChannelTransactionToApply;
@@ -204,6 +205,10 @@ impl Channel {
         self.get(access_path)
             .and_then(|value| ChannelAccountResource::make_from(value).ok())
             .expect("channel must contains ChannelAccountResource")
+    }
+
+    pub fn channel_info(&self) -> ChannelInfo {
+        ChannelInfo::new(self.stage(), self.account_resource())
     }
 
     pub fn account_resource(&self) -> ChannelAccountResource {

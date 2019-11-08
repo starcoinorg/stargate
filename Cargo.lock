@@ -4252,6 +4252,7 @@ dependencies = [
  "sg_config 0.1.0",
  "sgchain 0.1.0",
  "sgcompiler 0.1.0",
+ "sgstorage 0.1.0",
  "sgtypes 0.1.0",
  "stdlib 0.1.0",
  "tokio 0.2.0-alpha.6 (registry+https://github.com/rust-lang/crates.io-index)",

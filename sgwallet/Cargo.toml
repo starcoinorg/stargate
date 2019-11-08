@@ -21,6 +21,8 @@ sgconfig = { path = "../sgconfig", package="sg_config" }
 libra-crypto = { path = "../libra/crypto/crypto" }
 
 channel-manager = { path = "./channel-manager"}
+sgstorage = { path = "../sgstorage" }
+
 sgchain = { path = "../sgchain" }
 libra-logger = { path = "../libra/common/logger"}
 tokio = "=0.2.0-alpha.6"
@@ -37,7 +39,6 @@ libra-config = { path = "../libra/config"}
 lcs = { path = "../libra/common/lcs", package = "libra-canonical-serialization"}
 sgcompiler = { path = "../sgcompiler"}
 chrono = { version = "0.4.7", default-features = false }
-
 [dev-dependencies]
 
 libra-tools = { path = "../libra/common/tools"}
