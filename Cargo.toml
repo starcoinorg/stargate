@@ -14,7 +14,6 @@ members = [
     "node/node_service",
     "node/node_internal",
     "cli",
-    "cli/cli_wallet",
     "sgcompiler",
     "sgchain",
     "sgstorage",
