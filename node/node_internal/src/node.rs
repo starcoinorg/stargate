@@ -553,6 +553,10 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
                         MessageType::ChannelTransactionRequest => node_inner.clone().lock().unwrap().handle_receiver_channel(data[2..].to_vec()),
                         MessageType::ChannelTransactionResponse => node_inner.clone().lock().unwrap().handle_sender_channel(data[2..].to_vec(),peer_id),
                         MessageType::ErrorMessage => node_inner.clone().lock().unwrap().handle_error_message(data[2..].to_vec()),
+                        MessageType::StateSyncMessageRequest => {node_inner.clone().lock().unwrap().handle_state_sync_request(peer_id)},
+                        MessageType::StateSyncMessageResponse => {},
+                        MessageType::SyncTransactionMessageRequest => {node_inner.clone().lock().unwrap().handle_sync_transaction_request(data[2..].to_vec())},
+                        MessageType::SyncTransactionMessageResponse => {},
                         _=>warn!("message type not found {:?}",msg_type),
                     };
                     },
@@ -696,6 +700,75 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         }
     }
 
+    fn handle_state_sync_request(&mut self, participant: AccountAddress) {
+        match self.wallet.channel_account_resource(participant) {
+            Ok(Some(resouce)) => {
+                let msg = add_message_type(
+                    SyncStateMessageResponse::new(resouce.channel_sequence_number())
+                        .into_proto_bytes()
+                        .unwrap(),
+                    MessageType::StateSyncMessageResponse,
+                );
+                self.sender
+                    .unbounded_send(NetworkMessage {
+                        peer_id: participant,
+                        data: msg.to_vec(),
+                    })
+                    .unwrap();
+            }
+            Ok(None) => {
+                warn!(
+                    "can't find account resource by participant address {}",
+                    participant
+                );
+            }
+            Err(_) => {
+                warn!(
+                    "can't find account resource by participant address {}",
+                    participant
+                );
+            }
+        }
+    }
+
+    fn handle_sync_transaction_request(&mut self, data: Vec<u8>) {
+        let sync_txn_request: SyncTransactionMessageRequest;
+
+        match SyncTransactionMessageRequest::from_proto_bytes(&data) {
+            Ok(msg) => {
+                sync_txn_request = msg;
+            }
+            Err(_e) => {
+                warn!("get wrong message");
+                return;
+            }
+        }
+
+        match self.wallet.get_txn_by_channel_sequence_number(
+            sync_txn_request.participant,
+            sync_txn_request.channel_sequence_number,
+        ) {
+            Ok(txn) => {
+                let msg = add_message_type(
+                    SyncTransactionMessageResponse::new(txn)
+                        .into_proto_bytes()
+                        .unwrap(),
+                    MessageType::SyncTransactionMessageResponse,
+                );
+                self.sender
+                    .unbounded_send(NetworkMessage {
+                        peer_id: sync_txn_request.participant,
+                        data: msg.to_vec(),
+                    })
+                    .unwrap();
+            }
+            Err(e) => {
+                warn!("can't find txn by channel sequence number {} with {}, err: {:?}", sync_txn_request. ,&e);
+                return;
+            }
+        }
+    }
+
     fn open_channel_negotiate(
         &mut self,
         negotiate_message: OpenChannelNodeNegotiateMessage,
@@ -800,6 +873,10 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
     ) -> Result<SignedChannelTransaction> {
         self.wallet
             .get_txn_by_channel_sequence_number(partipant_address, channel_seq_number)
+    }
+
+    pub fn _init(&self) {
+        let _channel_info_map = self.wallet.channel_infos();
     }
 }
 
