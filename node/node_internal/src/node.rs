@@ -763,7 +763,10 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
                     .unwrap();
             }
             Err(e) => {
-                warn!("can't find txn by channel sequence number {} with {}, err: {:?}", sync_txn_request. ,&e);
+                warn!(
+                    "can't find txn by channel sequence number {} with {}, err: {:?}",
+                    sync_txn_request.participant, sync_txn_request.channel_sequence_number, &e
+                );
                 return;
             }
         }
