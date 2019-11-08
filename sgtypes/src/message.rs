@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::sg_error::SgError;
+use crate::signed_channel_transaction::SignedChannelTransaction;
 use bytes::IntoBuf;
 use failure::prelude::*;
 use libra_crypto::{ed25519::Ed25519Signature, HashValue};
@@ -296,11 +297,153 @@ impl From<ErrorMessage> for crate::proto::sgtypes::ErrorMessage {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SyncStateMessageResponse {
+    pub channel_sequence_number: u64,
+}
+
+impl SyncStateMessageResponse {
+    pub fn new(channel_sequence_number: u64) -> Self {
+        Self {
+            channel_sequence_number,
+        }
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(TryInto::<crate::proto::sgtypes::SyncStateMessageResponse>::try_into(self)?.to_vec()?)
+    }
+}
+
+impl TryFrom<crate::proto::sgtypes::SyncStateMessageResponse> for SyncStateMessageResponse {
+    type Error = Error;
+
+    fn try_from(value: crate::proto::sgtypes::SyncStateMessageResponse) -> Result<Self> {
+        Ok(SyncStateMessageResponse::new(
+            value.channel_sequence_number.try_into()?,
+        ))
+    }
+}
+
+impl From<SyncStateMessageResponse> for crate::proto::sgtypes::SyncStateMessageResponse {
+    fn from(value: SyncStateMessageResponse) -> Self {
+        Self {
+            channel_sequence_number: value.channel_sequence_number,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SyncTransactionMessageRequest {
+    pub channel_sequence_number: u64,
+    pub participant: AccountAddress,
+}
+
+impl SyncTransactionMessageRequest {
+    pub fn new(channel_sequence_number: u64, participant: AccountAddress) -> Self {
+        Self {
+            channel_sequence_number,
+            participant,
+        }
+    }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+    where
+        B: IntoBuf,
+    {
+        crate::proto::sgtypes::SyncTransactionMessageRequest::decode(buf)?.try_into()
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(
+            TryInto::<crate::proto::sgtypes::SyncTransactionMessageRequest>::try_into(self)?
+                .to_vec()?,
+        )
+    }
+}
+
+impl TryFrom<crate::proto::sgtypes::SyncTransactionMessageRequest>
+    for SyncTransactionMessageRequest
+{
+    type Error = Error;
+
+    fn try_from(value: crate::proto::sgtypes::SyncTransactionMessageRequest) -> Result<Self> {
+        Ok(Self {
+            channel_sequence_number: value.channel_sequence_number.try_into()?,
+            participant: value.participant.try_into()?,
+        })
+    }
+}
+
+impl From<SyncTransactionMessageRequest> for crate::proto::sgtypes::SyncTransactionMessageRequest {
+    fn from(value: SyncTransactionMessageRequest) -> Self {
+        Self {
+            channel_sequence_number: value.channel_sequence_number,
+            participant: value.participant.to_vec(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SyncTransactionMessageResponse {
+    pub signed_channel_transaction: SignedChannelTransaction,
+}
+
+impl SyncTransactionMessageResponse {
+    pub fn new(signed_channel_transaction: SignedChannelTransaction) -> Self {
+        Self {
+            signed_channel_transaction,
+        }
+    }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+    where
+        B: IntoBuf,
+    {
+        crate::proto::sgtypes::SyncTransactionMessageResponse::decode(buf)?.try_into()
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(
+            TryInto::<crate::proto::sgtypes::SyncTransactionMessageResponse>::try_into(self)?
+                .to_vec()?,
+        )
+    }
+}
+
+impl TryFrom<crate::proto::sgtypes::SyncTransactionMessageResponse>
+    for SyncTransactionMessageResponse
+{
+    type Error = Error;
+
+    fn try_from(value: crate::proto::sgtypes::SyncTransactionMessageResponse) -> Result<Self> {
+        Ok(Self {
+            signed_channel_transaction: value
+                .signed_channel_transaction
+                .ok_or_else(|| format_err!("Missing resource_type"))?
+                .try_into()?,
+        })
+    }
+}
+
+impl From<SyncTransactionMessageResponse>
+    for crate::proto::sgtypes::SyncTransactionMessageResponse
+{
+    fn from(value: SyncTransactionMessageResponse) -> Self {
+        Self {
+            signed_channel_transaction: Some(value.signed_channel_transaction.into()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MessageType {
     OpenChannelNodeNegotiateMessage,
     ChannelTransactionRequest,
     ChannelTransactionResponse,
     ErrorMessage,
+    StateSyncMessageRequest,
+    StateSyncMessageResponse,
+    SyncTransactionMessageRequest,
+    SyncTransactionMessageResponse,
 }
 
 impl MessageType {
@@ -310,6 +453,10 @@ impl MessageType {
             MessageType::ChannelTransactionRequest => 2,
             MessageType::ChannelTransactionResponse => 3,
             MessageType::ErrorMessage => 4,
+            MessageType::StateSyncMessageRequest => 5,
+            MessageType::StateSyncMessageResponse => 6,
+            MessageType::SyncTransactionMessageRequest => 7,
+            MessageType::SyncTransactionMessageResponse => 8,
         }
     }
 
@@ -319,6 +466,10 @@ impl MessageType {
             2 => Ok(MessageType::ChannelTransactionRequest),
             3 => Ok(MessageType::ChannelTransactionResponse),
             4 => Ok(MessageType::ErrorMessage),
+            5 => Ok(MessageType::StateSyncMessageRequest),
+            6 => Ok(MessageType::StateSyncMessageResponse),
+            7 => Ok(MessageType::SyncTransactionMessageRequest),
+            8 => Ok(MessageType::SyncTransactionMessageResponse),
             _ => bail!("no such type"),
         }
     }

@@ -41,3 +41,19 @@ message ErrorMessage {
     uint32 error_code=2;
     string error_message =3 ;
 }
+
+message SyncStateMessageRequest {
+}
+
+message SyncStateMessageResponse {
+    uint64 channel_sequence_number = 1;
+}
+
+message SyncTransactionMessageRequest {
+    uint64 channel_sequence_number = 1;
+    bytes participant = 2;
+}
+
+message SyncTransactionMessageResponse {
+    SignedChannelTransaction signed_channel_transaction = 1;
+}
