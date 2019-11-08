@@ -5,7 +5,8 @@ use crate::channel_state_view::ChannelStateView;
 use crate::tx_applier::TxApplier;
 use atomic_refcell::AtomicRefCell;
 use failure::prelude::*;
-use libra_types::transaction::{ChannelTransactionPayload, ChannelTransactionPayloadBody, Version};
+use libra_crypto::HashValue;
+use libra_types::transaction::Version;
 use libra_types::write_set::WriteSet;
 use libra_types::{
     access_path::{AccessPath, DataPath},
@@ -25,7 +26,6 @@ use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use sgtypes::signed_channel_transaction_with_proof::SignedChannelTransactionWithProof;
 use sgtypes::{
     channel::{ChannelStage, ChannelState},
-    channel_transaction::{ChannelOp, ChannelTransactionRequestAndOutput},
     sg_error::SgError,
 };
 
@@ -34,44 +34,41 @@ pub struct Channel {
     /// The version of chain when this ChannelState init.
     //TODO need version?
     //version: Version,
-    stage: AtomicRefCell<ChannelStage>,
     /// Current account state in this channel
     account: ChannelState,
     /// Participant state in this channel
     participant: ChannelState,
-    pending_txn_request: AtomicRefCell<Option<ChannelTransactionRequestAndOutput>>,
+    pending_state: PendingState,
+    db: ChannelDB,
     store: ChannelStore<ChannelDB>,
     tx_applier: TxApplier,
 }
 
 impl Channel {
     /// create channel for participant, use `store` to store tx data.
-    pub fn new(
-        account: AccountAddress,
-        participant: AccountAddress,
-        store: ChannelStore<ChannelDB>,
-    ) -> Self {
+    pub fn new(account: AccountAddress, participant: AccountAddress, db: ChannelDB) -> Self {
+        let store = ChannelStore::new(db.clone());
+        let pending_state = PendingState::new();
         Self {
-            stage: AtomicRefCell::new(ChannelStage::Opening),
             account: ChannelState::empty(account),
             participant: ChannelState::empty(participant),
-            pending_txn_request: AtomicRefCell::new(None),
+            pending_state,
+            db,
             store: store.clone(),
             tx_applier: TxApplier::new(store),
         }
     }
 
     /// load channel from storage
-    pub fn load(
-        account: ChannelState,
-        participant: ChannelState,
-        store: ChannelStore<ChannelDB>,
-    ) -> Result<Self> {
+    pub fn load(account: ChannelState, participant: ChannelState, db: ChannelDB) -> Result<Self> {
+        let store = ChannelStore::new(db.clone());
+
+        let pending_state = PendingState::new();
         let channel = Channel {
             account,
             participant,
-            stage: AtomicRefCell::new(ChannelStage::Idle),
-            pending_txn_request: AtomicRefCell::new(None),
+            pending_state,
+            db,
             store: store.clone(),
             tx_applier: TxApplier::new(store),
         };
@@ -88,7 +85,20 @@ impl Channel {
     }
 
     pub fn stage(&self) -> ChannelStage {
-        *self.stage.borrow()
+        if self.pending_state.is_pending() {
+            return ChannelStage::Pending;
+        }
+        let channel_account_resource = self.account_resource();
+        match channel_account_resource {
+            Some(resource) => {
+                if resource.closed() {
+                    ChannelStage::Closed
+                } else {
+                    ChannelStage::Idle
+                }
+            }
+            None => ChannelStage::Opening,
+        }
     }
 
     pub fn account(&self) -> &ChannelState {
@@ -125,57 +135,49 @@ impl Channel {
     }
 
     /// apply data into local channel storage
-    pub fn apply(
-        &mut self,
-        channel_txn: &ChannelTransaction,
-        sender_sigs: &ChannelTransactionSigs,
-        receiver_sigs: &ChannelTransactionSigs,
-        output: &TransactionOutput,
-        participant_witness_payload: ChannelTransactionPayload,
-    ) -> Result<()> {
+    pub fn apply(&mut self) -> Result<()> {
         self.check_stage(vec![ChannelStage::Opening, ChannelStage::Pending])?;
-        let _pending_txn = self
-            .pending_txn_request
-            .borrow()
-            .as_ref()
-            .expect("must exist");
-
-        match &participant_witness_payload.body {
-            ChannelTransactionPayloadBody::WriteSet(_) => {}
-            _ => {
-                bail!("not witness type");
-            }
-        }
+        let (_request_id, channel_txn, txn_output, sender_sigs, receiver_sigs) =
+            match self.pending_txn() {
+                Some(PendingTransaction::WaitForApply {
+                    request_id,
+                    raw_tx,
+                    sender_sigs,
+                    receiver_sigs,
+                    output,
+                }) => (request_id, raw_tx, output, sender_sigs, receiver_sigs),
+                _ => bail!("invalid state of apply txn"),
+            };
 
         let txn_to_apply = ChannelTransactionToApply {
-            signed_channel_txn: SignedChannelTransaction {
-                raw_tx: channel_txn.clone(),
-                sender_signature: sender_sigs.clone(),
-                receiver_signature: receiver_sigs.clone(),
-            },
-            travel: output.is_travel_txn(),
-            write_set: if output.is_travel_txn() {
-                WriteSet::default()
+            signed_channel_txn: SignedChannelTransaction::new(
+                channel_txn,
+                sender_sigs,
+                receiver_sigs,
+            ),
+            events: txn_output.events().to_vec(),
+            major_status: txn_output.status().vm_status().major_status,
+            write_set: if txn_output.is_travel_txn() {
+                None
             } else {
-                output.write_set().clone()
+                Some(txn_output.write_set().clone())
             },
-            events: output.events().to_vec(),
-            major_status: output.status().vm_status().major_status,
         };
+
         self.tx_applier.apply(txn_to_apply)?;
 
-        if output.is_travel_txn() {
-            self.apply_output(output.clone())?;
+        if txn_output.is_travel_txn() {
+            self.apply_travel_output(txn_output.write_set())?;
         }
 
-        *self.pending_txn_request.borrow_mut() = None;
-        *self.stage.borrow_mut() = ChannelStage::Idle;
+        // clear cached pending state
+        self.pending_state.clear()?;
 
         Ok(())
     }
 
-    pub fn apply_output(&self, output: TransactionOutput) -> Result<()> {
-        for (ap, op) in output.write_set() {
+    pub fn apply_travel_output(&self, write_set: &WriteSet) -> Result<()> {
+        for (ap, op) in write_set {
             if ap.is_channel_resource() {
                 let state = if ap.address == self.account.address() {
                     &self.account
@@ -201,53 +203,54 @@ impl Channel {
         self.store.get_latest_write_set()
     }
 
-    fn get_channel_account_resource(&self, access_path: &AccessPath) -> ChannelAccountResource {
-        self.get(access_path)
-            .and_then(|value| ChannelAccountResource::make_from(value).ok())
-            .expect("channel must contains ChannelAccountResource")
-    }
-
     pub fn channel_info(&self) -> ChannelInfo {
-        ChannelInfo::new(self.stage(), self.account_resource())
+        ChannelInfo::new(
+            self.stage(),
+            self.account_resource().unwrap_or_else(|| {
+                ChannelAccountResource::new(0, 0, false, self.participant.address())
+            }),
+        )
     }
 
-    pub fn account_resource(&self) -> ChannelAccountResource {
+    pub fn account_resource(&self) -> Option<ChannelAccountResource> {
         let access_path = AccessPath::new_for_data_path(
             self.account.address(),
             DataPath::channel_account_path(self.participant.address()),
         );
-        self.get_channel_account_resource(&access_path)
+        self.get(&access_path)
+            .and_then(|value| ChannelAccountResource::make_from(value).ok())
     }
 
-    pub fn participant_account_resource(&self) -> ChannelAccountResource {
+    pub fn participant_account_resource(&self) -> Option<ChannelAccountResource> {
         let access_path = AccessPath::new_for_data_path(
             self.participant.address(),
             DataPath::channel_account_path(self.account.address()),
         );
-        self.get_channel_account_resource(&access_path)
+        self.get(&access_path)
+            .and_then(|value| ChannelAccountResource::make_from(value).ok())
     }
 
-    pub fn pending_txn_request(&self) -> Option<ChannelTransactionRequestAndOutput> {
-        self.pending_txn_request.borrow().as_ref().cloned()
+    pub fn pending_txn(&self) -> Option<PendingTransaction> {
+        self.pending_state.pend_txn()
     }
 
-    pub fn append_txn_request(&self, request: ChannelTransactionRequestAndOutput) -> Result<()> {
-        let mut pending_txn_request = self.pending_txn_request.borrow_mut();
-        if pending_txn_request.is_some() {
-            bail!("exist a pending txn request.");
-        }
-        let operator = request.request.channel_txn().operator().clone();
-        *pending_txn_request = Some(request);
-        if operator != ChannelOp::Open {
-            *self.stage.borrow_mut() = ChannelStage::Pending;
-        }
-        Ok(())
+    pub fn save_pending_txn(&self, pending_txn: PendingTransaction, _persist: bool) -> Result<()> {
+        let cur_pending_txn = self.pending_txn();
+        match (&cur_pending_txn, &pending_txn) {
+            (None, _)
+            | (
+                Some(PendingTransaction::WaitForReceiverSig { .. }),
+                PendingTransaction::WaitForApply { .. },
+            ) => {}
+            _ => bail!("cannot save pending txn, state invalid"),
+        };
+        self.pending_state.store(pending_txn)
     }
 
     pub fn channel_sequence_number(&self) -> u64 {
-        match &*self.stage.borrow() {
-            ChannelStage::Opening => 0,
-            _ => self.account_resource().channel_sequence_number(),
+        match self.account_resource() {
+            None => 0,
+            Some(account_resource) => account_resource.channel_sequence_number(),
         }
     }
 
@@ -268,5 +271,65 @@ impl Channel {
     ) -> Result<SignedChannelTransactionWithProof> {
         self.store
             .get_transaction_by_channel_seq_number(channel_seq_number, false)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum PendingTransaction {
+    WaitForReceiverSig {
+        request_id: HashValue,
+        raw_tx: ChannelTransaction,
+        output: TransactionOutput,
+        sender_sigs: ChannelTransactionSigs,
+    },
+    WaitForApply {
+        request_id: HashValue,
+        raw_tx: ChannelTransaction,
+        output: TransactionOutput,
+        sender_sigs: ChannelTransactionSigs,
+        receiver_sigs: ChannelTransactionSigs,
+    },
+}
+
+impl PendingTransaction {
+    pub fn request_id(&self) -> HashValue {
+        match self {
+            PendingTransaction::WaitForReceiverSig { request_id, .. } => request_id.clone(),
+            PendingTransaction::WaitForApply { request_id, .. } => request_id.clone(),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct PendingState {
+    //    store: ChannelStore<ChannelDB>,
+    cache: AtomicRefCell<Option<PendingTransaction>>,
+}
+
+impl PendingState {
+    pub fn new() -> Self {
+        Self {
+            //            store,
+            cache: AtomicRefCell::new(None), // FIXME(caojiafeng): load from store
+        }
+    }
+
+    pub fn is_pending(&self) -> bool {
+        self.cache.borrow().is_some()
+    }
+
+    pub fn pend_txn(&self) -> Option<PendingTransaction> {
+        self.cache.borrow().as_ref().cloned()
+    }
+
+    // TODO(caojiafeng): clear the storage should be in the same db txn of apply
+    pub fn clear(&self) -> Result<()> {
+        *self.cache.borrow_mut() = None;
+        Ok(())
+    }
+
+    pub fn store(&self, pending: PendingTransaction) -> Result<()> {
+        *self.cache.borrow_mut() = Some(pending);
+        Ok(())
     }
 }

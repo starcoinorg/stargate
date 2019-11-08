@@ -1,6 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::channel::PendingTransaction;
 use crate::{channel::Channel, scripts::*};
 use chrono::Utc;
 use failure::prelude::*;
@@ -34,7 +35,6 @@ use libra_types::{
 use sgchain::star_chain_client::{ChainClient, StarChainClient};
 use sgconfig::config::WalletConfig;
 use sgstorage::channel_db::ChannelDB;
-use sgstorage::channel_store::ChannelStore;
 use sgstorage::storage::SgStorage;
 use sgtypes::channel::ChannelInfo;
 use sgtypes::channel_transaction_sigs::{ChannelTransactionSigs, TxnSignature};
@@ -43,8 +43,7 @@ use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use sgtypes::{
     account_resource_ext,
     channel_transaction::{
-        ChannelOp, ChannelTransaction, ChannelTransactionRequest,
-        ChannelTransactionRequestAndOutput, ChannelTransactionResponse,
+        ChannelOp, ChannelTransaction, ChannelTransactionRequest, ChannelTransactionResponse,
     },
     resource::Resource,
     script_package::{ChannelScriptPackage, ScriptCode},
@@ -133,9 +132,9 @@ where
                         self.account,
                         participant
                     ))?;
-                let channel_store = self.get_channel_store(participant);
+                let channel_db = self.get_channel_db(participant);
                 let channel =
-                    Channel::load(my_channel_state, participant_channel_state, channel_store)?;
+                    Channel::load(my_channel_state, participant_channel_state, channel_db)?;
                 info!("Init new channel with: {}", participant);
                 self.channels.write().unwrap().insert(participant, channel);
             }
@@ -258,15 +257,22 @@ where
         );
 
         let channel_txn_request = ChannelTransactionRequest::new(
-            channel_transaction,
-            channel_txn_sigs,
+            channel_transaction.clone(),
+            channel_txn_sigs.clone(),
             output.is_travel_txn(),
         );
-        channel.append_txn_request(ChannelTransactionRequestAndOutput::new(
-            channel_txn_request.clone(),
-            output,
-            None,
-        ))?;
+
+        // we need to save the pending txn, in case node nown
+        channel.save_pending_txn(
+            PendingTransaction::WaitForReceiverSig {
+                request_id: channel_txn_request.request_id(),
+                raw_tx: channel_transaction,
+                output,
+                sender_sigs: channel_txn_sigs,
+            },
+            true,
+        )?;
+
         Ok(channel_txn_request)
     }
 
@@ -330,12 +336,12 @@ where
         &self,
         txn_request: &ChannelTransactionRequest,
     ) -> Result<ChannelTransactionResponse> {
-        let id = txn_request.request_id();
+        let request_id = txn_request.request_id();
         let channel_txn = txn_request.channel_txn();
-        let channel_txn_sigs = txn_request.channel_txn_sigs();
+        let channel_txn_sender_sigs = txn_request.channel_txn_sigs();
 
         // get channel
-        debug!("verify_txn id:{}", id);
+        debug!("verify_txn id:{}", request_id);
         ensure!(
             channel_txn.receiver() == self.account,
             "check receiver fail."
@@ -354,7 +360,7 @@ where
             .get(&sender)
             .ok_or::<Error>(SgError::new_channel_not_exist_error(&sender).into())?;
 
-        self.verify_channel_txn(&channel, channel_txn, channel_txn_sigs)?;
+        self.verify_channel_txn(&channel, channel_txn, channel_txn_sender_sigs)?;
 
         let signed_txn = self.create_mocked_signed_script_txn(&channel, channel_txn)?;
         let txn_payload_signature = signed_txn
@@ -367,14 +373,8 @@ where
             Self::execute_transaction(&state_view, signed_txn)?
         };
 
-        let verified_participant_witness_payload =
-            self.verify_channel_witness(&channel, &output, channel_txn_sigs)?;
-
-        channel.append_txn_request(ChannelTransactionRequestAndOutput::new(
-            txn_request.clone(),
-            output.clone(),
-            Some(verified_participant_witness_payload),
-        ))?;
+        let _verified_participant_witness_payload =
+            self.verify_channel_witness(&channel, &output, channel_txn_sender_sigs)?;
 
         // build signatures sent to sender
         let write_set_body = ChannelWriteSetBody::new(
@@ -385,7 +385,7 @@ where
         let witness_hash = write_set_body.hash();
         let witness_signature = self.keypair.private_key.sign_message(&witness_hash);
 
-        let channel_txn_sigs = ChannelTransactionSigs::new(
+        let channel_txn_receiver_sigs = ChannelTransactionSigs::new(
             self.keypair.public_key.clone(),
             TxnSignature::ReceiverSig {
                 channel_script_body_signature: txn_payload_signature,
@@ -393,9 +393,31 @@ where
             witness_hash,
             witness_signature,
         );
+
+        // if it's a travel txn, we need to persist the pending apply txn before reply to sender.
+        // just in case that the node is down after sending reply to sender.
+        // in this case, if it's not saved, receiver has no way to get channel_txn from onchain txn,
+        // if it's offchain, there is no need. because:
+        // - if sender receive the msg from receiver, receiver can sync it from sender.
+        // - if sender doesn't receive the msg, sender will resend the request to receiver, as if nothing happens.
+
+        {
+            let should_persist = output.is_travel_txn();
+            channel.save_pending_txn(
+                PendingTransaction::WaitForApply {
+                    request_id,
+                    raw_tx: channel_txn.clone(),
+                    sender_sigs: channel_txn_sender_sigs.clone(),
+                    receiver_sigs: channel_txn_receiver_sigs.clone(),
+                    output,
+                },
+                should_persist,
+            )?;
+        }
+
         Ok(ChannelTransactionResponse::new(
             txn_request.request_id(),
-            channel_txn_sigs,
+            channel_txn_receiver_sigs,
         ))
     }
 
@@ -497,14 +519,17 @@ where
         participant: AccountAddress,
         response: &ChannelTransactionResponse,
     ) -> Result<u64> {
-        let (request, output, verified_participant_witness_payload) =
+        let (request_id, channel_txn, output, _sender_sigs, _receiver_sigs) =
             self.with_channel(&participant, |channel| {
-                match channel.pending_txn_request() {
-                    Some(ChannelTransactionRequestAndOutput {
-                        request,
+                match channel.pending_txn() {
+                    Some(PendingTransaction::WaitForApply {
+                        request_id,
+                        raw_tx,
+                        sender_sigs,
+                        receiver_sigs,
                         output,
-                        verified_participant_witness_payload,
-                    }) => Ok((request, output, verified_participant_witness_payload)),
+                    }) => Ok((request_id, raw_tx, output, sender_sigs, receiver_sigs)),
+                    Some(_) => bail!("invalid state of receiver apply txn"),
                     //TODO(jole) can not find request has such reason:
                     // 1. txn is expire.
                     // 2. txn is invalid.
@@ -515,14 +540,11 @@ where
                 }
             })?;
         ensure!(
-            request.request_id() == response.request_id(),
+            request_id == response.request_id(),
             "request id mismatch, request: {}, response: {}",
-            request.request_id(),
+            request_id,
             response.request_id()
         );
-        let request_id = request.request_id();
-
-        let channel_txn = request.channel_txn();
 
         let gas = if !output.is_travel_txn() {
             0
@@ -538,17 +560,8 @@ where
             gas
         };
 
-        self.with_channel_mut(&participant, |channel| {
-            // save to db
-            channel.apply(
-                channel_txn,
-                request.channel_txn_sigs(),
-                response.channel_txn_sigs(),
-                &output,
-                verified_participant_witness_payload
-                    .expect("receiver should have verified participant witness data"),
-            )
-        })?;
+        // save to db
+        self.with_channel_mut(&participant, |channel| channel.apply())?;
 
         info!("success apply channel request: {}", request_id);
         Ok(gas)
@@ -605,43 +618,61 @@ where
         participant: AccountAddress,
         response: &ChannelTransactionResponse,
     ) -> Result<u64> {
-        let (request, output) = self.with_channel(&participant, |channel| {
-            match channel.pending_txn_request() {
-                Some(ChannelTransactionRequestAndOutput {
-                    request, output, ..
-                }) => Ok((request, output)),
-                //TODO(jole) can not find request has such reason:
-                // 1. txn is expire.
-                // 2. txn is invalid.
-                None => bail!(
-                    "pending_txn_request must exist at stage:{:?}",
-                    channel.stage()
-                ),
-            }
-        })?;
-
-        ensure!(
-            request.request_id() == response.request_id(),
-            "request id mismatch, request: {}, response: {}",
-            request.request_id(),
-            response.request_id()
-        );
-        let request_id = request.request_id();
-
-        let channel_txn = request.channel_txn();
-        let (verified_participant_script_payload, verified_participant_witness_payload) = self
-            .with_channel(&participant, |channel| {
-                self.verify_response(&channel, channel_txn, &output, response)
+        let (request_id, channel_txn, output, sender_sigs) =
+            self.with_channel(&participant, |channel| {
+                match channel.pending_txn() {
+                    Some(PendingTransaction::WaitForReceiverSig {
+                        request_id,
+                        raw_tx,
+                        output,
+                        sender_sigs,
+                    }) => Ok((request_id, raw_tx, output, sender_sigs)),
+                    //TODO(jole) can not find request has such reason:
+                    // 1. txn is expire.
+                    // 2. txn is invalid.
+                    _ => bail!("invalid state when sender apply txn"),
+                }
             })?;
 
-        let gas = if !output.is_travel_txn() {
+        ensure!(
+            request_id == response.request_id(),
+            "request id mismatch, request: {}, response: {}",
+            request_id,
+            response.request_id()
+        );
+
+        let (verified_participant_script_payload, _verified_participant_witness_payload) = self
+            .with_channel(&participant, |channel| {
+                self.verify_response(&channel, &channel_txn, &output, response)
+            })?;
+
+        let gas_used = output.gas_used();
+        let is_travel = output.is_travel_txn();
+
+        // if it's a travel txn, we need to save the pending apply txn before submit to layer1.
+        // just in case that the node is down after submit.
+        // in this case, if it's not saved, receiver has no way to get channel_txn from onchain txn,
+        // if it's offchain, there is no need. because:
+        // - sender will resend the txn to receiver, and receiver will reply the msg.
+        self.with_channel_mut(&participant, |channel| {
+            channel.save_pending_txn(
+                PendingTransaction::WaitForApply {
+                    request_id,
+                    raw_tx: channel_txn.clone(),
+                    sender_sigs: sender_sigs.clone(),
+                    receiver_sigs: response.channel_txn_sigs().clone(),
+                    output,
+                },
+                is_travel,
+            )
+        })?;
+
+        let gas = if !is_travel {
             0
         } else {
             // construct onchain tx
-            let max_gas_amount = std::cmp::min(
-                (output.gas_used() as f64 * 1.1) as u64,
-                Self::MAX_GAS_AMOUNT_ONCHAIN,
-            );
+            let max_gas_amount =
+                std::cmp::min((gas_used as f64 * 1.1) as u64, Self::MAX_GAS_AMOUNT_ONCHAIN);
             let new_raw_txn = RawTransaction::new_channel(
                 channel_txn.sender(),
                 channel_txn.sequence_number(),
@@ -662,16 +693,8 @@ where
             gas
         };
 
-        self.with_channel_mut(&participant, |channel| {
-            // save to db
-            channel.apply(
-                channel_txn,
-                request.channel_txn_sigs(),
-                response.channel_txn_sigs(),
-                &output,
-                verified_participant_witness_payload,
-            )
-        })?;
+        // save to db
+        self.with_channel_mut(&participant, |channel| channel.apply())?;
 
         info!("success apply channel request: {}", request_id);
         Ok(gas)
@@ -923,11 +946,7 @@ where
         let mut channels = self.channels.write().unwrap();
         channels.insert(
             participant,
-            Channel::new(
-                self.account,
-                participant,
-                self.get_channel_store(participant),
-            ),
+            Channel::new(self.account, participant, self.get_channel_db(participant)),
         );
     }
 
@@ -956,9 +975,8 @@ where
     }
 
     #[inline]
-    fn get_channel_store(&self, participant_address: AccountAddress) -> ChannelStore<ChannelDB> {
-        let channel_db = ChannelDB::new(participant_address, self.sgdb.clone());
-        ChannelStore::new(channel_db)
+    fn get_channel_db(&self, participant_address: AccountAddress) -> ChannelDB {
+        ChannelDB::new(participant_address, self.sgdb.clone())
     }
 }
 
