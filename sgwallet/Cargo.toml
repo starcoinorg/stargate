@@ -10,36 +10,38 @@ edition = "2018"
 hex = "0.3.2"
 rand = "0.6.5"
 protobuf = "2.7"
+prost = "0.5.0"
 atomic_refcell = "0.1.3"
 load_file = "1.0.0"
 lazy_static = "1.3.0"
 include_dir = "0.2.1"
-failure = { path = "../libra/common/failure-ext", package = "libra-failure-ext"  }
-libra-types = { path = "../libra/types" }
-sgtypes = { path = "../sgtypes" }
-sgconfig = { path = "../sgconfig", package="sg_config" }
-libra-crypto = { path = "../libra/crypto/crypto" }
-
-channel-manager = { path = "./channel-manager"}
-sgstorage = { path = "../sgstorage" }
-
-sgchain = { path = "../sgchain" }
-libra-logger = { path = "../libra/common/logger"}
 tokio = "=0.2.0-alpha.6"
 futures = { package = "futures", version = "0.1.28" }
-prost = "0.5.0"
-stdlib = { path = "../libra/language/stdlib" }
-ir-to-bytecode = { path = "../libra/language/compiler/ir-to-bytecode" }
 futures_03 = { version = "=0.3.0-alpha.19", package = "futures-preview", features = ["async-await", "io-compat", "compat"] }
 futures_locks = { version = "=0.3.0", package = "futures-locks", features=["tokio"]}
-vm-runtime = {path="../libra/language/vm/vm-runtime"}
-vm = {path="../libra/language/vm"}
+chrono = { version = "0.4.7", default-features = false }
+itertools = "0.8.0"
+
+
+failure = { path = "../libra/common/failure-ext", package = "libra-failure-ext"  }
+libra-types = { path = "../libra/types" }
+libra-crypto = { path = "../libra/crypto/crypto" }
+libra-logger = { path = "../libra/common/logger"}
 libra-state-view = { path = "../libra/storage/state-view"}
 libra-config = { path = "../libra/config"}
+stdlib = { path = "../libra/language/stdlib" }
+ir-to-bytecode = { path = "../libra/language/compiler/ir-to-bytecode" }
+vm-runtime = {path="../libra/language/vm/vm-runtime"}
+vm = {path="../libra/language/vm"}
 lcs = { path = "../libra/common/lcs", package = "libra-canonical-serialization"}
-sgcompiler = { path = "../sgcompiler"}
-chrono = { version = "0.4.7", default-features = false }
-[dev-dependencies]
+scratchpad = { path = "../libra/storage/scratchpad" }
 
+sgtypes = { path = "../sgtypes" }
+sgconfig = { path = "../sgconfig", package="sg_config" }
+sgstorage = { path = "../sgstorage" }
+sgcompiler = { path = "../sgcompiler"}
+sgchain = { path = "../sgchain" }
+
+[dev-dependencies]
 libra-tools = { path = "../libra/common/tools"}
 rusty-fork = "0.2.1"

@@ -1,8 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::scripts::*;
-use channel_manager::channel::Channel;
+use crate::{channel::Channel, scripts::*};
 use chrono::Utc;
 use failure::prelude::*;
 use lazy_static::lazy_static;

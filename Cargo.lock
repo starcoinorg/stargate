@@ -496,31 +496,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "channel-manager"
-version = "0.1.0"
-dependencies = [
- "atomic_refcell 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "chashmap 2.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "itertools 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "libra-canonical-serialization 0.1.0",
- "libra-crypto 0.1.0",
- "libra-failure-ext 0.1.0",
- "libra-logger 0.1.0",
- "libra-state-view 0.1.0",
- "libra-tools 0.1.0",
- "libra-types 0.1.0",
- "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "scratchpad 0.1.0",
- "sg_config 0.1.0",
- "sgchain 0.1.0",
- "sgstorage 0.1.0",
- "sgtypes 0.1.0",
- "storage-proto 0.1.0",
- "tokio 0.1.22 (registry+https://github.com/rust-lang/crates.io-index)",
- "vm-runtime-types 0.1.0",
-]
-
-[[package]]
 name = "chashmap"
 version = "2.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4187,7 +4162,6 @@ name = "sgwallet"
 version = "0.1.0"
 dependencies = [
  "atomic_refcell 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "channel-manager 0.1.0",
  "chrono 0.4.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures-locks 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -4195,6 +4169,7 @@ dependencies = [
  "hex 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "include_dir 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "ir-to-bytecode 0.1.0",
+ "itertools 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "libra-canonical-serialization 0.1.0",
  "libra-config 0.1.0",
@@ -4209,6 +4184,7 @@ dependencies = [
  "protobuf 2.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusty-fork 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "scratchpad 0.1.0",
  "sg_config 0.1.0",
  "sgchain 0.1.0",
  "sgcompiler 0.1.0",
