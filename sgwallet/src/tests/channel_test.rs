@@ -12,6 +12,6 @@ fn test_channel_get_txn() {
     let _channel = Channel::new(
         store.db().owner_address(),
         store.db().participant_address(),
-        store,
+        store.db(),
     );
 }
