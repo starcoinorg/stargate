@@ -35,6 +35,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::runtime::Runtime;
+use tokio::runtime::TaskExecutor;
 use tokio::timer::delay;
 use transaction_builder::{encode_create_account_script, encode_transfer_script};
 use vm_genesis::{encode_genesis_transaction_with_validator, GENESIS_KEYPAIR};
@@ -295,6 +296,17 @@ where
     let rt = Runtime::new().expect("faucet runtime err.");
     let f = async move { client.faucet(receiver, amount).await };
     rt.block_on(f)
+}
+
+pub fn faucet_async<C>(client: C, executor: TaskExecutor, receiver: AccountAddress, amount: u64)
+where
+    C: 'static + ChainClient,
+{
+    let f = async move {
+        client.faucet(receiver, amount).await.unwrap();
+    };
+    executor.spawn(f);
+    ()
 }
 
 fn parse_response(mut resp: UpdateToLatestLedgerResponse) -> ResponseItem {

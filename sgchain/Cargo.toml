@@ -43,5 +43,9 @@ transaction-builder = { path = "../libra/language/transaction-builder"}
 libra-node = { path = "../libra/libra-node" }
 slog-scope = "4.0"
 network = { path = "../libra/network", version = "0.1.0" }
+consensus = { path = "../libra/consensus" }
+state-synchronizer = { path = "../libra/state-synchronizer" }
+parity-multiaddr = "0.5.0"
+rand = "0.6.5"
 
 [dev-dependencies]
