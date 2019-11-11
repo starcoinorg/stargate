@@ -553,10 +553,10 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
                         MessageType::ChannelTransactionRequest => node_inner.clone().lock().unwrap().handle_receiver_channel(data[2..].to_vec()),
                         MessageType::ChannelTransactionResponse => node_inner.clone().lock().unwrap().handle_sender_channel(data[2..].to_vec(),peer_id),
                         MessageType::ErrorMessage => node_inner.clone().lock().unwrap().handle_error_message(data[2..].to_vec()),
-                        MessageType::StateSyncMessageRequest => {node_inner.clone().lock().unwrap().handle_state_sync_request(peer_id)},
-                        MessageType::StateSyncMessageResponse => {},
+                        MessageType::StateSyncMessageRequest => {node_inner.clone().lock().unwrap().handle_state_sync_request(data[2..].to_vec())},
+                        MessageType::StateSyncMessageResponse => {node_inner.clone().lock().unwrap().handle_state_sync_response(data[2..].to_vec())},
                         MessageType::SyncTransactionMessageRequest => {node_inner.clone().lock().unwrap().handle_sync_transaction_request(data[2..].to_vec())},
-                        MessageType::SyncTransactionMessageResponse => {},
+                        MessageType::SyncTransactionMessageResponse => {node_inner.clone().lock().unwrap().handle_sync_transaction_response(data[2..].to_vec())},
                         _=>warn!("message type not found {:?}",msg_type),
                     };
                     },
@@ -700,8 +700,23 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         }
     }
 
-    fn handle_state_sync_request(&mut self, participant: AccountAddress) {
-        match self.wallet.channel_account_resource(participant) {
+    fn handle_state_sync_request(&mut self, data: Vec<u8>) {
+        let sync_state_message_request: SyncStateMessageRequest;
+
+        match SyncStateMessageRequest::from_proto_bytes(&data) {
+            Ok(msg) => {
+                sync_state_message_request = msg;
+            }
+            Err(_e) => {
+                warn!("get wrong message");
+                return;
+            }
+        }
+
+        match self
+            .wallet
+            .channel_account_resource(sync_state_message_request.participant)
+        {
             Ok(Some(resouce)) => {
                 let msg = add_message_type(
                     SyncStateMessageResponse::new(resouce.channel_sequence_number())
@@ -711,7 +726,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
                 );
                 self.sender
                     .unbounded_send(NetworkMessage {
-                        peer_id: participant,
+                        peer_id: sync_state_message_request.participant,
                         data: msg.to_vec(),
                     })
                     .unwrap();
@@ -719,14 +734,28 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             Ok(None) => {
                 warn!(
                     "can't find account resource by participant address {}",
-                    participant
+                    sync_state_message_request.participant
                 );
             }
             Err(_) => {
                 warn!(
                     "can't find account resource by participant address {}",
-                    participant
+                    sync_state_message_request.participant
                 );
+            }
+        }
+    }
+
+    fn handle_state_sync_response(&mut self, data: Vec<u8>) {
+        let sync_state_message_response: SyncStateMessageResponse;
+
+        match SyncStateMessageResponse::from_proto_bytes(&data) {
+            Ok(msg) => {
+                sync_state_message_response = msg;
+            }
+            Err(_e) => {
+                warn!("get wrong message");
+                return;
             }
         }
     }
@@ -767,6 +796,20 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
                     "can't find txn by channel sequence number {} with {}, err: {:?}",
                     sync_txn_request.participant, sync_txn_request.channel_sequence_number, &e
                 );
+                return;
+            }
+        }
+    }
+
+    fn handle_sync_transaction_response(&mut self, data: Vec<u8>) {
+        let sync_txn_response: SyncTransactionMessageResponse;
+
+        match SyncTransactionMessageResponse::from_proto_bytes(&data) {
+            Ok(msg) => {
+                sync_txn_response = msg;
+            }
+            Err(_e) => {
+                warn!("get wrong message");
                 return;
             }
         }

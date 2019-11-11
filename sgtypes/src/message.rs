@@ -297,6 +297,44 @@ impl From<ErrorMessage> for crate::proto::sgtypes::ErrorMessage {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SyncStateMessageRequest {
+    pub participant: AccountAddress,
+}
+
+impl SyncStateMessageRequest {
+    pub fn new(participant: AccountAddress) -> Self {
+        Self { participant }
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(TryInto::<crate::proto::sgtypes::SyncStateMessageRequest>::try_into(self)?.to_vec()?)
+    }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+    where
+        B: IntoBuf,
+    {
+        crate::proto::sgtypes::SyncStateMessageRequest::decode(buf)?.try_into()
+    }
+}
+
+impl TryFrom<crate::proto::sgtypes::SyncStateMessageRequest> for SyncStateMessageRequest {
+    type Error = Error;
+
+    fn try_from(value: crate::proto::sgtypes::SyncStateMessageRequest) -> Result<Self> {
+        Ok(SyncStateMessageRequest::new(value.participant.try_into()?))
+    }
+}
+
+impl From<SyncStateMessageRequest> for crate::proto::sgtypes::SyncStateMessageRequest {
+    fn from(value: SyncStateMessageRequest) -> Self {
+        Self {
+            participant: value.participant.to_vec(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SyncStateMessageResponse {
     pub channel_sequence_number: u64,
 }
@@ -306,6 +344,13 @@ impl SyncStateMessageResponse {
         Self {
             channel_sequence_number,
         }
+    }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+    where
+        B: IntoBuf,
+    {
+        crate::proto::sgtypes::SyncStateMessageResponse::decode(buf)?.try_into()
     }
 
     pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
