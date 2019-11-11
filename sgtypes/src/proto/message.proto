@@ -43,6 +43,7 @@ message ErrorMessage {
 }
 
 message SyncStateMessageRequest {
+    bytes participant = 1;
 }
 
 message SyncStateMessageResponse {
