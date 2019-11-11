@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    account_commands::AccountCommand, client_proxy::ClientProxy, dev_commands::DevCommand,
-    node_commands::NodeCommand,
+    account_commands::AccountCommand, dev_commands::DevCommand, node_commands::NodeCommand,
+    sg_client_proxy::SGClientProxy,
 };
 use failure::prelude::*;
+use libra_types::account_address::ADDRESS_LENGTH;
 use std::{collections::HashMap, sync::Arc};
 
 pub fn report_error(msg: &str, e: Error) {
@@ -55,7 +56,7 @@ pub fn parse_cmd(cmd_str: &str) -> Vec<&str> {
 pub fn subcommand_execute(
     parent_command_name: &str,
     commands: Vec<Box<dyn Command>>,
-    client: &mut ClientProxy,
+    client: &mut SGClientProxy,
     params: &[&str],
 ) {
     let mut commands_map = HashMap::new();
@@ -94,6 +95,14 @@ pub fn print_subcommand_help(parent_command: &str, commands: &[Box<dyn Command>]
     println!("\n");
 }
 
+/// Check whether the input string is a valid libra address.
+pub fn is_address(data: &str) -> bool {
+    match hex::decode(data) {
+        Ok(vec) => vec.len() == ADDRESS_LENGTH,
+        Err(_) => false,
+    }
+}
+
 pub trait Command {
     /// all commands and aliases this command support.
     fn get_aliases(&self) -> Vec<&'static str>;
@@ -104,5 +113,5 @@ pub trait Command {
     /// string that describes what the command does.
     fn get_description(&self) -> &'static str;
     /// code to execute.
-    fn execute(&self, client: &mut ClientProxy, params: &[&str]);
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]);
 }

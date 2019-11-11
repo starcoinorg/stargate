@@ -1,7 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{client_proxy::ClientProxy, commands::*};
+use crate::{commands::*, sg_client_proxy::SGClientProxy};
 
 /// Major command for account related operations.
 pub struct NodeCommand {}
@@ -13,7 +13,7 @@ impl Command for NodeCommand {
     fn get_description(&self) -> &'static str {
         "Node operations"
     }
-    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
         let commands: Vec<Box<dyn Command>> = vec![
             Box::new(NodeCommandOpenChannel {}),
             Box::new(NodeCommandPay {}),
@@ -41,7 +41,7 @@ impl Command for NodeCommandOpenChannel {
         "open channel with remote addr"
     }
 
-    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
         if params.len() < 4 {
             println!("Invalid number of arguments for open channel");
             return;
@@ -69,7 +69,7 @@ impl Command for NodeCommandDepositChannel {
         "deposit money to channel"
     }
 
-    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
         if params.len() < 4 {
             println!("Invalid number of arguments for deposit channel");
             return;
@@ -97,7 +97,7 @@ impl Command for NodeCommandPay {
         "<remote_addr> <amount>"
     }
 
-    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
         if params.len() < 3 {
             println!("Invalid number of arguments for pay");
             return;
@@ -125,7 +125,7 @@ impl Command for NodeCommandWithdrawChannel {
         "withdraw money from channel"
     }
 
-    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
         if params.len() < 4 {
             println!("Invalid number of arguments for withdrawl from channel");
             return;
@@ -153,7 +153,7 @@ impl Command for NodeCommandChannelBalance {
         "<remote_addr>"
     }
 
-    fn execute(&self, client: &mut ClientProxy, params: &[&str]) {
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
         if params.len() < 2 {
             println!("Invalid number of arguments for get channel balance");
             return;

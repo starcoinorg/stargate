@@ -2,10 +2,65 @@ syntax = "proto3";
 
 package sgtypes;
 
+import "transaction.proto";
+
 message ChannelTransactionRequest {
-    bytes payload = 1;
+    bytes request_id = 1;
+    ChannelTransaction channel_txn = 2;
+    ChannelTransactionSigs channel_txn_sigs = 3;
+    bool travel = 4;
 }
 
 message ChannelTransactionResponse {
-    bytes payload = 1;
+    bytes request_id = 1;
+    ChannelTransactionSigs channel_txn_sigs = 2;
+}
+
+message ChannelTransactionSigs {
+    bytes public_key = 1;
+    TxnSignature signature = 2;
+    bytes write_set_payload_hash = 3;
+    bytes write_set_payload_signature = 4;
+}
+
+message SignedChannelTransaction {
+    ChannelTransaction raw_tx = 1;
+    ChannelTransactionSigs sender_signature = 2;
+    ChannelTransactionSigs receiver_signature = 3;
+}
+
+message TxnSignature {
+    // The channel txn signature. Empty if `type` is ReceiverSig.
+    bytes channel_txn_signature = 1;
+    // The channel script body signature. Empty if `type` is SenderSig.
+    bytes channel_script_body_signature = 2;
+    TxnSignatureType sign_type = 3;
+}
+enum TxnSignatureType {
+    SenderSig = 0;
+    ReceiverSig = 1;
+}
+
+message ChannelTransaction {
+    uint64 version = 1;
+    ChannelOp operator = 2;
+    bytes sender = 3;
+    uint64 sequence_number = 4;
+    bytes receiver = 5;
+    uint64 channel_sequence_number = 6;
+    uint64 expiration_time = 7;
+    repeated types.TransactionArgument args = 8;
+}
+
+message ChannelOp {
+    // The op package name. Empty if `type` is Open/Close.
+    string package_name = 1;
+    // The op script name. Empty if `type` is Open/Close.
+    string script_name = 2;
+    ChannelOpType op_type = 3;
+}
+enum ChannelOpType {
+    Open = 0;
+    Execute = 1;
+    Close = 2;
 }

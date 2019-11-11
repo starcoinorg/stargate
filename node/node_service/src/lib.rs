@@ -10,10 +10,11 @@ use node_proto::proto::node::create_node;
 use node_proto::{
     ChannelBalanceRequest, ChannelBalanceResponse, DeployModuleRequest, DepositRequest,
     ExecuteScriptRequest, InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse,
-    OpenChannelRequest, PayRequest, WithdrawRequest,
+    OpenChannelRequest, PayRequest, QueryTransactionQuest, WithdrawRequest,
 };
 use sg_config::config::NodeConfig;
 use sgchain::star_chain_client::ChainClient;
+use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use std::convert::TryFrom;
 use std::sync::Arc;
 
@@ -163,6 +164,26 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> node_proto::proto::node::No
         );
         let fut = process_response(rx, sink);
         ctx.spawn(fut.boxed().unit_error().compat());
+    }
+
+    fn query_transaction(
+        &mut self,
+        ctx: ::grpcio::RpcContext,
+        req: node_proto::proto::node::QueryTransactionQuest,
+        sink: ::grpcio::UnarySink<sgtypes::proto::sgtypes::SignedChannelTransaction>,
+    ) {
+        let request = QueryTransactionQuest::try_from(req).unwrap();
+        let rx = self
+            .node
+            .get_txn_by_channel_sequence_number(
+                request.partipant_address,
+                request.channel_seq_number,
+            )
+            .unwrap();
+        let resp =
+            SignedChannelTransaction::new(rx.raw_tx, rx.sender_signature, rx.receiver_signature)
+                .into();
+        provide_grpc_response(Ok(resp), ctx, sink);
     }
 }
 

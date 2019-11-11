@@ -134,10 +134,7 @@ mod tests {
                     Err(_e) => Err(()),
                 }
             });
-        let receive_fut = rx1.for_each(|msg| {
-            println!("{:?}", msg);
-            Ok(())
-        });
+        let receive_fut = rx1.for_each(|_| Ok(()));
         executor.spawn(receive_fut);
         rt.executor().spawn(sender_fut);
         let task = Delay::new(Instant::now() + Duration::from_secs(6))
