@@ -21,7 +21,6 @@ use node_proto::{
     DeployModuleResponse, DepositResponse, ExecuteScriptResponse, OpenChannelResponse, PayResponse,
     WithdrawResponse,
 };
-use sgchain::star_chain_client::ChainClient;
 use sgtypes::script_package::ChannelScriptPackage;
 use sgtypes::{
     channel_transaction::{ChannelTransactionRequest, ChannelTransactionResponse},
@@ -39,15 +38,15 @@ use futures_01::sync::{
 use sgtypes::sg_error::SgError;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 
-pub struct Node<C: ChainClient + Send + Sync + 'static> {
+pub struct Node {
     executor: TaskExecutor,
-    node_inner: Arc<Mutex<NodeInner<C>>>,
+    node_inner: Arc<Mutex<NodeInner>>,
     event_sender: UnboundedSender<Event>,
     default_max_deposit: u64,
 }
 
-struct NodeInner<C: ChainClient + Send + Sync + 'static> {
-    wallet: Arc<Wallet<C>>,
+struct NodeInner {
+    wallet: Arc<Wallet>,
     executor: TaskExecutor,
     network_service: NetworkService,
     network_service_close_tx: Option<oneshot::Sender<()>>,
@@ -58,10 +57,10 @@ struct NodeInner<C: ChainClient + Send + Sync + 'static> {
     default_future_timeout: u64,
 }
 
-impl<C: ChainClient + Send + Sync + 'static> Node<C> {
+impl Node {
     pub fn new(
         executor: TaskExecutor,
-        wallet: Wallet<C>,
+        wallet: Wallet,
         network_service: NetworkService,
         sender: UnboundedSender<NetworkMessage>,
         receiver: UnboundedReceiver<NetworkMessage>,
@@ -100,14 +99,17 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             .open_channel_negotiate(negotiate_message)
     }
 
-    pub fn open_channel_oneshot(
+    pub async fn open_channel_oneshot(
         &self,
         receiver: AccountAddress,
         sender_amount: u64,
         receiver_amount: u64,
     ) -> futures::channel::oneshot::Receiver<Result<OpenChannelResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
-        let f = match self.open_channel_async(receiver, sender_amount, receiver_amount) {
+        let f = match self
+            .open_channel_async(receiver, sender_amount, receiver_amount)
+            .await
+        {
             Ok(msg_future) => msg_future,
             Err(e) => {
                 resp_sender
@@ -130,7 +132,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         resp_receiver
     }
 
-    pub fn open_channel_async(
+    pub async fn open_channel_async(
         &self,
         receiver: AccountAddress,
         sender_amount: u64,
@@ -152,12 +154,17 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         if !is_receiver_connected {
             bail!("could not connect to receiver")
         }
+
         info!("start open channel ");
-        let channel_txn = self.node_inner.clone().lock().unwrap().wallet.open(
-            receiver,
-            sender_amount,
-            receiver_amount,
-        )?;
+        let channel_txn = self
+            .node_inner
+            .clone()
+            .lock()
+            .unwrap()
+            .wallet
+            .open(receiver, sender_amount, receiver_amount)
+            .await?;
+
         info!("get open channel txn");
         let f = self
             .node_inner
@@ -168,14 +175,17 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         f
     }
 
-    pub fn deposit_oneshot(
+    pub async fn deposit_oneshot(
         &self,
         receiver: AccountAddress,
         sender_amount: u64,
         receiver_amount: u64,
     ) -> futures::channel::oneshot::Receiver<Result<DepositResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
-        let f = match self.deposit_async(receiver, sender_amount, receiver_amount) {
+        let f = match self
+            .deposit_async(receiver, sender_amount, receiver_amount)
+            .await
+        {
             Ok(msg_future) => msg_future,
             Err(e) => {
                 resp_sender
@@ -198,7 +208,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         resp_receiver
     }
 
-    pub fn deposit_async(
+    pub async fn deposit_async(
         &self,
         receiver: AccountAddress,
         sender_amount: u64,
@@ -220,11 +230,14 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         if !is_receiver_connected {
             bail!("could not connect to receiver")
         }
-        let channel_txn = self.node_inner.clone().lock().unwrap().wallet.deposit(
-            receiver,
-            sender_amount,
-            receiver_amount,
-        )?;
+        let channel_txn = self
+            .node_inner
+            .clone()
+            .lock()
+            .unwrap()
+            .wallet
+            .deposit(receiver, sender_amount, receiver_amount)
+            .await?;
         let f = self
             .node_inner
             .clone()
@@ -234,14 +247,17 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         f
     }
 
-    pub fn withdraw_oneshot(
+    pub async fn withdraw_oneshot(
         &self,
         receiver: AccountAddress,
         sender_amount: u64,
         receiver_amount: u64,
     ) -> futures::channel::oneshot::Receiver<Result<WithdrawResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
-        let f = match self.withdraw_async(receiver, sender_amount, receiver_amount) {
+        let f = match self
+            .withdraw_async(receiver, sender_amount, receiver_amount)
+            .await
+        {
             Ok(msg_future) => msg_future,
             Err(e) => {
                 resp_sender
@@ -265,7 +281,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         resp_receiver
     }
 
-    pub fn withdraw_async(
+    pub async fn withdraw_async(
         &self,
         receiver: AccountAddress,
         sender_amount: u64,
@@ -289,11 +305,14 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             "start to withdraw with {:?} {} {}",
             receiver, sender_amount, receiver_amount
         );
-        let channel_txn = self.node_inner.clone().lock().unwrap().wallet.withdraw(
-            receiver,
-            sender_amount,
-            receiver_amount,
-        )?;
+        let channel_txn = self
+            .node_inner
+            .clone()
+            .lock()
+            .unwrap()
+            .wallet
+            .withdraw(receiver, sender_amount, receiver_amount)
+            .await?;
         let f = self
             .node_inner
             .clone()
@@ -303,14 +322,14 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         f
     }
 
-    pub fn off_chain_pay_oneshot(
+    pub async fn off_chain_pay_oneshot(
         &self,
         receiver: AccountAddress,
         sender_amount: u64,
     ) -> futures::channel::oneshot::Receiver<Result<PayResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
 
-        let f = match self.off_chain_pay_async(receiver, sender_amount) {
+        let f = match self.off_chain_pay_async(receiver, sender_amount).await {
             Ok(msg_future) => msg_future,
             Err(e) => {
                 resp_sender
@@ -334,7 +353,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         resp_receiver
     }
 
-    pub fn off_chain_pay_async(
+    pub async fn off_chain_pay_async(
         &self,
         receiver_address: AccountAddress,
         amount: u64,
@@ -354,7 +373,8 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             .clone()
             .lock()
             .unwrap()
-            .off_chain_pay(receiver_address, amount);
+            .off_chain_pay(receiver_address, amount)
+            .await;
         f
     }
 
@@ -380,7 +400,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         ));
     }
 
-    pub fn local_balance(&self) -> Result<AccountResource> {
+    pub async fn local_balance(&self) -> Result<AccountResource> {
         self.node_inner
             .clone()
             .lock()
@@ -389,13 +409,14 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             .account_resource()
     }
 
-    pub fn channel_balance(&self, participant: AccountAddress) -> Result<u64> {
+    pub async fn channel_balance(&self, participant: AccountAddress) -> Result<u64> {
         self.node_inner
             .clone()
             .lock()
             .unwrap()
             .wallet
             .channel_balance(participant)
+            .await
     }
 
     pub fn set_default_timeout(&self, timeout: u64) {
@@ -474,7 +495,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
         resp_receiver
     }
 
-    pub fn execute_script_async(
+    pub async fn execute_script_async(
         &self,
         receiver_address: AccountAddress,
         package_name: String,
@@ -486,12 +507,13 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
             let transaction_arg = lcs::from_bytes(arg.as_slice())?;
             trans_args.push(transaction_arg);
         }
-        let f = self.node_inner.clone().lock().unwrap().execute_script(
-            receiver_address,
-            package_name,
-            script_name,
-            trans_args,
-        );
+        let f = self
+            .node_inner
+            .clone()
+            .lock()
+            .unwrap()
+            .execute_script(receiver_address, package_name, script_name, trans_args)
+            .await;
         f
     }
 
@@ -524,7 +546,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
     }
 
     async fn start(
-        node_inner: Arc<Mutex<NodeInner<C>>>,
+        node_inner: Arc<Mutex<NodeInner>>,
         receiver: UnboundedReceiver<NetworkMessage>,
         event_receiver: UnboundedReceiver<Event>,
     ) {
@@ -578,7 +600,7 @@ impl<C: ChainClient + Send + Sync + 'static> Node<C> {
     }
 }
 
-impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
+impl NodeInner {
     fn handle_receiver_channel(&mut self, data: Vec<u8>) {
         debug!("receive channel");
         let open_channel_message: ChannelTransactionRequest;
@@ -600,7 +622,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             let request_id = open_channel_message.request_id();
             let f = async move {
                 let receiver_open_txn: ChannelTransactionResponse;
-                match wallet.verify_txn(&open_channel_message) {
+                match wallet.verify_txn(&open_channel_message).await {
                     Ok(tx) => {
                         receiver_open_txn = tx;
                     }
@@ -625,10 +647,7 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
                         data: msg.to_vec(),
                     })
                     .unwrap();
-                match wallet
-                    .receiver_apply_txn(sender_addr, &receiver_open_txn)
-                    .await
-                {
+                match wallet.apply_txn(sender_addr, &receiver_open_txn).await {
                     Ok(_) => {}
                     Err(e) => {
                         warn!("apply tx fail, err: {:?}", &e);
@@ -663,17 +682,14 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         let wallet = self.wallet.clone();
         let mut message_processor = self.message_processor.clone();
         let f = async move {
-            match wallet
-                .sender_apply_txn(receiver_addr, &open_channel_message)
-                .await
-            {
+            match wallet.apply_txn(receiver_addr, &open_channel_message).await {
                 Ok(_) => {}
                 Err(e) => {
                     warn!("apply tx fail, err: {:?}", e);
                     return;
                 }
             };
-            let channel_seq_number = match wallet.channel_sequence_number(receiver_addr) {
+            let channel_seq_number = match wallet.channel_sequence_number(receiver_addr).await {
                 Ok(n) => n,
                 Err(e) => {
                     error!("fail to get channel sequence number, err: {:?}", e);
@@ -713,37 +729,42 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
             }
         }
 
-        match self
-            .wallet
-            .channel_account_resource(sync_state_message_request.participant)
-        {
-            Ok(Some(resouce)) => {
-                let msg = add_message_type(
-                    SyncStateMessageResponse::new(resouce.channel_sequence_number())
-                        .into_proto_bytes()
-                        .unwrap(),
-                    MessageType::StateSyncMessageResponse,
-                );
-                self.sender
-                    .unbounded_send(NetworkMessage {
-                        peer_id: sync_state_message_request.participant,
-                        data: msg.to_vec(),
-                    })
-                    .unwrap();
-            }
-            Ok(None) => {
-                warn!(
-                    "can't find account resource by participant address {}",
-                    sync_state_message_request.participant
-                );
-            }
-            Err(_) => {
-                warn!(
-                    "can't find account resource by participant address {}",
-                    sync_state_message_request.participant
-                );
-            }
-        }
+        let wallet = self.wallet.clone();
+        let sender = self.sender.clone();
+        let f = async {
+            match wallet
+                .channel_account_resource(sync_state_message_request.participant)
+                .await
+            {
+                Ok(Some(resouce)) => {
+                    let msg = add_message_type(
+                        SyncStateMessageResponse::new(resouce.channel_sequence_number())
+                            .into_proto_bytes()
+                            .unwrap(),
+                        MessageType::StateSyncMessageResponse,
+                    );
+                    sender
+                        .unbounded_send(NetworkMessage {
+                            peer_id: sync_state_message_request.participant,
+                            data: msg.to_vec(),
+                        })
+                        .unwrap();
+                }
+                Ok(None) => {
+                    warn!(
+                        "can't find account resource by participant address {}",
+                        sync_state_message_request.participant
+                    );
+                }
+                Err(_) => {
+                    warn!(
+                        "can't find account resource by participant address {}",
+                        sync_state_message_request.participant
+                    );
+                }
+            };
+        };
+        self.executor.spawn(f);
     }
 
     fn handle_state_sync_response(&mut self, data: Vec<u8>) {
@@ -849,12 +870,12 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         Ok(message_future)
     }
 
-    fn off_chain_pay(
+    async fn off_chain_pay(
         &mut self,
         receiver_address: AccountAddress,
         amount: u64,
     ) -> Result<MessageFuture<u64>> {
-        let off_chain_pay_tx = self.wallet.transfer(receiver_address, amount)?;
+        let off_chain_pay_tx = self.wallet.transfer(receiver_address, amount).await?;
         self.send_channel_request(receiver_address, off_chain_pay_tx)
     }
 
@@ -880,19 +901,22 @@ impl<C: ChainClient + Send + Sync + 'static> NodeInner<C> {
         Ok(message_future)
     }
 
-    fn execute_script(
+    async fn execute_script(
         &mut self,
         receiver_address: AccountAddress,
         package_name: String,
         script_name: String,
         transaction_args: Vec<TransactionArgument>,
     ) -> Result<MessageFuture<u64>> {
-        let script_transaction = self.wallet.execute_script(
-            receiver_address,
-            &package_name,
-            &script_name,
-            transaction_args,
-        )?;
+        let script_transaction = self
+            .wallet
+            .execute_script(
+                receiver_address,
+                &package_name,
+                &script_name,
+                transaction_args,
+            )
+            .await?;
         self.send_channel_request(receiver_address, script_transaction)
     }
 

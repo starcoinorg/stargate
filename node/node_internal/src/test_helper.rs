@@ -22,7 +22,7 @@ pub fn gen_node(
     executor: TaskExecutor,
     config: &NetworkConfig,
     client: Arc<MockChainClient>,
-) -> (Node<MockChainClient>, AccountAddress) {
+) -> (Node, AccountAddress) {
     let amount: u64 = 10_000_000;
     let mut rng: StdRng = SeedableRng::seed_from_u64(get_unix_ts()); //SeedableRng::from_seed([0; 32]);
     let keypair = Arc::new(KeyPair::generate_for_testing(&mut rng));
