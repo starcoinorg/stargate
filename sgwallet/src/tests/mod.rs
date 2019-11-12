@@ -70,8 +70,7 @@ fn generate_txn_to_apply(
                 signature.clone(),
             ),
         },
-        write_set: ws,
-        travel: false,
+        write_set: Some(ws),
         events: vec![],
         major_status: StatusCode::ABORTED,
     };
