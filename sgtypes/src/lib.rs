@@ -12,6 +12,7 @@ pub mod channel_transaction_to_commit;
 #[macro_use]
 pub mod hash;
 pub mod message;
+pub mod pending_txn;
 pub mod proof;
 pub mod proto;
 pub mod resource;

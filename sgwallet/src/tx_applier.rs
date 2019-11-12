@@ -220,8 +220,12 @@ impl TxApplier {
             major_status,
         );
 
-        self.store
-            .save_tx(txn_to_commit, channel_seq_number, &ledger_info_with_sigs)?;
+        self.store.save_tx(
+            txn_to_commit,
+            channel_seq_number,
+            &ledger_info_with_sigs,
+            true,
+        )?;
 
         self.applied_trees = AppliedTrees {
             epoch: new_epoch,

@@ -16,7 +16,7 @@ use futures::{
 };
 use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
 use libra_crypto::test_utils::KeyPair;
-use libra_crypto::{hash::CryptoHash, HashValue, SigningKey, VerifyingKey};
+use libra_crypto::{hash::CryptoHash, SigningKey, VerifyingKey};
 use libra_logger::prelude::*;
 use libra_state_view::StateView;
 use libra_types::transaction::helpers::TransactionSigner;
@@ -41,6 +41,7 @@ use sgtypes::channel_transaction::{
 };
 use sgtypes::channel_transaction_sigs::{ChannelTransactionSigs, TxnSignature};
 use sgtypes::channel_transaction_to_commit::ChannelTransactionToApply;
+use sgtypes::pending_txn::PendingTransaction;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use sgtypes::{
     channel::{ChannelStage, ChannelState},
@@ -144,7 +145,6 @@ impl Channel {
         let inner = Inner {
             account_address,
             participant_address,
-            pending_state: None, // FIXME(caojiafeng): load from store
             account,
             participant,
             store: store.clone(),
@@ -188,7 +188,6 @@ struct Inner {
     account: ChannelState,
     /// Participant state in this channel
     participant: ChannelState,
-    pending_state: Option<PendingTransaction>,
     //    db: ChannelDB,
     store: ChannelStore<ChannelDB>,
     keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
@@ -456,7 +455,7 @@ impl Inner {
         );
 
         // we need to save the pending txn, in case node nown
-        self.save_pending_txn(
+        self.store.save_pending_txn(
             PendingTransaction::WaitForReceiverSig {
                 request_id: channel_txn_request.request_id(),
                 raw_tx: channel_transaction,
@@ -560,7 +559,7 @@ impl Inner {
 
         {
             let should_persist = output.is_travel_txn();
-            self.save_pending_txn(
+            self.store.save_pending_txn(
                 PendingTransaction::WaitForApply {
                     request_id,
                     raw_tx: channel_txn.clone(),
@@ -640,7 +639,7 @@ impl Inner {
                 receiver_sigs: response.channel_txn_sigs().clone(),
                 output,
             };
-            self.save_pending_txn(pending_txn, is_travel)?;
+            self.store.save_pending_txn(pending_txn, is_travel)?;
         }
         Ok(())
     }
@@ -848,14 +847,12 @@ impl Inner {
             },
         };
 
+        // apply txn  also delete pending txn from db
         self.tx_applier.apply(txn_to_apply)?;
 
         if txn_output.is_travel_txn() {
             self.apply_travel_output(txn_output.write_set())?;
         }
-
-        // clear cached pending state, should also delete from db
-        let _ = self.pending_state.take();
 
         Ok(())
     }
@@ -887,29 +884,6 @@ impl Inner {
         self.store.get_latest_write_set()
     }
 
-    //    pub fn channel_info(&self) -> ChannelInfo {
-    //        ChannelInfo::new(
-    //            self.stage(),
-    //            self.channel_account_resource().unwrap_or_else(|| {
-    //                ChannelAccountResource::new(0, 0, false, self.participant.address())
-    //            }),
-    //        )
-    //    }
-
-    fn save_pending_txn(&mut self, pending_txn: PendingTransaction, _persist: bool) -> Result<()> {
-        let cur_pending_txn = self.pending_txn();
-        match (&cur_pending_txn, &pending_txn) {
-            (None, _)
-            | (
-                Some(PendingTransaction::WaitForReceiverSig { .. }),
-                PendingTransaction::WaitForApply { .. },
-            ) => {}
-            _ => bail!("cannot save pending txn, state invalid"),
-        };
-        self.pending_state = Some(pending_txn);
-        Ok(())
-    }
-
     fn channel_sequence_number(&self) -> u64 {
         match self.channel_account_resource() {
             None => 0,
@@ -938,11 +912,11 @@ impl Inner {
     //    }
 
     fn pending_txn(&self) -> Option<PendingTransaction> {
-        self.pending_state.clone()
+        self.store.get_pending_txn()
     }
 
     fn get_pending_channel_txn_request(&self) -> Option<ChannelTransactionRequest> {
-        self.pending_state
+        self.pending_txn()
             .as_ref()
             .and_then(|pending| match pending {
                 PendingTransaction::WaitForReceiverSig {
@@ -1013,34 +987,8 @@ impl Inner {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum PendingTransaction {
-    WaitForReceiverSig {
-        request_id: HashValue,
-        raw_tx: ChannelTransaction,
-        output: TransactionOutput,
-        sender_sigs: ChannelTransactionSigs,
-    },
-    WaitForApply {
-        request_id: HashValue,
-        raw_tx: ChannelTransaction,
-        output: TransactionOutput,
-        sender_sigs: ChannelTransactionSigs,
-        receiver_sigs: ChannelTransactionSigs,
-    },
-}
-
-impl PendingTransaction {
-    pub fn request_id(&self) -> HashValue {
-        match self {
-            PendingTransaction::WaitForReceiverSig { request_id, .. } => request_id.clone(),
-            PendingTransaction::WaitForApply { request_id, .. } => request_id.clone(),
-        }
-    }
-}
-
-pub enum ChannelEvent {
-    ChannelStarted { channel: Channel },
-    ChannelStopped { participant: AccountAddress },
-}
-pub struct ChannelManager {}
+//pub enum ChannelEvent {
+//    ChannelStarted { channel: Channel },
+//    ChannelStopped { participant: AccountAddress },
+//}
+//pub struct ChannelManager {}
