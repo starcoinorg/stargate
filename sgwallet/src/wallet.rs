@@ -18,9 +18,9 @@ use libra_crypto::{
 };
 use libra_logger::prelude::*;
 use libra_state_view::StateView;
-
+use libra_types::access_path::AccessPath;
+use libra_types::channel_account::channel_account_struct_tag;
 use libra_types::transaction::Transaction;
-
 use libra_types::{
     access_path::DataPath,
     account_address::AccountAddress,
@@ -29,9 +29,9 @@ use libra_types::{
     language_storage::StructTag,
     transaction::{
         helpers::{create_signed_payload_txn, ChannelPayloadSigner, TransactionSigner},
-        ChannelScriptBody, ChannelTransactionPayload, ChannelTransactionPayloadBody, Module,
-        RawTransaction, Script, SignedTransaction, TransactionArgument, TransactionOutput,
-        TransactionPayload, TransactionStatus, TransactionWithProof,
+        ChannelTransactionPayloadBody, Module, RawTransaction, SignedTransaction,
+        TransactionArgument, TransactionOutput, TransactionPayload, TransactionStatus,
+        TransactionWithProof,
     },
     vm_error::*,
 };
@@ -48,12 +48,8 @@ use sgtypes::{
     channel_transaction::{ChannelOp, ChannelTransactionRequest, ChannelTransactionResponse},
     script_package::{ChannelScriptPackage, ScriptCode},
 };
-use std::collections::HashMap;
-
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
-
-use libra_types::access_path::AccessPath;
-use libra_types::channel_account::channel_account_struct_tag;
 use std::{sync::Arc, time::Duration};
 use tokio::runtime;
 use vm_runtime::{MoveVM, VMExecutor};
@@ -115,7 +111,6 @@ impl Wallet {
             sgdb: sgdb.clone(),
             runtime,
             mailbox,
-            mail_sender: mail_sender.clone(),
         };
         let wallet = Wallet {
             mailbox_sender: mail_sender.clone(),
@@ -404,6 +399,14 @@ impl Wallet {
         resp
     }
 
+    pub async fn get_all_channels(&self) -> Result<HashSet<AccountAddress>> {
+        let (tx, rx) = oneshot::channel();
+        let cmd = WalletCmd::GetAllChannels { responder: tx };
+
+        let resp = self.call(cmd, rx).await?;
+        resp
+    }
+
     async fn call<T>(&self, cmd: WalletCmd, rx: oneshot::Receiver<T>) -> Result<T> {
         if let Err(_e) = self.mailbox_sender.clone().try_send(cmd) {
             bail!("wallet mailbox is full or close");
@@ -436,6 +439,9 @@ pub enum WalletCmd {
         package: ChannelScriptPackage,
         responder: oneshot::Sender<Result<()>>,
     },
+    GetAllChannels {
+        responder: oneshot::Sender<Result<HashSet<AccountAddress>>>,
+    },
     DeployModule {
         module_byte_code: Vec<u8>,
         responder: oneshot::Sender<Result<TransactionWithProof>>,
@@ -458,7 +464,6 @@ pub struct Inner {
     sgdb: Arc<SgStorage>,
     runtime: tokio::runtime::Runtime,
     mailbox: mpsc::Receiver<WalletCmd>,
-    mail_sender: mpsc::Sender<WalletCmd>,
     //    channel_event_receiver: mpsc::Receiver<ChannelEvent>,
 }
 
@@ -513,6 +518,14 @@ impl Inner {
                 txn_response,
                 responder,
             } => self.apply_txn(participant, &txn_response, responder).await,
+            WalletCmd::GetChannelResource {
+                participant,
+                struct_tag,
+                responder,
+            } => {
+                self.get_channel_resource(participant, struct_tag, responder)
+                    .await;
+            }
             WalletCmd::InstallPackage { package, responder } => {
                 let result = self.install_package(package);
                 respond_with(responder, result);
@@ -535,13 +548,13 @@ impl Inner {
                     .get_script(&package_name, &script_name);
                 respond_with(responder, Ok(resp));
             }
-            WalletCmd::GetChannelResource {
-                participant,
-                struct_tag,
-                responder,
-            } => {
-                self.get_channel_resource(participant, struct_tag, responder)
-                    .await;
+            WalletCmd::GetAllChannels { responder } => {
+                let all_channels = self
+                    .channels
+                    .keys()
+                    .map(Clone::clone)
+                    .collect::<HashSet<_>>();
+                respond_with(responder, Ok(all_channels));
             }
         }
     }
@@ -747,6 +760,33 @@ impl Inner {
         };
     }
 
+    async fn get_pending_channel_txn_request(
+        &mut self,
+        participant: AccountAddress,
+        responder: oneshot::Sender<Result<Option<ChannelTransactionRequest>>>,
+    ) {
+        let channel = match self.channels.get(&participant) {
+            Some(channel) => channel,
+            None => {
+                let e: Error = SgError::new_channel_not_exist_error(&participant).into();
+                respond_with(responder, Err(e));
+                return ();
+            }
+        };
+        let msg = ChannelMsg::GetPendingChannelTransactionRequest { responder };
+        if let Err(err) = channel.mail_sender().try_send(msg) {
+            let err_status = if err.is_disconnected() {
+                "closed"
+            } else {
+                "full"
+            };
+            if let ChannelMsg::AccessPath { responder, .. } = err.into_inner() {
+                let resp_err = format_err!("channel {:?} mailbox {:?}", &participant, err_status);
+                respond_with(responder, Err(resp_err));
+            }
+        }
+    }
+
     /// get channel account resource data from channel task
     async fn get_channel_resource(
         &self,
@@ -768,11 +808,15 @@ impl Inner {
             responder,
         };
         if let Err(err) = channel.mail_sender().try_send(msg) {
-            let _err_status = if err.is_disconnected() {
+            let err_status = if err.is_disconnected() {
                 "closed"
             } else {
                 "full"
             };
+            if let ChannelMsg::AccessPath { responder, .. } = err.into_inner() {
+                let resp_err = format_err!("channel {:?} mailbox {:?}", &participant, err_status);
+                respond_with(responder, Err(resp_err));
+            }
         }
     }
 

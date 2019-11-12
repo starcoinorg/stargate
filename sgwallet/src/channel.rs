@@ -9,13 +9,11 @@ use crate::wallet::{
     txn_expiration, watch_transaction, GAS_UNIT_PRICE, MAX_GAS_AMOUNT_OFFCHAIN,
     MAX_GAS_AMOUNT_ONCHAIN,
 };
-
 use failure::prelude::*;
 use futures::{
     channel::{mpsc, oneshot},
-    FutureExt, StreamExt,
+    StreamExt,
 };
-
 use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
 use libra_crypto::test_utils::KeyPair;
 use libra_crypto::{hash::CryptoHash, HashValue, SigningKey, VerifyingKey};
@@ -38,14 +36,12 @@ use libra_types::{
 use sgchain::star_chain_client::ChainClient;
 use sgstorage::channel_db::ChannelDB;
 use sgstorage::channel_store::ChannelStore;
-
 use sgtypes::channel_transaction::{
     ChannelOp, ChannelTransaction, ChannelTransactionRequest, ChannelTransactionResponse,
 };
 use sgtypes::channel_transaction_sigs::{ChannelTransactionSigs, TxnSignature};
 use sgtypes::channel_transaction_to_commit::ChannelTransactionToApply;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
-
 use sgtypes::{
     channel::{ChannelStage, ChannelState},
     sg_error::SgError,
@@ -69,6 +65,9 @@ pub enum ChannelMsg {
     },
     ApplyPendingTxn {
         responder: oneshot::Sender<Result<u64>>,
+    },
+    GetPendingChannelTransactionRequest {
+        responder: oneshot::Sender<Result<Option<ChannelTransactionRequest>>>,
     },
     AccessPath {
         path: AccessPath,
@@ -95,11 +94,10 @@ pub struct Channel {
     /// The version of chain when this ChannelState init.
     //TODO need version?
     //version: Version,
-    db: ChannelDB,
-    store: ChannelStore<ChannelDB>,
-    keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
-    script_registry: Arc<PackageRegistry>,
-    chain_client: Arc<dyn ChainClient>,
+    account_address: AccountAddress,
+    participant_address: AccountAddress,
+    //    db: ChannelDB,
+    //    store: ChannelStore<ChannelDB>,
     mail_sender: mpsc::Sender<ChannelMsg>,
     inner: Option<Inner>,
 }
@@ -149,7 +147,6 @@ impl Channel {
             pending_state: None, // FIXME(caojiafeng): load from store
             account,
             participant,
-            db: db.clone(),
             store: store.clone(),
             keypair: keypair.clone(),
             script_registry: script_registry.clone(),
@@ -158,11 +155,8 @@ impl Channel {
             mailbox,
         };
         let channel = Self {
-            db,
-            store,
-            keypair,
-            script_registry,
-            chain_client,
+            account_address,
+            participant_address,
             mail_sender,
             inner: Some(inner),
         };
@@ -173,6 +167,13 @@ impl Channel {
         let inner = self.inner.take().expect("channel already started");
         // TODO: wait channel start?
         executor.spawn(inner.start())
+    }
+
+    pub fn account_address(&self) -> &AccountAddress {
+        &self.account_address
+    }
+    pub fn participant_address(&self) -> &AccountAddress {
+        &self.participant_address
     }
 
     pub fn mail_sender(&self) -> mpsc::Sender<ChannelMsg> {
@@ -188,7 +189,7 @@ struct Inner {
     /// Participant state in this channel
     participant: ChannelState,
     pending_state: Option<PendingTransaction>,
-    db: ChannelDB,
+    //    db: ChannelDB,
     store: ChannelStore<ChannelDB>,
     keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
     script_registry: Arc<PackageRegistry>,
@@ -278,6 +279,10 @@ impl Inner {
             ChannelMsg::AccessPath { path, responder } => {
                 let response = self.get_local(&path);
                 respond_with(responder, response);
+            }
+            ChannelMsg::GetPendingChannelTransactionRequest { responder } => {
+                let response = self.get_pending_channel_txn_request();
+                respond_with(responder, Ok(response));
             }
         };
     }
@@ -870,22 +875,40 @@ impl Inner {
             .unwrap()
             .and_then(|value| ChannelAccountResource::make_from(value).ok())
     }
+    //
+    //    pub fn participant_channel_account_resource(&self) -> Option<ChannelAccountResource> {
+    //        let access_path = AccessPath::new_for_data_path(
+    //            self.participant.address(),
+    //            DataPath::channel_account_path(self.account.address()),
+    //        );
+    //        self.get_local(&access_path)
+    //            .unwrap()
+    //            .and_then(|value| ChannelAccountResource::make_from(value).ok())
+    //    }
 
-    pub fn participant_channel_account_resource(&self) -> Option<ChannelAccountResource> {
-        let access_path = AccessPath::new_for_data_path(
-            self.participant.address(),
-            DataPath::channel_account_path(self.account.address()),
-        );
-        self.get_local(&access_path)
-            .unwrap()
-            .and_then(|value| ChannelAccountResource::make_from(value).ok())
-    }
-
-    pub fn pending_txn(&self) -> Option<PendingTransaction> {
+    fn pending_txn(&self) -> Option<PendingTransaction> {
         self.pending_state.clone()
     }
 
-    pub fn stage(&self) -> ChannelStage {
+    fn get_pending_channel_txn_request(&self) -> Option<ChannelTransactionRequest> {
+        self.pending_state
+            .as_ref()
+            .and_then(|pending| match pending {
+                PendingTransaction::WaitForReceiverSig {
+                    raw_tx,
+                    output,
+                    sender_sigs,
+                    ..
+                } => Some(ChannelTransactionRequest::new(
+                    raw_tx.clone(),
+                    sender_sigs.clone(),
+                    output.is_travel_txn(),
+                )),
+                _ => None,
+            })
+    }
+
+    fn stage(&self) -> ChannelStage {
         match self.pending_txn() {
             Some(PendingTransaction::WaitForApply { .. }) => ChannelStage::Syncing,
             Some(PendingTransaction::WaitForReceiverSig { .. }) => ChannelStage::Pending,
