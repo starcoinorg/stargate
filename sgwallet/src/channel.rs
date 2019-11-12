@@ -478,6 +478,41 @@ impl Inner {
         let channel_txn_sender_sigs = txn_request.channel_txn_sigs();
 
         self.verify_channel_txn_and_sigs(channel_txn, channel_txn_sender_sigs)?;
+        let applied_txn = if let Some(info) = self.store.get_startup_info()? {
+            if channel_txn.channel_sequence_number() > info.latest_version {
+                None
+            } else {
+                let signed_channel_txn_with_proof =
+                    self.store.get_transaction_by_channel_seq_number(
+                        channel_txn.channel_sequence_number(),
+                        false,
+                    )?;
+                debug_assert_eq!(
+                    signed_channel_txn_with_proof.version,
+                    channel_txn.channel_sequence_number()
+                );
+                Some(signed_channel_txn_with_proof.signed_transaction)
+            }
+        } else {
+            None
+        };
+
+        // if found an already applied txn in local storage,
+        // we can return directly after check the hash of transaction and signatures.
+        if let Some(signed_txn) = applied_txn {
+            if signed_txn.raw_tx.hash() == channel_txn.hash()
+                && signed_txn.sender_signature.hash() == channel_txn_sender_sigs.hash()
+            {
+                return Ok(ChannelTransactionResponse::new(
+                    request_id,
+                    signed_txn.receiver_signature,
+                ));
+            } else {
+                return Err(format_err!(
+                    "invalid txn, txn with channel_seq_number is mismatched"
+                ));
+            }
+        }
 
         let signed_txn = {
             let raw_txn =
@@ -565,10 +600,19 @@ impl Inner {
             //TODO(jole) can not find request has such reason:
             // 1. txn is expire.
             // 2. txn is invalid.
-            None => bail!(
-                "pending txn must exist when verify txn response, stage: {:?}",
-                self.stage()
-            ),
+            None => {
+                // If I'm the receiver, no need to verify my own response
+                // TODO: figure out a better way to do it.
+                let is_receiver =
+                    &self.keypair.public_key == &response.channel_txn_sigs().public_key;
+                if is_receiver {
+                    return Ok(());
+                }
+                bail!(
+                    "pending txn must exist when verify txn response, stage: {:?}",
+                    self.stage()
+                )
+            }
         };
 
         ensure!(
@@ -605,10 +649,14 @@ impl Inner {
         // apply
         let (channel_txn, output, receiver_pub_key_and_script_body_signature) =
             match self.pending_txn() {
-                //TODO(jole) can not find request has such reason:
-                // 1. txn is expire.
-                // 2. txn is invalid.
-                None | Some(PendingTransaction::WaitForReceiverSig { .. }) => {
+                //can not find request has such reason:
+                // 1. receiver has already apply the txn before, this msg is a retry msg.
+                // 2. currently, no ongoing.
+                // TODO: should distinguish these cases, and return saved gas data if former.
+                None => {
+                    return Ok(0);
+                }
+                Some(PendingTransaction::WaitForReceiverSig { .. }) => {
                     bail!("pending_txn_request must exist at stage:{:?}", self.stage())
                 }
                 Some(PendingTransaction::WaitForApply {
@@ -685,8 +733,11 @@ impl Inner {
             "check receiver fail."
         );
         let channel_sequence_number = self.channel_sequence_number();
+        let smallest_allowed_channel_seq_number =
+            channel_sequence_number.checked_sub(1).unwrap_or(0);
         ensure!(
-            channel_sequence_number == channel_txn.channel_sequence_number(),
+            channel_txn.channel_sequence_number() >= smallest_allowed_channel_seq_number
+                && channel_txn.channel_sequence_number() <= channel_sequence_number,
             "check channel_sequence_number fail."
         );
         match &channel_txn_sigs.signature {

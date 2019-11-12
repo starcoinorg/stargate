@@ -16,7 +16,10 @@ pub mod wallet_test_helper;
 
 #[test]
 fn test_wallet_with_mock_client() {
-    run_test_wallet_with_mock_client().unwrap();
+    if let Err(e) = run_test_wallet_with_mock_client() {
+        println!("err: {:?}", e);
+        assert!(false)
+    }
 }
 
 #[test]

@@ -363,6 +363,20 @@ impl Wallet {
         resp
     }
 
+    pub async fn get_pending_txn_request(
+        &self,
+        participant: AccountAddress,
+    ) -> Result<Option<ChannelTransactionRequest>> {
+        let (tx, rx) = oneshot::channel();
+        let cmd = WalletCmd::GetPendingTxnRequest {
+            participant,
+            responder: tx,
+        };
+
+        let resp = self.call(cmd, rx).await?;
+        resp
+    }
+
     pub async fn install_package(&self, package: ChannelScriptPackage) -> Result<()> {
         let (tx, rx) = oneshot::channel();
         let cmd = WalletCmd::InstallPackage {
@@ -456,6 +470,10 @@ pub enum WalletCmd {
         struct_tag: StructTag,
         responder: oneshot::Sender<Result<Option<Vec<u8>>>>,
     },
+    GetPendingTxnRequest {
+        participant: AccountAddress,
+        responder: oneshot::Sender<Result<Option<ChannelTransactionRequest>>>,
+    },
 }
 
 pub struct Inner {
@@ -525,6 +543,13 @@ impl Inner {
             } => {
                 self.get_channel_resource(participant, struct_tag, responder)
                     .await;
+            }
+            WalletCmd::GetPendingTxnRequest {
+                participant,
+                responder,
+            } => {
+                self.get_pending_channel_txn_request(participant, responder)
+                    .await
             }
             WalletCmd::InstallPackage { package, responder } => {
                 let result = self.install_package(package);
