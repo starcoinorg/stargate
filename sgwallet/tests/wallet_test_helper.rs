@@ -210,12 +210,26 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
         //debug!("txn:{:#?}", transfer_txn);
 
         let receiver_transfer_txn = receiver_wallet.verify_txn(&transfer_txn).await.unwrap();
-
+        // now,receiver apply the txn
         let receiver_future = receiver_wallet.apply_txn(sender, &receiver_transfer_txn);
-        let sender_future = sender_wallet.apply_txn(receiver, &receiver_transfer_txn);
+        receiver_future.await?;
+        // then sender still pending
+        assert!(
+            sender_wallet
+                .get_pending_txn_request(receiver_wallet.account())
+                .await?
+                .is_some(),
+            "sender should have pending txn"
+        );
+        // then retry the txn
+        let retried_txn = receiver_wallet.verify_txn(&transfer_txn).await?;
+        assert_eq!(receiver_transfer_txn, retried_txn, "two txn shold be equal");
 
-        sender_gas_used += sender_future.await.unwrap();
-        receiver_future.await.unwrap();
+        let sender_future = sender_wallet.apply_txn(receiver, &receiver_transfer_txn);
+        sender_gas_used += sender_future.await?;
+        let _ = receiver_wallet
+            .apply_txn(sender, &receiver_transfer_txn)
+            .await?;
 
         let sender_channel_balance = sender_wallet.channel_balance(receiver).await.unwrap();
         assert_eq!(
@@ -283,9 +297,10 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
         drop(sender_wallet);
         drop(receiver_wallet);
         debug!("finish");
+        Ok::<_, Error>(())
     };
 
-    rt.block_on(f);
+    rt.block_on(f)?;
     Ok(())
 }
 

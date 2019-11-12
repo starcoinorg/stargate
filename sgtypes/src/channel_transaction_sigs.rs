@@ -1,7 +1,9 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
+use crate::hash::ChannelTransactionSigsHasher;
 use failure::prelude::*;
 use libra_crypto::ed25519::{Ed25519PublicKey, Ed25519Signature};
+use libra_crypto::hash::{CryptoHash, CryptoHasher};
 use libra_crypto::HashValue;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -88,6 +90,19 @@ impl ChannelTransactionSigs {
             write_set_payload_hash,
             write_set_payload_signature,
         }
+    }
+}
+
+impl CryptoHash for ChannelTransactionSigs {
+    type Hasher = ChannelTransactionSigsHasher;
+    fn hash(&self) -> HashValue {
+        let mut state = Self::Hasher::default();
+        state.write(
+            lcs::to_bytes(self)
+                .expect("Failed to serialize ChannelTransaction")
+                .as_slice(),
+        );
+        state.finish()
     }
 }
 
