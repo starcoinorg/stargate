@@ -70,6 +70,7 @@ pub fn setup_network(
     );
     network_builder
         .permissioned(config.is_permissioned)
+        .is_public(config.is_public_network)
         .advertised_address(config.listen_address.clone())
         .direct_send_protocols(vec![
             ProtocolId::from_static(CONSENSUS_DIRECT_SEND_PROTOCOL),
@@ -117,7 +118,15 @@ pub fn setup_network(
         .trusted_peers(trusted_peers)
         .signing_keys((network_signing_private_key, network_signing_public_key));
 
-    network_builder.transport(TransportType::Memory);
+    network_builder.transport(TransportType::PermissionlessMemoryNoise(Some((
+        config.network_keypairs.get_network_identity_private(),
+        config
+            .network_keypairs
+            .get_network_identity_public()
+            .clone(),
+    ))));
+
+    //network_builder.transport(TransportType::PermissionlessMemoryNoise);
 
     //    if flag {
     //        network_builder.transport(TransportType::PermissionlessMemoryNoise(Some((
@@ -262,7 +271,9 @@ fn pow_node_random_conf(listen_address: &str, times: usize) -> NodeConfig {
     let mut config = NodeConfigHelpers::get_single_node_test_config_times(true, times);
 
     for conf in &mut (&mut config).networks {
-        conf.is_permissioned = true;
+        conf.is_permissioned = false;
+        conf.is_public_network = true;
+        conf.enable_encryption_and_authentication = true;
         conf.listen_address = listen_address.parse().unwrap();
         conf.role = "validator".to_string();
     }
@@ -292,7 +303,6 @@ fn print_ports(config: &NodeConfig) {
 }
 
 #[test]
-#[ignore]
 fn test_pow_node() {
     ::libra_logger::init_for_e2e_testing();
     let mut conf_1 = pow_node_random_conf("/memory/0", 0);
