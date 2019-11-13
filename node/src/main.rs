@@ -72,7 +72,7 @@ fn gen_node(
     sender: UnboundedSender<NetworkMessage>,
     receiver: UnboundedReceiver<NetworkMessage>,
     close_tx: futures_01::sync::oneshot::Sender<()>,
-) -> (Node<StarChainClient>) {
+) -> (Node) {
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     let client = StarChainClient::new(
         &wallet_config.chain_address,

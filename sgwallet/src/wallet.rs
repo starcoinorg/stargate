@@ -249,7 +249,7 @@ impl Wallet {
     }
 
     pub async fn transfer(
-        &mut self,
+        &self,
         receiver: AccountAddress,
         amount: u64,
     ) -> Result<ChannelTransactionRequest> {

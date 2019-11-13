@@ -5,6 +5,7 @@
 
 mod message_processor;
 pub mod node;
+mod node_command;
 
 //#[cfg(test)]
 pub mod test_helper;

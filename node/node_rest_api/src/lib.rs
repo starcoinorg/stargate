@@ -14,20 +14,14 @@ use libra_types::{account_address::AccountAddress, transaction::parse_as_transac
 use node_internal::node::Node as Node_Internal;
 use serde_json::Value;
 use sg_config::config::RestConfig;
-use sgchain::star_chain_client::ChainClient;
 
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use std::{sync::Arc, thread};
 
-trait CompoundTrait: ChainClient + Clone + Send + Sync + 'static {}
-
-pub fn setup_node_rest<C>(
+pub fn setup_node_rest(
     config: RestConfig,
-    node: Arc<Node_Internal<C>>,
-) -> Result<(), Box<dyn std::error::Error>>
-where
-    C: ChainClient + Clone + 'static,
-{
+    node: Arc<Node_Internal>,
+) -> Result<(), Box<dyn std::error::Error>> {
     thread::spawn(move || {
         let web_server = WebServer { node };
         web_server.start(config.address.clone(), config.port);
@@ -56,15 +50,15 @@ impl ResponseFormat for ResponseResult {
     }
 }
 
-struct WebServer<C: ChainClient + Clone + 'static> {
-    node: Arc<Node_Internal<C>>,
+struct WebServer {
+    node: Arc<Node_Internal>,
 }
 
-impl<C: ChainClient + Clone + 'static> NewService for WebServer<C> {
+impl NewService for WebServer {
     type ReqBody = Body;
     type ResBody = Body;
     type Error = Error;
-    type Service = WebServer<C>;
+    type Service = WebServer;
     type Future = Box<dyn Future<Item = Self::Service, Error = Self::InitError> + Send>;
     type InitError = Error;
 
@@ -75,7 +69,7 @@ impl<C: ChainClient + Clone + 'static> NewService for WebServer<C> {
     }
 }
 
-impl<C: ChainClient + Clone + 'static> Service for WebServer<C> {
+impl Service for WebServer {
     type ReqBody = Body;
     type ResBody = Body;
     type Error = Error;
@@ -206,7 +200,7 @@ impl<C: ChainClient + Clone + 'static> Service for WebServer<C> {
     }
 }
 
-impl<C: ChainClient + Clone + 'static> WebServer<C> {
+impl WebServer {
     fn start(self, address: String, port: u16) {
         let addr = format!("{}:{}", address, port).parse().unwrap();
         let server = Server::bind(&addr)
