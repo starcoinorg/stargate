@@ -1,7 +1,7 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::star_chain_client::{faucet_async, StarChainClient};
+use crate::star_chain_client::{faucet_async, submit_txn_async, StarChainClient};
 use admission_control_service::runtime::AdmissionControlRuntime;
 use consensus::consensus_provider::make_pow_consensus_provider;
 use futures::future;
@@ -22,6 +22,8 @@ use libra_logger::prelude::*;
 use libra_mempool::MempoolRuntime;
 use libra_node::main_node::{setup_debug_interface, setup_executor, LibraHandle};
 use libra_types::account_address::{AccountAddress as PeerId, AccountAddress};
+use libra_types::account_config::association_address;
+use libra_types::transaction::{RawTransaction, SignedTransaction};
 use network::{
     validator_network::{
         network_builder::{NetworkBuilder, TransportType},
@@ -40,6 +42,7 @@ use parity_multiaddr::Multiaddr;
 use rand::prelude::*;
 use rand::{rngs::StdRng, SeedableRng};
 use state_synchronizer::StateSynchronizer;
+use std::thread::sleep;
 use std::time::Duration;
 use std::{
     collections::HashMap,
@@ -52,6 +55,8 @@ use storage_service::start_storage_service;
 use tokio::runtime::TaskExecutor;
 use tokio::runtime::{Builder, Runtime};
 use tokio::timer::Interval;
+use transaction_builder::{encode_create_account_script, encode_transfer_script};
+use vm_genesis::GENESIS_KEYPAIR;
 
 pub fn setup_network(
     peer_id: PeerId,
@@ -126,19 +131,6 @@ pub fn setup_network(
             .clone(),
     ))));
 
-    //network_builder.transport(TransportType::PermissionlessMemoryNoise);
-
-    //    if flag {
-    //        network_builder.transport(TransportType::PermissionlessMemoryNoise(Some((
-    //            config.network_keypairs.get_network_identity_private(),
-    //            config.network_keypairs.get_network_identity_public().clone(),
-    //        ))));
-    //    } else {
-    //        network_builder.transport(TransportType::MemoryNoise(Some((
-    //            config.network_keypairs.get_network_identity_private(),
-    //            config.network_keypairs.get_network_identity_public().clone(),
-    //        ))));
-    //    }
     let (_listen_addr, network_provider) = network_builder.build();
     (runtime, network_provider)
 }
@@ -303,6 +295,7 @@ fn print_ports(config: &NodeConfig) {
 }
 
 #[test]
+#[ignore]
 fn test_pow_node() {
     ::libra_logger::init_for_e2e_testing();
     let mut conf_1 = pow_node_random_conf("/memory/0", 0);
@@ -394,20 +387,62 @@ fn test_pow_node() {
     let _handle_1 = setup_environment(&mut conf_1, false);
 
     let runtime_1 = tokio::runtime::Runtime::new().unwrap();
-    commit_tx(
-        conf_1.admission_control.admission_control_service_port as u32,
-        runtime_1.executor(),
-    );
-
-    print_ports(&conf_2);
     let _handle_2 = setup_environment(&mut conf_2, false);
     let runtime_2 = tokio::runtime::Runtime::new().unwrap();
-    commit_tx(
-        conf_2.admission_control.admission_control_service_port as u32,
-        runtime_2.executor(),
-    );
+
+    print_ports(&conf_2);
+    let flag = false;
+
+    if flag {
+        commit_tx(
+            conf_1.admission_control.admission_control_service_port as u32,
+            runtime_1.executor(),
+        );
+
+        sleep(Duration::from_secs(30));
+
+        commit_tx(
+            conf_2.admission_control.admission_control_service_port as u32,
+            runtime_2.executor(),
+        );
+    } else {
+        let account_keypair_1: KeyPair<Ed25519PrivateKey, Ed25519PublicKey> = create_keypair();
+        let account_keypair_2: KeyPair<Ed25519PrivateKey, Ed25519PublicKey> = create_keypair();
+
+        let faucet_1 = faucet_txn(
+            AccountAddress::from_public_key(&account_keypair_1.public_key),
+            1,
+        );
+        let faucet_2 = faucet_txn(
+            AccountAddress::from_public_key(&account_keypair_2.public_key),
+            2,
+        );
+
+        commit_tx_2(
+            conf_1.admission_control.admission_control_service_port as u32,
+            runtime_1.executor(),
+            &faucet_2,
+            (&faucet_1, account_keypair_1),
+        );
+
+        sleep(Duration::from_secs(30));
+
+        commit_tx_2(
+            conf_2.admission_control.admission_control_service_port as u32,
+            runtime_2.executor(),
+            &faucet_1,
+            (&faucet_2, account_keypair_2),
+        );
+    }
     runtime_1.shutdown_on_idle();
     runtime_2.shutdown_on_idle();
+}
+
+fn create_keypair() -> KeyPair<Ed25519PrivateKey, Ed25519PublicKey> {
+    let mut seed_rng = rand::rngs::OsRng::new().expect("can't access OsRng");
+    let seed_buf: [u8; 32] = seed_rng.gen();
+    let mut rng0: StdRng = SeedableRng::from_seed(seed_buf);
+    KeyPair::generate_for_testing(&mut rng0)
 }
 
 #[test]
@@ -464,15 +499,86 @@ fn gen_account() -> AccountAddress {
     AccountAddress::from_public_key(&account_keypair.public_key)
 }
 
+fn transfer(
+    private_key: &Ed25519PrivateKey,
+    public_key: Ed25519PublicKey,
+    sequence_number: u64,
+    recipient: &AccountAddress,
+) -> SignedTransaction {
+    let script = encode_transfer_script(recipient, 10);
+
+    let sender = AccountAddress::from_public_key(&public_key);
+    RawTransaction::new_script(
+        sender.clone(),
+        sequence_number,
+        script,
+        10_000 as u64,
+        1 as u64,
+        Duration::from_secs(u64::max_value()),
+    )
+    .sign(private_key, public_key)
+    .unwrap()
+    .into_inner()
+}
+
+fn faucet_txn(receiver: AccountAddress, sequence_number: u64) -> SignedTransaction {
+    let script = encode_create_account_script(&receiver, 10_000_000);
+    let sender = association_address();
+    RawTransaction::new_script(
+        sender.clone(),
+        sequence_number,
+        script,
+        1000_000 as u64,
+        1 as u64,
+        Duration::from_secs(u64::max_value()),
+    )
+    .sign(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone())
+    .unwrap()
+    .into_inner()
+}
+
+fn commit_tx_2(
+    port: u32,
+    executor: TaskExecutor,
+    faucet: &SignedTransaction,
+    owner: (
+        &SignedTransaction,
+        KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
+    ),
+) {
+    let faucet_executor = executor.clone();
+
+    let client = StarChainClient::new("127.0.0.1", port);
+    submit_txn_async(client.clone(), faucet_executor.clone(), faucet.clone());
+    sleep(Duration::from_secs(10));
+    submit_txn_async(client.clone(), faucet_executor.clone(), owner.0.clone());
+    sleep(Duration::from_secs(10));
+    let mut count = 0;
+    let key_pair = owner.1;
+
+    let task = Interval::new(Instant::now(), Duration::from_secs(10)).for_each(move |_| {
+        let account = gen_account();
+        let txn = transfer(
+            &key_pair.private_key,
+            key_pair.public_key.clone(),
+            count,
+            &account,
+        );
+        submit_txn_async(client.clone(), faucet_executor.clone(), txn);
+        count = count + 1;
+
+        future::ready(())
+    });
+
+    executor.spawn(task);
+}
+
 fn commit_tx(port: u32, executor: TaskExecutor) {
     let account = gen_account();
     let faucet_executor = executor.clone();
     let task = Interval::new(Instant::now(), Duration::from_secs(10)).for_each(move |_| {
         let client = StarChainClient::new("127.0.0.1", port);
         faucet_async(client, faucet_executor.clone(), account, 10);
-
-        //            let account = gen_account();
-        //            let txn = gen_tx(account, 0, 100, false);
         future::ready(())
     });
 

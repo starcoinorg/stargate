@@ -309,6 +309,17 @@ where
     ()
 }
 
+pub fn submit_txn_async<C>(client: C, executor: TaskExecutor, txn: SignedTransaction)
+where
+    C: 'static + ChainClient,
+{
+    let f = async move {
+        client.submit_signed_transaction(txn).unwrap();
+    };
+    executor.spawn(f);
+    ()
+}
+
 fn parse_response(mut resp: UpdateToLatestLedgerResponse) -> ResponseItem {
     //TODO fix unwrap
     //.expect("response item is none.")
