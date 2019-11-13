@@ -45,12 +45,12 @@ pub struct Node {
     event_sender: UnboundedSender<Event>,
     command_sender: UnboundedSender<NodeMessage>,
     default_max_deposit: u64,
+    network_service: NetworkService,
 }
 
 struct NodeInner {
     wallet: Arc<Wallet>,
     executor: TaskExecutor,
-    network_service: NetworkService,
     network_service_close_tx: Option<oneshot::Sender<()>>,
     sender: UnboundedSender<NetworkMessage>,
     receiver: Option<UnboundedReceiver<NetworkMessage>>,
@@ -76,7 +76,6 @@ impl Node {
         let node_inner = NodeInner {
             executor: executor_clone,
             wallet: Arc::new(wallet),
-            network_service,
             network_service_close_tx: Some(net_close_tx),
             sender,
             receiver: Some(receiver),
@@ -86,6 +85,7 @@ impl Node {
             command_receiver: Some(command_receiver),
         };
         Self {
+            network_service,
             executor,
             node_inner: Arc::new(Mutex::new(node_inner)),
             event_sender,
@@ -147,13 +147,7 @@ impl Node {
         if receiver_amount > sender_amount {
             bail!("sender amount should bigger than receiver amount.")
         }
-        let is_receiver_connected = self
-            .node_inner
-            .clone()
-            .lock()
-            .unwrap()
-            .network_service
-            .is_connected(receiver);
+        let is_receiver_connected = self.network_service.is_connected(receiver);
         if !is_receiver_connected {
             bail!("could not connect to receiver")
         }
@@ -212,13 +206,7 @@ impl Node {
         if receiver_amount > sender_amount {
             bail!("sender amount should bigger than receiver amount.")
         }
-        let is_receiver_connected = self
-            .node_inner
-            .clone()
-            .lock()
-            .unwrap()
-            .network_service
-            .is_connected(receiver);
+        let is_receiver_connected = self.network_service.is_connected(receiver);
         if !is_receiver_connected {
             bail!("could not connect to receiver")
         }
@@ -274,13 +262,7 @@ impl Node {
             bail!("sender amount should smaller than receiver amount.")
         }
 
-        let is_receiver_connected = self
-            .node_inner
-            .clone()
-            .lock()
-            .unwrap()
-            .network_service
-            .is_connected(receiver);
+        let is_receiver_connected = self.network_service.is_connected(receiver);
         if !is_receiver_connected {
             bail!("could not connect to receiver")
         }
@@ -333,13 +315,7 @@ impl Node {
         receiver_address: AccountAddress,
         amount: u64,
     ) -> Result<MessageFuture<u64>> {
-        let is_receiver_connected = self
-            .node_inner
-            .clone()
-            .lock()
-            .unwrap()
-            .network_service
-            .is_connected(receiver_address);
+        let is_receiver_connected = self.network_service.is_connected(receiver_address);
         if !is_receiver_connected {
             bail!("could not connect to receiver")
         }
@@ -563,7 +539,7 @@ impl Node {
                                     channel_script_package,
                                     responder,
                                 } =>{
-
+                                    node_inner.clone().lock().unwrap().install_package(channel_script_package);
                                 },
                                 NodeMessage::Execute{
                                     receiver_address,
@@ -588,7 +564,7 @@ impl Node {
                                     receiver_amount,
                                     responder,
                                 }=> {
-
+                                    node_inner.clone().lock().unwrap().open_channel(receiver,sender_amount,receiver_amount,responder);
                                 },
                                 NodeMessage::Withdraw {
                                     receiver,
@@ -980,6 +956,24 @@ impl NodeInner {
     pub async fn init(&self) -> Result<()> {
         let all_chanels = self.wallet.get_all_channels().await?;
         Ok(())
+    }
+
+    async fn open_channel(
+        &mut self,
+        receiver: AccountAddress,
+        sender_amount: u64,
+        receiver_amount: u64,
+        mut responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
+    ) {
+        info!("start open channel ");
+        let channel_txn = self
+            .wallet
+            .open(receiver, sender_amount, receiver_amount)
+            .await
+            .unwrap();
+        info!("get open channel txn");
+        let result = self.channel_txn_onchain(channel_txn, MessageType::ChannelTransactionRequest);
+        responder.send(result);
     }
 }
 
