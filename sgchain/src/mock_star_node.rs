@@ -34,7 +34,6 @@ use libra_types::crypto_proxies::LedgerInfoWithSignatures;
 use libra_types::ledger_info::LedgerInfo;
 use libra_types::transaction::Transaction;
 use network::validator_network::AdmissionControlNetworkSender;
-use network::validator_network::NetworkSender;
 use network::TEST_NETWORK_REQUESTS;
 use storage_client::{StorageRead, StorageWrite};
 use storage_service::start_storage_service_and_return_service;
@@ -61,16 +60,15 @@ where
     R: StorageRead + Clone + 'static,
 {
     let mempool = CoreMemPoolClient::new(&config);
-    let mempool_client = Some(Arc::new(mempool.clone()));
 
     let storage_read_client = Arc::clone(&r);
     let vm_validator = VMValidator::new(&config, storage_read_client.clone());
 
     let handle = AdmissionControlService::new(upstream_proxy_sender, storage_read_client.clone());
 
-    let (rpc_net_notifs_tx, rpc_net_notifs_rx) = channel::new(100, &TEST_NETWORK_REQUESTS);
+    let (rpc_net_notifs_tx, _rpc_net_notifs_rx) = channel::new(100, &TEST_NETWORK_REQUESTS);
     let tmp_network_sender = AdmissionControlNetworkSender::new(rpc_net_notifs_tx);
-    let mut upstream_proxy_data = UpstreamProxyData::new(
+    let upstream_proxy_data = UpstreamProxyData::new(
         config.admission_control.clone(),
         tmp_network_sender,
         config.get_role(),
