@@ -59,4 +59,7 @@ pub enum NodeMessage {
         channel_seq_number: u64,
         responder: oneshot::Sender<Result<SignedChannelTransaction>>,
     },
+    SetTimeout {
+        default_future_timeout: u64,
+    },
 }

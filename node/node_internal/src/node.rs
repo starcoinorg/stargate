@@ -372,11 +372,9 @@ impl Node {
     }
 
     pub fn set_default_timeout(&self, timeout: u64) {
-        //        self.node_inner
-        //            .clone()
-        //            .lock()
-        //            .unwrap()
-        //            .default_future_timeout = timeout;
+        self.command_sender.unbounded_send(NodeMessage::SetTimeout {
+            default_future_timeout: timeout,
+        });
     }
 
     pub fn shutdown(&self) -> Result<()> {
@@ -479,7 +477,7 @@ impl Node {
     }
 
     async fn start(
-        node_inner: NodeInner,
+        mut node_inner: NodeInner,
         receiver: UnboundedReceiver<NetworkMessage>,
         event_receiver: UnboundedReceiver<Event>,
         command_receiver: UnboundedReceiver<NodeMessage>,
@@ -591,6 +589,11 @@ impl Node {
                                     responder,
                                 }=>{
                                     node_inner.tnx_by_sn(participant_address,channel_seq_number,responder).await;
+                                },
+                                NodeMessage::SetTimeout {
+                                    default_future_timeout
+                                }=>{
+                                    node_inner.set_timeout(default_future_timeout);
                                 },
                             }
                         },
@@ -1064,6 +1067,10 @@ impl NodeInner {
                     .get_txn_by_channel_sequence_number(participant_address, channel_seq_number),
             )
             .unwrap();
+    }
+
+    pub fn set_timeout(&mut self, timeout: u64) {
+        self.default_future_timeout = timeout;
     }
 }
 
