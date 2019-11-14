@@ -205,18 +205,36 @@ impl node_proto::proto::node::Node for NodeService {
         req: node_proto::proto::node::QueryTransactionQuest,
         sink: ::grpcio::UnarySink<sgtypes::proto::sgtypes::SignedChannelTransaction>,
     ) {
-        let request = QueryTransactionQuest::try_from(req).unwrap();
-        let rx = self
-            .node
-            .get_txn_by_channel_sequence_number(
-                request.partipant_address,
-                request.channel_seq_number,
-            )
-            .unwrap();
-        let resp =
-            SignedChannelTransaction::new(rx.raw_tx, rx.sender_signature, rx.receiver_signature)
-                .into();
-        provide_grpc_response(Ok(resp), ctx, sink);
+        let node = self.node.clone();
+        let f = async move {
+            let request = QueryTransactionQuest::try_from(req).unwrap();
+
+            let rx = node
+                .get_txn_by_channel_sequence_number(
+                    request.partipant_address,
+                    request.channel_seq_number,
+                )
+                .await;
+            match rx {
+                Ok(rx) => {
+                    let resp = SignedChannelTransaction::new(
+                        rx.raw_tx,
+                        rx.sender_signature,
+                        rx.receiver_signature,
+                    )
+                    .into();
+                    sink.success(resp);
+                }
+                Err(e) => {
+                    set_failure_message(
+                        RpcStatusCode::UNKNOWN,
+                        format!("Failed to process request: {}", e),
+                        sink,
+                    );
+                }
+            }
+        };
+        ctx.spawn(f.boxed().unit_error().compat());
     }
 }
 

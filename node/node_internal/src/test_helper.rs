@@ -30,9 +30,10 @@ pub fn gen_node(
     println!("account_address: {}", account_address);
     faucet_sync(client.as_ref().clone(), account_address, amount).unwrap();
     let store_path = TempPath::new();
-    let wallet =
+    let mut wallet =
         Wallet::new_with_client(account_address, keypair.clone(), client, store_path.path())
             .unwrap();
+    wallet.start(executor.clone()).unwrap();
     let (network, tx, rx, close_tx) = build_network_service(config, keypair.clone());
     let _identify = network.identify();
     thread::sleep(Duration::from_millis(1000));

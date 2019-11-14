@@ -45,6 +45,8 @@ fn node_test() -> Result<()> {
     node2.start_server();
 
     let f = async move {
+        _delay(Duration::from_millis(1000)).await;
+
         let fund_amount = 1000000;
         let result = node2
             .open_channel_async(addr1, fund_amount, fund_amount)

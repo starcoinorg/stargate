@@ -1,9 +1,12 @@
 use crate::message_processor::MessageFuture;
 use failure::prelude::*;
 use futures::channel::oneshot;
-use libra_types::account_address::AccountAddress;
+use libra_types::{account_address::AccountAddress, account_config::AccountResource};
 
 use sgtypes::script_package::ChannelScriptPackage;
+use sgtypes::signed_channel_transaction::SignedChannelTransaction;
+
+use node_proto::DeployModuleResponse;
 
 pub enum NodeMessage {
     Execute {
@@ -43,5 +46,17 @@ pub enum NodeMessage {
     ChannelBalance {
         participant: AccountAddress,
         responder: oneshot::Sender<Result<u64>>,
+    },
+    DeployModule {
+        module_code: Vec<u8>,
+        responder: oneshot::Sender<Result<DeployModuleResponse>>,
+    },
+    ChainBalance {
+        responder: oneshot::Sender<Result<AccountResource>>,
+    },
+    TxnBySn {
+        participant_address: AccountAddress,
+        channel_seq_number: u64,
+        responder: oneshot::Sender<Result<SignedChannelTransaction>>,
     },
 }
