@@ -29,7 +29,7 @@ fn node_test() -> Result<()> {
     let (mock_chain_service, _handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
     let network_config1 = create_node_network_config("/ip4/127.0.0.1/tcp/5000".to_string(), vec![]);
-    let (node1, addr1) = gen_node(executor.clone(), &network_config1, client.clone());
+    let (mut node1, addr1) = gen_node(executor.clone(), &network_config1, client.clone());
     node1.start_server();
 
     let addr1_hex = hex::encode(addr1);
@@ -41,25 +41,33 @@ fn node_test() -> Result<()> {
     );
     let network_config2 =
         create_node_network_config("/ip4/127.0.0.1/tcp/5001".to_string(), vec![seed]);
-    let (node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone());
+    let (mut node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone());
     node2.start_server();
 
     let f = async move {
         let fund_amount = 1000000;
-        node2
+        let result = node2
             .open_channel_async(addr1, fund_amount, fund_amount)
+            .await
             .unwrap()
             .compat()
             .await
             .unwrap();
 
         _delay(Duration::from_millis(500)).await;
-        assert_eq!(node2.channel_balance(addr1).unwrap(), fund_amount);
-        assert_eq!(node1.channel_balance(addr2).unwrap(), fund_amount);
+        assert_eq!(
+            node2.channel_balance_async(addr1).await.unwrap(),
+            fund_amount
+        );
+        assert_eq!(
+            node1.channel_balance_async(addr2).await.unwrap(),
+            fund_amount
+        );
 
         let deposit_amount = 10000;
         node2
             .deposit_async(addr1, deposit_amount, deposit_amount)
+            .await
             .unwrap()
             .compat()
             .await
@@ -68,17 +76,18 @@ fn node_test() -> Result<()> {
         // NOTICE: delay longer, give dual some time to save into local store.
         _delay(Duration::from_millis(500)).await;
         assert_eq!(
-            node2.channel_balance(addr1).unwrap(),
+            node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount + deposit_amount
         );
         assert_eq!(
-            node1.channel_balance(addr2).unwrap(),
+            node1.channel_balance_async(addr2).await.unwrap(),
             fund_amount + deposit_amount
         );
 
         let transfer_amount = 1_000;
         let offchain_txn = node2
             .off_chain_pay_async(addr1, transfer_amount)
+            .await
             .unwrap()
             .compat()
             .await
@@ -87,17 +96,18 @@ fn node_test() -> Result<()> {
 
         _delay(Duration::from_millis(500)).await;
         assert_eq!(
-            node2.channel_balance(addr1).unwrap(),
+            node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount - transfer_amount + deposit_amount
         );
         assert_eq!(
-            node1.channel_balance(addr2).unwrap(),
+            node1.channel_balance_async(addr2).await.unwrap(),
             fund_amount + transfer_amount + deposit_amount
         );
 
         let wd_amount = 10000;
         node2
             .withdraw_async(addr1, wd_amount, wd_amount)
+            .await
             .unwrap()
             .compat()
             .await
@@ -105,11 +115,11 @@ fn node_test() -> Result<()> {
 
         _delay(Duration::from_millis(500)).await;
         assert_eq!(
-            node2.channel_balance(addr1).unwrap(),
+            node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount - transfer_amount - wd_amount + deposit_amount
         );
         assert_eq!(
-            node1.channel_balance(addr2).unwrap(),
+            node1.channel_balance_async(addr2).await.unwrap(),
             fund_amount + transfer_amount - wd_amount + deposit_amount
         );
 

@@ -41,21 +41,22 @@ use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 
 pub struct Node {
     executor: TaskExecutor,
-    node_inner: Arc<Mutex<NodeInner>>,
+    node_inner: Arc<NodeInner>,
     event_sender: UnboundedSender<Event>,
     command_sender: UnboundedSender<NodeMessage>,
     default_max_deposit: u64,
     network_service: NetworkService,
+    receiver: Option<UnboundedReceiver<NetworkMessage>>,
+    event_receiver: Option<UnboundedReceiver<Event>>,
+    command_receiver: Option<UnboundedReceiver<NodeMessage>>,
+    network_service_close_tx: Option<oneshot::Sender<()>>,
+    wallet: Arc<Wallet>,
 }
 
 struct NodeInner {
     wallet: Arc<Wallet>,
     executor: TaskExecutor,
-    network_service_close_tx: Option<oneshot::Sender<()>>,
     sender: UnboundedSender<NetworkMessage>,
-    receiver: Option<UnboundedReceiver<NetworkMessage>>,
-    event_receiver: Option<UnboundedReceiver<Event>>,
-    command_receiver: Option<UnboundedReceiver<NodeMessage>>,
     message_processor: MessageProcessor<u64>,
     default_future_timeout: u64,
 }
@@ -73,24 +74,26 @@ impl Node {
         let (event_sender, event_receiver) = futures_01::sync::mpsc::unbounded();
         let (command_sender, command_receiver) = futures_01::sync::mpsc::unbounded();
 
+        let wallet_arc = Arc::new(wallet);
         let node_inner = NodeInner {
             executor: executor_clone,
-            wallet: Arc::new(wallet),
-            network_service_close_tx: Some(net_close_tx),
+            wallet: wallet_arc.clone(),
             sender,
-            receiver: Some(receiver),
-            event_receiver: Some(event_receiver),
             message_processor: MessageProcessor::new(),
             default_future_timeout: 20000,
-            command_receiver: Some(command_receiver),
         };
         Self {
             network_service,
             executor,
-            node_inner: Arc::new(Mutex::new(node_inner)),
+            node_inner: Arc::new(node_inner),
             event_sender,
             default_max_deposit: 10000000,
             command_sender,
+            receiver: Some(receiver),
+            event_receiver: Some(event_receiver),
+            command_receiver: Some(command_receiver),
+            network_service_close_tx: Some(net_close_tx),
+            wallet: wallet_arc.clone(),
         }
     }
 
@@ -98,11 +101,7 @@ impl Node {
         &self,
         negotiate_message: OpenChannelNodeNegotiateMessage,
     ) -> Result<()> {
-        self.node_inner
-            .clone()
-            .lock()
-            .unwrap()
-            .open_channel_negotiate(negotiate_message)
+        Ok(())
     }
 
     pub async fn open_channel_oneshot(
@@ -330,45 +329,31 @@ impl Node {
         resp_receiver.await?
     }
 
-    pub fn start_server(&self) {
-        let receiver = self
-            .node_inner
-            .lock()
-            .unwrap()
-            .receiver
-            .take()
-            .expect("receiver already taken");
-        let event_receiver = self
-            .node_inner
-            .lock()
-            .unwrap()
-            .event_receiver
-            .take()
-            .expect("receiver already taken");
+    pub fn start_server(&mut self) {
+        let receiver = self.receiver.take().expect("receiver already taken");
+        let event_receiver = self.event_receiver.take().expect("receiver already taken");
 
         let command_receiver = self
-            .node_inner
-            .lock()
-            .unwrap()
             .command_receiver
             .take()
             .expect("receiver already taken");
+
+        let network_service_close_tx = self
+            .network_service_close_tx
+            .take()
+            .expect("tx already taken");
 
         self.executor.spawn(Self::start(
             self.node_inner.clone(),
             receiver,
             event_receiver,
             command_receiver,
+            network_service_close_tx,
         ));
     }
 
     pub async fn local_balance(&self) -> Result<AccountResource> {
-        self.node_inner
-            .clone()
-            .lock()
-            .unwrap()
-            .wallet
-            .account_resource()
+        self.node_inner.wallet.account_resource()
     }
 
     pub async fn channel_balance_async(&self, participant: AccountAddress) -> Result<u64> {
@@ -384,11 +369,11 @@ impl Node {
     }
 
     pub fn set_default_timeout(&self, timeout: u64) {
-        self.node_inner
-            .clone()
-            .lock()
-            .unwrap()
-            .default_future_timeout = timeout;
+        //        self.node_inner
+        //            .clone()
+        //            .lock()
+        //            .unwrap()
+        //            .default_future_timeout = timeout;
     }
 
     pub fn shutdown(&self) -> Result<()> {
@@ -423,7 +408,7 @@ impl Node {
         module_code: Vec<u8>,
     ) -> futures::channel::oneshot::Receiver<Result<DeployModuleResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
-        let wallet = self.node_inner.clone().lock().unwrap().wallet.clone();
+        let wallet = self.wallet.clone();
         let f = async move {
             let proof = wallet.deploy_module(module_code).await.unwrap();
             resp_sender
@@ -482,27 +467,20 @@ impl Node {
     ) -> Result<SignedChannelTransaction> {
         self.node_inner
             .clone()
-            .lock()
-            .unwrap()
             .get_txn_by_channel_sequence_number(participant_address, channel_seq_number)
     }
 
     async fn start(
-        node_inner: Arc<Mutex<NodeInner>>,
+        node_inner: Arc<NodeInner>,
         receiver: UnboundedReceiver<NetworkMessage>,
         event_receiver: UnboundedReceiver<Event>,
         command_receiver: UnboundedReceiver<NodeMessage>,
+        network_service_close_tx: oneshot::Sender<()>,
     ) {
         info!("start receive message");
         let mut receiver = receiver.compat().fuse();
         let mut event_receiver = event_receiver.compat().fuse();
         let mut command_receiver = command_receiver.compat().fuse();
-        let net_close_tx = node_inner
-            .clone()
-            .lock()
-            .unwrap()
-            .network_service_close_tx
-            .take();
 
         loop {
             futures::select! {
@@ -516,13 +494,13 @@ impl Node {
                             debug!("message type is {:?}",msg_type);
                             match msg_type {
                                 MessageType::OpenChannelNodeNegotiateMessage => {},
-                                MessageType::ChannelTransactionRequest => node_inner.clone().lock().unwrap().handle_receiver_channel(data[2..].to_vec()),
-                                MessageType::ChannelTransactionResponse => node_inner.clone().lock().unwrap().handle_sender_channel(data[2..].to_vec(),peer_id),
-                                MessageType::ErrorMessage => node_inner.clone().lock().unwrap().handle_error_message(data[2..].to_vec()),
-                                MessageType::StateSyncMessageRequest => {node_inner.clone().lock().unwrap().handle_state_sync_request(data[2..].to_vec())},
-                                MessageType::StateSyncMessageResponse => {node_inner.clone().lock().unwrap().handle_state_sync_response(data[2..].to_vec())},
-                                MessageType::SyncTransactionMessageRequest => {node_inner.clone().lock().unwrap().handle_sync_transaction_request(data[2..].to_vec())},
-                                MessageType::SyncTransactionMessageResponse => {node_inner.clone().lock().unwrap().handle_sync_transaction_response(data[2..].to_vec())},
+                                MessageType::ChannelTransactionRequest => node_inner.clone().handle_receiver_channel(data[2..].to_vec()),
+                                MessageType::ChannelTransactionResponse => node_inner.clone().handle_sender_channel(data[2..].to_vec(),peer_id),
+                                MessageType::ErrorMessage => node_inner.clone().handle_error_message(data[2..].to_vec()),
+                                MessageType::StateSyncMessageRequest => {node_inner.clone().handle_state_sync_request(data[2..].to_vec())},
+                                MessageType::StateSyncMessageResponse => {node_inner.clone().handle_state_sync_response(data[2..].to_vec())},
+                                MessageType::SyncTransactionMessageRequest => {node_inner.clone().handle_sync_transaction_request(data[2..].to_vec())},
+                                MessageType::SyncTransactionMessageResponse => {node_inner.clone().handle_sync_transaction_response(data[2..].to_vec())},
                                 _=>warn!("message type not found {:?}",msg_type),
                             };
                         },
@@ -539,7 +517,7 @@ impl Node {
                                     channel_script_package,
                                     responder,
                                 } =>{
-                                    node_inner.clone().lock().unwrap().install_package(channel_script_package,responder);
+                                    node_inner.clone().install_package(channel_script_package,responder);
                                 },
                                 NodeMessage::Execute{
                                     receiver_address,
@@ -548,7 +526,7 @@ impl Node {
                                     transaction_args,
                                     responder,
                                 } =>{
-                                    node_inner.clone().lock().unwrap().execute_script(receiver_address,package_name,script_name,transaction_args,responder);
+                                    node_inner.clone().execute_script(receiver_address,package_name,script_name,transaction_args,responder);
                                 },
                                 NodeMessage::Deposit {
                                     receiver,
@@ -556,7 +534,7 @@ impl Node {
                                     receiver_amount,
                                     responder,
                                 }=> {
-                                    node_inner.clone().lock().unwrap().deposit(receiver,sender_amount,receiver_amount,responder);
+                                    node_inner.clone().deposit(receiver,sender_amount,receiver_amount,responder);
                                 },
                                 NodeMessage::OpenChannel {
                                     receiver,
@@ -564,7 +542,8 @@ impl Node {
                                     receiver_amount,
                                     responder,
                                 }=> {
-                                    node_inner.clone().lock().unwrap().open_channel(receiver,sender_amount,receiver_amount,responder);
+                                    info!("get open channel message");
+                                    node_inner.clone().open_channel(receiver,sender_amount,receiver_amount,responder);
                                 },
                                 NodeMessage::Withdraw {
                                     receiver,
@@ -572,20 +551,20 @@ impl Node {
                                     receiver_amount,
                                     responder,
                                 }=> {
-                                    node_inner.clone().lock().unwrap().withdraw(receiver,sender_amount,receiver_amount,responder);
+                                    node_inner.clone().withdraw(receiver,sender_amount,receiver_amount,responder);
                                 },
                                 NodeMessage::ChannelPay {
                                     receiver_address,
                                     amount,
                                     responder,
                                 }=> {
-                                    node_inner.clone().lock().unwrap().off_chain_pay(receiver_address,amount,responder);
+                                    node_inner.clone().off_chain_pay(receiver_address,amount,responder);
                                 },
                                 NodeMessage::ChannelBalance {
                                     participant,
                                     responder,
                                 }=> {
-                                    node_inner.clone().lock().unwrap().channel_balance(participant,responder);
+                                    node_inner.clone().channel_balance(participant,responder);
                                 },
                             }
                         },
@@ -595,10 +574,8 @@ impl Node {
                     }
                 },
                 _ = event_receiver.select_next_some() => {
-                    if let Some(sender) = net_close_tx{
-                       debug!("To shutdown network");
-                       let _ = sender.send(());
-                    }
+                    debug!("To shutdown network");
+                    let _ = network_service_close_tx.send(());
                     break;
                 }
             }
@@ -608,7 +585,7 @@ impl Node {
 }
 
 impl NodeInner {
-    fn handle_receiver_channel(&mut self, data: Vec<u8>) {
+    fn handle_receiver_channel(&self, data: Vec<u8>) {
         debug!("receive channel");
         let open_channel_message: ChannelTransactionRequest;
         //TODO refactor error handle.
@@ -672,7 +649,7 @@ impl NodeInner {
         }
     }
 
-    fn handle_sender_channel(&mut self, data: Vec<u8>, receiver_addr: AccountAddress) {
+    fn handle_sender_channel(&self, data: Vec<u8>, receiver_addr: AccountAddress) {
         debug!("sender channel");
         let open_channel_message: ChannelTransactionResponse;
 
@@ -710,7 +687,7 @@ impl NodeInner {
         self.executor.spawn(f);
     }
 
-    fn handle_error_message(&mut self, data: Vec<u8>) {
+    fn handle_error_message(&self, data: Vec<u8>) {
         debug!("off error message");
         match ErrorMessage::from_proto_bytes(&data) {
             Ok(msg) => {
@@ -723,7 +700,7 @@ impl NodeInner {
         }
     }
 
-    fn handle_state_sync_request(&mut self, data: Vec<u8>) {
+    fn handle_state_sync_request(&self, data: Vec<u8>) {
         let sync_state_message_request: SyncStateMessageRequest;
 
         match SyncStateMessageRequest::from_proto_bytes(&data) {
@@ -774,7 +751,7 @@ impl NodeInner {
         self.executor.spawn(f);
     }
 
-    fn handle_state_sync_response(&mut self, data: Vec<u8>) {
+    fn handle_state_sync_response(&self, data: Vec<u8>) {
         let sync_state_message_response: SyncStateMessageResponse;
 
         match SyncStateMessageResponse::from_proto_bytes(&data) {
@@ -788,7 +765,7 @@ impl NodeInner {
         }
     }
 
-    fn handle_sync_transaction_request(&mut self, data: Vec<u8>) {
+    fn handle_sync_transaction_request(&self, data: Vec<u8>) {
         let sync_txn_request: SyncTransactionMessageRequest;
 
         match SyncTransactionMessageRequest::from_proto_bytes(&data) {
@@ -829,7 +806,7 @@ impl NodeInner {
         }
     }
 
-    fn handle_sync_transaction_response(&mut self, data: Vec<u8>) {
+    fn handle_sync_transaction_response(&self, data: Vec<u8>) {
         let sync_txn_response: SyncTransactionMessageResponse;
 
         match SyncTransactionMessageResponse::from_proto_bytes(&data) {
@@ -858,7 +835,7 @@ impl NodeInner {
     }
 
     fn channel_txn_onchain(
-        &mut self,
+        &self,
         open_channel_message: ChannelTransactionRequest,
         msg_type: MessageType,
     ) -> Result<MessageFuture<u64>> {
@@ -878,7 +855,7 @@ impl NodeInner {
     }
 
     async fn off_chain_pay(
-        &mut self,
+        &self,
         receiver_address: AccountAddress,
         amount: u64,
         mut responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
@@ -889,7 +866,7 @@ impl NodeInner {
     }
 
     fn send_channel_request(
-        &mut self,
+        &self,
         receiver_address: AccountAddress,
         off_chain_pay_tx: ChannelTransactionRequest,
     ) -> Result<MessageFuture<u64>> {
@@ -911,7 +888,7 @@ impl NodeInner {
     }
 
     async fn execute_script(
-        &mut self,
+        &self,
         receiver_address: AccountAddress,
         package_name: String,
         script_name: String,
@@ -968,7 +945,7 @@ impl NodeInner {
     }
 
     async fn open_channel(
-        &mut self,
+        &self,
         receiver: AccountAddress,
         sender_amount: u64,
         receiver_amount: u64,
@@ -986,7 +963,7 @@ impl NodeInner {
     }
 
     async fn deposit(
-        &mut self,
+        &self,
         receiver: AccountAddress,
         sender_amount: u64,
         receiver_amount: u64,
@@ -1004,7 +981,7 @@ impl NodeInner {
     }
 
     async fn withdraw(
-        &mut self,
+        &self,
         receiver: AccountAddress,
         sender_amount: u64,
         receiver_amount: u64,
@@ -1022,7 +999,7 @@ impl NodeInner {
     }
 
     async fn channel_balance(
-        &mut self,
+        &self,
         participant: AccountAddress,
         mut responder: futures::channel::oneshot::Sender<Result<u64>>,
     ) -> Result<()> {

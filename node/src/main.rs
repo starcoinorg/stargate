@@ -114,7 +114,7 @@ fn main() {
     let (network_service, tx, rx, close_tx) =
         build_network_service(&swarm.config.net_config, keypair.clone());
 
-    let node = gen_node(
+    let mut node = gen_node(
         executor,
         keypair,
         &swarm.config.wallet,
