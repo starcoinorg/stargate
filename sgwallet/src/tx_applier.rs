@@ -99,7 +99,7 @@ impl TxApplier {
                 }
                 None => {
                     info!("Startup info is empty. Will start from GENESIS.");
-                    (*SPARSE_MERKLE_PLACEHOLDER_HASH, vec![], 0, 0, 0)
+                    (*SPARSE_MERKLE_PLACEHOLDER_HASH, vec![], 0, 0)
                 }
             };
         let applied_trees = AppliedTrees {
@@ -187,7 +187,7 @@ impl TxApplier {
         );
 
         self.store
-            .save_tx(txn_to_commit, channel_seq_number, &ledger_info_with_sigs)?;
+            .save_tx(txn_to_commit, channel_seq_number, &Some(ledger_info))?;
 
         self.applied_trees = AppliedTrees {
             epoch: new_epoch,

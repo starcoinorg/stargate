@@ -27,6 +27,7 @@ use libra_config::config::NodeConfig;
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_mempool::core_mempool_client::CoreMemPoolClient;
+use libra_types::block_info::BlockInfo;
 use libra_types::crypto_proxies::LedgerInfoWithSignatures;
 use libra_types::ledger_info::LedgerInfo;
 use libra_types::transaction::Transaction;
@@ -42,14 +43,11 @@ pub struct StarHandle {
 fn setup_ac<R>(
     config: &NodeConfig,
     r: Arc<R>,
-    upstream_proxy_sender: mpsc::UnboundedSender<(
+    upstream_proxy_sender: mpsc::Sender<(
         SubmitTransactionRequest,
         oneshot::Sender<failure::Result<SubmitTransactionResponse>>,
     )>,
-) -> (
-    CoreMemPoolClient,
-    AdmissionControlService<CoreMemPoolClient, VMValidator>,
-)
+) -> (CoreMemPoolClient, AdmissionControlService)
 where
     R: StorageRead + Clone + 'static,
 {
@@ -60,15 +58,7 @@ where
     let vm_validator = Arc::new(VMValidator::new(&config, storage_read_client));
 
     let storage_read_client = Arc::clone(&r);
-    let handle = AdmissionControlService::new(
-        mempool_client,
-        storage_read_client,
-        vm_validator,
-        config
-            .admission_control
-            .need_to_check_mempool_before_validation,
-        upstream_proxy_sender,
-    );
+    let handle = AdmissionControlService::new(upstream_proxy_sender, storage_read_client);
 
     (mempool, handle)
 }
@@ -83,11 +73,7 @@ where
 
 pub fn setup_environment(
     node_config: &mut NodeConfig,
-) -> (
-    StarHandle,
-    Sender<()>,
-    AdmissionControlService<CoreMemPoolClient, VMValidator>,
-) {
+) -> (StarHandle, Sender<()>, AdmissionControlService) {
     crash_handler::setup_panic_handler();
 
     let mut instant = Instant::now();
@@ -110,7 +96,7 @@ pub fn setup_environment(
 
     // Initialize and start AC.
     instant = Instant::now();
-    let (upstream_proxy_sender, _upstream_proxy_receiver) = mpsc::unbounded();
+    let (upstream_proxy_sender, _upstream_proxy_receiver) = mpsc::channel(1000);
     let (mempool_client, ac) = setup_ac(
         &node_config,
         Arc::clone(&storage_service),
@@ -120,9 +106,9 @@ pub fn setup_environment(
 
     let info = storage_service.get_startup_info().unwrap().unwrap();
     let executed_tree = Mutex::new(ExecutedTrees::new(
-        info.account_state_root_hash,
-        info.ledger_frozen_subtree_hashes,
-        info.latest_version + 1,
+        info.committed_tree_state.account_state_root_hash,
+        info.committed_tree_state.ledger_frozen_subtree_hashes,
+        info.committed_tree_state.version + 1,
     ));
 
     let shutdown_sender = commit_block(executed_tree, mempool_client, executor);
@@ -137,7 +123,7 @@ fn commit_block(
     executor: Arc<Executor<MoveVM>>,
 ) -> Sender<()> {
     let (shutdown_sender, mut shutdown_receiver) = oneshot::channel::<()>();
-
+    let mut height = 1;
     let task = Interval::new(Instant::now(), Duration::from_secs(3))
         .take_while(move |_| match shutdown_receiver.try_recv() {
             Err(_) | Ok(Some(_)) => {
@@ -180,15 +166,16 @@ fn commit_block(
                 let mut tree = executed_tree.lock().unwrap();
                 std::mem::replace(&mut *tree, output.executed_trees().clone());
                 // commit
-                let info = LedgerInfo::new(
-                    output.version().unwrap(),
-                    output.executed_trees().state_id(),
-                    output.executed_trees().state_root(),
-                    block_id,
+                let commit_info = BlockInfo::new(
                     0,
-                    u64::max_value(),
+                    height,
+                    block_id,
+                    output.executed_trees().state_id(),
+                    output.version().unwrap(),
+                    0,
                     None,
                 );
+                let info = LedgerInfo::new(commit_info, output.executed_trees().state_root());
                 let info_sign = LedgerInfoWithSignatures::new(info, BTreeMap::new());
                 let committable_block = CommittableBlock::new(transactions, Arc::new(output));
                 block_on(executor.commit_blocks(vec![committable_block], info_sign))
@@ -197,6 +184,7 @@ fn commit_block(
 
                 // remove from mem pool
                 mempool_client.remove_txn(exclude_transactions);
+                height = height + 1;
             }
             future::ready(())
         });
