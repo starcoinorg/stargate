@@ -48,4 +48,6 @@ state-synchronizer = { path = "../libra/state-synchronizer" }
 parity-multiaddr = "0.5.0"
 rand = "0.6.5"
 
+channel = { path = "../libra/common/channel", version = "0.1.0" }
+
 [dev-dependencies]

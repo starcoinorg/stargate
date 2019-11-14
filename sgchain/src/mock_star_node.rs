@@ -19,6 +19,8 @@ use admission_control_proto::proto::admission_control::{
     SubmitTransactionRequest, SubmitTransactionResponse,
 };
 use admission_control_service::admission_control_service::AdmissionControlService;
+use admission_control_service::UpstreamProxyData;
+use channel;
 use executor::{CommittableBlock, ExecutedTrees, Executor};
 use futures::channel::oneshot::Sender;
 use futures::channel::{mpsc, oneshot};
@@ -31,6 +33,9 @@ use libra_types::block_info::BlockInfo;
 use libra_types::crypto_proxies::LedgerInfoWithSignatures;
 use libra_types::ledger_info::LedgerInfo;
 use libra_types::transaction::Transaction;
+use network::validator_network::AdmissionControlNetworkSender;
+use network::validator_network::NetworkSender;
+use network::TEST_NETWORK_REQUESTS;
 use storage_client::{StorageRead, StorageWrite};
 use storage_service::start_storage_service_and_return_service;
 use vm_runtime::MoveVM;
@@ -47,7 +52,11 @@ fn setup_ac<R>(
         SubmitTransactionRequest,
         oneshot::Sender<failure::Result<SubmitTransactionResponse>>,
     )>,
-) -> (CoreMemPoolClient, AdmissionControlService)
+) -> (
+    CoreMemPoolClient,
+    AdmissionControlService,
+    UpstreamProxyData<CoreMemPoolClient, VMValidator>,
+)
 where
     R: StorageRead + Clone + 'static,
 {
@@ -55,12 +64,25 @@ where
     let mempool_client = Some(Arc::new(mempool.clone()));
 
     let storage_read_client = Arc::clone(&r);
-    let vm_validator = Arc::new(VMValidator::new(&config, storage_read_client));
+    let vm_validator = VMValidator::new(&config, storage_read_client.clone());
 
-    let storage_read_client = Arc::clone(&r);
-    let handle = AdmissionControlService::new(upstream_proxy_sender, storage_read_client);
+    let handle = AdmissionControlService::new(upstream_proxy_sender, storage_read_client.clone());
 
-    (mempool, handle)
+    let (rpc_net_notifs_tx, rpc_net_notifs_rx) = channel::new(100, &TEST_NETWORK_REQUESTS);
+    let tmp_network_sender = AdmissionControlNetworkSender::new(rpc_net_notifs_tx);
+    let mut upstream_proxy_data = UpstreamProxyData::new(
+        config.admission_control.clone(),
+        tmp_network_sender,
+        config.get_role(),
+        Some(Arc::new(mempool.clone())),
+        storage_read_client.clone(),
+        Arc::new(vm_validator),
+        config
+            .admission_control
+            .need_to_check_mempool_before_validation,
+    );
+
+    (mempool, handle, upstream_proxy_data)
 }
 
 fn setup_executor<R, W>(config: &NodeConfig, r: Arc<R>, w: Arc<W>) -> Arc<Executor<MoveVM>>
@@ -73,7 +95,12 @@ where
 
 pub fn setup_environment(
     node_config: &mut NodeConfig,
-) -> (StarHandle, Sender<()>, AdmissionControlService) {
+) -> (
+    StarHandle,
+    Sender<()>,
+    AdmissionControlService,
+    UpstreamProxyData<CoreMemPoolClient, VMValidator>,
+) {
     crash_handler::setup_panic_handler();
 
     let mut instant = Instant::now();
@@ -97,7 +124,7 @@ pub fn setup_environment(
     // Initialize and start AC.
     instant = Instant::now();
     let (upstream_proxy_sender, _upstream_proxy_receiver) = mpsc::channel(1000);
-    let (mempool_client, ac) = setup_ac(
+    let (mempool_client, ac, upstream_proxy_data) = setup_ac(
         &node_config,
         Arc::clone(&storage_service),
         upstream_proxy_sender,
@@ -114,7 +141,7 @@ pub fn setup_environment(
     let shutdown_sender = commit_block(executed_tree, mempool_client, executor);
     let star_handle = StarHandle { _storage: storage };
 
-    (star_handle, shutdown_sender, ac)
+    (star_handle, shutdown_sender, ac, upstream_proxy_data)
 }
 
 fn commit_block(

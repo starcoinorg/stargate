@@ -4158,6 +4158,7 @@ dependencies = [
  "admission-control-service 0.1.0",
  "async-trait 0.1.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "atomic_refcell 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "channel 0.1.0",
  "consensus 0.1.0",
  "crash-handler 0.1.0",
  "executable-helpers 0.1.0",
