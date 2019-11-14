@@ -7,26 +7,24 @@ use crate::channel_transaction_store::ChannelTransactionStore;
 use crate::channel_write_set_store::ChannelWriteSetStore;
 use crate::ledger_info_store::LedgerStore;
 use crate::schema_db::SchemaDB;
-
 use failure::prelude::*;
 use libra_crypto::hash::CryptoHash;
 use libra_crypto::HashValue;
 use libra_types::account_address::AccountAddress;
 use libra_types::account_state_blob::AccountStateBlob;
-use libra_types::crypto_proxies::LedgerInfoWithSignatures;
 use libra_types::proof::SparseMerkleProof;
 use libra_types::transaction::Version;
 use libra_types::write_set::WriteSet;
-
 use schemadb::SchemaBatch;
 use sgtypes::channel_transaction_info::ChannelTransactionInfo;
 use sgtypes::channel_transaction_to_commit::*;
+use sgtypes::ledger_info::LedgerInfo;
 use sgtypes::proof::signed_channel_transaction_proof::SignedChannelTransactionProof;
 use sgtypes::signed_channel_transaction_with_proof::SignedChannelTransactionWithProof;
+use sgtypes::startup_info::StartupInfo;
 use std::fmt::Formatter;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
-use storage_proto::StartupInfo;
 
 #[derive(Clone)]
 pub struct ChannelStore<S> {
@@ -77,7 +75,7 @@ where
         let write_set_option = match store.ledger_store.get_latest_ledger_info_option() {
             None => None,
             Some(ledger_info) => {
-                let version = ledger_info.ledger_info().version();
+                let version = ledger_info.version();
                 let ws = store
                     .write_set_store
                     .get_write_set_by_version(version)
@@ -118,10 +116,10 @@ where
         &self,
         txn_to_commit: ChannelTransactionToCommit,
         version: Version,
-        ledger_info_with_sigs: &Option<LedgerInfoWithSignatures>,
+        ledger_info: &Option<LedgerInfo>,
     ) -> Result<()> {
-        if let Some(x) = ledger_info_with_sigs {
-            let claimed_last_version = x.ledger_info().version();
+        if let Some(x) = ledger_info {
+            let claimed_last_version = x.version();
             ensure!(
                 claimed_last_version == version,
                 "Transaction batch not applicable: version {}, last_version {}",
@@ -135,8 +133,8 @@ where
         let mut schema_batch = SchemaBatch::default();
         let new_ledger_hash = self.save_tx_impl(txn_to_commit, version, &mut schema_batch)?;
 
-        if let Some(x) = ledger_info_with_sigs {
-            let expected_root_hash = x.ledger_info().transaction_accumulator_hash();
+        if let Some(x) = ledger_info {
+            let expected_root_hash = x.transaction_accumulator_hash();
             ensure!(
                 new_ledger_hash == expected_root_hash,
                 "Root hash calculated doesn't match expected. {:?} vs {:?}",
@@ -149,7 +147,7 @@ where
         self.commit(schema_batch)?;
 
         // Once everything is successfully persisted, update the latest in-memory ledger info.
-        if let Some(x) = ledger_info_with_sigs {
+        if let Some(x) = ledger_info {
             self.ledger_store.set_latest_ledger_info(x.clone());
         }
         // and cache the write set
@@ -211,11 +209,10 @@ where
     /// synchronizer module.
     pub fn get_startup_info(&self) -> Result<Option<StartupInfo>> {
         // Get the latest ledger info. Return None if not bootstrapped.
-        let ledger_info_with_sigs = match self.ledger_store.get_latest_ledger_info_option() {
+        let ledger_info = match self.ledger_store.get_latest_ledger_info_option() {
             Some(x) => x,
             None => return Ok(None),
         };
-        let ledger_info = ledger_info_with_sigs.ledger_info().clone();
 
         let (latest_version, txn_info) = self.ledger_store.get_latest_transaction_info()?;
 
@@ -251,8 +248,8 @@ where
         fetch_events: bool,
     ) -> Result<SignedChannelTransactionWithProof> {
         // Get the latest ledger info and signatures
-        let ledger_info_with_sigs = self.ledger_store.get_latest_ledger_info()?;
-        let ledger_version = ledger_info_with_sigs.ledger_info().version();
+        let ledger_info = self.ledger_store.get_latest_ledger_info()?;
+        let ledger_version = ledger_info.version();
         self.get_txn_with_proof(channel_sequence_number, ledger_version, fetch_events)
     }
 
