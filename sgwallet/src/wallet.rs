@@ -224,7 +224,7 @@ impl Wallet {
     }
 
     pub async fn deposit(
-        &mut self,
+        &self,
         receiver: AccountAddress,
         sender_amount: u64,
         receiver_amount: u64,
@@ -267,7 +267,7 @@ impl Wallet {
     }
 
     pub async fn withdraw(
-        &mut self,
+        &self,
         receiver: AccountAddress,
         sender_amount: u64,
         receiver_amount: u64,

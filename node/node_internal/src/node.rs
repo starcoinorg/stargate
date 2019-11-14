@@ -539,7 +539,7 @@ impl Node {
                                     channel_script_package,
                                     responder,
                                 } =>{
-                                    node_inner.clone().lock().unwrap().install_package(channel_script_package);
+                                    node_inner.clone().lock().unwrap().install_package(channel_script_package,responder);
                                 },
                                 NodeMessage::Execute{
                                     receiver_address,
@@ -548,7 +548,7 @@ impl Node {
                                     transaction_args,
                                     responder,
                                 } =>{
-                                    node_inner.clone().lock().unwrap().execute_script(receiver_address,package_name,script_name,transaction_args);
+                                    node_inner.clone().lock().unwrap().execute_script(receiver_address,package_name,script_name,transaction_args,responder);
                                 },
                                 NodeMessage::Deposit {
                                     receiver,
@@ -556,7 +556,7 @@ impl Node {
                                     receiver_amount,
                                     responder,
                                 }=> {
-
+                                    node_inner.clone().lock().unwrap().deposit(receiver,sender_amount,receiver_amount,responder);
                                 },
                                 NodeMessage::OpenChannel {
                                     receiver,
@@ -572,20 +572,20 @@ impl Node {
                                     receiver_amount,
                                     responder,
                                 }=> {
-
+                                    node_inner.clone().lock().unwrap().withdraw(receiver,sender_amount,receiver_amount,responder);
                                 },
                                 NodeMessage::ChannelPay {
                                     receiver_address,
                                     amount,
                                     responder,
                                 }=> {
-
+                                    node_inner.clone().lock().unwrap().off_chain_pay(receiver_address,amount,responder);
                                 },
                                 NodeMessage::ChannelBalance {
                                     participant,
                                     responder,
                                 }=> {
-
+                                    node_inner.clone().lock().unwrap().channel_balance(participant,responder);
                                 },
                             }
                         },
@@ -881,9 +881,11 @@ impl NodeInner {
         &mut self,
         receiver_address: AccountAddress,
         amount: u64,
-    ) -> Result<MessageFuture<u64>> {
+        mut responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
+    ) -> Result<()> {
         let off_chain_pay_tx = self.wallet.transfer(receiver_address, amount).await?;
-        self.send_channel_request(receiver_address, off_chain_pay_tx)
+        responder.send(self.send_channel_request(receiver_address, off_chain_pay_tx));
+        Ok(())
     }
 
     fn send_channel_request(
@@ -914,7 +916,8 @@ impl NodeInner {
         package_name: String,
         script_name: String,
         transaction_args: Vec<Vec<u8>>,
-    ) -> Result<MessageFuture<u64>> {
+        mut responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
+    ) -> Result<()> {
         let mut trans_args = Vec::new();
         for arg in transaction_args {
             let transaction_arg = lcs::from_bytes(arg.as_slice())?;
@@ -925,10 +928,16 @@ impl NodeInner {
             .wallet
             .execute_script(receiver_address, &package_name, &script_name, trans_args)
             .await?;
-        self.send_channel_request(receiver_address, script_transaction)
+        let f = self.send_channel_request(receiver_address, script_transaction);
+        responder.send(f);
+        Ok(())
     }
 
-    async fn install_package(&self, channel_script_package: ChannelScriptPackage) -> Result<()> {
+    async fn install_package(
+        &self,
+        channel_script_package: ChannelScriptPackage,
+        mut responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
+    ) -> Result<()> {
         self.wallet.install_package(channel_script_package).await
     }
 
@@ -974,6 +983,52 @@ impl NodeInner {
         info!("get open channel txn");
         let result = self.channel_txn_onchain(channel_txn, MessageType::ChannelTransactionRequest);
         responder.send(result);
+    }
+
+    async fn deposit(
+        &mut self,
+        receiver: AccountAddress,
+        sender_amount: u64,
+        receiver_amount: u64,
+        mut responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
+    ) {
+        info!("start deposit ");
+        let channel_txn = self
+            .wallet
+            .deposit(receiver, sender_amount, receiver_amount)
+            .await
+            .unwrap();
+        info!("get deposit txn");
+        let result = self.channel_txn_onchain(channel_txn, MessageType::ChannelTransactionRequest);
+        responder.send(result);
+    }
+
+    async fn withdraw(
+        &mut self,
+        receiver: AccountAddress,
+        sender_amount: u64,
+        receiver_amount: u64,
+        mut responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
+    ) {
+        info!("start withdraw ");
+        let channel_txn = self
+            .wallet
+            .withdraw(receiver, sender_amount, receiver_amount)
+            .await
+            .unwrap();
+        info!("get withdraw txn");
+        let result = self.channel_txn_onchain(channel_txn, MessageType::ChannelTransactionRequest);
+        responder.send(result);
+    }
+
+    async fn channel_balance(
+        &mut self,
+        participant: AccountAddress,
+        mut responder: futures::channel::oneshot::Sender<Result<u64>>,
+    ) -> Result<()> {
+        let result = self.wallet.channel_balance(participant).await;
+        responder.send(result);
+        Ok(())
     }
 }
 
