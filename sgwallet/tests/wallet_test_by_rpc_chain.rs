@@ -26,7 +26,6 @@ rusty_fork_test! {
 }
 
 #[test]
-#[ignore]
 // just for manual execute
 fn test_wallet_with_rpc_client_manual() {
     run_test_wallet_with_rpc_client().unwrap();

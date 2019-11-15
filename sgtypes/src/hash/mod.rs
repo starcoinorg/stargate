@@ -37,6 +37,11 @@ define_hasher! {
 
 define_hasher! { (WriteSetItemHasher, WRITE_SET_ITEM_HASHER, b"WriteSetItem") }
 
+define_hasher! {
+    /// The hasher used to compute the hash of a LedgerInfo object.
+    (LedgerInfoHasher, LEDGER_INFO_HASHER, b"LedgerInfo")
+}
+
 /// impl `CryptoHash` for `struct_type` using `hasher_type`
 #[macro_export]
 macro_rules! impl_hash {

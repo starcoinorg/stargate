@@ -9,8 +9,6 @@ use libra_crypto::hash::{
 use libra_logger::prelude::*;
 use libra_types::account_address::AccountAddress;
 use libra_types::account_state_blob::AccountStateBlob;
-use libra_types::crypto_proxies::LedgerInfoWithSignatures;
-use libra_types::ledger_info::LedgerInfo;
 use libra_types::proof::accumulator::InMemoryAccumulator;
 use libra_types::proof::SparseMerkleProof;
 use libra_types::transaction::Version;
@@ -23,6 +21,7 @@ use sgtypes::channel_transaction_to_commit::{
     ChannelTransactionToApply, ChannelTransactionToCommit,
 };
 use sgtypes::hash::*;
+use sgtypes::ledger_info::LedgerInfo;
 use sgtypes::write_set_item::WriteSetItem;
 use std::collections::{BTreeMap, HashMap};
 use std::convert::{TryFrom, TryInto};
@@ -85,30 +84,24 @@ impl TxApplier {
             .get_startup_info()
             .expect("Fail to read startup info from storage");
 
-        let (
-            state_root_hash,
-            frozen_subtrees_in_accumulator,
-            num_leaves_in_accumulator,
-            epoch,
-            _committed_timestamp_usecs,
-        ) = match startup_info {
-            Some(info) => {
-                info!("Startup info read from DB: {:?}.", info);
-                let ledger_info = info.ledger_info;
+        let (state_root_hash, frozen_subtrees_in_accumulator, num_leaves_in_accumulator, epoch) =
+            match startup_info {
+                Some(info) => {
+                    info!("Startup info read from DB: {:?}.", info);
+                    let ledger_info = info.ledger_info;
 
-                (
-                    info.account_state_root_hash,
-                    info.ledger_frozen_subtree_hashes,
-                    info.latest_version + 1,
-                    ledger_info.epoch(),
-                    ledger_info.timestamp_usecs(),
-                )
-            }
-            None => {
-                info!("Startup info is empty. Will start from GENESIS.");
-                (*SPARSE_MERKLE_PLACEHOLDER_HASH, vec![], 0, 0, 0)
-            }
-        };
+                    (
+                        info.account_state_root_hash,
+                        info.ledger_frozen_subtree_hashes,
+                        info.latest_version + 1,
+                        ledger_info.epoch(),
+                    )
+                }
+                None => {
+                    info!("Startup info is empty. Will start from GENESIS.");
+                    (*SPARSE_MERKLE_PLACEHOLDER_HASH, vec![], 0, 0)
+                }
+            };
         let applied_trees = AppliedTrees {
             epoch,
             state_tree: SparseMerkleTree::new(state_root_hash),
@@ -181,29 +174,9 @@ impl TxApplier {
         let ledger_info = LedgerInfo::new(
             channel_seq_number,
             new_txn_accumulator.root_hash(),
-            HashValue::zero(),
-            HashValue::zero(),
             new_epoch,
             get_current_timestamp().as_micros() as u64,
-            None,
         );
-
-        let mut ledger_sig = BTreeMap::new();
-        ledger_sig.insert(
-            signed_channel_txn.raw_tx.sender(),
-            signed_channel_txn
-                .sender_signature
-                .write_set_payload_signature
-                .clone(),
-        );
-        ledger_sig.insert(
-            signed_channel_txn.raw_tx.receiver(),
-            signed_channel_txn
-                .receiver_signature
-                .write_set_payload_signature
-                .clone(),
-        );
-        let ledger_info_with_sigs = Some(LedgerInfoWithSignatures::new(ledger_info, ledger_sig));
 
         let txn_to_commit = ChannelTransactionToCommit::new(
             signed_channel_txn,
@@ -214,7 +187,7 @@ impl TxApplier {
         );
 
         self.store
-            .save_tx(txn_to_commit, channel_seq_number, &ledger_info_with_sigs)?;
+            .save_tx(txn_to_commit, channel_seq_number, &Some(ledger_info))?;
 
         self.applied_trees = AppliedTrees {
             epoch: new_epoch,

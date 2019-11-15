@@ -19,6 +19,8 @@ use admission_control_proto::proto::admission_control::{
     SubmitTransactionRequest, SubmitTransactionResponse,
 };
 use admission_control_service::admission_control_service::AdmissionControlService;
+use admission_control_service::UpstreamProxyData;
+use channel;
 use executor::{CommittableBlock, ExecutedTrees, Executor};
 use futures::channel::oneshot::Sender;
 use futures::channel::{mpsc, oneshot};
@@ -27,9 +29,12 @@ use libra_config::config::NodeConfig;
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_mempool::core_mempool_client::CoreMemPoolClient;
+use libra_types::block_info::BlockInfo;
 use libra_types::crypto_proxies::LedgerInfoWithSignatures;
 use libra_types::ledger_info::LedgerInfo;
 use libra_types::transaction::Transaction;
+use network::validator_network::AdmissionControlNetworkSender;
+use network::TEST_NETWORK_REQUESTS;
 use storage_client::{StorageRead, StorageWrite};
 use storage_service::start_storage_service_and_return_service;
 use vm_runtime::MoveVM;
@@ -42,35 +47,40 @@ pub struct StarHandle {
 fn setup_ac<R>(
     config: &NodeConfig,
     r: Arc<R>,
-    upstream_proxy_sender: mpsc::UnboundedSender<(
+    upstream_proxy_sender: mpsc::Sender<(
         SubmitTransactionRequest,
         oneshot::Sender<failure::Result<SubmitTransactionResponse>>,
     )>,
 ) -> (
     CoreMemPoolClient,
-    AdmissionControlService<CoreMemPoolClient, VMValidator>,
+    AdmissionControlService,
+    UpstreamProxyData<CoreMemPoolClient, VMValidator>,
 )
 where
     R: StorageRead + Clone + 'static,
 {
     let mempool = CoreMemPoolClient::new(&config);
-    let mempool_client = Some(Arc::new(mempool.clone()));
 
     let storage_read_client = Arc::clone(&r);
-    let vm_validator = Arc::new(VMValidator::new(&config, storage_read_client));
+    let vm_validator = VMValidator::new(&config, storage_read_client.clone());
 
-    let storage_read_client = Arc::clone(&r);
-    let handle = AdmissionControlService::new(
-        mempool_client,
-        storage_read_client,
-        vm_validator,
+    let handle = AdmissionControlService::new(upstream_proxy_sender, storage_read_client.clone());
+
+    let (rpc_net_notifs_tx, _rpc_net_notifs_rx) = channel::new(100, &TEST_NETWORK_REQUESTS);
+    let tmp_network_sender = AdmissionControlNetworkSender::new(rpc_net_notifs_tx);
+    let upstream_proxy_data = UpstreamProxyData::new(
+        config.admission_control.clone(),
+        tmp_network_sender,
+        config.get_role(),
+        Some(Arc::new(mempool.clone())),
+        storage_read_client.clone(),
+        Arc::new(vm_validator),
         config
             .admission_control
             .need_to_check_mempool_before_validation,
-        upstream_proxy_sender,
     );
 
-    (mempool, handle)
+    (mempool, handle, upstream_proxy_data)
 }
 
 fn setup_executor<R, W>(config: &NodeConfig, r: Arc<R>, w: Arc<W>) -> Arc<Executor<MoveVM>>
@@ -86,7 +96,8 @@ pub fn setup_environment(
 ) -> (
     StarHandle,
     Sender<()>,
-    AdmissionControlService<CoreMemPoolClient, VMValidator>,
+    AdmissionControlService,
+    UpstreamProxyData<CoreMemPoolClient, VMValidator>,
 ) {
     crash_handler::setup_panic_handler();
 
@@ -110,8 +121,8 @@ pub fn setup_environment(
 
     // Initialize and start AC.
     instant = Instant::now();
-    let (upstream_proxy_sender, _upstream_proxy_receiver) = mpsc::unbounded();
-    let (mempool_client, ac) = setup_ac(
+    let (upstream_proxy_sender, _upstream_proxy_receiver) = mpsc::channel(1000);
+    let (mempool_client, ac, upstream_proxy_data) = setup_ac(
         &node_config,
         Arc::clone(&storage_service),
         upstream_proxy_sender,
@@ -120,15 +131,15 @@ pub fn setup_environment(
 
     let info = storage_service.get_startup_info().unwrap().unwrap();
     let executed_tree = Mutex::new(ExecutedTrees::new(
-        info.account_state_root_hash,
-        info.ledger_frozen_subtree_hashes,
-        info.latest_version + 1,
+        info.committed_tree_state.account_state_root_hash,
+        info.committed_tree_state.ledger_frozen_subtree_hashes,
+        info.committed_tree_state.version + 1,
     ));
 
     let shutdown_sender = commit_block(executed_tree, mempool_client, executor);
     let star_handle = StarHandle { _storage: storage };
 
-    (star_handle, shutdown_sender, ac)
+    (star_handle, shutdown_sender, ac, upstream_proxy_data)
 }
 
 fn commit_block(
@@ -137,7 +148,7 @@ fn commit_block(
     executor: Arc<Executor<MoveVM>>,
 ) -> Sender<()> {
     let (shutdown_sender, mut shutdown_receiver) = oneshot::channel::<()>();
-
+    let mut height = 1;
     let task = Interval::new(Instant::now(), Duration::from_secs(3))
         .take_while(move |_| match shutdown_receiver.try_recv() {
             Err(_) | Ok(Some(_)) => {
@@ -180,15 +191,16 @@ fn commit_block(
                 let mut tree = executed_tree.lock().unwrap();
                 std::mem::replace(&mut *tree, output.executed_trees().clone());
                 // commit
-                let info = LedgerInfo::new(
-                    output.version().unwrap(),
-                    output.executed_trees().state_id(),
-                    output.executed_trees().state_root(),
-                    block_id,
+                let commit_info = BlockInfo::new(
                     0,
-                    u64::max_value(),
+                    height,
+                    block_id,
+                    output.executed_trees().state_id(),
+                    output.version().unwrap(),
+                    0,
                     None,
                 );
+                let info = LedgerInfo::new(commit_info, output.executed_trees().state_root());
                 let info_sign = LedgerInfoWithSignatures::new(info, BTreeMap::new());
                 let committable_block = CommittableBlock::new(transactions, Arc::new(output));
                 block_on(executor.commit_blocks(vec![committable_block], info_sign))
@@ -197,6 +209,7 @@ fn commit_block(
 
                 // remove from mem pool
                 mempool_client.remove_txn(exclude_transactions);
+                height = height + 1;
             }
             future::ready(())
         });

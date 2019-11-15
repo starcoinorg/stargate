@@ -8,19 +8,17 @@
 //! root(LedgerInfo) to leaf(TransactionInfo).
 
 use crate::error::SgStorageError;
-use crate::schema::channel_transaction_accumulator::*;
 use crate::schema::channel_transaction_info::*;
+use crate::schema::{channel_transaction_accumulator::*, ledger_info_schema::*};
 use crate::schema_db::SchemaDB;
 use accumulator::{HashReader, MerkleAccumulator};
-
 use failure::prelude::*;
 use libra_crypto::{hash::CryptoHash, HashValue};
-use libra_types::crypto_proxies::LedgerInfoWithSignatures;
 use libra_types::proof::position::Position;
 use libra_types::proof::AccumulatorConsistencyProof;
 use libra_types::transaction::Version;
-use libradb::schema::ledger_info::*;
 use schemadb::{ReadOptions, SchemaBatch};
+use sgtypes::ledger_info::LedgerInfo;
 use sgtypes::{
     channel_transaction_info::ChannelTransactionInfo, hash::ChannelTransactionAccumulatorHasher,
     proof::ChannelTransactionAccumulatorProof,
@@ -32,7 +30,7 @@ use std::sync::RwLock;
 #[derive(Clone)]
 pub struct LedgerStore<S> {
     db: S,
-    latest_ledger_info: Arc<RwLock<Option<LedgerInfoWithSignatures>>>,
+    latest_ledger_info: Arc<RwLock<Option<LedgerInfo>>>,
 }
 impl<S> core::fmt::Debug for LedgerStore<S>
 where
@@ -82,26 +80,23 @@ where
     /// the most recent one.
     /// Note: ledger infos and signatures are only available at the last version of each earlier
     /// epoch and at the latest version of current epoch.
-    pub fn get_latest_ledger_infos_per_epoch(
-        &self,
-        start_epoch: u64,
-    ) -> Result<Vec<LedgerInfoWithSignatures>> {
+    pub fn get_latest_ledger_infos_per_epoch(&self, start_epoch: u64) -> Result<Vec<LedgerInfo>> {
         let mut iter = self.db.iter::<LedgerInfoSchema>(ReadOptions::default())?;
         iter.seek(&start_epoch)?;
         Ok(iter.map(|kv| Ok(kv?.1)).collect::<Result<Vec<_>>>()?)
     }
 
-    pub fn get_latest_ledger_info_option(&self) -> Option<LedgerInfoWithSignatures> {
+    pub fn get_latest_ledger_info_option(&self) -> Option<LedgerInfo> {
         let ledger_info_ptr = self.latest_ledger_info.read().unwrap();
         (*ledger_info_ptr).clone()
     }
 
-    pub fn get_latest_ledger_info(&self) -> Result<LedgerInfoWithSignatures> {
+    pub fn get_latest_ledger_info(&self) -> Result<LedgerInfo> {
         self.get_latest_ledger_info_option()
             .ok_or_else(|| SgStorageError::NotFound(String::from("Genesis LedgerInfo")).into())
     }
 
-    pub fn set_latest_ledger_info(&self, ledger_info_with_sigs: LedgerInfoWithSignatures) {
+    pub fn set_latest_ledger_info(&self, ledger_info_with_sigs: LedgerInfo) {
         *self.latest_ledger_info.write().unwrap() = Some(ledger_info_with_sigs);
     }
 
@@ -185,15 +180,8 @@ where
     }
 
     /// Write `ledger_info` to `cs`.
-    pub fn put_ledger_info(
-        &self,
-        ledger_info_with_sigs: &LedgerInfoWithSignatures,
-        cs: &mut SchemaBatch,
-    ) -> Result<()> {
-        cs.put::<LedgerInfoSchema>(
-            &ledger_info_with_sigs.ledger_info().epoch(),
-            ledger_info_with_sigs,
-        )
+    pub fn put_ledger_info(&self, ledger_info: &LedgerInfo, cs: &mut SchemaBatch) -> Result<()> {
+        cs.put::<LedgerInfoSchema>(&ledger_info.epoch(), ledger_info)
     }
 }
 

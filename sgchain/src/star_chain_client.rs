@@ -246,6 +246,7 @@ pub struct MockChainClient {
     ac_client: Arc<AdmissionControlMockClient>,
     // just wait client to be drop.
     _shutdown_sender: Arc<Sender<()>>,
+    rt: Arc<tokio::runtime::Runtime>,
 }
 
 impl MockChainClient {
@@ -257,11 +258,15 @@ impl MockChainClient {
         info!("MockChainClient config: {:?} ", config);
         genesis_blob(&config);
 
-        let (_handle, shutdown_sender, ac) = setup_environment(&mut config);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let executor = rt.executor();
+
+        let (_handle, shutdown_sender, ac, proxy) = setup_environment(&mut config);
         (
             MockChainClient {
-                ac_client: Arc::new(AdmissionControlMockClient::new(ac)),
+                ac_client: Arc::new(AdmissionControlMockClient::new(ac, proxy, executor)),
                 _shutdown_sender: Arc::new(shutdown_sender),
+                rt: Arc::new(rt),
             },
             _handle,
         )
