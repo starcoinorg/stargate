@@ -48,7 +48,7 @@ fn node_test() -> Result<()> {
         _delay(Duration::from_millis(1000)).await;
 
         let fund_amount = 1000000;
-        let result = node2
+        let _result = node2
             .open_channel_async(addr1, fund_amount, fund_amount)
             .await
             .unwrap()

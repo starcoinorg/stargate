@@ -18,7 +18,7 @@ pub enum NodeMessage {
     },
     Install {
         channel_script_package: ChannelScriptPackage,
-        responder: oneshot::Sender<Result<MessageFuture<u64>>>,
+        responder: oneshot::Sender<Result<()>>,
     },
     Deposit {
         receiver: AccountAddress,
