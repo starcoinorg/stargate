@@ -13,6 +13,7 @@ pub mod channel_transaction_to_commit;
 pub mod hash;
 pub mod ledger_info;
 pub mod message;
+pub mod pending_txn;
 pub mod proof;
 pub mod proto;
 pub mod resource;

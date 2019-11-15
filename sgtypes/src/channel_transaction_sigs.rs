@@ -1,5 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
+use crate::hash::ChannelTransactionSigsHasher;
+use crate::impl_hash;
 use failure::prelude::*;
 use libra_crypto::ed25519::{Ed25519PublicKey, Ed25519Signature};
 use libra_crypto::HashValue;
@@ -90,6 +92,7 @@ impl ChannelTransactionSigs {
         }
     }
 }
+impl_hash!(ChannelTransactionSigs, ChannelTransactionSigsHasher);
 
 impl TryFrom<crate::proto::sgtypes::ChannelTransactionSigs> for ChannelTransactionSigs {
     type Error = Error;

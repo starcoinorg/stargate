@@ -9,7 +9,6 @@ members = [
     "node",
     "node/node_proto",
     "node/node_client",
-    "node/node_rest_api",
     "node/node_service",
     "node/node_internal",
     "cli",

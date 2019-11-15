@@ -12,9 +12,8 @@ use std::collections::BTreeMap;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ChannelTransactionToApply {
     pub signed_channel_txn: SignedChannelTransaction,
-    pub travel: bool,
     /// tx output related
-    pub write_set: WriteSet,
+    pub write_set: Option<WriteSet>,
     // other tx output fields for later usage
     pub events: Vec<ContractEvent>,
     pub major_status: StatusCode,

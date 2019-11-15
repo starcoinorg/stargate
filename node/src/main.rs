@@ -16,7 +16,6 @@ use libra_types::account_address::AccountAddress;
 use network::{build_network_service, NetworkMessage, NetworkService};
 use node::client;
 use node_internal::node::Node;
-use node_rest_api::setup_node_rest;
 use node_service::setup_node_service;
 use sg_config::config::{load_from, NodeConfig, WalletConfig};
 use sgchain::star_chain_client::StarChainClient;
@@ -72,7 +71,7 @@ fn gen_node(
     sender: UnboundedSender<NetworkMessage>,
     receiver: UnboundedReceiver<NetworkMessage>,
     close_tx: futures_01::sync::oneshot::Sender<()>,
-) -> (Node<StarChainClient>) {
+) -> (Node) {
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     let client = StarChainClient::new(
         &wallet_config.chain_address,
@@ -114,7 +113,7 @@ fn main() {
     let (network_service, tx, rx, close_tx) =
         build_network_service(&swarm.config.net_config, keypair.clone());
 
-    let node = gen_node(
+    let mut node = gen_node(
         executor,
         keypair,
         &swarm.config.wallet,
@@ -127,7 +126,6 @@ fn main() {
     let api_node = Arc::new(node);
     let mut node_server = setup_node_service(&swarm.config, api_node.clone());
     node_server.start();
-    setup_node_rest(swarm.config.rest_config, api_node.clone()).ok();
 
     if args.start_client {
         let client = client::InteractiveClient::new_with_inherit_io(

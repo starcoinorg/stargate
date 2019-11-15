@@ -7,6 +7,7 @@ pub mod channel_transaction_schema;
 pub mod channel_write_set_accumulator_schema;
 pub mod channel_write_set_schema;
 pub mod ledger_info_schema;
+pub mod pending_transaction_schema;
 use failure::prelude::*;
 use schemadb::ColumnFamilyName;
 
@@ -24,7 +25,7 @@ pub const CHANNEL_TRANSACTION_INFO_CF_NAME: ColumnFamilyName = "channel_transact
 
 pub const CHANNEL_WRITE_SET_CF_NAME: ColumnFamilyName = "channel_write_set";
 pub const CHANNEL_WRITE_SET_ACCUMULATOR_CF_NAME: ColumnFamilyName = "channel_write_set_accumulator";
-
+pub const PENDING_CHANNEL_TRANSACTION_CF_NAME: ColumnFamilyName = "pending_channel_transaction";
 pub fn ensure_slice_len_eq(data: &[u8], len: usize) -> Result<()> {
     ensure!(
         data.len() == len,

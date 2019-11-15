@@ -34,6 +34,9 @@ define_hasher! {
 define_hasher! {
     (ChannelTransactionHasher, CHANNEL_TRANSACTION_HASHER, b"ChannelTransaction")
 }
+define_hasher! {
+    (ChannelTransactionSigsHasher, CHANNEL_TRANSACTION_SIGS_HASHER, b"ChannelTransactionSigs")
+}
 
 define_hasher! { (WriteSetItemHasher, WRITE_SET_ITEM_HASHER, b"WriteSetItem") }
 
