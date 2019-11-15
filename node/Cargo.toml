@@ -23,7 +23,6 @@ hex = "0.3.2"
 
 libra-logger = { path = "../libra/common/logger" }
 node_service = { path = "./node_service"}
-node_rest_api = {path = "./node_rest_api"}
 sg_config = { path = "../sgconfig"}
 sgwallet = { path="../sgwallet"}
 libra-types = { path = "../libra/types" }

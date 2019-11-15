@@ -13,6 +13,7 @@ pub mod channel_transaction_store;
 pub mod channel_write_set_store;
 pub mod error;
 pub mod ledger_info_store;
+pub mod pending_txn_store;
 pub mod rocksdb_utils;
 pub mod schema;
 pub mod schema_db;

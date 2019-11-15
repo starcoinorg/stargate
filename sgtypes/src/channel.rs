@@ -17,6 +17,9 @@ pub enum ChannelStage {
     Idle,
     /// Channel is pending for some tx not finished.
     Pending,
+    /// Channel is(or will start) applying some txn to local db.
+    Syncing,
+    /// Channel is closed.
     Closed,
 }
 

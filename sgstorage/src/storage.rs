@@ -4,8 +4,8 @@
 use super::schema::{
     CHANNEL_TRANSACTION_ACCUMULATOR_CF_NAME, CHANNEL_TRANSACTION_INFO_CF_NAME,
     CHANNEL_WRITE_SET_ACCUMULATOR_CF_NAME, CHANNEL_WRITE_SET_CF_NAME,
-    JELLYFISH_MERKLE_NODE_CF_NAME, SIGNED_CHANNEL_TRANSACTION_CF_NAME, STALE_NODE_INDEX_CF_NAME,
-    TRANSACTION_BY_ACCOUNT_CF_NAME,
+    JELLYFISH_MERKLE_NODE_CF_NAME, PENDING_CHANNEL_TRANSACTION_CF_NAME,
+    SIGNED_CHANNEL_TRANSACTION_CF_NAME, STALE_NODE_INDEX_CF_NAME, TRANSACTION_BY_ACCOUNT_CF_NAME,
 };
 use crate::rocksdb_utils::FixedPrefixSliceTransform;
 use failure::prelude::*;
@@ -83,6 +83,10 @@ impl SgStorage {
             ),
             (
                 SIGNED_CHANNEL_TRANSACTION_CF_NAME,
+                default_column_family_options(),
+            ),
+            (
+                PENDING_CHANNEL_TRANSACTION_CF_NAME,
                 default_column_family_options(),
             ),
         ]

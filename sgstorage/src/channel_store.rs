@@ -6,6 +6,7 @@ use crate::channel_state_store::ChannelStateStore;
 use crate::channel_transaction_store::ChannelTransactionStore;
 use crate::channel_write_set_store::ChannelWriteSetStore;
 use crate::ledger_info_store::LedgerStore;
+use crate::pending_txn_store::PendingTxnStore;
 use crate::schema_db::SchemaDB;
 use failure::prelude::*;
 use libra_crypto::hash::CryptoHash;
@@ -19,6 +20,7 @@ use schemadb::SchemaBatch;
 use sgtypes::channel_transaction_info::ChannelTransactionInfo;
 use sgtypes::channel_transaction_to_commit::*;
 use sgtypes::ledger_info::LedgerInfo;
+use sgtypes::pending_txn::PendingTransaction;
 use sgtypes::proof::signed_channel_transaction_proof::SignedChannelTransactionProof;
 use sgtypes::signed_channel_transaction_with_proof::SignedChannelTransactionWithProof;
 use sgtypes::startup_info::StartupInfo;
@@ -33,7 +35,9 @@ pub struct ChannelStore<S> {
     ledger_store: LedgerStore<S>,
     transaction_store: ChannelTransactionStore<S>,
     write_set_store: ChannelWriteSetStore<S>,
+    pending_txn_store: PendingTxnStore<S>,
     latest_write_set: Arc<RwLock<Option<WriteSet>>>,
+    pending_txn: Arc<RwLock<Option<PendingTransaction>>>,
 }
 
 impl<S> core::fmt::Debug for ChannelStore<S>
@@ -46,13 +50,19 @@ where
 }
 
 impl<S> ChannelStore<S> {
-    fn set_write_set(&self, write_set: Option<WriteSet>) -> Result<()> {
+    fn set_write_set(&self, write_set: Option<WriteSet>) {
         let mut write_guard = self
             .latest_write_set
-            .try_write()
-            .map_err(|_| format_err!("try to get write lock error"))?;
+            .write()
+            .expect("should get write lock");
+
         *write_guard = write_set;
-        Ok(())
+    }
+
+    fn set_pending_txn(&self, pending_txn: Option<PendingTransaction>) {
+        let mut write_guard = self.pending_txn.write().expect("should get write lock");
+
+        *write_guard = pending_txn;
     }
 }
 
@@ -67,7 +77,9 @@ where
             ledger_store: LedgerStore::new(db.clone()),
             transaction_store: ChannelTransactionStore::new(db.clone()),
             write_set_store: ChannelWriteSetStore::new(db.clone()),
+            pending_txn_store: PendingTxnStore::new(db.clone()),
             latest_write_set: Arc::new(RwLock::new(None)),
+            pending_txn: Arc::new(RwLock::new(None)),
         };
 
         // TODO refactor this
@@ -83,9 +95,12 @@ where
                 Some(ws)
             }
         };
-        store
-            .set_write_set(write_set_option)
-            .expect("set write set should be ok");
+        let pending_txn_opt = store
+            .pending_txn_store
+            .get_pending_txn()
+            .expect("read lastest pending txn from db shold work");
+        store.set_write_set(write_set_option);
+        store.set_pending_txn(pending_txn_opt);
         store
     }
 
@@ -93,6 +108,11 @@ where
     pub fn db(&self) -> S {
         self.db.clone()
     }
+
+    pub fn pending_txn_store(&self) -> &PendingTxnStore<S> {
+        &self.pending_txn_store
+    }
+
     #[cfg(test)]
     pub fn state_store(&self) -> &ChannelStateStore<S> {
         &self.state_store
@@ -117,6 +137,7 @@ where
         txn_to_commit: ChannelTransactionToCommit,
         version: Version,
         ledger_info: &Option<LedgerInfo>,
+        clear_pending_txn: bool,
     ) -> Result<()> {
         if let Some(x) = ledger_info {
             let claimed_last_version = x.version();
@@ -144,6 +165,10 @@ where
             self.ledger_store.put_ledger_info(x, &mut schema_batch)?;
         }
 
+        if clear_pending_txn {
+            self.pending_txn_store.clear(&mut schema_batch)?;
+        }
+
         self.commit(schema_batch)?;
 
         // Once everything is successfully persisted, update the latest in-memory ledger info.
@@ -151,8 +176,36 @@ where
             self.ledger_store.set_latest_ledger_info(x.clone());
         }
         // and cache the write set
-        self.set_write_set(Some(write_set))?;
+        self.set_write_set(Some(write_set));
+        if clear_pending_txn {
+            self.set_pending_txn(None);
+        }
         // TODO: wake pruner
+        Ok(())
+    }
+
+    pub fn save_pending_txn(
+        &mut self,
+        pending_txn: PendingTransaction,
+        persist: bool,
+    ) -> Result<()> {
+        let cur_pending_txn = self.get_pending_txn();
+        match (&cur_pending_txn, &pending_txn) {
+            (None, _)
+            | (
+                Some(PendingTransaction::WaitForReceiverSig { .. }),
+                PendingTransaction::WaitForApply { .. },
+            ) => {}
+            _ => bail!("cannot save pending txn, state invalid"),
+        };
+        if persist {
+            let mut sb = SchemaBatch::new();
+            self.pending_txn_store
+                .save_pending_txn(&pending_txn, &mut sb)?;
+            self.commit(sb)?;
+        }
+
+        self.set_pending_txn(Some(pending_txn));
         Ok(())
     }
 
@@ -232,6 +285,14 @@ where
 
     pub fn get_write_set_by_version(&self, version: u64) -> Result<WriteSet> {
         self.write_set_store.get_write_set_by_version(version)
+    }
+
+    pub fn get_pending_txn(&self) -> Option<PendingTransaction> {
+        self.pending_txn
+            .read()
+            .expect("should get read lock")
+            .deref()
+            .clone()
     }
 
     pub fn get_latest_write_set(&self) -> Option<WriteSet> {

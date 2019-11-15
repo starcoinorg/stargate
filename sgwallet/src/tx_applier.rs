@@ -128,14 +128,15 @@ impl TxApplier {
             write_set,
             events,
             major_status,
-            travel,
+            ..
         } = tx_to_apply;
         let channel_seq_number = signed_channel_txn.raw_tx.channel_sequence_number();
         ensure!(
             channel_seq_number == self.applied_trees.tx_accumulator.num_leaves(),
             "tx channel seq number mismatched"
         );
-        let witness_states = self.process_write_set(&write_set, travel)?;
+
+        let witness_states = self.process_write_set(write_set.as_ref())?;
 
         let new_state_tree = Self::build_state_tree(
             &witness_states,
@@ -144,6 +145,12 @@ impl TxApplier {
         )?;
         let _event_tree = InMemoryAccumulator::<EventAccumulatorHasher>::default()
             .append(events.iter().map(CryptoHash::hash).collect_vec().as_slice());
+
+        let (travel, write_set) = match write_set {
+            None => (true, WriteSet::default()),
+            Some(ws) => (false, ws),
+        };
+
         let write_set_tree = InMemoryAccumulator::<WriteSetAccumulatorHasher>::default().append(
             write_set
                 .iter()
@@ -187,7 +194,7 @@ impl TxApplier {
         );
 
         self.store
-            .save_tx(txn_to_commit, channel_seq_number, &Some(ledger_info))?;
+            .save_tx(txn_to_commit, channel_seq_number, &Some(ledger_info), true)?;
 
         self.applied_trees = AppliedTrees {
             epoch: new_epoch,
@@ -277,37 +284,35 @@ impl TxApplier {
 
     fn process_write_set(
         &self,
-        write_set: &WriteSet,
-        travel: bool,
+        write_set: Option<&WriteSet>,
     ) -> Result<BTreeMap<AccountAddress, AccountStateBlob>> {
-        // if write_set is empty, it means the upper channel tx is travel
-        if travel {
-            ensure!(
-                write_set.is_empty(),
-                "write set should be empty if channel tx is travel"
-            );
-            let mut state = BTreeMap::new();
-            let empty_state_blob = AccountStateBlob::try_from(&BTreeMap::new())?;
-            state.insert(self.owner_address(), empty_state_blob.clone());
-            state.insert(self.participant_address(), empty_state_blob);
-            Ok(state)
-        } else {
-            ensure!(
-                !write_set.is_empty(),
-                "write set should not be empty if channel tx is offchain"
-            );
-            let state: BTreeMap<AccountAddress, BTreeMap<Vec<u8>, Vec<u8>>> =
-                write_set.try_into()?;
-            let mut blob_state = BTreeMap::new();
-            for (addr, state_btree) in state.into_iter() {
-                blob_state.insert(addr, AccountStateBlob::try_from(&state_btree)?);
+        // if write_set is none, it means the upper channel tx is travel
+        match write_set {
+            None => {
+                let mut state = BTreeMap::new();
+                let empty_state_blob = AccountStateBlob::try_from(&BTreeMap::new())?;
+                state.insert(self.owner_address(), empty_state_blob.clone());
+                state.insert(self.participant_address(), empty_state_blob);
+                Ok(state)
             }
-            check_witness_state(
-                self.owner_address(),
-                self.participant_address(),
-                &blob_state,
-            )?;
-            Ok(blob_state)
+            Some(write_set) => {
+                ensure!(
+                    !write_set.is_empty(),
+                    "write set should not be empty if channel tx is offchain"
+                );
+                let state: BTreeMap<AccountAddress, BTreeMap<Vec<u8>, Vec<u8>>> =
+                    write_set.try_into()?;
+                let mut blob_state = BTreeMap::new();
+                for (addr, state_btree) in state.into_iter() {
+                    blob_state.insert(addr, AccountStateBlob::try_from(&state_btree)?);
+                }
+                check_witness_state(
+                    self.owner_address(),
+                    self.participant_address(),
+                    &blob_state,
+                )?;
+                Ok(blob_state)
+            }
         }
     }
 }

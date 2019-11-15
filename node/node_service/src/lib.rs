@@ -13,15 +13,11 @@ use node_proto::{
     OpenChannelRequest, PayRequest, QueryTransactionQuest, WithdrawRequest,
 };
 use sg_config::config::NodeConfig;
-use sgchain::star_chain_client::ChainClient;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use std::convert::TryFrom;
 use std::sync::Arc;
 
-pub fn setup_node_service<C>(config: &NodeConfig, node: Arc<Node_Internal<C>>) -> ::grpcio::Server
-where
-    C: ChainClient + Clone + Send + Sync + 'static,
-{
+pub fn setup_node_service(config: &NodeConfig, node: Arc<Node_Internal>) -> ::grpcio::Server {
     let handle = NodeService::new(node);
     let service = create_node(handle);
     ::grpcio::ServerBuilder::new(Arc::new(
@@ -34,19 +30,17 @@ where
 }
 
 #[derive(Clone)]
-pub struct NodeService<C: ChainClient + Clone + Send + Sync + 'static> {
-    node: Arc<Node_Internal<C>>,
+pub struct NodeService {
+    node: Arc<Node_Internal>,
 }
 
-impl<C: ChainClient + Clone + Send + Sync + 'static> NodeService<C> {
-    pub fn new(node: Arc<Node_Internal<C>>) -> Self {
+impl NodeService {
+    pub fn new(node: Arc<Node_Internal>) -> Self {
         NodeService { node }
     }
 }
 
-impl<C: ChainClient + Clone + Send + Sync + 'static> node_proto::proto::node::Node
-    for NodeService<C>
-{
+impl node_proto::proto::node::Node for NodeService {
     fn open_channel(
         &mut self,
         ctx: ::grpcio::RpcContext,
@@ -54,15 +48,18 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> node_proto::proto::node::No
         sink: ::grpcio::UnarySink<node_proto::proto::node::OpenChannelResponse>,
     ) {
         let request = OpenChannelRequest::try_from(req).unwrap();
-        let rx = self.node.open_channel_oneshot(
-            request.remote_addr,
-            request.local_amount,
-            request.remote_amount,
-        );
-        //let resp=OpenChannelResponse{}.into();
-        //provide_grpc_response(Ok(resp),ctx,sink);
-        let fut = process_response(rx, sink);
-        ctx.spawn(fut.boxed().unit_error().compat());
+        let node = self.node.clone();
+        let f = async move {
+            let rx = node
+                .open_channel_oneshot(
+                    request.remote_addr,
+                    request.local_amount,
+                    request.remote_amount,
+                )
+                .await;
+            process_response(rx, sink).await;
+        };
+        ctx.spawn(f.boxed().unit_error().compat());
     }
 
     fn pay(
@@ -72,11 +69,14 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> node_proto::proto::node::No
         sink: ::grpcio::UnarySink<node_proto::proto::node::PayResponse>,
     ) {
         let request = PayRequest::try_from(req).unwrap();
-        let rx = self
-            .node
-            .off_chain_pay_oneshot(request.remote_addr, request.amount);
-        let fut = process_response(rx, sink);
-        ctx.spawn(fut.boxed().unit_error().compat());
+        let node = self.node.clone();
+        let f = async move {
+            let rx = node
+                .off_chain_pay_oneshot(request.remote_addr, request.amount)
+                .await;
+            process_response(rx, sink).await;
+        };
+        ctx.spawn(f.boxed().unit_error().compat());
     }
 
     fn deposit(
@@ -86,13 +86,18 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> node_proto::proto::node::No
         sink: ::grpcio::UnarySink<node_proto::proto::node::DepositResponse>,
     ) {
         let request = DepositRequest::try_from(req).unwrap();
-        let rx = self.node.deposit_oneshot(
-            request.remote_addr,
-            request.local_amount,
-            request.remote_amount,
-        );
-        let fut = process_response(rx, sink);
-        ctx.spawn(fut.boxed().unit_error().compat());
+        let node = self.node.clone();
+        let f = async move {
+            let rx = node
+                .deposit_oneshot(
+                    request.remote_addr,
+                    request.local_amount,
+                    request.remote_amount,
+                )
+                .await;
+            process_response(rx, sink).await;
+        };
+        ctx.spawn(f.boxed().unit_error().compat());
     }
 
     fn withdraw(
@@ -102,13 +107,18 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> node_proto::proto::node::No
         sink: ::grpcio::UnarySink<node_proto::proto::node::WithdrawResponse>,
     ) {
         let request = WithdrawRequest::try_from(req).unwrap();
-        let rx = self.node.withdraw_oneshot(
-            request.remote_addr,
-            request.local_amount,
-            request.remote_amount,
-        );
-        let fut = process_response(rx, sink);
-        ctx.spawn(fut.boxed().unit_error().compat());
+        let node = self.node.clone();
+        let f = async move {
+            let rx = node
+                .withdraw_oneshot(
+                    request.remote_addr,
+                    request.local_amount,
+                    request.remote_amount,
+                )
+                .await;
+            process_response(rx, sink).await;
+        };
+        ctx.spawn(f.boxed().unit_error().compat());
     }
 
     fn channel_balance(
@@ -118,9 +128,16 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> node_proto::proto::node::No
         sink: ::grpcio::UnarySink<node_proto::proto::node::ChannelBalanceResponse>,
     ) {
         let request = ChannelBalanceRequest::try_from(req).unwrap();
-        let balance = self.node.channel_balance(request.remote_addr).unwrap();
-        let resp = ChannelBalanceResponse::new(balance).into();
-        provide_grpc_response(Ok(resp), ctx, sink);
+        let node = self.node.clone();
+        let f = async move {
+            let balance = node
+                .channel_balance_async(request.remote_addr)
+                .await
+                .unwrap_or(0);
+            let resp = ChannelBalanceResponse::new(balance).into();
+            sink.success(resp);
+        };
+        ctx.spawn(f.boxed().unit_error().compat());
     }
 
     fn install_channel_script_package(
@@ -156,14 +173,30 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> node_proto::proto::node::No
         sink: ::grpcio::UnarySink<node_proto::proto::node::ExecuteScriptResponse>,
     ) {
         let request = ExecuteScriptRequest::try_from(req).unwrap();
-        let rx = self.node.execute_script_oneshot(
-            request.remote_addr,
-            request.package_name,
-            request.script_name,
-            request.args,
-        );
-        let fut = process_response(rx, sink);
-        ctx.spawn(fut.boxed().unit_error().compat());
+        let node = self.node.clone();
+        let f = async move {
+            match node
+                .execute_script_oneshot(
+                    request.remote_addr,
+                    request.package_name,
+                    request.script_name,
+                    request.args,
+                )
+                .await
+            {
+                Ok(rx) => {
+                    process_response(rx, sink).await;
+                }
+                Err(e) => {
+                    set_failure_message(
+                        RpcStatusCode::UNKNOWN,
+                        format!("Failed to process request: {}", e),
+                        sink,
+                    );
+                }
+            }
+        };
+        ctx.spawn(f.boxed().unit_error().compat());
     }
 
     fn query_transaction(
@@ -172,18 +205,36 @@ impl<C: ChainClient + Clone + Send + Sync + 'static> node_proto::proto::node::No
         req: node_proto::proto::node::QueryTransactionQuest,
         sink: ::grpcio::UnarySink<sgtypes::proto::sgtypes::SignedChannelTransaction>,
     ) {
-        let request = QueryTransactionQuest::try_from(req).unwrap();
-        let rx = self
-            .node
-            .get_txn_by_channel_sequence_number(
-                request.partipant_address,
-                request.channel_seq_number,
-            )
-            .unwrap();
-        let resp =
-            SignedChannelTransaction::new(rx.raw_tx, rx.sender_signature, rx.receiver_signature)
-                .into();
-        provide_grpc_response(Ok(resp), ctx, sink);
+        let node = self.node.clone();
+        let f = async move {
+            let request = QueryTransactionQuest::try_from(req).unwrap();
+
+            let rx = node
+                .get_txn_by_channel_sequence_number(
+                    request.partipant_address,
+                    request.channel_seq_number,
+                )
+                .await;
+            match rx {
+                Ok(rx) => {
+                    let resp = SignedChannelTransaction::new(
+                        rx.raw_tx,
+                        rx.sender_signature,
+                        rx.receiver_signature,
+                    )
+                    .into();
+                    sink.success(resp);
+                }
+                Err(e) => {
+                    set_failure_message(
+                        RpcStatusCode::UNKNOWN,
+                        format!("Failed to process request: {}", e),
+                        sink,
+                    );
+                }
+            }
+        };
+        ctx.spawn(f.boxed().unit_error().compat());
     }
 }
 
