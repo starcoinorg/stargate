@@ -448,12 +448,12 @@ fn create_keypair() -> KeyPair<Ed25519PrivateKey, Ed25519PublicKey> {
 #[test]
 fn test_pow_single_node() {
     ::libra_logger::init_for_e2e_testing();
+    let mut conf_1 = pow_node_random_conf("/memory/0", 0);
+    let miner_rpc_addr = conf_1.consensus.miner_rpc_address();
     task::spawn(async move {
-        let mine_client = MineClient::default();
+        let mine_client = MineClient::new(miner_rpc_addr);
         mine_client.start().await
     });
-    let mut conf_1 = pow_node_random_conf("/memory/0", 0);
-
     print_ports(&conf_1);
     debug!("conf1:{:?}", conf_1);
     let _handle_1 = setup_environment(&mut conf_1, false);
