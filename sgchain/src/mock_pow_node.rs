@@ -4,9 +4,11 @@
 use crate::star_chain_client::{faucet_async, submit_txn_async, StarChainClient};
 use admission_control_service::runtime::AdmissionControlRuntime;
 use consensus::consensus_provider::make_pow_consensus_provider;
+use consensus::MineClient;
 use futures::future;
 use futures::StreamExt;
 use grpc_helpers::ServerHandle;
+use async_std::task;
 use libra_config::{
     config::{NetworkConfig, NodeConfig, NodeConfigHelpers, RoleType},
     seed_peers::SeedPeersConfig,
@@ -186,7 +188,7 @@ pub fn setup_environment(node_config: &mut NodeConfig, rollback_flag: bool) -> L
                         .get_network_identity_public()
                         .to_bytes()
                 )
-                .unwrap()
+                    .unwrap()
             );
             // Start the network provider.
             runtime.executor().spawn(network_provider.start());
@@ -329,8 +331,8 @@ fn test_pow_node() {
             },
         ),
     ]
-    .into_iter()
-    .collect();
+        .into_iter()
+        .collect();
 
     conf_1.consensus.consensus_peers.peers = consensus_peers.clone();
     conf_2.consensus.consensus_peers.peers = consensus_peers;
@@ -352,8 +354,8 @@ fn test_pow_node() {
             },
         ),
     ]
-    .into_iter()
-    .collect();
+        .into_iter()
+        .collect();
     for n in &mut (&mut conf_1).networks {
         n.network_peers.peers = trusted_peers.clone();
     }
@@ -444,9 +446,13 @@ fn create_keypair() -> KeyPair<Ed25519PrivateKey, Ed25519PublicKey> {
 }
 
 #[test]
-#[ignore]
 fn test_pow_single_node() {
     ::libra_logger::init_for_e2e_testing();
+
+    task::spawn(async move {
+        let mine_client = MineClient::default();
+        mine_client.start().await
+    });
     let mut conf_1 = pow_node_random_conf("/memory/0", 0);
 
     print_ports(&conf_1);
@@ -514,9 +520,9 @@ fn transfer(
         1 as u64,
         Duration::from_secs(u64::max_value()),
     )
-    .sign(private_key, public_key)
-    .unwrap()
-    .into_inner()
+        .sign(private_key, public_key)
+        .unwrap()
+        .into_inner()
 }
 
 fn faucet_txn(receiver: AccountAddress, sequence_number: u64) -> SignedTransaction {
@@ -530,9 +536,9 @@ fn faucet_txn(receiver: AccountAddress, sequence_number: u64) -> SignedTransacti
         1 as u64,
         Duration::from_secs(u64::max_value()),
     )
-    .sign(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone())
-    .unwrap()
-    .into_inner()
+        .sign(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone())
+        .unwrap()
+        .into_inner()
 }
 
 fn commit_tx_2(
