@@ -4,7 +4,6 @@
 use crate::star_chain_client::{faucet_async, submit_txn_async, StarChainClient};
 use admission_control_service::runtime::AdmissionControlRuntime;
 use consensus::consensus_provider::make_pow_consensus_provider;
-use consensus::MineClient;
 use futures::future;
 use futures::StreamExt;
 use grpc_helpers::ServerHandle;
@@ -59,6 +58,7 @@ use tokio::runtime::{Builder, Runtime};
 use tokio::timer::Interval;
 use transaction_builder::{encode_create_account_script, encode_transfer_script};
 use vm_genesis::GENESIS_KEYPAIR;
+use consensus::MineClient;
 
 pub fn setup_network(
     peer_id: PeerId,
@@ -448,7 +448,6 @@ fn create_keypair() -> KeyPair<Ed25519PrivateKey, Ed25519PublicKey> {
 #[test]
 fn test_pow_single_node() {
     ::libra_logger::init_for_e2e_testing();
-
     task::spawn(async move {
         let mine_client = MineClient::default();
         mine_client.start().await
