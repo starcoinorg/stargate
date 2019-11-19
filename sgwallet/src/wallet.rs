@@ -40,7 +40,7 @@ use sgconfig::config::WalletConfig;
 use sgstorage::channel_db::ChannelDB;
 use sgstorage::channel_store::ChannelStore;
 use sgstorage::storage::SgStorage;
-use sgtypes::channel::{ChannelInfo, ChannelState};
+use sgtypes::channel::ChannelState;
 use sgtypes::sg_error::SgError;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use sgtypes::{
@@ -486,19 +486,6 @@ pub struct Inner {
 }
 
 impl Inner {
-    //    async fn start_channel_manager(channel_event_receiver: mpsc::Receiver<ChannelEvent>) {
-    //        loop {
-    //            ::futures::select! {
-    //                maybe_channel_event = channel_event_receiver.next() => {
-    //                    if let Some(event) = maybe_channel_event {
-    //                        Self::handle_channel_event(event).await
-    //                    }
-    //                }
-    //            }
-    //        }
-    //    }
-    //    async fn handle_channel_event(event: ChannelEvent) {}
-
     async fn start(mut self) {
         if let Err(e) = self.refresh_channels() {
             error!("fail to start all channels, err: {:?}", e);
@@ -618,14 +605,6 @@ impl Inner {
         Ok(())
     }
 
-    //    pub fn default_asset() -> StructTag {
-    //        DEFAULT_ASSET.clone()
-    //    }
-    //
-    //    pub fn get_resources() -> Vec<Resource> {
-    //        unimplemented!()
-    //    }
-    //
     async fn execute(
         &mut self,
         channel_op: ChannelOp,
@@ -887,35 +866,6 @@ impl Inner {
     }
     fn sequence_number(&self) -> Result<u64> {
         Ok(self.account_resource()?.sequence_number())
-    }
-
-    pub fn get(&self, _path: &DataPath) -> Result<Option<Vec<u8>>> {
-        //        if path.is_channel_resource() {
-        //            let participant = path.participant().expect("participant must exist");
-        //            self.with_channel(&participant, |channel| {
-        //                Ok(channel.get(&AccessPath::new_for_data_path(
-        //                    self.inner.account,
-        //                    path.clone(),
-        //                )))
-        //            })
-        //        } else {
-        //            let account_state = self
-        //                .inner
-        //                .client
-        //                .get_account_state(self.inner.account, None)?;
-        //            Ok(account_state.get(&path.to_vec()))
-        //        }
-        unimplemented!()
-    }
-
-    /// return all channels' state infos
-    pub fn channel_infos(&self) -> HashMap<AccountAddress, ChannelInfo> {
-        //        let channels = self.channels.read().unwrap();
-        //        channels
-        //            .iter()
-        //            .map(|(ap, channel)| (ap.clone(), channel.channel_info()))
-        //            .collect::<HashMap<_, _>>()
-        unimplemented!()
     }
 
     fn exist_channel(&self, participant: &AccountAddress) -> bool {
