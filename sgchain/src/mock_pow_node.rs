@@ -299,6 +299,7 @@ fn print_ports(config: &NodeConfig) {
 }
 
 #[test]
+#[ignore]
 fn test_pow_node() {
     ::libra_logger::init_for_e2e_testing();
     let mut conf_1 = pow_node_random_conf("/memory/0", 0);
@@ -449,6 +450,7 @@ fn create_keypair() -> KeyPair<Ed25519PrivateKey, Ed25519PublicKey> {
 }
 
 #[test]
+#[ignore]
 fn test_pow_single_node() {
     ::libra_logger::init_for_e2e_testing();
     let mut conf_1 = pow_node_random_conf("/memory/0", 0);
