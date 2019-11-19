@@ -21,14 +21,14 @@ module TheFive {
         let is_black: bool;
         let t1: Self.Score;
 
-        if (!exist_sender_channel<Score>()) {
+        if (!ChannelAccount.native_exist_channel<Self.Score>(true)) {
             t1 = Score {
                 total: 0,
             };
-            move_to_sender_channel<Score>(move(t1));
+            ChannelAccount.native_move_to_channel<Self.Score>(move(t1), true);
         }
 
-        is_black = !exist_receiver_channel<T>(); // first come first play
+        is_black = !ChannelAccount.native_exist_channel<Self.T>(false); // first come first play
         if (move(is_black)) {
             grid = Vector.empty<Vector.T<bool>>();
             y = 0;
@@ -48,7 +48,7 @@ module TheFive {
                 grid: move(grid),
                 is_my_turn: true,
             };
-            move_to_sender_channel<T>(move(t));
+            ChannelAccount.native_move_to_channel<Self.T>(move(t), true);
 
             return 0;
         } else {
@@ -65,11 +65,11 @@ module TheFive {
         let y: u64;
         let t1: Self.Score;
 
-        if (!exist_sender_channel<Score>()) {
+        if (!ChannelAccount.native_exist_channel<Self.Score>(true)) {
             t1 = Score {
                 total: 0,
             };
-            move_to_sender_channel<Score>(move(t1));
+            ChannelAccount.native_move_to_channel<Self.Score>(move(t1), true);
         }
 
         grid = Vector.empty<Vector.T<bool>>();
@@ -90,7 +90,7 @@ module TheFive {
             grid: move(grid),
             is_my_turn: false,
         };
-        move_to_sender_channel<T>(move(t));
+        ChannelAccount.native_move_to_channel<Self.T>(move(t), true);
         return 0;
     }
 
@@ -116,10 +116,10 @@ module TheFive {
             return false;
         }
 
-        t_ref_sender = borrow_sender_channel<T>();
+        t_ref_sender = ChannelAccount.native_borrow_channel<Self.T>(true);
         is_blank_1 = Self.is_blank_internal(move(t_ref_sender), copy(x), copy(y));
 
-        t_ref_receiver = borrow_receiver_channel<T>();
+        t_ref_receiver = ChannelAccount.native_borrow_channel<Self.T>(false);
         is_blank_2 = Self.is_blank_internal(move(t_ref_receiver), copy(x), copy(y));
 
         return move(is_blank_1) && move(is_blank_2);
@@ -129,7 +129,7 @@ module TheFive {
         let t_ref: &mut Self.T;
         let is_my_turn_ref: &mut bool;
 
-        t_ref = borrow_receiver_channel<T>();
+        t_ref = ChannelAccount.native_borrow_channel<Self.T>(false);
         is_my_turn_ref = &mut copy(t_ref).is_my_turn;
         *copy(is_my_turn_ref) = true;
 
@@ -144,7 +144,7 @@ module TheFive {
         let value_ref: &mut bool;
         let is_my_turn_ref: &mut bool;
 
-        t_ref = borrow_sender_channel<T>();
+        t_ref = ChannelAccount.native_borrow_channel<Self.T>(true);
         grid_ref = &mut copy(t_ref).grid;
         row_ref = Vector.borrow_mut<Vector.T<bool>>(move(grid_ref), move(y));
         value_ref = Vector.borrow_mut<bool>(move(row_ref), move(x));
@@ -161,7 +161,7 @@ module TheFive {
         let t_ref_sender: &mut Self.T;
         let is_my_turn_ref: &bool;
 
-        t_ref_sender = borrow_sender_channel<T>();
+        t_ref_sender = ChannelAccount.native_borrow_channel<Self.T>(true);
         is_my_turn_ref = &copy(t_ref_sender).is_my_turn;
 
         if (*copy(is_my_turn_ref)) {
@@ -294,7 +294,7 @@ module TheFive {
         let result: bool;
         let direction: u64;
 
-        t_ref = borrow_sender_channel<T>();
+        t_ref = ChannelAccount.native_borrow_channel<Self.T>(true);
         direction = 0;
         while (copy(direction) < 4) {
             result = Self.logic(copy(t_ref), copy(x), copy(y), copy(direction));
@@ -319,8 +319,8 @@ module TheFive {
         let t1: Self.T;
         let t2: Self.T;
 
-        t1 = move_from_sender_channel<T>();
-        t2 = move_from_receiver_channel<T>();
+        t1 = ChannelAccount.native_move_from_channel<Self.T>(true);
+        t2 = ChannelAccount.native_move_from_channel<Self.T>(false);
         Self.unwrap_T(move(t1));
         Self.unwrap_T(move(t2));
 
@@ -332,7 +332,7 @@ module TheFive {
         let score_ref: &mut Self.Score;
         let total_ref: &mut u64;
 
-        score_ref = borrow_sender_channel<Score>();
+        score_ref = ChannelAccount.native_borrow_channel<Self.Score>(true);
         total_ref = &mut copy(score_ref).total;
         *copy(total_ref) = *copy(total_ref) + 1;
         return;
@@ -362,7 +362,7 @@ module TheFive {
         let score_ref: &mut Self.Score;
         let total_ref: &mut u64;
 
-        score_ref = borrow_sender_channel<Score>();
+        score_ref = ChannelAccount.native_borrow_channel<Self.Score>(true);
         total_ref = &mut copy(score_ref).total;
         return *copy(total_ref);
     }
@@ -371,7 +371,7 @@ module TheFive {
         let score: Self.Score;
         let total: u64;
 
-        score = move_from_sender_channel<Score>();
+        score = ChannelAccount.native_move_from_channel<Self.Score>(true);
         Score { total } = move(score);
         return;
     }

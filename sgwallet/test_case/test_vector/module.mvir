@@ -1,5 +1,6 @@
 module VecTest{
     import 0x0.Vector;
+    import 0x0.ChannelAccount;
 
     resource VecBox {
         grid: Vector.T<bool>,
@@ -15,7 +16,7 @@ module VecTest{
             grid: move(grid),
         };
 
-        move_to_sender_channel<VecBox>(move(t));
+        ChannelAccount.native_move_to_channel<Self.VecBox>(move(t), true);
 
         return;
     }
@@ -24,7 +25,7 @@ module VecTest{
         let t: Self.VecBox;
         let grid: Vector.T<bool>;
 
-        t = move_from_sender_channel<VecBox>();
+        t = ChannelAccount.native_move_from_channel<Self.VecBox>(true);
         VecBox{ grid } = move(t);
         Vector.destroy_empty<bool>(move(grid));
         return;
@@ -40,7 +41,7 @@ module VecTest{
             grid: move(grid),
         };
 
-        move_to_receiver_channel<VecBox>(move(t));
+        ChannelAccount.native_move_to_channel<Self.VecBox>(move(t), false);
 
         return;
     }
@@ -48,8 +49,8 @@ module VecTest{
     public test_move_vec_from_receiver() {
         let t: Self.VecBox;
         let grid: Vector.T<bool>;
-        assert(exist_receiver_channel<VecBox>(), 44);
-        t = move_from_receiver_channel<VecBox>();
+        assert(ChannelAccount.native_exist_channel<Self.VecBox>(false), 44);
+        t = ChannelAccount.native_move_from_channel<Self.VecBox>(false);
         VecBox{ grid } = move(t);
         Vector.destroy_empty<bool>(move(grid));
         return;
