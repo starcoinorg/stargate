@@ -3,11 +3,12 @@
 
 use crate::star_chain_client::{faucet_async, submit_txn_async, StarChainClient};
 use admission_control_service::runtime::AdmissionControlRuntime;
+use async_std::task;
 use consensus::consensus_provider::make_pow_consensus_provider;
+use consensus::MineClient;
 use futures::future;
 use futures::StreamExt;
 use grpc_helpers::ServerHandle;
-use async_std::task;
 use libra_config::{
     config::{NetworkConfig, NodeConfig, NodeConfigHelpers, RoleType},
     seed_peers::SeedPeersConfig,
@@ -58,7 +59,6 @@ use tokio::runtime::{Builder, Runtime};
 use tokio::timer::Interval;
 use transaction_builder::{encode_create_account_script, encode_transfer_script};
 use vm_genesis::GENESIS_KEYPAIR;
-use consensus::MineClient;
 
 pub fn setup_network(
     peer_id: PeerId,
@@ -192,7 +192,7 @@ pub fn setup_environment(node_config: &mut NodeConfig, rollback_flag: bool) -> L
                         .get_network_identity_public()
                         .to_bytes()
                 )
-                    .unwrap()
+                .unwrap()
             );
             // Start the network provider.
             runtime.executor().spawn(network_provider.start());
@@ -335,8 +335,8 @@ fn test_pow_node() {
             },
         ),
     ]
-        .into_iter()
-        .collect();
+    .into_iter()
+    .collect();
 
     conf_1.consensus.consensus_peers.peers = consensus_peers.clone();
     conf_2.consensus.consensus_peers.peers = consensus_peers;
@@ -358,8 +358,8 @@ fn test_pow_node() {
             },
         ),
     ]
-        .into_iter()
-        .collect();
+    .into_iter()
+    .collect();
     for n in &mut (&mut conf_1).networks {
         n.network_peers.peers = trusted_peers.clone();
     }
@@ -519,9 +519,9 @@ fn transfer(
         1 as u64,
         Duration::from_secs(u64::max_value()),
     )
-        .sign(private_key, public_key)
-        .unwrap()
-        .into_inner()
+    .sign(private_key, public_key)
+    .unwrap()
+    .into_inner()
 }
 
 fn faucet_txn(receiver: AccountAddress, sequence_number: u64) -> SignedTransaction {
@@ -535,9 +535,9 @@ fn faucet_txn(receiver: AccountAddress, sequence_number: u64) -> SignedTransacti
         1 as u64,
         Duration::from_secs(u64::max_value()),
     )
-        .sign(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone())
-        .unwrap()
-        .into_inner()
+    .sign(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone())
+    .unwrap()
+    .into_inner()
 }
 
 fn commit_tx_2(
