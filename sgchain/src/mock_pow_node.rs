@@ -3,7 +3,9 @@
 
 use crate::star_chain_client::{faucet_async, submit_txn_async, StarChainClient};
 use admission_control_service::runtime::AdmissionControlRuntime;
+use async_std::task;
 use consensus::consensus_provider::make_pow_consensus_provider;
+use consensus::MineClient;
 use futures::future;
 use futures::StreamExt;
 use grpc_helpers::ServerHandle;
@@ -137,7 +139,11 @@ pub fn setup_network(
 
 pub fn setup_environment(node_config: &mut NodeConfig, rollback_flag: bool) -> LibraHandle {
     crash_handler::setup_panic_handler();
-
+    let miner_rpc_addr = node_config.consensus.miner_rpc_address();
+    task::spawn(async move {
+        let mine_client = MineClient::new(miner_rpc_addr);
+        mine_client.start().await
+    });
     let mut instant = Instant::now();
     let storage = start_storage_service(&node_config);
     debug!(
@@ -448,7 +454,6 @@ fn create_keypair() -> KeyPair<Ed25519PrivateKey, Ed25519PublicKey> {
 fn test_pow_single_node() {
     ::libra_logger::init_for_e2e_testing();
     let mut conf_1 = pow_node_random_conf("/memory/0", 0);
-
     print_ports(&conf_1);
     debug!("conf1:{:?}", conf_1);
     let _handle_1 = setup_environment(&mut conf_1, false);
