@@ -14,7 +14,7 @@ pub fn run_node(
 
     // Start miner client.
     // TODO: Make miner client start configurability
-    let miner_rpc_addr = config.consensus.miner_rpc_address();
+    let miner_rpc_addr = config.consensus.miner_rpc_address.clone();
     task::spawn(async move {
         let mine_client = MineClient::new(miner_rpc_addr);
         mine_client.start().await
