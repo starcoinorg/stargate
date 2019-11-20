@@ -10,6 +10,7 @@ use libra_types::language_storage::StructTag;
 use libra_types::{account_config::AccountResource, event::EventHandle};
 
 use proptest::std_facade::VecDeque;
+use vm::gas_schedule::CostTable;
 use vm_runtime_types::loaded_data::types::Type;
 use vm_runtime_types::native_structs::vector::NativeVector;
 use vm_runtime_types::value::{Struct, Value};
@@ -44,7 +45,7 @@ fn test_vector_resource() {
         name: Identifier::from(IdentStr::new("T").unwrap()),
         type_params: vec![],
     };
-    let native_result = NativeVector::native_empty(VecDeque::new()).unwrap();
+    let native_result = NativeVector::native_empty(VecDeque::new(), &CostTable::zero()).unwrap();
     let field0 = native_result.result.unwrap().pop().unwrap();
     let s: Struct = Struct::new(vec![field0]);
     let value = Value::struct_(s.clone());
