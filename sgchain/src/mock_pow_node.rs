@@ -68,7 +68,7 @@ pub fn setup_network(
         .name_prefix("pow-network-")
         .build()
         .expect("Failed to start runtime. Won't be able to start networking.");
-    let role: RoleType = (&config.role).into();
+    let role: RoleType = config.role;
     let mut network_builder = NetworkBuilder::new(
         runtime.executor(),
         peer_id,
@@ -139,7 +139,7 @@ pub fn setup_network(
 
 pub fn setup_environment(node_config: &mut NodeConfig, rollback_flag: bool) -> LibraHandle {
     crash_handler::setup_panic_handler();
-    let miner_rpc_addr = node_config.consensus.miner_rpc_address();
+    let miner_rpc_addr = node_config.consensus.miner_rpc_address.clone();
     task::spawn(async move {
         let mine_client = MineClient::new(miner_rpc_addr);
         mine_client.start().await
@@ -175,7 +175,7 @@ pub fn setup_environment(node_config: &mut NodeConfig, rollback_flag: bool) -> L
         ac_network_events.push(ac_events);
 
         let network = &node_config.networks[i];
-        if let RoleType::Validator = (&network.role).into() {
+        if network.role == RoleType::Validator {
             validator_network_provider = Some((peer_id, runtime, network_provider));
             ac_network_sender = Some(ac_sender);
         } else {
@@ -273,7 +273,7 @@ fn pow_node_random_conf(listen_address: &str, times: usize) -> NodeConfig {
         conf.is_public_network = true;
         conf.enable_encryption_and_authentication = true;
         conf.listen_address = listen_address.parse().unwrap();
-        conf.role = "validator".to_string();
+        conf.role = RoleType::Validator;
     }
 
     debug!("config : {:?}", config);
