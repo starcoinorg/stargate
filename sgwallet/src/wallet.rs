@@ -513,7 +513,10 @@ impl Inner {
                 channel_op,
                 args,
                 responder,
-            } => self.execute(channel_op, participant, args, responder).await,
+            } => {
+                let resp = self.execute(participant, channel_op, args).await;
+                respond_with(responder, resp);
+            }
             WalletCmd::VerifyTxnRequest {
                 txn_request,
                 responder,
@@ -605,52 +608,61 @@ impl Inner {
         Ok(())
     }
 
-    async fn execute(
+    async fn open_channel(
         &mut self,
-        channel_op: ChannelOp,
-        receiver: AccountAddress,
-        args: Vec<TransactionArgument>,
+        participant: AccountAddress,
+        amount: u64,
         responder: oneshot::Sender<Result<ChannelTransactionRequest>>,
     ) {
-        if channel_op.is_open() {
-            if self.exist_channel(&receiver) {
-                let err = format_err!("Channel with address {} exist.", &receiver);
-                respond_with(responder, Err(err));
-                return ();
-            }
-            self.spawn_new_channel(receiver);
+        if self.exist_channel(&receiver) {
+            let err = format_err!("Channel with address {} exist.", &receiver);
+            respond_with(responder, Err(err));
+            return ();
         }
+        self.spawn_new_channel(receiver);
+    }
 
-        let channel = match self.channels.get_mut(&receiver) {
-            Some(channel) => channel,
+    fn ensure_channel_not_exists(&self, participant: &AccountAddress) -> Result<()> {
+        if self.exist_channel(participant) {
+            let err = format_err!("Channel with address {} exist.", &participant);
+            Err(err)
+        } else {
+            Ok(())
+        }
+    }
+    fn get_channel_mut(&mut self, participant: &AccountAddress) -> Result<&mut Channel> {
+        let channel = match self.channels.get_mut(&participant) {
+            Some(channel) => Ok(channel),
             None => {
-                let e: Error = SgError::new_channel_not_exist_error(&receiver).into();
-                if let Err(_) = responder.send(Err(e)) {
-                    error!(
-                        "fail to send back response of op({:?}) , receiver is dropped",
-                        &channel_op
-                    );
-                };
-                return ();
+                let e: Error = SgError::new_channel_not_exist_error(&participant).into();
+                Err(e)
             }
         };
+    }
 
+    async fn execute(
+        &mut self,
+        participant: AccountAddress,
+        channel_op: ChannelOp,
+        args: Vec<TransactionArgument>,
+    ) -> Result<ChannelTransactionRequest> {
+        if channel_op.is_open() {
+            self.ensure_channel_not_exists(&participant)?;
+            self.spawn_new_channel(participant);
+        }
+
+        let mut channel = self.get_channel_mut(&participant)?;
+
+        let (tx, rx) = oneshot::channel();
         let msg = ChannelMsg::Execute {
             channel_op,
             args,
-            responder,
+            responder: tx,
         };
-        if let Err(err) = channel.mail_sender().try_send(msg) {
-            let err_status = if err.is_disconnected() {
-                "closed"
-            } else {
-                "full"
-            };
-            if let ChannelMsg::Execute { responder, .. } = err.into_inner() {
-                let resp_err = format_err!("channel {:?} mailbox {:?}", &receiver, err_status);
-                respond_with(responder, Err(resp_err));
-            }
-        };
+        channel.send(msg)?;
+        let (proposal, sigs) = rx.await?;
+        let request = ChannelTransactionRequest::new(proposal, sigs);
+        Ok(request)
     }
 
     /// Verify channel participant's txn

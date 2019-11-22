@@ -5,6 +5,7 @@ use crate::channel_transaction_sigs::ChannelTransactionSigs;
 use crate::hash::ChannelTransactionHasher;
 use bytes::IntoBuf;
 use failure::prelude::*;
+use libra_crypto::ed25519::{Ed25519PublicKey, Ed25519Signature};
 use libra_crypto::hash::{CryptoHash, CryptoHasher};
 use libra_crypto::HashValue;
 use libra_prost_ext::MessageExt;
@@ -13,6 +14,7 @@ use libra_types::{account_address::AccountAddress, transaction::TransactionOutpu
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
+use std::hash::Hash;
 use std::time::Duration;
 use std::{
     convert::TryFrom,
@@ -37,45 +39,45 @@ use std::{
 /// 2. if onchian, sender constructs signed transaction of onchain, submit it to onchain.
 ///    receiver waits the onchain tx.
 /// 3. if offchain, sender and receiver apply the tx to their local storage.  
-#[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize, CryptoHasher)]
 pub struct ChannelTransaction {
     /// The global status version on this tx executed.
     version: Version,
-    operator: ChannelOp,
-    /// txn sender
-    sender: AccountAddress,
-    /// Sequence number of this transaction corresponding to sender's account.
-    sequence_number: u64,
-    /// txn receiver
-    receiver: AccountAddress,
+    /// channel address to execute txn.
+    channel_address: AccountAddress,
     /// Sequence number of this channel.
     channel_sequence_number: u64,
+    /// channel action
+    operator: ChannelOp,
+    args: Vec<TransactionArgument>,
+    /// txn proposer
+    proposer: AccountAddress,
+    /// Sequence number of this transaction corresponding to proposer's account.
+    sequence_number: u64,
     /// The txn expiration time
     expiration_time: Duration,
-
-    args: Vec<TransactionArgument>,
 }
 
 impl ChannelTransaction {
     pub fn new(
         version: Version,
-        operator: ChannelOp,
-        sender: AccountAddress,
-        sequence_number: u64,
-        receiver: AccountAddress,
+        channel_address: AccountAddress,
         channel_sequence_number: u64,
-        expiration_time: Duration,
+        operator: ChannelOp,
         args: Vec<TransactionArgument>,
+        proposer: AccountAddress,
+        proposer_sequence_number: u64,
+        expiration_time: Duration,
     ) -> Self {
         Self {
             version,
-            operator,
-            sender,
-            sequence_number,
-            receiver,
+            channel_address,
             channel_sequence_number,
-            expiration_time,
+            operator,
             args,
+            proposer,
+            sequence_number: proposer_sequence_number,
+            expiration_time,
         }
     }
 }
@@ -88,9 +90,11 @@ impl ChannelTransaction {
     pub fn operator(&self) -> &ChannelOp {
         &self.operator
     }
-
-    pub fn sender(&self) -> AccountAddress {
-        self.sender
+    pub fn channel_address(&self) -> AccountAddress {
+        self.channel_address
+    }
+    pub fn proposer(&self) -> AccountAddress {
+        self.proposer
     }
 
     pub fn receiver(&self) -> AccountAddress {
@@ -111,20 +115,6 @@ impl ChannelTransaction {
 
     pub fn expiration_time(&self) -> Duration {
         self.expiration_time
-    }
-}
-
-impl CryptoHash for ChannelTransaction {
-    type Hasher = ChannelTransactionHasher;
-
-    fn hash(&self) -> HashValue {
-        let mut state = Self::Hasher::default();
-        state.write(
-            lcs::to_bytes(self)
-                .expect("Failed to serialize ChannelTransaction")
-                .as_slice(),
-        );
-        state.finish()
     }
 }
 
@@ -172,12 +162,17 @@ impl From<ChannelTransaction> for crate::proto::sgtypes::ChannelTransaction {
     }
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum ChannelOp {
     Open,
     Execute {
         package_name: String,
         script_name: String,
+    },
+    Action {
+        module_address: AccountAddress,
+        module_name: String,
+        function_name: String,
     },
     Close,
 }
@@ -203,6 +198,11 @@ impl Display for ChannelOp {
                 package_name,
                 script_name,
             } => write!(f, "{}.{}", package_name, script_name),
+            ChannelOp::Action {
+                module_address,
+                module_name,
+                function_name,
+            } => write!(f, "{}.{}.{}", module_address, module_name, function_name),
             ChannelOp::Close => write!(f, "close"),
         }
     }
@@ -258,45 +258,44 @@ impl From<ChannelOp> for crate::proto::sgtypes::ChannelOp {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ChannelTransactionRequest {
-    /// The id of request
-    request_id: HashValue,
-    channel_txn: ChannelTransaction,
+    proposal: ChannelTransactionProposal,
     channel_txn_sigs: ChannelTransactionSigs,
-    travel: bool,
+}
+
+#[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ChannelTransactionProposal {
+    pub channel_txn: ChannelTransaction,
+    pub proposer_public_key: Ed25519PublicKey,
+    pub proposer_signature: Ed25519Signature,
+}
+
+impl ChannelTransactionProposal {
+    pub fn new(
+        channel_txn: ChannelTransaction,
+        proposer_public_key: Ed25519PublicKey,
+        proposer_signature: Ed25519Signature,
+    ) -> Self {
+        Self {
+            channel_txn,
+            proposer_public_key,
+            proposer_signature,
+        }
+    }
 }
 
 impl ChannelTransactionRequest {
     pub fn new(
-        channel_txn: ChannelTransaction,
+        proposal: ChannelTransactionProposal,
         channel_txn_sigs: ChannelTransactionSigs,
-        travel: bool,
     ) -> Self {
-        let sender = channel_txn.sender();
-        let receiver = channel_txn.receiver();
-        let channel_sequence_number = channel_txn.channel_sequence_number();
-        let request_id = Self::generate_request_id(sender, receiver, channel_sequence_number);
         Self {
-            request_id,
-            channel_txn,
+            proposal,
             channel_txn_sigs,
-            travel,
         }
-    }
-    //TODO(jole) should use sequence_number?
-    fn generate_request_id(
-        sender: AccountAddress,
-        receiver: AccountAddress,
-        channel_sequence_number: u64,
-    ) -> HashValue {
-        let mut bytes = vec![];
-        bytes.append(&mut sender.to_vec());
-        bytes.append(&mut receiver.to_vec());
-        bytes.append(&mut channel_sequence_number.to_be_bytes().to_vec());
-        HashValue::from_sha3_256(bytes.as_slice())
     }
 
     pub fn request_id(&self) -> HashValue {
-        self.request_id
+        self.channel_txn().hash()
     }
     pub fn channel_txn(&self) -> &ChannelTransaction {
         &self.channel_txn
@@ -305,15 +304,16 @@ impl ChannelTransactionRequest {
         &self.channel_txn_sigs
     }
 
-    pub fn sender(&self) -> AccountAddress {
-        self.channel_txn.sender()
+    pub fn proposer(&self) -> AccountAddress {
+        self.channel_txn.proposer()
     }
-    pub fn receiver(&self) -> AccountAddress {
-        self.channel_txn.receiver()
+
+    pub fn channel_address(&self) -> AccountAddress {
+        self.channel_txn.channel_address()
     }
 
     pub fn is_travel_txn(&self) -> bool {
-        self.travel
+        unimplemented!()
     }
 
     pub fn from_proto_bytes<B>(buf: B) -> Result<Self>

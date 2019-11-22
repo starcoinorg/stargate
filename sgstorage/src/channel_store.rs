@@ -193,7 +193,7 @@ where
         match (&cur_pending_txn, &pending_txn) {
             (None, _)
             | (
-                Some(PendingTransaction::WaitForReceiverSig { .. }),
+                Some(PendingTransaction::WaitForSig { .. }),
                 PendingTransaction::WaitForApply { .. },
             ) => {}
             _ => bail!("cannot save pending txn, state invalid"),

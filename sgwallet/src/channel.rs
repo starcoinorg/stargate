@@ -14,15 +14,18 @@ use futures::{
     channel::{mpsc, oneshot},
     StreamExt,
 };
+use itertools::Itertools;
 use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
 use libra_crypto::test_utils::KeyPair;
-use libra_crypto::{hash::CryptoHash, SigningKey, VerifyingKey};
+use libra_crypto::{hash::CryptoHash, HashValue, SigningKey, VerifyingKey};
 use libra_logger::prelude::*;
 use libra_state_view::StateView;
+use libra_types::channel::witness::{Witness, WitnessData};
 use libra_types::transaction::helpers::TransactionSigner;
 use libra_types::transaction::{
     ChannelScriptBody, ChannelTransactionPayload, ChannelTransactionPayloadBody,
-    ChannelWriteSetBody, RawTransaction, SignedTransaction, TransactionArgument,
+    ChannelTransactionPayloadBodyV2, ChannelTransactionPayloadV2, ChannelWriteSetBody,
+    RawTransaction, ScriptAction, SignedTransaction, TransactionArgument, TransactionPayload,
     TransactionWithProof, Version,
 };
 use libra_types::write_set::WriteSet;
@@ -37,7 +40,8 @@ use sgchain::star_chain_client::ChainClient;
 use sgstorage::channel_db::ChannelDB;
 use sgstorage::channel_store::ChannelStore;
 use sgtypes::channel_transaction::{
-    ChannelOp, ChannelTransaction, ChannelTransactionRequest, ChannelTransactionResponse,
+    ChannelOp, ChannelTransaction, ChannelTransactionProposal, ChannelTransactionRequest,
+    ChannelTransactionResponse,
 };
 use sgtypes::channel_transaction_sigs::{ChannelTransactionSigs, TxnSignature};
 use sgtypes::channel_transaction_to_commit::ChannelTransactionToApply;
@@ -47,6 +51,9 @@ use sgtypes::{
     channel::{ChannelStage, ChannelState},
     sg_error::SgError,
 };
+use std::collections::{BTreeMap, BTreeSet};
+use std::convert::TryFrom;
+use std::hash::Hash;
 use std::sync::Arc;
 use vm::gas_schedule::GasAlgebra;
 
@@ -54,15 +61,18 @@ pub enum ChannelMsg {
     Execute {
         channel_op: ChannelOp,
         args: Vec<TransactionArgument>,
-        responder: oneshot::Sender<Result<ChannelTransactionRequest>>,
+        responder: oneshot::Sender<Result<(ChannelTransactionProposal, ChannelTransactionSigs)>>,
     },
-    VerifyTxnRequest {
-        txn_request: ChannelTransactionRequest,
-        responder: oneshot::Sender<Result<ChannelTransactionResponse>>,
+    HandleProposalWithSigs {
+        proposal: ChannelTransactionProposal,
+        /// the sigs maybe proposer's, or other participant's.
+        sigs: ChannelTransactionSigs,
+        responder: oneshot::Sender<Result<Option<ChannelTransactionSigs>>>,
     },
-    VerifyTxnResponse {
-        txn_response: ChannelTransactionResponse,
-        responder: oneshot::Sender<Result<()>>,
+    GrantProposal {
+        channel_txn_id: HashValue,
+        grant: bool,
+        responder: oneshot::Sender<Result<Option<ChannelTransactionSigs>>>,
     },
     ApplyPendingTxn {
         responder: oneshot::Sender<Result<u64>>,
@@ -92,11 +102,9 @@ pub enum ChainMsg {
 }
 
 pub struct Channel {
-    /// The version of chain when this ChannelState init.
-    //TODO need version?
-    //version: Version,
+    channel_address: AccountAddress,
     account_address: AccountAddress,
-    participant_address: AccountAddress,
+    participant_addresses: Vec<AccountAddress>,
     //    db: ChannelDB,
     //    store: ChannelStore<ChannelDB>,
     mail_sender: mpsc::Sender<ChannelMsg>,
@@ -116,9 +124,23 @@ impl Channel {
         script_registry: Arc<PackageRegistry>,
         chain_client: Arc<dyn ChainClient>,
     ) -> Self {
+        let participants = {
+            let mut set = BTreeSet::new();
+            set.insert(account);
+            set.insert(participant);
+            set
+        };
+        let channel_address = generate_channel_address(&participants);
+        let participant_states = {
+            let mut states = BTreeMap::new();
+            states.insert(account, ChannelState::empty(account));
+            states.insert(participant, ChannelState::empty(participant));
+            states
+        };
         Self::load(
-            ChannelState::empty(account),
-            ChannelState::empty(participant),
+            channel_address,
+            account,
+            participant_states,
             db,
             mail_sender,
             mailbox,
@@ -130,8 +152,9 @@ impl Channel {
 
     /// load channel from storage
     pub fn load(
-        account: ChannelState,
-        participant: ChannelState,
+        channel_address: AccountAddress,
+        account_address: AccountAddress,
+        participants_states: BTreeMap<AccountAddress, ChannelState>,
         db: ChannelDB,
         mail_sender: mpsc::Sender<ChannelMsg>,
         mailbox: mpsc::Receiver<ChannelMsg>,
@@ -140,13 +163,15 @@ impl Channel {
         chain_client: Arc<dyn ChainClient>,
     ) -> Self {
         let store = ChannelStore::new(db.clone());
-        let account_address = account.address();
-        let participant_address = participant.address();
+        let participant_addresses = participants_states
+            .keys()
+            .map(Clone::clone)
+            .collect::<Vec<_>>();
         let inner = Inner {
+            channel_address,
             account_address,
-            participant_address,
-            account,
-            participant,
+            participant_addresses: BTreeMap::new(),
+            participants_states,
             store: store.clone(),
             keypair: keypair.clone(),
             script_registry: script_registry.clone(),
@@ -155,8 +180,9 @@ impl Channel {
             mailbox,
         };
         let channel = Self {
+            channel_address,
             account_address,
-            participant_address,
+            participant_addresses,
             mail_sender,
             inner: Some(inner),
         };
@@ -179,15 +205,42 @@ impl Channel {
     pub fn mail_sender(&self) -> mpsc::Sender<ChannelMsg> {
         self.mail_sender.clone()
     }
+
+    pub fn send(&self, msg: ChannelMsg) -> Result<()> {
+        if let Err(err) = self.mail_sender().try_send(msg) {
+            let err_status = if err.is_disconnected() {
+                "closed"
+            } else {
+                "full"
+            };
+            let resp_err = format_err!(
+                "channel {:?} mailbox {:?}",
+                self.participant_address(),
+                err_status
+            );
+            Err(resp_err)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+// should keep the same logic with onchain
+pub fn generate_channel_address(participants: &BTreeSet<AccountAddress>) -> AccountAddress {
+    let mut data = Vec::new();
+    for participant in participants.iter() {
+        data.extend_from_slice(participant.as_ref());
+    }
+    let hash = HashValue::from_sha3_256(&data);
+    AccountAddress::try_from(hash.as_ref()).unwrap()
 }
 
 struct Inner {
+    channel_address: AccountAddress,
     account_address: AccountAddress,
-    participant_address: AccountAddress,
-    /// Current account state in this channel
-    account: ChannelState,
-    /// Participant state in this channel
-    participant: ChannelState,
+    // participant contains self address, use btree to preserve address order.
+    participant_addresses: BTreeMap<AccountAddress, Ed25519PublicKey>,
+    participants_states: BTreeMap<AccountAddress, ChannelState>,
     //    db: ChannelDB,
     store: ChannelStore<ChannelDB>,
     keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
@@ -228,14 +281,8 @@ impl Inner {
     fn bootstrap(&mut self, mut internal_msg_tx: mpsc::Sender<InternalMsg>) {
         match self.pending_txn() {
             None => {}
-            Some(PendingTransaction::WaitForReceiverSig { .. }) => {}
-            Some(PendingTransaction::WaitForApply {
-                request_id: _,
-                raw_tx: _,
-                output,
-                sender_sigs: _,
-                receiver_sigs: _,
-            }) => {
+            Some(PendingTransaction::WaitForSig { .. }) => {}
+            Some(PendingTransaction::WaitForApply { .. }) => {
                 debug_assert!(output.is_travel_txn(), "only travel txn is persisted");
                 if let Err(_e) = internal_msg_tx.try_send(InternalMsg::ApplyPendingTxn) {
                     error!("should not happen");
@@ -256,19 +303,20 @@ impl Inner {
                 let request = self.execute_async(channel_op, args).await;
                 respond_with(responder, request);
             }
-            ChannelMsg::VerifyTxnRequest {
-                txn_request,
+            ChannelMsg::HandleProposalWithSigs {
+                proposal,
+                sigs,
                 responder,
             } => {
-                let response = self.verify_txn_request_async(txn_request).await;
-
+                let response = self.handle_proposal_and_sigs_async(proposal, sigs).await;
                 respond_with(responder, response);
             }
-            ChannelMsg::VerifyTxnResponse {
-                txn_response,
+            ChannelMsg::GrantProposal {
+                channel_txn_id,
+                grant,
                 responder,
             } => {
-                let response = self.verify_txn_response_async(txn_response).await;
+                let response = self.grant_proposal_async(channel_txn_id, grant).await;
                 respond_with(responder, response);
             }
             ChannelMsg::ApplyPendingTxn { responder } => {
@@ -308,7 +356,7 @@ impl Inner {
             (
                 self.account.clone(),
                 self.participant.clone(),
-                self.witness_data().unwrap_or_default(),
+                self.witness_data().write_set().clone(),
             )
         };
         ChannelStateView::new(account, participant, latest_writeset, version, client)
@@ -316,23 +364,63 @@ impl Inner {
 
     fn build_raw_txn_from_channel_txn(
         &self,
-        channel_witness_data: Option<WriteSet>,
+        channel_payload_body: ChannelTransactionPayloadBodyV2,
         channel_txn: &ChannelTransaction,
-        payload_key_and_signature: Option<(Ed25519PublicKey, Ed25519Signature)>,
     ) -> Result<RawTransaction> {
-        let channel_txn_payload = self.build_channel_script_payload(
-            channel_witness_data,
-            channel_txn,
-            payload_key_and_signature,
-        )?;
-        Ok(RawTransaction::new_channel(
-            channel_txn.sender(),
+        //        let pub_keys = self
+        //            .participants
+        //            .values()
+        //            .map(|k| k.clone())
+        //            .collect::<Vec<_>>();
+        //
+        //        let (keys, sigs) = {
+        //            let channel_participant_size = self.participants.len();
+        //            let mut keys = Vec::with_capacity(channel_participant_size);
+        //            let mut sigs = Vec::with_capacity(channel_participant_size);
+        //            for (addr, key) in self.participants.iter() {
+        //                let sig = if addr == self.account_address {
+        //                    debug_assert_eq!(key, &pub_key);
+        //                    Some(signature)
+        //                } else {
+        //                    None
+        //                };
+        //                keys.push(key.clone());
+        //                sigs.push(sig);
+        //            }
+        //            (keys, sigs)
+        //        };
+        // TODO(caojiafeng): should put my sig into the payload?
+        let (keys, sigs) = (vec![], vec![]);
+        let channel_txn_payload =
+            ChannelTransactionPayloadV2::new(channel_payload_body, keys, sigs);
+        let txn_payload = TransactionPayload::ChannelV2(channel_txn_payload);
+        let raw_txn = RawTransaction::new(
+            channel_txn.proposer(),
             channel_txn.sequence_number(),
-            channel_txn_payload,
+            txn_payload,
             MAX_GAS_AMOUNT_OFFCHAIN,
             GAS_UNIT_PRICE,
             channel_txn.expiration_time(),
-        ))
+        );
+        Ok(raw_txn)
+    }
+
+    /// build channel txn payload version 2.
+    fn build_and_sign_channel_txn_payload_body_v2(
+        &self,
+        channel_witness: Witness,
+        channel_txn: &ChannelTransaction,
+    ) -> Result<(ChannelTransactionPayloadBodyV2, Ed25519Signature)> {
+        let action: ScriptAction;
+        let body = ChannelTransactionPayloadBodyV2::new(
+            channel_txn.channel_address(),
+            channel_txn.proposer(),
+            action,
+            channel_witness,
+        );
+        let body_hash = body.hash();
+        let sig = self.keypair.private_key.sign_message(&body_hash);
+        Ok((body, sig))
     }
 
     fn build_channel_script_payload(
@@ -371,277 +459,141 @@ impl Inner {
         &mut self,
         channel_op: ChannelOp,
         args: Vec<TransactionArgument>,
-    ) -> Result<ChannelTransactionRequest> {
-        // TODO: state view should be shared to reduce fetching account state from layer1.
-        let state_view = self.channel_view(None, self.chain_client.as_ref())?;
+    ) -> Result<(ChannelTransactionProposal, ChannelTransactionSigs)> {
+        // generate proposal
+        let proposal = self.generate_proposal(channel_op, args)?;
+        // execute proposal to get txn payload and txn witness data for later use
+        let (payload_body, payload_body_signature, witness_data) =
+            self.execute_proposal(&proposal)?;
 
-        // account state already cached in state view
-        let account_seq_number = {
-            let account_resource_blob = state_view
-                .get(&AccessPath::new_for_account_resource(
-                    self.account.address(),
-                ))?
-                .ok_or(format_err!(
-                    "account resource for {} not exists on chain",
-                    self.account.address()
-                ))?;
-            let account_resource =
-                sgtypes::account_resource_ext::from_bytes(&account_resource_blob)?;
-            account_resource.sequence_number()
-        };
-
-        let chain_version = state_view.version();
-        // build channel_transaction first
-        let channel_transaction = ChannelTransaction::new(
-            chain_version,
-            channel_op,
-            self.account_address,
-            account_seq_number,
-            self.participant_address,
-            self.channel_sequence_number(),
-            txn_expiration(),
-            args,
-        );
-
-        // create mocked txn to execute
-        let txn = {
-            let raw_txn = self.build_raw_txn_from_channel_txn(
-                self.witness_data(),
-                &channel_transaction,
-                None,
-            )?;
-            // execute txn on offchain vm, should mock sender and receiver signature with a local
-            // keypair. the vm will skip signature check on offchain vm.
-            self.keypair.sign_txn(raw_txn)?
-        };
-        let output = execute_transaction(&state_view, txn.clone())?;
-
-        // check output gas
-        let gas_used = output.gas_used();
-        if gas_used > vm::gas_schedule::MAXIMUM_NUMBER_OF_GAS_UNITS.get() {
-            warn!(
-                "GasUsed {} > gas_schedule::MAXIMUM_NUMBER_OF_GAS_UNITS {}",
-                gas_used,
-                vm::gas_schedule::MAXIMUM_NUMBER_OF_GAS_UNITS.get()
-            );
-        }
-
-        let channel_write_set = ChannelWriteSetBody::new(
-            channel_transaction.channel_sequence_number(),
-            output.write_set().clone(),
-            channel_transaction.sender(),
-        );
-        let channel_write_set_hash = channel_write_set.hash();
-        let channel_write_set_signature = self
-            .keypair
-            .private_key
-            .sign_message(&channel_write_set_hash);
-        let channel_txn_hash = channel_transaction.hash();
-        let channel_txn_signature = self.keypair.private_key.sign_message(&channel_txn_hash);
+        let witness_data_hash = witness_data.hash();
+        let witness_data_signature = self.keypair.private_key.sign_message(&witness_data_hash);
 
         let channel_txn_sigs = ChannelTransactionSigs::new(
+            self.account_address,
             self.keypair.public_key.clone(),
-            TxnSignature::SenderSig {
-                channel_txn_signature,
-            },
-            channel_write_set_hash,
-            channel_write_set_signature,
-        );
-
-        let channel_txn_request = ChannelTransactionRequest::new(
-            channel_transaction.clone(),
-            channel_txn_sigs.clone(),
-            output.is_travel_txn(),
+            payload_body_signature,
+            witness_data_hash,
+            witness_data_signature,
         );
 
         // we need to save the pending txn, in case node nown
-        self.store.save_pending_txn(
-            PendingTransaction::WaitForReceiverSig {
-                request_id: channel_txn_request.request_id(),
-                raw_tx: channel_transaction,
-                output,
-                sender_sigs: channel_txn_sigs,
-            },
-            true,
-        )?;
+        let mut pending_txn = PendingTransaction::WaitForSig {
+            proposal: proposal.clone(),
+            output,
+            signatures: BTreeMap::new(),
+        };
+        pending_txn.add_signature(channel_txn_sigs.clone());
+        self.store.save_pending_txn(pending_txn, true)?;
 
-        Ok(channel_txn_request)
+        Ok((proposal, channel_txn_sigs))
     }
 
-    async fn verify_txn_request_async(
+    /// handle incoming proposal, return my sigs.
+    /// If I don't agree the proposal, return None.
+    /// If the proposal is already handled, also return my sigs from local cached state.
+    async fn handle_proposal_and_sigs_async(
         &mut self,
-        txn_request: ChannelTransactionRequest,
-    ) -> Result<ChannelTransactionResponse> {
-        let request_id = txn_request.request_id();
-        let channel_txn = txn_request.channel_txn();
-        let channel_txn_sender_sigs = txn_request.channel_txn_sigs();
+        proposal: ChannelTransactionProposal,
+        sigs: ChannelTransactionSigs,
+    ) -> Result<Option<ChannelTransactionSigs>> {
+        debug_assert_ne!(self.account_address, proposal.proposer());
+        debug_assert_ne!(self.account_address, sigs.address);
 
-        self.verify_channel_txn_and_sigs(channel_txn, channel_txn_sender_sigs)?;
-        let applied_txn = if let Some(info) = self.store.get_startup_info()? {
-            if channel_txn.channel_sequence_number() > info.latest_version {
-                None
-            } else {
-                let signed_channel_txn_with_proof =
-                    self.store.get_transaction_by_channel_seq_number(
-                        channel_txn.channel_sequence_number(),
-                        false,
-                    )?;
-                debug_assert_eq!(
-                    signed_channel_txn_with_proof.version,
-                    channel_txn.channel_sequence_number()
-                );
-                Some(signed_channel_txn_with_proof.signed_transaction)
-            }
-        } else {
-            None
-        };
-
-        // if found an already applied txn in local storage,
-        // we can return directly after check the hash of transaction and signatures.
-        if let Some(signed_txn) = applied_txn {
-            if signed_txn.raw_tx.hash() == channel_txn.hash()
-                && signed_txn.sender_signature.hash() == channel_txn_sender_sigs.hash()
-            {
-                return Ok(ChannelTransactionResponse::new(
-                    request_id,
-                    signed_txn.receiver_signature,
-                ));
-            } else {
-                return Err(format_err!(
-                    "invalid txn, txn with channel_seq_number is mismatched"
-                ));
-            }
+        // check local storage begore verifying
+        if let Some(local_sigs) = self.check_applied(&proposal)? {
+            return Ok(Some(local_sigs));
         }
+        self.verify_proposal(&proposal)?;
 
-        let signed_txn = {
-            let raw_txn =
-                self.build_raw_txn_from_channel_txn(self.witness_data(), channel_txn, None)?;
-            self.keypair.sign_txn(raw_txn)?
-        };
-
-        let txn_payload_signature = signed_txn
-            .receiver_signature()
-            .expect("signature must exist.");
-
-        let output = {
-            let version = channel_txn.version();
-            let state_view = self.channel_view(Some(version), self.chain_client.as_ref())?;
-            execute_transaction(&state_view, signed_txn)?
-        };
-
-        let _verified_participant_witness_payload =
-            self.verify_channel_write_set_body(&output, channel_txn_sender_sigs)?;
-
-        // build signatures sent to sender
-        let write_set_body = ChannelWriteSetBody::new(
-            self.channel_sequence_number(),
-            output.write_set().clone(),
-            self.account_address,
-        );
-        let witness_hash = write_set_body.hash();
-        let witness_signature = self.keypair.private_key.sign_message(&witness_hash);
-
-        let channel_txn_receiver_sigs = ChannelTransactionSigs::new(
-            self.keypair.public_key.clone(),
-            TxnSignature::ReceiverSig {
-                channel_script_body_signature: txn_payload_signature,
-            },
-            witness_hash,
-            witness_signature,
-        );
-
-        // if it's a travel txn, we need to persist the pending apply txn before reply to sender.
-        // just in case that the node is down after sending reply to sender.
-        // in this case, if it's not saved, receiver has no way to get channel_txn from onchain txn,
-        // if it's offchain, there is no need. because:
-        // - if sender receive the msg from receiver, receiver can sync it from sender.
-        // - if sender doesn't receive the msg, sender will resend the request to receiver, as if nothing happens.
-
-        {
-            let should_persist = output.is_travel_txn();
-            self.store.save_pending_txn(
-                PendingTransaction::WaitForApply {
-                    request_id,
-                    raw_tx: channel_txn.clone(),
-                    sender_sigs: channel_txn_sender_sigs.clone(),
-                    receiver_sigs: channel_txn_receiver_sigs.clone(),
-                    output,
-                },
-                should_persist,
-            )?;
-        }
-
-        Ok(ChannelTransactionResponse::new(
-            request_id,
-            channel_txn_receiver_sigs,
-        ))
-    }
-
-    async fn verify_txn_response_async(
-        &mut self,
-        response: ChannelTransactionResponse,
-    ) -> Result<()> {
-        let (request_id, channel_txn, output, sender_sigs) = match self.pending_txn() {
-            Some(PendingTransaction::WaitForReceiverSig {
-                request_id,
-                raw_tx,
+        let mut verified_signatures = BTreeMap::new();
+        let (payload_body, payload_body_signature, output) = match self.pending_txn() {
+            None => self.execute_proposal(&proposal)?,
+            Some(PendingTransaction::WaitForSig {
+                proposal: local_proposal,
                 output,
-                sender_sigs,
+                signatures,
+                ..
             }) => {
-                debug_assert_eq!(self.account_address, raw_tx.sender());
-                (request_id, raw_tx, output, sender_sigs)
+                ensure!(
+                    proposal.channel_txn.hash() == local_proposal.channel_txn.hash(),
+                    format_err!("channel txn conflict with local")
+                );
+                ensure!(
+                    &proposal.proposer_public_key == &local_proposal.proposer_public_key,
+                    format_err!("txn proposer public_key conflict with local")
+                );
+                debug_assert_eq!(
+                    &local_proposal.proposer_signature,
+                    &proposal.proposer_signature
+                );
+                verified_signatures = signatures;
+
+                let (payload_body, payload_body_signature) = self
+                    .build_and_sign_channel_txn_payload_body_v2(
+                        self.witness_data(),
+                        &proposal.channel_txn,
+                    )?;
+                (payload_body, payload_body_signature, output)
             }
-            Some(PendingTransaction::WaitForApply { raw_tx, .. }) => {
-                debug_assert_eq!(self.account_address, raw_tx.receiver());
-                // if receiver, no need to verify
-                return Ok(());
-            }
-            //TODO(jole) can not find request has such reason:
-            // 1. txn is expire.
-            // 2. txn is invalid.
-            None => {
-                // If I'm the receiver, no need to verify my own response
-                // TODO: figure out a better way to do it.
-                let is_receiver =
-                    &self.keypair.public_key == &response.channel_txn_sigs().public_key;
-                if is_receiver {
-                    return Ok(());
-                }
-                bail!(
-                    "pending txn must exist when verify txn response, stage: {:?}",
-                    self.stage()
-                )
-            }
+            Some(PendingTransaction::WaitForApply { .. }) => bail!("proposal already fullfilled"),
         };
 
-        ensure!(
-            request_id == response.request_id(),
-            "request id mismatch, request: {}, response: {}",
-            request_id,
-            response.request_id()
-        );
+        let witness_data =
+            WitnessData::new(self.channel_sequence_number(), output.write_set().clone());
 
-        info!("verify channel response: {}", response.request_id());
-        let (_verified_participant_script_payload, _verified_participant_witness_payload) =
-            self.verify_response(&channel_txn, &output, response.channel_txn_sigs())?;
+        self.verify_txn_sigs(&payload_body, &witness_data, &sigs)?;
+        verified_signatures.insert(sigs.address, sigs);
 
-        {
-            let is_travel = output.is_travel_txn();
-            // if it's a travel txn, we need to save the pending apply txn before submit to layer1.
-            // just in case that the node is down after submit.
-            // in this case, if it's not saved, receiver has no way to get channel_txn from onchain txn,
-            // if it's offchain, there is no need. because:
-            // - sender will resend the txn to receiver, and receiver will reply the msg.
-            let pending_txn = PendingTransaction::WaitForApply {
-                request_id,
-                raw_tx: channel_txn.clone(),
-                sender_sigs: sender_sigs.clone(),
-                receiver_sigs: response.channel_txn_sigs().clone(),
+        // if the output modifies user's channel state, permission need to be granted by user.
+        // it cannot be auto-signed.
+        let can_auto_signed = !witness_data
+            .write_set()
+            .contains_channel_resource(&self.account_address);
+        if can_auto_signed && !verified_signatures.contains_key(&self.account_address) {
+            self.do_grant_proposal(proposal, output, verified_signatures)?;
+        } else {
+            self.save_pending_txn(proposal, output, verified_signatures)?;
+        };
+
+        let pending = self.pending_txn().expect("pending txn must exists");
+        let user_sigs = pending.get_signature(&self.account_address);
+        Ok(user_sigs)
+    }
+
+    async fn grant_proposal_async(
+        &mut self,
+        channel_txn_id: HashValue,
+        grant: bool,
+    ) -> Result<Option<ChannelTransactionSigs>> {
+        match self.pending_txn() {
+            None => Ok(None),
+            Some(PendingTransaction::WaitForApply { .. }) => Ok(None),
+            Some(PendingTransaction::WaitForSig {
+                proposal,
                 output,
-            };
-            self.store.save_pending_txn(pending_txn, is_travel)?;
+                mut signatures,
+            }) => {
+                if channel_txn_id != proposal.channel_txn.hash() {
+                    let err = format_err!("channel_txn_id confilict with local pending state");
+                    return Err(err);
+                }
+                if grant {
+                    // maybe already grant the proposal
+                    if !signatures.contains_key(&self.account_address) {
+                        self.do_grant_proposal(proposal, output, signatures)?;
+                    }
+                    let pending = self.pending_txn().expect("pending txn must exists");
+                    let user_sigs = pending
+                        .get_signature(&self.account_address)
+                        .expect("user signature must exists");
+                    Ok(user_sigs)
+                } else {
+                    self.clear_pending_txn()?;
+                    Ok(None)
+                }
+            }
         }
-        Ok(())
     }
 
     async fn apply_pending_txn_async(&mut self) -> Result<u64> {
@@ -655,7 +607,7 @@ impl Inner {
                 None => {
                     return Ok(0);
                 }
-                Some(PendingTransaction::WaitForReceiverSig { .. }) => {
+                Some(PendingTransaction::WaitForSig { .. }) => {
                     bail!("pending_txn_request must exist at stage:{:?}", self.stage())
                 }
                 Some(PendingTransaction::WaitForApply {
@@ -721,15 +673,11 @@ impl Inner {
         Ok(gas)
     }
 
-    /// called by reciever to verify sender's channel_txn.
-    fn verify_channel_txn_and_sigs(
-        &self,
-        channel_txn: &ChannelTransaction,
-        channel_txn_sigs: &ChannelTransactionSigs,
-    ) -> Result<()> {
+    fn verify_proposal(&self, proposal: &ChannelTransactionProposal) -> Result<()> {
+        let channel_txn = &proposal.channel_txn;
         ensure!(
-            channel_txn.receiver() == self.account.address(),
-            "check receiver fail."
+            self.channel_address == channel_txn.channel_address(),
+            "invalid channel address"
         );
         let channel_sequence_number = self.channel_sequence_number();
         let smallest_allowed_channel_seq_number =
@@ -739,17 +687,33 @@ impl Inner {
                 && channel_txn.channel_sequence_number() <= channel_sequence_number,
             "check channel_sequence_number fail."
         );
-        match &channel_txn_sigs.signature {
-            TxnSignature::SenderSig {
-                channel_txn_signature,
-            } => {
-                channel_txn_sigs
-                    .public_key
-                    .verify_signature(&channel_txn.hash(), channel_txn_signature)?;
-            }
-            _ => bail!("not support"),
-        }
-        //TODO check public_key match with sender address.
+
+        // TODO: ensure proposer is belong to the channel
+        // TODO: check public key match proposer address
+        proposal
+            .proposer_public_key
+            .verify_signature(&channel_txn.hash(), &proposal.proposer_signature)?;
+        Ok(())
+    }
+
+    fn verify_txn_sigs(
+        &self,
+        payload_body: &ChannelTransactionPayloadBodyV2,
+        witness_data: &WitnessData,
+        channel_txn_sigs: &ChannelTransactionSigs,
+    ) -> Result<()> {
+        channel_txn_sigs.public_key.verify_signature(
+            &payload_body.hash(),
+            &channel_txn_sigs.channel_payload_signature,
+        )?;
+        ensure!(
+            &witness_data.hash() == &channel_txn_sigs.witness_data_hash,
+            "new witness hash mismatched"
+        );
+        channel_txn_sigs.public_key.verify_signature(
+            &channel_txn_sigs.witness_data_hash,
+            &channel_txn_sigs.witness_data_signature,
+        )?;
         Ok(())
     }
     // called by both of sender and reciver, to verify participant's writeset payload
@@ -777,43 +741,6 @@ impl Inner {
             write_set_body,
             channel_txn_sigs.public_key.clone(),
             channel_txn_sigs.write_set_payload_signature.clone(),
-        ))
-    }
-
-    /// called by sender, to verify receiver's response
-    fn verify_response(
-        &self,
-        channel_txn: &ChannelTransaction,
-        output: &TransactionOutput,
-        receiver_sigs: &ChannelTransactionSigs,
-    ) -> Result<(ChannelTransactionPayload, ChannelTransactionPayload)> {
-        let channel_txn_sigs = receiver_sigs;
-
-        let raw_txn =
-            self.build_raw_txn_from_channel_txn(self.witness_data(), channel_txn, None)?;
-
-        // verify receiver's channel txn payload signature
-        let verified_channel_txn_payload = match &channel_txn_sigs.signature {
-            TxnSignature::ReceiverSig {
-                channel_script_body_signature,
-            } => {
-                let channel_payload = get_channel_transaction_payload_body(&raw_txn)?;
-                channel_payload
-                    .verify(&channel_txn_sigs.public_key, channel_script_body_signature)?;
-                ChannelTransactionPayload::new(
-                    channel_payload,
-                    channel_txn_sigs.public_key.clone(),
-                    channel_script_body_signature.clone(),
-                )
-            }
-            _ => bail!("should not happen"),
-        };
-
-        let verified_participant_witness_payload =
-            self.verify_channel_write_set_body(&output, channel_txn_sigs)?;
-        Ok((
-            verified_channel_txn_payload,
-            verified_participant_witness_payload,
         ))
     }
 
@@ -880,8 +807,9 @@ impl Inner {
         Ok(())
     }
 
-    fn witness_data(&self) -> Option<WriteSet> {
-        self.store.get_latest_write_set()
+    fn witness_data(&self) -> Witness {
+        //        self.store.get_latest_write_set()
+        unimplemented!()
     }
 
     fn channel_sequence_number(&self) -> u64 {
@@ -919,7 +847,7 @@ impl Inner {
         self.pending_txn()
             .as_ref()
             .and_then(|pending| match pending {
-                PendingTransaction::WaitForReceiverSig {
+                PendingTransaction::WaitForSig {
                     raw_tx,
                     output,
                     sender_sigs,
@@ -936,7 +864,7 @@ impl Inner {
     fn stage(&self) -> ChannelStage {
         match self.pending_txn() {
             Some(PendingTransaction::WaitForApply { .. }) => ChannelStage::Syncing,
-            Some(PendingTransaction::WaitForReceiverSig { .. }) => ChannelStage::Pending,
+            Some(PendingTransaction::WaitForSig { .. }) => ChannelStage::Pending,
             None => {
                 let _channel_account_resource = self.channel_account_resource();
                 match self.channel_account_resource() {
@@ -984,6 +912,187 @@ impl Inner {
                 }
             }
         }
+    }
+
+    fn generate_proposal(
+        &self,
+        channel_op: ChannelOp,
+        args: Vec<TransactionArgument>,
+    ) -> Result<ChannelTransactionProposal> {
+        // TODO: state view should be shared to reduce fetching account state from layer1.
+        let state_view = self.channel_view(None, self.chain_client.as_ref())?;
+
+        // account state already cached in state view
+        let account_seq_number = {
+            let account_resource_blob = state_view
+                .get(&AccessPath::new_for_account_resource(self.account_address))?
+                .ok_or(format_err!(
+                    "account resource for {} not exists on chain",
+                    self.account_address,
+                ))?;
+            let account_resource =
+                sgtypes::account_resource_ext::from_bytes(&account_resource_blob)?;
+            account_resource.sequence_number()
+        };
+
+        let chain_version = state_view.version();
+        // build channel_transaction first
+        let channel_transaction = ChannelTransaction::new(
+            chain_version,
+            self.channel_address,
+            self.channel_sequence_number(),
+            channel_op,
+            args,
+            self.account_address,
+            account_seq_number,
+            txn_expiration(),
+        );
+        let channel_txn_hash = channel_transaction.hash();
+        let channel_txn_signature = self.keypair.private_key.sign_message(&channel_txn_hash);
+
+        let proposal = ChannelTransactionProposal {
+            channel_txn,
+            proposer_public_key: self.keypair.public_key.clone(),
+            proposer_signature: channel_txn_signature,
+        };
+        Ok(proposal)
+    }
+
+    fn execute_proposal(
+        &self,
+        proposal: &ChannelTransactionProposal,
+    ) -> Result<(
+        ChannelTransactionPayloadBodyV2,
+        Ed25519Signature,
+        TransactionOutput,
+    )> {
+        let (payload_body, payload_body_signature) = self
+            .build_and_sign_channel_txn_payload_body_v2(
+                self.witness_data(),
+                &proposal.channel_txn,
+            )?;
+
+        let output = {
+            // create mocked txn to execute
+            let raw_txn =
+                self.build_raw_txn_from_channel_txn(payload_body.clone(), &proposal.channel_txn)?;
+            // execute txn on offchain vm, should mock sender and receiver signature with a local
+            // keypair. the vm will skip signature check on offchain vm.
+            let txn = self.keypair.sign_txn(raw_txn)?;
+            let version = channel_txn.version();
+            let state_view = self.channel_view(Some(version), self.chain_client.as_ref())?;
+            execute_transaction(&state_view, txn)?
+        };
+
+        // check output gas
+        let gas_used = output.gas_used();
+        if gas_used > vm::gas_schedule::MAXIMUM_NUMBER_OF_GAS_UNITS.get() {
+            warn!(
+                "GasUsed {} > gas_schedule::MAXIMUM_NUMBER_OF_GAS_UNITS {}",
+                gas_used,
+                vm::gas_schedule::MAXIMUM_NUMBER_OF_GAS_UNITS.get()
+            );
+        }
+
+        Ok((payload_body, payload_body_signature, output))
+    }
+    fn check_applied(
+        &self,
+        proposal: &ChannelTransactionProposal,
+    ) -> Result<Option<(ChannelTransactionSigs)>> {
+        let channel_txn = &proposal.channel_txn;
+        let applied_txn = if let Some(info) = self.store.get_startup_info()? {
+            if channel_txn.channel_sequence_number() > info.latest_version {
+                None
+            } else {
+                let signed_channel_txn_with_proof =
+                    self.store.get_transaction_by_channel_seq_number(
+                        channel_txn.channel_sequence_number(),
+                        false,
+                    )?;
+                debug_assert_eq!(
+                    signed_channel_txn_with_proof.version,
+                    channel_txn.channel_sequence_number()
+                );
+                Some(signed_channel_txn_with_proof.signed_transaction)
+            }
+        } else {
+            None
+        };
+
+        // FIXME: refactor this
+        // if found an already applied txn in local storage,
+        // we can return directly after check the hash of transaction and signatures.
+        if let Some(signed_txn) = applied_txn {
+            if signed_txn.raw_tx.hash() == channel_txn.hash()
+                && signed_txn.sender_signature.hash() == channel_txn_sender_sigs.hash()
+            {
+                Ok(Some(signed_txn.receiver_signature))
+            } else {
+                Err(format_err!(
+                    "invalid txn, txn with channel_seq_number is mismatched"
+                ))
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn generate_txn_sigs(
+        &self,
+        channel_txn: &ChannelTransaction,
+        witness_data: &WitnessData,
+    ) -> Result<ChannelTransactionSigs> {
+        let (_, payload_body_signature) =
+            self.build_and_sign_channel_txn_payload_body_v2(self.witness_data(), channel_txn)?;
+
+        let witness_data_hash = witness_data.hash();
+        let witness_data_signature = self.keypair.private_key.sign_message(&witness_data_hash);
+
+        Ok(ChannelTransactionSigs::new(
+            self.account_address,
+            self.keypair.public_key.clone(),
+            payload_body_signature,
+            witness_data_hash,
+            witness_data_signature,
+        ))
+    }
+
+    /// Grant the proposal and save it into pending txn
+    fn do_grant_proposal(
+        &mut self,
+        proposal: ChannelTransactionProposal,
+        output: TransactionOutput,
+        mut signatures: BtreeMap<AccountAddress, ChannelTransactionSigs>,
+    ) -> Result<()> {
+        let witness_data =
+            WitnessData::new(self.channel_sequence_number(), output.write_set().clone());
+        let user_sigs = self.generate_txn_sigs(&proposal.channel_txn, &witness_data)?;
+        signatures.insert(user_sigs.address, user_sigs.clone());
+
+        self.save_pending_txn(proposal, output, signatures)
+    }
+
+    fn save_pending_txn(
+        &mut self,
+        proposal: ChannelTransactionProposal,
+        output: TransactionOutput,
+        signatures: BtreeMap<AccountAddress, ChannelTransactionSigs>,
+    ) -> Result<()> {
+        let mut pending_txn = PendingTransaction::WaitForSig {
+            proposal,
+            output,
+            signatures,
+        };
+        pending_txn.try_fullfill(&self.participants_states.keys().collect());
+        let should_persist = output.write_set().contains_onchain_resource();
+        self.store.save_pending_txn(pending_txn, should_persist)?;
+        Ok(())
+    }
+
+    /// clear local pending state
+    fn clear_pending_txn(&mut self) -> Result<()> {
+        unimplemented!()
     }
 }
 

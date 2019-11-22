@@ -3,8 +3,12 @@
 use crate::hash::ChannelTransactionSigsHasher;
 use crate::impl_hash;
 use failure::prelude::*;
-use libra_crypto::ed25519::{Ed25519PublicKey, Ed25519Signature};
-use libra_crypto::HashValue;
+use libra_crypto::{
+    ed25519::{Ed25519PublicKey, Ed25519Signature},
+    hash::CryptoHasher,
+    HashValue,
+};
+use libra_types::account_address::AccountAddress;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
@@ -65,34 +69,40 @@ impl From<TxnSignature> for crate::proto::sgtypes::TxnSignature {
     }
 }
 
-#[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize, CryptoHasher)]
 pub struct ChannelTransactionSigs {
-    /// The public key
+    /// The signer
+    pub address: AccountAddress,
+    /// The signer's public key
     pub public_key: Ed25519PublicKey,
     /// tx signature
-    pub signature: TxnSignature,
-    // hash of output from libra raw tx
-    pub write_set_payload_hash: HashValue,
-    // signature on write_set_hash
-    pub write_set_payload_signature: Ed25519Signature,
+    //    pub signature: TxnSignature,
+    /// signature of channel txn payload
+    pub channel_payload_signature: Ed25519Signature,
+    /// hash of output from libra raw tx
+    pub witness_data_hash: HashValue,
+    /// signature on write_set_hash
+    pub witness_data_signature: Ed25519Signature,
 }
 
 impl ChannelTransactionSigs {
     pub fn new(
+        address: AccountAddress,
         public_key: Ed25519PublicKey,
-        signature: TxnSignature,
-        write_set_payload_hash: HashValue,
-        write_set_payload_signature: Ed25519Signature,
+        channel_payload_signature: Ed25519Signature,
+        witness_data_hash: HashValue,
+        witness_data_signature: Ed25519Signature,
     ) -> Self {
         Self {
+            address,
             public_key,
-            signature,
-            write_set_payload_hash,
-            write_set_payload_signature,
+            channel_payload_signature,
+            witness_data_hash,
+            witness_data_signature,
         }
     }
 }
-impl_hash!(ChannelTransactionSigs, ChannelTransactionSigsHasher);
+//impl_hash!(ChannelTransactionSigs, ChannelTransactionSigsHasher);
 
 impl TryFrom<crate::proto::sgtypes::ChannelTransactionSigs> for ChannelTransactionSigs {
     type Error = Error;
