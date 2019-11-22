@@ -1,0 +1,11 @@
+[package]
+name = "graphdb"
+version = "0.1.0"
+authors = ["Starcoin Core Dev <dev@starcoin.org>"]
+license = "Apache-2.0"
+publish = false
+edition = "2018"
+
+[dependencies]
+petgraph = "0.4.13"
+libra-types = { path = "../../libra/types" }
