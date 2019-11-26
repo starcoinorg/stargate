@@ -2,18 +2,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
+use libra_crypto::hash::CryptoHash;
 use libra_crypto::test_utils::KeyPair;
-use libra_crypto::{HashValue, Uniform};
+use libra_crypto::{HashValue, SigningKey, Uniform};
 use libra_types::access_path::AccessPath;
 use libra_types::account_address::AccountAddress;
 use libra_types::transaction::{helpers::ChannelPayloadSigner, ChannelScriptBody, Script};
 use libra_types::vm_error::StatusCode;
 use libra_types::write_set::{WriteOp, WriteSet, WriteSetMut};
 use rand::prelude::*;
-use sgtypes::channel_transaction::{ChannelOp, ChannelTransaction};
-use sgtypes::channel_transaction_sigs::{ChannelTransactionSigs, TxnSignature};
+use sgtypes::channel_transaction::{ChannelOp, ChannelTransaction, ChannelTransactionProposal};
+use sgtypes::channel_transaction_sigs::ChannelTransactionSigs;
 use sgtypes::channel_transaction_to_commit::ChannelTransactionToApply;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
+use std::collections::{HashMap};
 use std::time::Duration;
 
 fn generate_txn_to_apply(
@@ -35,13 +37,23 @@ fn generate_txn_to_apply(
 
     let txn = ChannelTransaction::new(
         rng0.next_u64(),
+        AccountAddress::random(),
+        channel_sequence_number,
         ChannelOp::Open,
+        Vec::new(),
         sender,
         rng0.next_u64(),
-        receiver,
-        channel_sequence_number,
         Duration::from_secs(rng0.next_u64()),
-        Vec::new(),
+    );
+    let txn_signature = keypair.private_key.sign_message(&CryptoHash::hash(&txn));
+    let _proposal =
+        ChannelTransactionProposal::new(txn.clone(), keypair.public_key.clone(), txn_signature);
+    let channel_txn_signatures = ChannelTransactionSigs::new(
+        sender,
+        keypair.public_key.clone(),
+        signature.clone(),
+        HashValue::random(),
+        signature.clone(),
     );
     let ws = WriteSetMut::new(vec![(
         AccessPath::new(sender, vec![0, 0, 0]),
@@ -50,25 +62,15 @@ fn generate_txn_to_apply(
     .freeze()
     .unwrap();
 
+    let signatures = {
+        let mut s = HashMap::new();
+        s.insert(channel_txn_signatures.address, channel_txn_signatures);
+        s
+    };
     let txn_to_apply = ChannelTransactionToApply {
         signed_channel_txn: SignedChannelTransaction {
             raw_tx: txn,
-            sender_signature: ChannelTransactionSigs::new(
-                keypair.public_key.clone(),
-                TxnSignature::SenderSig {
-                    channel_txn_signature: signature.clone(),
-                },
-                HashValue::default(),
-                signature.clone(),
-            ),
-            receiver_signature: ChannelTransactionSigs::new(
-                keypair.public_key.clone(),
-                TxnSignature::ReceiverSig {
-                    channel_script_body_signature: signature.clone(),
-                },
-                HashValue::default(),
-                signature.clone(),
-            ),
+            signatures,
         },
         write_set: Some(ws),
         events: vec![],

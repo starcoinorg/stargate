@@ -66,8 +66,11 @@ pub fn open_channel(
 
         debug_assert!(open_txn.is_travel_txn(), "open_txn must travel txn");
 
-        let receiver_open_txn = receiver_wallet.verify_txn(&open_txn).await?;
+        let receiver_open_txn = receiver_wallet.verify_txn(sender, &open_txn).await?;
 
+        sender_wallet
+            .verify_txn_response(receiver, &receiver_open_txn)
+            .await?;
         let gas_used = sender_wallet
             .apply_txn(receiver, &receiver_open_txn)
             .await?;
@@ -96,8 +99,10 @@ pub fn execute_script(
         let txn_request = sender_wallet
             .execute_script(receiver, package_name, script_name, args)
             .await?;
-        let txn_response = receiver_wallet.verify_txn(&txn_request).await?;
-
+        let txn_response = receiver_wallet.verify_txn(sender, &txn_request).await?;
+        sender_wallet
+            .verify_txn_response(receiver, &txn_response)
+            .await?;
         let sender_future = sender_wallet.apply_txn(receiver, &txn_response);
         let receiver_future = receiver_wallet.apply_txn(sender, &txn_response);
 
@@ -145,8 +150,10 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
             .unwrap();
         debug_assert!(open_txn.is_travel_txn(), "open_txn must travel txn");
 
-        let receiver_open_txn = receiver_wallet.verify_txn(&open_txn).await.unwrap();
-
+        let receiver_open_txn = receiver_wallet.verify_txn(sender, &open_txn).await.unwrap();
+        sender_wallet
+            .verify_txn_response(receiver, &receiver_open_txn)
+            .await?;
         let sender_gas = sender_wallet
             .apply_txn(receiver, &receiver_open_txn)
             .await
@@ -175,15 +182,22 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
             .unwrap();
         debug_assert!(deposit_txn.is_travel_txn(), "open_txn must travel txn");
 
-        let receiver_deposit_txn = receiver_wallet.verify_txn(&deposit_txn).await.unwrap();
+        let receiver_deposit_txn = receiver_wallet
+            .verify_txn(sender, &deposit_txn)
+            .await
+            .unwrap();
 
-        let receiver_future = receiver_wallet.apply_txn(sender, &receiver_deposit_txn);
-        let sender_future = sender_wallet.apply_txn(receiver, &receiver_deposit_txn);
+        sender_wallet
+            .verify_txn_response(receiver, &receiver_deposit_txn)
+            .await?;
+        sender_gas_used += sender_wallet
+            .apply_txn(receiver, &receiver_deposit_txn)
+            .await?;
+        receiver_wallet
+            .apply_txn(sender, &receiver_deposit_txn)
+            .await?;
 
-        sender_gas_used += sender_future.await.unwrap();
-        receiver_future.await.unwrap();
-
-        let sender_channel_balance = sender_wallet.channel_balance(receiver).await.unwrap();
+        let sender_channel_balance = sender_wallet.channel_balance(receiver).await?;
         assert_eq!(
             sender_channel_balance,
             sender_fund_amount + sender_deposit_amount
@@ -209,10 +223,14 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
         );
         //debug!("txn:{:#?}", transfer_txn);
 
-        let receiver_transfer_txn = receiver_wallet.verify_txn(&transfer_txn).await.unwrap();
+        let receiver_transfer_txn = receiver_wallet
+            .verify_txn(sender, &transfer_txn)
+            .await
+            .unwrap();
         // now,receiver apply the txn
-        let receiver_future = receiver_wallet.apply_txn(sender, &receiver_transfer_txn);
-        receiver_future.await?;
+        receiver_wallet
+            .apply_txn(sender, &receiver_transfer_txn)
+            .await?;
         // then sender still pending
         assert!(
             sender_wallet
@@ -222,11 +240,15 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
             "sender should have pending txn"
         );
         // then retry the txn
-        let retried_txn = receiver_wallet.verify_txn(&transfer_txn).await?;
+        let retried_txn = receiver_wallet.verify_txn(sender, &transfer_txn).await?;
         assert_eq!(receiver_transfer_txn, retried_txn, "two txn shold be equal");
 
-        let sender_future = sender_wallet.apply_txn(receiver, &receiver_transfer_txn);
-        sender_gas_used += sender_future.await?;
+        sender_wallet
+            .verify_txn_response(receiver, &receiver_transfer_txn)
+            .await?;
+        sender_gas_used += sender_wallet
+            .apply_txn(receiver, &receiver_transfer_txn)
+            .await?;
         let _ = receiver_wallet
             .apply_txn(sender, &receiver_transfer_txn)
             .await?;
@@ -254,21 +276,28 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
         debug_assert!(withdraw_txn.is_travel_txn(), "withdraw_txn must travel txn");
         //debug!("txn:{:#?}", withdraw_txn);
 
-        let receiver_withdraw_txn = receiver_wallet.verify_txn(&withdraw_txn).await.unwrap();
+        let receiver_withdraw_txn = receiver_wallet
+            .verify_txn(sender, &withdraw_txn)
+            .await
+            .unwrap();
 
-        let receiver_future = receiver_wallet.apply_txn(sender, &receiver_withdraw_txn);
-        let sender_future = sender_wallet.apply_txn(receiver, &receiver_withdraw_txn);
+        sender_wallet
+            .verify_txn_response(receiver, &receiver_withdraw_txn)
+            .await?;
+        sender_gas_used += sender_wallet
+            .apply_txn(receiver, &receiver_withdraw_txn)
+            .await?;
+        receiver_wallet
+            .apply_txn(sender, &receiver_withdraw_txn)
+            .await?;
 
-        sender_gas_used += sender_future.await.unwrap();
-        receiver_future.await.unwrap();
-
-        let sender_channel_balance = sender_wallet.channel_balance(receiver).await.unwrap();
+        let sender_channel_balance = sender_wallet.channel_balance(receiver).await?;
         assert_eq!(
             sender_channel_balance,
             sender_fund_amount + sender_deposit_amount - transfer_amount - sender_withdraw_amount
         );
 
-        let receiver_channel_balance = receiver_wallet.channel_balance(sender).await.unwrap();
+        let receiver_channel_balance = receiver_wallet.channel_balance(sender).await?;
         assert_eq!(
             receiver_channel_balance,
             receiver_fund_amount + receiver_deposit_amount + transfer_amount
@@ -280,8 +309,8 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
             sender_channel_balance, receiver_channel_balance
         );
 
-        let sender_balance = sender_wallet.balance().unwrap();
-        let receiver_balance = receiver_wallet.balance().unwrap();
+        let sender_balance = sender_wallet.balance()?;
+        let receiver_balance = receiver_wallet.balance()?;
 
         assert_eq!(
             sender_balance,

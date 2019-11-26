@@ -2,15 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::channel_transaction_sigs::ChannelTransactionSigs;
-use crate::hash::ChannelTransactionHasher;
+use crate::impl_hash;
 use bytes::IntoBuf;
 use failure::prelude::*;
-use libra_crypto::ed25519::{Ed25519PublicKey, Ed25519Signature};
-use libra_crypto::hash::{CryptoHash, CryptoHasher};
-use libra_crypto::HashValue;
+use libra_crypto::{
+    ed25519::{Ed25519PublicKey, Ed25519Signature},
+    hash::CryptoHash,
+    HashValue,
+};
+use libra_crypto_derive::CryptoHasher;
 use libra_prost_ext::MessageExt;
-use libra_types::transaction::{ChannelTransactionPayload, TransactionArgument, Version};
-use libra_types::{account_address::AccountAddress, transaction::TransactionOutput};
+use libra_types::account_address::AccountAddress;
+use libra_types::transaction::{TransactionArgument, Version};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
@@ -58,6 +61,8 @@ pub struct ChannelTransaction {
     expiration_time: Duration,
 }
 
+impl_hash!(ChannelTransaction, ChannelTransactionHasher);
+
 impl ChannelTransaction {
     pub fn new(
         version: Version,
@@ -97,10 +102,6 @@ impl ChannelTransaction {
         self.proposer
     }
 
-    pub fn receiver(&self) -> AccountAddress {
-        self.receiver
-    }
-
     pub fn channel_sequence_number(&self) -> u64 {
         self.channel_sequence_number
     }
@@ -123,26 +124,26 @@ impl TryFrom<crate::proto::sgtypes::ChannelTransaction> for ChannelTransaction {
 
     fn try_from(value: crate::proto::sgtypes::ChannelTransaction) -> Result<Self> {
         let version = value.version;
-        let operator = ChannelOp::try_from(value.operator.unwrap())?;
-        let sender = AccountAddress::try_from(value.sender)?;
-        let sequence_number = value.sequence_number;
-        let receiver = AccountAddress::try_from(value.receiver)?;
+        let channel_address = AccountAddress::try_from(value.channel_address)?;
         let channel_sequence_number = value.channel_sequence_number;
-        let expiration_time = Duration::from_secs(value.expiration_time);
+        let proposer = AccountAddress::try_from(value.proposer)?;
+        let sequence_number = value.sequence_number;
+        let operator = ChannelOp::try_from(value.operator.unwrap())?;
         let args = value
             .args
             .into_iter()
             .map(TransactionArgument::try_from)
             .collect::<Result<Vec<_>>>()?;
+        let expiration_time = Duration::from_secs(value.expiration_time);
         Ok(ChannelTransaction {
             version,
-            operator,
-            sender,
-            sequence_number,
-            receiver,
+            channel_address,
             channel_sequence_number,
-            expiration_time,
+            operator,
             args,
+            proposer,
+            sequence_number,
+            expiration_time,
         })
     }
 }
@@ -152,9 +153,9 @@ impl From<ChannelTransaction> for crate::proto::sgtypes::ChannelTransaction {
         Self {
             version: value.version.to_owned(),
             operator: Some(value.operator.into()),
-            sender: value.sender.into(),
+            proposer: value.proposer.into(),
             sequence_number: value.sequence_number.into(),
-            receiver: value.receiver.into(),
+            channel_address: value.channel_address.into(),
             channel_sequence_number: value.channel_sequence_number,
             expiration_time: value.expiration_time.as_secs(),
             args: value.args.into_iter().map(Into::into).collect(),
@@ -225,6 +226,11 @@ impl TryFrom<crate::proto::sgtypes::ChannelOp> for ChannelOp {
                     script_name,
                 }
             }
+            ProtoChannelOpType::Action => ChannelOp::Action {
+                module_address: AccountAddress::try_from(proto.module_address)?,
+                module_name: proto.module_name,
+                function_name: proto.function_name,
+            },
             ProtoChannelOpType::Close => ChannelOp::Close,
         };
         Ok(ret)
@@ -248,18 +254,22 @@ impl From<ChannelOp> for crate::proto::sgtypes::ChannelOp {
                 channel_op.script_name = script_name;
                 channel_op.set_op_type(ProtoChannelOpType::Execute);
             }
+            ChannelOp::Action {
+                module_name,
+                module_address,
+                function_name,
+            } => {
+                channel_op.set_op_type(ProtoChannelOpType::Action);
+                channel_op.module_address = module_address.to_vec();
+                channel_op.module_name = module_name;
+                channel_op.function_name = function_name;
+            }
             ChannelOp::Close => {
                 channel_op.set_op_type(ProtoChannelOpType::Close);
             }
         };
         channel_op
     }
-}
-
-#[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ChannelTransactionRequest {
-    proposal: ChannelTransactionProposal,
-    channel_txn_sigs: ChannelTransactionSigs,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
@@ -283,6 +293,22 @@ impl ChannelTransactionProposal {
     }
 }
 
+#[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ChannelTransactionRequest {
+    proposal: ChannelTransactionProposal,
+    channel_txn_sigs: ChannelTransactionSigs,
+}
+
+impl Into<(ChannelTransactionProposal, ChannelTransactionSigs)> for ChannelTransactionRequest {
+    fn into(self) -> (ChannelTransactionProposal, ChannelTransactionSigs) {
+        let ChannelTransactionRequest {
+            proposal,
+            channel_txn_sigs,
+        } = self;
+        (proposal, channel_txn_sigs)
+    }
+}
+
 impl ChannelTransactionRequest {
     pub fn new(
         proposal: ChannelTransactionProposal,
@@ -295,21 +321,21 @@ impl ChannelTransactionRequest {
     }
 
     pub fn request_id(&self) -> HashValue {
-        self.channel_txn().hash()
+        CryptoHash::hash(self.channel_txn())
     }
     pub fn channel_txn(&self) -> &ChannelTransaction {
-        &self.channel_txn
+        &self.proposal.channel_txn
     }
     pub fn channel_txn_sigs(&self) -> &ChannelTransactionSigs {
         &self.channel_txn_sigs
     }
 
     pub fn proposer(&self) -> AccountAddress {
-        self.channel_txn.proposer()
+        self.channel_txn().proposer()
     }
 
     pub fn channel_address(&self) -> AccountAddress {
-        self.channel_txn.channel_address()
+        self.channel_txn().channel_address()
     }
 
     pub fn is_travel_txn(&self) -> bool {
@@ -331,43 +357,35 @@ impl ChannelTransactionRequest {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ChannelTransactionRequestAndOutput {
-    pub request: ChannelTransactionRequest,
-    pub output: TransactionOutput,
-    pub verified_participant_witness_payload: Option<ChannelTransactionPayload>,
-}
-
-impl ChannelTransactionRequestAndOutput {
-    pub fn new(
-        request: ChannelTransactionRequest,
-        output: TransactionOutput,
-        verified_participant_witness_payload: Option<ChannelTransactionPayload>,
-    ) -> Self {
-        Self {
-            request,
-            output,
-            verified_participant_witness_payload,
-        }
-    }
-}
-
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ChannelTransactionResponse {
-    request_id: HashValue,
+    proposal: ChannelTransactionProposal,
     channel_txn_sigs: ChannelTransactionSigs,
 }
-
+impl Into<(ChannelTransactionProposal, ChannelTransactionSigs)> for ChannelTransactionResponse {
+    fn into(self) -> (ChannelTransactionProposal, ChannelTransactionSigs) {
+        let ChannelTransactionResponse {
+            proposal,
+            channel_txn_sigs,
+        } = self;
+        (proposal, channel_txn_sigs)
+    }
+}
 impl ChannelTransactionResponse {
-    pub fn new(request_id: HashValue, channel_txn_sigs: ChannelTransactionSigs) -> Self {
+    pub fn new(
+        proposal: ChannelTransactionProposal,
+        channel_txn_sigs: ChannelTransactionSigs,
+    ) -> Self {
         Self {
-            request_id,
+            proposal,
             channel_txn_sigs,
         }
     }
-
     pub fn request_id(&self) -> HashValue {
-        self.request_id
+        CryptoHash::hash(self.channel_txn())
+    }
+    pub fn channel_txn(&self) -> &ChannelTransaction {
+        &self.proposal.channel_txn
     }
     pub fn channel_txn_sigs(&self) -> &ChannelTransactionSigs {
         &self.channel_txn_sigs
@@ -392,15 +410,12 @@ impl TryFrom<crate::proto::sgtypes::ChannelTransactionRequest> for ChannelTransa
     type Error = Error;
 
     fn try_from(value: crate::proto::sgtypes::ChannelTransactionRequest) -> Result<Self> {
-        let request_id = HashValue::from_slice(&value.request_id)?;
-        let channel_txn = ChannelTransaction::try_from(value.channel_txn.unwrap())?;
+        let proposal = ChannelTransactionProposal::try_from(value.proposal.unwrap())?;
         let channel_txn_sigs = ChannelTransactionSigs::try_from(value.channel_txn_sigs.unwrap())?;
-        let travel = value.travel;
+
         Ok(ChannelTransactionRequest {
-            request_id,
-            channel_txn,
+            proposal,
             channel_txn_sigs,
-            travel,
         })
     }
 }
@@ -408,10 +423,8 @@ impl TryFrom<crate::proto::sgtypes::ChannelTransactionRequest> for ChannelTransa
 impl From<ChannelTransactionRequest> for crate::proto::sgtypes::ChannelTransactionRequest {
     fn from(value: ChannelTransactionRequest) -> Self {
         Self {
-            request_id: value.request_id.to_vec(),
-            channel_txn: Some(value.channel_txn.into()),
+            proposal: Some(value.proposal.into()),
             channel_txn_sigs: Some(value.channel_txn_sigs.into()),
-            travel: value.travel,
         }
     }
 }
@@ -420,11 +433,12 @@ impl TryFrom<crate::proto::sgtypes::ChannelTransactionResponse> for ChannelTrans
     type Error = Error;
 
     fn try_from(response: crate::proto::sgtypes::ChannelTransactionResponse) -> Result<Self> {
-        let request_id = HashValue::from_slice(&response.request_id)?;
+        let proposal = ChannelTransactionProposal::try_from(response.proposal.unwrap())?;
+
         let channel_txn_sigs =
             ChannelTransactionSigs::try_from(response.channel_txn_sigs.unwrap())?;
         Ok(Self {
-            request_id,
+            proposal,
             channel_txn_sigs,
         })
     }
@@ -433,8 +447,30 @@ impl TryFrom<crate::proto::sgtypes::ChannelTransactionResponse> for ChannelTrans
 impl From<ChannelTransactionResponse> for crate::proto::sgtypes::ChannelTransactionResponse {
     fn from(response: ChannelTransactionResponse) -> Self {
         Self {
-            request_id: response.request_id.to_vec(),
+            proposal: Some(response.proposal.into()),
             channel_txn_sigs: Some(response.channel_txn_sigs.into()),
+        }
+    }
+}
+
+impl TryFrom<crate::proto::sgtypes::ChannelTransactionProposal> for ChannelTransactionProposal {
+    type Error = Error;
+
+    fn try_from(value: crate::proto::sgtypes::ChannelTransactionProposal) -> Result<Self> {
+        Ok(Self {
+            channel_txn: ChannelTransaction::try_from(value.channel_txn.unwrap())?,
+            proposer_public_key: Ed25519PublicKey::try_from(value.proposer_public_key.as_slice())?,
+            proposer_signature: Ed25519Signature::try_from(value.proposer_signature.as_slice())?,
+        })
+    }
+}
+
+impl From<ChannelTransactionProposal> for crate::proto::sgtypes::ChannelTransactionProposal {
+    fn from(value: ChannelTransactionProposal) -> Self {
+        Self {
+            channel_txn: Some(value.channel_txn.into()),
+            proposer_public_key: value.proposer_public_key.to_bytes().to_vec(),
+            proposer_signature: value.proposer_signature.to_bytes().to_vec(),
         }
     }
 }

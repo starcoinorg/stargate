@@ -27,7 +27,7 @@ impl SignedChannelTransactionWithProof {
         &self,
         _ledger_info: &LedgerInfo,
         version: Version,
-        sender: AccountAddress,
+        proposer: AccountAddress,
         sequence_number: u64,
         channel_sequence_number: u64,
     ) -> Result<()> {
@@ -38,10 +38,10 @@ impl SignedChannelTransactionWithProof {
             version,
         );
         ensure!(
-            self.signed_transaction.raw_tx.sender() == sender,
+            self.signed_transaction.raw_tx.proposer() == proposer,
             "Sender ({}) not expected ({}).",
-            self.signed_transaction.raw_tx.sender(),
-            sender,
+            self.signed_transaction.raw_tx.proposer(),
+            proposer,
         );
         ensure!(
             self.signed_transaction.raw_tx.sequence_number() == sequence_number,

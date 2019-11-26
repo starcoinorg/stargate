@@ -1,10 +1,10 @@
-use crate::channel_transaction::{ChannelTransaction, ChannelTransactionProposal};
+use crate::channel_transaction::ChannelTransactionProposal;
 use crate::channel_transaction_sigs::ChannelTransactionSigs;
 use libra_crypto::HashValue;
 use libra_types::account_address::AccountAddress;
 use libra_types::transaction::TransactionOutput;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 /// Every Transaction Proposal should wait for others' signature,
 /// TODO: should handle `agree or disagree`
@@ -14,14 +14,14 @@ pub enum PendingTransaction {
         proposal: ChannelTransactionProposal,
         output: TransactionOutput,
         // TODO: or call it vote?
-        signatures: BTreeMap<AccountAddress, ChannelTransactionSigs>,
+        signatures: HashMap<AccountAddress, ChannelTransactionSigs>,
     },
 
     WaitForApply {
         proposal: ChannelTransactionProposal,
         output: TransactionOutput,
         // TODO: or call it vote?
-        signatures: BTreeMap<AccountAddress, ChannelTransactionSigs>,
+        signatures: HashMap<AccountAddress, ChannelTransactionSigs>,
     },
 }
 
@@ -39,17 +39,17 @@ impl PendingTransaction {
     pub fn get_signature(&self, address: &AccountAddress) -> Option<ChannelTransactionSigs> {
         match self {
             PendingTransaction::WaitForSig { signatures, .. } => signatures.get(address).cloned(),
-            PendingTransaction::WaitForApply { .. } => signatures.get(address).cloned(),
+            PendingTransaction::WaitForApply { signatures, .. } => signatures.get(address).cloned(),
         }
     }
 
-    pub fn fullfilled(&self) -> bool {
+    pub fn fulfilled(&self) -> bool {
         match self {
             PendingTransaction::WaitForApply { .. } => true,
             _ => false,
         }
     }
-    pub fn try_fullfill(&mut self, participants: &[AccountAddress]) {
+    pub fn try_fulfill(&mut self, participants: &[AccountAddress]) -> bool {
         match self {
             PendingTransaction::WaitForSig {
                 signatures,
@@ -73,7 +73,7 @@ impl PendingTransaction {
                 // TODO: debug_assert
             }
         };
-        self.fullfilled()
+        self.fulfilled()
     }
 
     pub fn request_id(&self) -> HashValue {
@@ -82,5 +82,34 @@ impl PendingTransaction {
         //            PendingTransaction::WaitForApply { proposal, .. } => proposal.channel_txn.hash(),
         //        }
         unimplemented!()
+    }
+}
+
+impl
+    Into<(
+        ChannelTransactionProposal,
+        TransactionOutput,
+        HashMap<AccountAddress, ChannelTransactionSigs>,
+    )> for PendingTransaction
+{
+    fn into(
+        self,
+    ) -> (
+        ChannelTransactionProposal,
+        TransactionOutput,
+        HashMap<AccountAddress, ChannelTransactionSigs>,
+    ) {
+        match self {
+            PendingTransaction::WaitForSig {
+                proposal,
+                output,
+                signatures,
+            } => (proposal, output, signatures),
+            PendingTransaction::WaitForApply {
+                proposal,
+                output,
+                signatures,
+            } => (proposal, output, signatures),
+        }
     }
 }

@@ -133,6 +133,7 @@ impl PackageRegistry {
                     package_name,
                     script_name
                 ))?,
+            ChannelOp::Action { .. } => bail!("Action is not supported by registry"),
         };
         let script = script_code.encode_script(args);
         Ok(script)
