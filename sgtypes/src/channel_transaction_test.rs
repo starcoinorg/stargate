@@ -26,7 +26,7 @@ fn request_roundtrip_canonical_serialization() {
     let sender = AccountAddress::from_public_key(&keypair.public_key);
     let _receiver = AccountAddress::random();
     let _script = Script::new(vec![], vec![]);
-    let action = ScriptAction::new(
+    let action = ScriptAction::new_call(
         ModuleId::new(AccountAddress::default(), Identifier::new("M").unwrap()),
         Identifier::new("f").unwrap(),
         vec![],

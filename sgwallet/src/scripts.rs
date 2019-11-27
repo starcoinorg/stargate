@@ -16,7 +16,7 @@ use sgtypes::{
     script_package::{ChannelScriptPackage, ScriptCode},
 };
 
-use libra_types::transaction::{Script, TransactionArgument};
+
 use libra_types::{
     account_address::AccountAddress, account_config::coin_struct_tag, language_storage::StructTag,
 };
@@ -113,30 +113,6 @@ impl PackageRegistry {
 
     pub fn close_script(&self) -> ScriptCode {
         self.close_script.clone()
-    }
-
-    pub fn channel_op_to_script(
-        &self,
-        channel_op: &ChannelOp,
-        args: Vec<TransactionArgument>,
-    ) -> Result<Script> {
-        let script_code = match channel_op {
-            ChannelOp::Open => self.open_script(),
-            ChannelOp::Close => self.close_script(),
-            ChannelOp::Execute {
-                package_name,
-                script_name,
-            } => self
-                .get_script(package_name, script_name)
-                .ok_or(format_err!(
-                    "Can not find script by package {} and script name {}",
-                    package_name,
-                    script_name
-                ))?,
-            ChannelOp::Action { .. } => bail!("Action is not supported by registry"),
-        };
-        let script = script_code.encode_script(args);
-        Ok(script)
     }
 }
 

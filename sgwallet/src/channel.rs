@@ -366,7 +366,8 @@ impl Inner {
         channel_witness: Witness,
         channel_txn: &ChannelTransaction,
     ) -> Result<(ChannelTransactionPayloadBodyV2, Ed25519Signature)> {
-        let action = channel_op_to_action(channel_txn.operator(), channel_txn.args().to_vec())?;
+        let action =
+            self.channel_op_to_action(channel_txn.operator(), channel_txn.args().to_vec())?;
 
         let body = ChannelTransactionPayloadBodyV2::new(
             channel_txn.channel_address(),
@@ -967,32 +968,54 @@ impl Inner {
     fn clear_pending_txn(&self) -> Result<()> {
         self.store.clear_pending_txn()
     }
-}
 
-fn channel_op_to_action(op: &ChannelOp, args: Vec<TransactionArgument>) -> Result<ScriptAction> {
-    match op {
-        ChannelOp::Action {
-            module_address,
-            module_name,
-            function_name,
-        } => {
-            let module_id = ModuleId::new(
-                module_address.clone(),
-                Identifier::new(module_name.clone().into_boxed_str())?,
-            );
-            Ok(ScriptAction::new(
-                module_id,
-                Identifier::new(function_name.clone().into_boxed_str())?,
+    fn channel_op_to_action(
+        &self,
+        op: &ChannelOp,
+        args: Vec<TransactionArgument>,
+    ) -> Result<ScriptAction> {
+        match op {
+            ChannelOp::Open => Ok(ScriptAction::new_code(
+                self.script_registry.open_script().byte_code().clone(),
                 args,
-            ))
+            )),
+            ChannelOp::Close => Ok(ScriptAction::new_code(
+                self.script_registry.close_script().byte_code().clone(),
+                args,
+            )),
+            ChannelOp::Execute {
+                package_name,
+                script_name,
+            } => {
+                let script_code = self
+                    .script_registry
+                    .get_script(package_name, script_name)
+                    .ok_or(format_err!(
+                        "Can not find script by package {} and script name {}",
+                        package_name,
+                        script_name
+                    ))?;
+                Ok(ScriptAction::new_code(
+                    script_code.byte_code().clone(),
+                    args,
+                ))
+            }
+            ChannelOp::Action {
+                module_address,
+                module_name,
+                function_name,
+            } => {
+                let module_id = ModuleId::new(
+                    module_address.clone(),
+                    Identifier::new(module_name.clone().into_boxed_str())?,
+                );
+                Ok(ScriptAction::new_call(
+                    module_id,
+                    Identifier::new(function_name.clone().into_boxed_str())?,
+                    args,
+                ))
+            }
         }
-        ChannelOp::Open => {
-            // FIXME: use methods from Channel type
-            let module_id = ModuleId::new(AccountAddress::default(), Identifier::new("Channel")?);
-            Ok(ScriptAction::new(module_id, Identifier::new("open")?, args))
-        }
-        ChannelOp::Close => unimplemented!(),
-        ChannelOp::Execute { .. } => unimplemented!(),
     }
 }
 
