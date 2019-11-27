@@ -1,25 +1,27 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::star_chain_client::{faucet_async, submit_txn_async, StarChainClient};
+use crate::star_chain_client::{faucet_async, submit_txn_async, ChainClient, StarChainClient};
 use admission_control_service::runtime::AdmissionControlRuntime;
 use async_std::task;
 use consensus::consensus_provider::make_pow_consensus_provider;
 use consensus::MineClient;
+use futures::channel::oneshot::{channel, Sender};
 use futures::future;
 use futures::StreamExt;
 use grpc_helpers::ServerHandle;
+use libra_config::config::{NetworkConfig, NodeConfig, NodeConfigHelpers, RoleType};
 use libra_config::{
-    config::{NetworkConfig, NodeConfig, NodeConfigHelpers, RoleType},
     seed_peers::SeedPeersConfig,
     trusted_peers::{ConfigHelpers, ConsensusPeerInfo, NetworkPeerInfo},
 };
+use libra_crypto::test_utils::TEST_SEED;
 use libra_crypto::traits::Uniform;
+use libra_crypto::ValidKey;
 use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
 };
-use libra_crypto::{test_utils::TEST_SEED, ValidKey};
 use libra_logger::prelude::*;
 use libra_mempool::MempoolRuntime;
 use libra_node::main_node::{setup_debug_interface, setup_executor, LibraHandle};
@@ -44,10 +46,10 @@ use parity_multiaddr::Multiaddr;
 use rand::prelude::*;
 use rand::{rngs::StdRng, SeedableRng};
 use state_synchronizer::StateSynchronizer;
+use std::collections::HashMap;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{
-    collections::HashMap,
     convert::{TryFrom, TryInto},
     str::FromStr,
     sync::Arc,
@@ -299,7 +301,6 @@ fn print_ports(config: &NodeConfig) {
 }
 
 #[test]
-#[ignore]
 fn test_pow_node() {
     ::libra_logger::init_for_e2e_testing();
     let mut conf_1 = pow_node_random_conf("/memory/0", 0);
@@ -391,24 +392,27 @@ fn test_pow_node() {
     let _handle_1 = setup_environment(&mut conf_1, false);
 
     let runtime_1 = tokio::runtime::Runtime::new().unwrap();
+    sleep(Duration::from_secs(20));
     let _handle_2 = setup_environment(&mut conf_2, false);
     let runtime_2 = tokio::runtime::Runtime::new().unwrap();
 
     print_ports(&conf_2);
     let flag = false;
 
-    if flag {
-        commit_tx(
+    let (s1, s2) = if flag {
+        let s1 = commit_tx(
             conf_1.admission_control.admission_control_service_port as u32,
             runtime_1.executor(),
         );
 
         sleep(Duration::from_secs(30));
 
-        commit_tx(
+        let s2 = commit_tx(
             conf_2.admission_control.admission_control_service_port as u32,
             runtime_2.executor(),
         );
+
+        (s1, s2)
     } else {
         let account_keypair_1: KeyPair<Ed25519PrivateKey, Ed25519PublicKey> = create_keypair();
         let account_keypair_2: KeyPair<Ed25519PrivateKey, Ed25519PublicKey> = create_keypair();
@@ -422,7 +426,7 @@ fn test_pow_node() {
             2,
         );
 
-        commit_tx_2(
+        let s1 = commit_tx_2(
             conf_1.admission_control.admission_control_service_port as u32,
             runtime_1.executor(),
             &faucet_2,
@@ -431,13 +435,24 @@ fn test_pow_node() {
 
         sleep(Duration::from_secs(30));
 
-        commit_tx_2(
+        let s2 = commit_tx_2(
             conf_2.admission_control.admission_control_service_port as u32,
             runtime_2.executor(),
             &faucet_1,
             (&faucet_2, account_keypair_2),
         );
-    }
+
+        (s1, s2)
+    };
+
+    check_latest_ledger(
+        conf_1.admission_control.admission_control_service_port as u32,
+        conf_2.admission_control.admission_control_service_port as u32,
+        s1,
+        s2,
+        runtime_1.executor(),
+    );
+
     runtime_1.shutdown_on_idle();
     runtime_2.shutdown_on_idle();
 }
@@ -450,7 +465,6 @@ fn create_keypair() -> KeyPair<Ed25519PrivateKey, Ed25519PublicKey> {
 }
 
 #[test]
-#[ignore]
 fn test_pow_single_node() {
     ::libra_logger::init_for_e2e_testing();
     let mut conf_1 = pow_node_random_conf("/memory/0", 0);
@@ -459,8 +473,14 @@ fn test_pow_single_node() {
     let _handle_1 = setup_environment(&mut conf_1, false);
 
     let runtime_1 = tokio::runtime::Runtime::new().unwrap();
-    commit_tx(
+    let s = commit_tx(
         conf_1.admission_control.admission_control_service_port as u32,
+        runtime_1.executor(),
+    );
+
+    check_single_latest_ledger(
+        conf_1.admission_control.admission_control_service_port as u32,
+        s,
         runtime_1.executor(),
     );
     runtime_1.shutdown_on_idle();
@@ -476,7 +496,6 @@ fn test_validator_nodes() {
 }
 
 #[test]
-#[ignore]
 fn test_rollback_block() {
     ::libra_logger::init_for_e2e_testing();
     let mut conf_1 = pow_node_random_conf("/memory/0", 0);
@@ -484,11 +503,16 @@ fn test_rollback_block() {
     let _handle_1 = setup_environment(&mut conf_1, true);
 
     let runtime_1 = tokio::runtime::Runtime::new().unwrap();
-    commit_tx(
+    let s = commit_tx(
         conf_1.admission_control.admission_control_service_port as u32,
         runtime_1.executor(),
     );
 
+    check_single_latest_ledger(
+        conf_1.admission_control.admission_control_service_port as u32,
+        s,
+        runtime_1.executor(),
+    );
     runtime_1.shutdown_on_idle();
 }
 
@@ -548,7 +572,9 @@ fn commit_tx_2(
         &SignedTransaction,
         KeyPair<Ed25519PrivateKey, Ed25519PublicKey>,
     ),
-) {
+) -> Sender<()> {
+    let (shutdown_sender, mut shutdown_receiver) = channel::<()>();
+
     let faucet_executor = executor.clone();
 
     let client = StarChainClient::new("127.0.0.1", port);
@@ -559,31 +585,102 @@ fn commit_tx_2(
     let mut count = 0;
     let key_pair = owner.1;
 
-    let task = Interval::new(Instant::now(), Duration::from_secs(10)).for_each(move |_| {
-        let account = gen_account();
-        let txn = transfer(
-            &key_pair.private_key,
-            key_pair.public_key.clone(),
-            count,
-            &account,
-        );
-        submit_txn_async(client.clone(), faucet_executor.clone(), txn);
-        count = count + 1;
+    let task = Interval::new(Instant::now(), Duration::from_secs(10))
+        .take_while(move |_| match shutdown_receiver.try_recv() {
+            Err(_) | Ok(Some(_)) => {
+                info!("Build block task exit.");
+                future::ready(false)
+            }
+            _ => future::ready(true),
+        })
+        .for_each(move |_| {
+            let account = gen_account();
+            let txn = transfer(
+                &key_pair.private_key,
+                key_pair.public_key.clone(),
+                count,
+                &account,
+            );
+            submit_txn_async(client.clone(), faucet_executor.clone(), txn);
+            count = count + 1;
 
-        future::ready(())
-    });
+            future::ready(())
+        });
 
     executor.spawn(task);
+
+    shutdown_sender
 }
 
-fn commit_tx(port: u32, executor: TaskExecutor) {
+fn commit_tx(port: u32, executor: TaskExecutor) -> Sender<()> {
+    let (shutdown_sender, mut shutdown_receiver) = channel::<()>();
+
     let account = gen_account();
     let faucet_executor = executor.clone();
-    let task = Interval::new(Instant::now(), Duration::from_secs(10)).for_each(move |_| {
-        let client = StarChainClient::new("127.0.0.1", port);
-        faucet_async(client, faucet_executor.clone(), account, 10);
-        future::ready(())
-    });
+    let task = Interval::new(Instant::now(), Duration::from_secs(10))
+        .take_while(move |_| match shutdown_receiver.try_recv() {
+            Err(_) | Ok(Some(_)) => {
+                info!("Build block task exit.");
+                future::ready(false)
+            }
+            _ => future::ready(true),
+        })
+        .for_each(move |_| {
+            let client = StarChainClient::new("127.0.0.1", port);
+            faucet_async(client, faucet_executor.clone(), account, 10);
+            future::ready(())
+        });
 
     executor.spawn(task);
+
+    shutdown_sender
+}
+
+fn check_latest_ledger(
+    port1: u32,
+    port2: u32,
+    sender_1: Sender<()>,
+    sender_2: Sender<()>,
+    executor: TaskExecutor,
+) {
+    let latest_ledger_fut = async move {
+        loop {
+            sleep(Duration::from_secs(10));
+            let client1 = StarChainClient::new("127.0.0.1", port1);
+            let client2 = StarChainClient::new("127.0.0.1", port2);
+
+            let ledger_1 = client1.get_latest_ledger(&association_address());
+            let ledger_2 = client2.get_latest_ledger(&association_address());
+
+            if ledger_1.version() > 15
+                && ledger_2.version() > 15
+                && ledger_1.version() == ledger_2.version()
+            {
+                assert_eq!(ledger_1.consensus_block_id(), ledger_2.consensus_block_id());
+                sender_1.send(()).unwrap();
+                sender_2.send(()).unwrap();
+                break;
+            }
+        }
+    };
+
+    executor.spawn(latest_ledger_fut);
+}
+
+fn check_single_latest_ledger(port: u32, sender: Sender<()>, executor: TaskExecutor) {
+    let latest_ledger_fut = async move {
+        loop {
+            sleep(Duration::from_secs(10));
+            let client = StarChainClient::new("127.0.0.1", port);
+
+            let ledger = client.get_latest_ledger(&association_address());
+
+            if ledger.version() > 15 {
+                sender.send(()).unwrap();
+                break;
+            }
+        }
+    };
+
+    executor.spawn(latest_ledger_fut);
 }
