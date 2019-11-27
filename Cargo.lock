@@ -1431,6 +1431,21 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
+name = "graphdb"
+version = "0.1.0"
+dependencies = [
+ "libra-canonical-serialization 0.1.0",
+ "libra-failure-ext 0.1.0",
+ "libra-logger 0.1.0",
+ "libra-types 0.1.0",
+ "petgraph 0.4.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rocksdb 0.3.0 (git+https://github.com/pingcap/rust-rocksdb.git?rev=3cd18c44d160a3cdba586d6502d51b7cc67efc59)",
+ "schemadb 0.1.0",
+ "serde 1.0.102 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "grpc-helpers"
 version = "0.1.0"
 dependencies = [
@@ -3905,6 +3920,10 @@ dependencies = [
  "libc 0.2.65 (registry+https://github.com/rust-lang/crates.io-index)",
  "librocksdb_sys 0.1.0 (git+https://github.com/pingcap/rust-rocksdb.git?rev=3cd18c44d160a3cdba586d6502d51b7cc67efc59)",
 ]
+
+[[package]]
+name = "router"
+version = "0.1.0"
 
 [[package]]
 name = "rust-argon2"
