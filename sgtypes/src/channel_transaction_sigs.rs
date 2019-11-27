@@ -25,6 +25,7 @@ pub struct ChannelTransactionSigs {
     pub witness_data_hash: HashValue,
     /// signature on write_set_hash
     pub witness_data_signature: Ed25519Signature,
+    pub travel_output_witness_signature: Option<Ed25519Signature>,
 }
 impl_hash!(ChannelTransactionSigs, ChannelTransactionSigsHasher);
 
@@ -35,6 +36,7 @@ impl ChannelTransactionSigs {
         channel_payload_signature: Ed25519Signature,
         witness_data_hash: HashValue,
         witness_data_signature: Ed25519Signature,
+        travel_output_witness_signature: Option<Ed25519Signature>,
     ) -> Self {
         Self {
             address,
@@ -42,6 +44,7 @@ impl ChannelTransactionSigs {
             channel_payload_signature,
             witness_data_hash,
             witness_data_signature,
+            travel_output_witness_signature,
         }
     }
 }
@@ -58,12 +61,20 @@ impl TryFrom<crate::proto::sgtypes::ChannelTransactionSigs> for ChannelTransacti
         let witness_data_hash = HashValue::from_slice(proto.witness_data_hash.as_slice())?;
         let witness_data_signature =
             Ed25519Signature::try_from(proto.witness_data_signature.as_slice())?;
+        let travel_output_witness_signature = if proto.travel_output_witness_signature.len() == 0 {
+            None
+        } else {
+            Some(Ed25519Signature::try_from(
+                proto.witness_data_signature.as_slice(),
+            )?)
+        };
         Ok(ChannelTransactionSigs {
             address,
             public_key,
             channel_payload_signature,
             witness_data_hash,
             witness_data_signature,
+            travel_output_witness_signature,
         })
     }
 }
@@ -76,6 +87,10 @@ impl From<ChannelTransactionSigs> for crate::proto::sgtypes::ChannelTransactionS
             channel_payload_signature: txn_sign.channel_payload_signature.to_bytes().to_vec(),
             witness_data_hash: txn_sign.witness_data_hash.to_vec(),
             witness_data_signature: txn_sign.witness_data_signature.to_bytes().to_vec(),
+            travel_output_witness_signature: txn_sign
+                .travel_output_witness_signature
+                .map(|s| s.to_bytes().to_vec())
+                .unwrap_or_default(),
         }
     }
 }

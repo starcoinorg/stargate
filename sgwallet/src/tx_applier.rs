@@ -126,6 +126,7 @@ impl TxApplier {
         let ChannelTransactionToApply {
             signed_channel_txn,
             write_set,
+            travel: _,
             events,
             major_status,
             ..
@@ -164,6 +165,7 @@ impl TxApplier {
             new_state_tree.root_hash(),
             HashValue::default(), // TODO: event_tree.root_hash(),
             major_status,
+            travel,
         );
 
         let new_txn_accumulator = self
@@ -188,6 +190,7 @@ impl TxApplier {
         let txn_to_commit = ChannelTransactionToCommit::new(
             signed_channel_txn,
             write_set,
+            travel,
             witness_states,
             events,
             major_status,

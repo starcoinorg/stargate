@@ -15,7 +15,7 @@ use sgtypes::channel_transaction::{ChannelOp, ChannelTransaction, ChannelTransac
 use sgtypes::channel_transaction_sigs::ChannelTransactionSigs;
 use sgtypes::channel_transaction_to_commit::ChannelTransactionToApply;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
-use std::collections::{HashMap};
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 fn generate_txn_to_apply(
@@ -54,6 +54,7 @@ fn generate_txn_to_apply(
         signature.clone(),
         HashValue::random(),
         signature.clone(),
+        None,
     );
     let ws = WriteSetMut::new(vec![(
         AccessPath::new(sender, vec![0, 0, 0]),
@@ -63,7 +64,7 @@ fn generate_txn_to_apply(
     .unwrap();
 
     let signatures = {
-        let mut s = HashMap::new();
+        let mut s = BTreeMap::new();
         s.insert(channel_txn_signatures.address, channel_txn_signatures);
         s
     };
@@ -74,6 +75,7 @@ fn generate_txn_to_apply(
         },
         write_set: Some(ws),
         events: vec![],
+        travel: false,
         major_status: StatusCode::ABORTED,
     };
 

@@ -63,6 +63,7 @@ fn request_roundtrip_canonical_serialization() {
         signature.clone(),
         HashValue::random(),
         signature.clone(),
+        None,
     );
 
     let requests = vec![ChannelTransactionRequest::new(

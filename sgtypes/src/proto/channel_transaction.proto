@@ -20,6 +20,7 @@ message ChannelTransactionSigs {
     bytes channel_payload_signature = 3;
     bytes witness_data_hash = 4;
     bytes witness_data_signature = 5;
+    bytes travel_output_witness_signature = 6;
 }
 
 message SignedChannelTransaction {

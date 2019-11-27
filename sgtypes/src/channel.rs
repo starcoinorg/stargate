@@ -3,9 +3,8 @@
 
 use atomic_refcell::AtomicRefCell;
 use failure::prelude::*;
-use libra_crypto::ed25519::Ed25519Signature;
 use libra_types::channel_account::ChannelAccountResource;
-use libra_types::{access_path::DataPath, account_address::AccountAddress, write_set::WriteSet};
+use libra_types::{access_path::DataPath, account_address::AccountAddress};
 use std::collections::{BTreeMap, HashSet};
 
 //TODO (jole) need maintain network state?
@@ -86,21 +85,6 @@ impl ChannelState {
 
     pub fn state(&self) -> BTreeMap<Vec<u8>, Vec<u8>> {
         self.state.borrow().clone()
-    }
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct WitnessData {
-    pub write_set: WriteSet,
-    pub signature: Option<Ed25519Signature>,
-}
-
-impl WitnessData {
-    pub fn new(write_set: WriteSet, signature: Ed25519Signature) -> Self {
-        Self {
-            write_set,
-            signature: Some(signature),
-        }
     }
 }
 

@@ -13,6 +13,7 @@ use libra_crypto::hash::CryptoHash;
 use libra_crypto::HashValue;
 use libra_types::account_address::AccountAddress;
 use libra_types::account_state_blob::AccountStateBlob;
+use libra_types::channel::witness::Witness;
 use libra_types::proof::SparseMerkleProof;
 use libra_types::transaction::Version;
 use libra_types::write_set::WriteSet;
@@ -36,7 +37,7 @@ pub struct ChannelStore<S> {
     transaction_store: ChannelTransactionStore<S>,
     write_set_store: ChannelWriteSetStore<S>,
     pending_txn_store: PendingTxnStore<S>,
-    latest_write_set: Arc<RwLock<Option<WriteSet>>>,
+    latest_witness: Arc<RwLock<Option<Witness>>>,
     pending_txn: Arc<RwLock<Option<PendingTransaction>>>,
 }
 
@@ -50,18 +51,13 @@ where
 }
 
 impl<S> ChannelStore<S> {
-    fn set_write_set(&self, write_set: Option<WriteSet>) {
-        let mut write_guard = self
-            .latest_write_set
-            .write()
-            .expect("should get write lock");
-
+    fn set_witness(&self, write_set: Option<Witness>) {
+        let mut write_guard = self.latest_witness.write().expect("should get write lock");
         *write_guard = write_set;
     }
 
     fn set_pending_txn(&self, pending_txn: Option<PendingTransaction>) {
         let mut write_guard = self.pending_txn.write().expect("should get write lock");
-
         *write_guard = pending_txn;
     }
 }
@@ -78,28 +74,41 @@ where
             transaction_store: ChannelTransactionStore::new(db.clone()),
             write_set_store: ChannelWriteSetStore::new(db.clone()),
             pending_txn_store: PendingTxnStore::new(db.clone()),
-            latest_write_set: Arc::new(RwLock::new(None)),
+            latest_witness: Arc::new(RwLock::new(None)),
             pending_txn: Arc::new(RwLock::new(None)),
         };
 
         // TODO refactor this
         store.ledger_store.bootstrap();
-        let write_set_option = match store.ledger_store.get_latest_ledger_info_option() {
+        let witness_option = match store.ledger_store.get_latest_ledger_info_option() {
             None => None,
             Some(ledger_info) => {
                 let version = ledger_info.version();
                 let ws = store
                     .write_set_store
                     .get_write_set_by_version(version)
-                    .expect("read lastest writeset from db shold work");
-                Some(ws)
+                    .expect("read lastest writeset from db should work");
+                let txn = store
+                    .transaction_store
+                    .get_transaction(version)
+                    .expect("read transaction data should work");
+
+                let witness = Witness::new(
+                    txn.raw_tx.channel_sequence_number(),
+                    ws,
+                    txn.signatures
+                        .values()
+                        .map(|s| s.witness_data_signature.clone())
+                        .collect(),
+                );
+                Some(witness)
             }
         };
         let pending_txn_opt = store
             .pending_txn_store
             .get_pending_txn()
             .expect("read lastest pending txn from db shold work");
-        store.set_write_set(write_set_option);
+        store.set_witness(witness_option);
         store.set_pending_txn(pending_txn_opt);
         store
     }
@@ -148,7 +157,17 @@ where
                 claimed_last_version,
             );
         }
-        let write_set = txn_to_commit.write_set().clone();
+
+        let witness = Witness::new(
+            txn_to_commit.transaction().raw_tx.channel_sequence_number(),
+            txn_to_commit.write_set().clone(),
+            txn_to_commit
+                .transaction()
+                .signatures
+                .values()
+                .map(|s| s.witness_data_signature.clone())
+                .collect(),
+        );
 
         // get write batch
         let mut schema_batch = SchemaBatch::default();
@@ -175,8 +194,9 @@ where
         if let Some(x) = ledger_info {
             self.ledger_store.set_latest_ledger_info(x.clone());
         }
+
         // and cache the write set
-        self.set_write_set(Some(write_set));
+        self.set_witness(Some(witness));
         if clear_pending_txn {
             self.set_pending_txn(None);
         }
@@ -209,13 +229,22 @@ where
         Ok(())
     }
 
+    /// clean pending txn as it never exists.
+    pub fn clear_pending_txn(&self) -> Result<()> {
+        let mut sb = SchemaBatch::new();
+        self.pending_txn_store.clear(&mut sb)?;
+        self.commit(sb)?;
+        self.set_pending_txn(None);
+        Ok(())
+    }
+
     fn save_tx_impl(
         &self,
         tx: ChannelTransactionToCommit,
         version: Version,
         mut schema_batch: &mut SchemaBatch,
     ) -> Result<HashValue> {
-        let (signed_txn, write_set, witness_states, _events, major_status) = tx.into();
+        let (signed_txn, write_set, travel, witness_states, _events, major_status) = tx.into();
         let state_root_hash =
             self.state_store
                 .put_channel_state_set(witness_states, version, &mut schema_batch)?;
@@ -238,6 +267,7 @@ where
             state_root_hash,
             HashValue::default(),
             major_status,
+            travel,
         );
         // TODO: save to ledger store
         let new_ledger_root_hash =
@@ -295,8 +325,8 @@ where
             .clone()
     }
 
-    pub fn get_latest_write_set(&self) -> Option<WriteSet> {
-        self.latest_write_set
+    pub fn get_latest_witness(&self) -> Option<Witness> {
+        self.latest_witness
             .read()
             .expect("should get read lock")
             .deref()

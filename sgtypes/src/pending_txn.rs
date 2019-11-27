@@ -4,7 +4,7 @@ use libra_crypto::HashValue;
 use libra_types::account_address::AccountAddress;
 use libra_types::transaction::TransactionOutput;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Every Transaction Proposal should wait for others' signature,
 /// TODO: should handle `agree or disagree`
@@ -14,14 +14,14 @@ pub enum PendingTransaction {
         proposal: ChannelTransactionProposal,
         output: TransactionOutput,
         // TODO: or call it vote?
-        signatures: HashMap<AccountAddress, ChannelTransactionSigs>,
+        signatures: BTreeMap<AccountAddress, ChannelTransactionSigs>,
     },
 
     WaitForApply {
         proposal: ChannelTransactionProposal,
         output: TransactionOutput,
         // TODO: or call it vote?
-        signatures: HashMap<AccountAddress, ChannelTransactionSigs>,
+        signatures: BTreeMap<AccountAddress, ChannelTransactionSigs>,
     },
 }
 
@@ -89,7 +89,7 @@ impl
     Into<(
         ChannelTransactionProposal,
         TransactionOutput,
-        HashMap<AccountAddress, ChannelTransactionSigs>,
+        BTreeMap<AccountAddress, ChannelTransactionSigs>,
     )> for PendingTransaction
 {
     fn into(
@@ -97,7 +97,7 @@ impl
     ) -> (
         ChannelTransactionProposal,
         TransactionOutput,
-        HashMap<AccountAddress, ChannelTransactionSigs>,
+        BTreeMap<AccountAddress, ChannelTransactionSigs>,
     ) {
         match self {
             PendingTransaction::WaitForSig {

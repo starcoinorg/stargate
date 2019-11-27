@@ -11,19 +11,20 @@ use libra_crypto::HashValue;
 use libra_crypto_derive::CryptoHasher;
 use libra_types::account_address::AccountAddress;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, CryptoHasher)]
 pub struct SignedChannelTransaction {
     pub raw_tx: ChannelTransaction,
-    pub signatures: HashMap<AccountAddress, ChannelTransactionSigs>,
+    // use BTree to preserve order.
+    pub signatures: BTreeMap<AccountAddress, ChannelTransactionSigs>,
 }
 
 impl SignedChannelTransaction {
     pub fn new(
         raw_tx: ChannelTransaction,
-        signatures: HashMap<AccountAddress, ChannelTransactionSigs>,
+        signatures: BTreeMap<AccountAddress, ChannelTransactionSigs>,
     ) -> Self {
         Self { raw_tx, signatures }
     }
@@ -51,7 +52,7 @@ impl TryFrom<crate::proto::sgtypes::SignedChannelTransaction> for SignedChannelT
         let signatures = signers
             .into_iter()
             .zip(signatures.into_iter())
-            .collect::<HashMap<_, _>>();
+            .collect::<BTreeMap<_, _>>();
         Ok(SignedChannelTransaction { raw_tx, signatures })
     }
 }

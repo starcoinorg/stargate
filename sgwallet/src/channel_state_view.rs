@@ -3,7 +3,7 @@
 
 use failure::prelude::*;
 use libra_state_view::StateView;
-use libra_types::write_set::{WriteSet};
+use libra_types::write_set::WriteSet;
 use libra_types::{access_path::AccessPath, transaction::Version};
 use sgchain::client_state_view::ClientStateView;
 use sgchain::star_chain_client::ChainClient;
@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 
 pub struct ChannelStateView<'txn> {
     participant_states: &'txn BTreeMap<AccountAddress, ChannelState>,
-    latest_write_set: &'txn WriteSet,
+    latest_write_set: WriteSet,
     client_state_view: ClientStateView<'txn>,
 }
 
@@ -22,7 +22,7 @@ impl<'txn> ChannelStateView<'txn> {
     pub fn new(
         account_address: AccountAddress,
         participant_states: &'txn BTreeMap<AccountAddress, ChannelState>,
-        latest_write_set: &'txn WriteSet,
+        latest_write_set: WriteSet,
         version: Option<Version>,
         client: &'txn dyn ChainClient,
     ) -> Result<Self> {
@@ -44,7 +44,7 @@ impl<'txn> ChannelStateView<'txn> {
     }
 
     pub fn get_local(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
-        super::channel::access_local(self.latest_write_set, self.participant_states, access_path)
+        super::channel::access_local(&self.latest_write_set, self.participant_states, access_path)
     }
 }
 
