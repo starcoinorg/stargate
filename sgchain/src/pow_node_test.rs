@@ -10,20 +10,18 @@ use futures::channel::oneshot::{channel, Sender};
 use futures::future;
 use futures::StreamExt;
 use grpc_helpers::ServerHandle;
-use libra_config::{
-    config::{NetworkConfig, NodeConfig, NodeConfigHelpers, RoleType}
-};
+use libra_config::config::{NetworkConfig, NodeConfig, NodeConfigHelpers, RoleType};
 use libra_config::{
     seed_peers::SeedPeersConfig,
     trusted_peers::{ConfigHelpers, ConsensusPeerInfo, NetworkPeerInfo},
 };
+use libra_crypto::test_utils::TEST_SEED;
 use libra_crypto::traits::Uniform;
+use libra_crypto::ValidKey;
 use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
 };
-use libra_crypto::test_utils::TEST_SEED;
-use libra_crypto::ValidKey;
 use libra_logger::prelude::*;
 use libra_mempool::MempoolRuntime;
 use libra_node::main_node::{setup_debug_interface, setup_executor, LibraHandle};
@@ -48,6 +46,7 @@ use parity_multiaddr::Multiaddr;
 use rand::prelude::*;
 use rand::{rngs::StdRng, SeedableRng};
 use state_synchronizer::StateSynchronizer;
+use std::collections::HashMap;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{
@@ -56,7 +55,6 @@ use std::{
     sync::Arc,
     time::Instant,
 };
-use std::collections::HashMap;
 use storage_service::start_storage_service;
 use tokio::runtime::TaskExecutor;
 use tokio::runtime::{Builder, Runtime};
