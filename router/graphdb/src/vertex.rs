@@ -1,13 +1,14 @@
 use libra_types::account_address::AccountAddress;
+use serde::{Deserialize, Serialize};
 
-#[derive(Eq, PartialEq, Clone, Debug, Hash, Ord, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct Type(pub String);
 
 /// A vertex.
 ///
 /// Vertices are how you would represent nouns in the datastore. An example
 /// might be a user, or a movie. All vertices have a unique ID and a type.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct Vertex {
     /// The id of the vertex.
     pub id: AccountAddress,
