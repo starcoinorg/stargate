@@ -447,8 +447,22 @@ impl Inner {
                     )?;
                 (payload_body, payload_body_signature, output)
             }
-            Some(PendingTransaction::WaitForApply { .. }) => bail!("proposal already fullfilled"),
+            Some(PendingTransaction::WaitForApply { signatures, .. }) => {
+                match signatures.get(&self.account_address) {
+                    Some(s) => return Ok(Some(s.clone())),
+                    None => {
+                        panic!("should already give out user signature");
+                    }
+                }
+            }
         };
+
+        // If already sign the proposal, return directly.
+        if verified_signatures.contains_key(&self.account_address) {
+            return Ok(Some(
+                verified_signatures.remove(&self.account_address).unwrap(),
+            ));
+        }
 
         self.verify_txn_sigs(&payload_body, &output, &sigs)?;
         verified_signatures.insert(sigs.address, sigs);
@@ -475,15 +489,16 @@ impl Inner {
         grant: bool,
     ) -> Result<Option<ChannelTransactionSigs>> {
         match self.pending_txn() {
-            None => Ok(None),
-            Some(PendingTransaction::WaitForApply { .. }) => Ok(None),
+            None | Some(PendingTransaction::WaitForApply { .. }) => {
+                bail!("no pending txn to grant")
+            }
             Some(PendingTransaction::WaitForSig {
                 proposal,
                 output,
                 signatures,
             }) => {
                 if channel_txn_id != CryptoHash::hash(&proposal.channel_txn) {
-                    let err = format_err!("channel_txn_id confilict with local pending state");
+                    let err = format_err!("channel_txn_id conflict with local pending txn");
                     return Err(err);
                 }
                 if grant {

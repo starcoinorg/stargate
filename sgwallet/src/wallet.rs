@@ -14,6 +14,7 @@ use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature},
     hash::CryptoHash,
     test_utils::KeyPair,
+    HashValue,
 };
 use libra_logger::prelude::*;
 use libra_state_view::StateView;
@@ -336,11 +337,13 @@ impl Wallet {
         resp
     }
 
+    /// Receiver verify txn.
+    /// If return None, it means the txn needs to be approved by user.
     pub async fn verify_txn(
         &self,
         participant: AccountAddress,
         txn_request: &ChannelTransactionRequest,
-    ) -> Result<ChannelTransactionResponse> {
+    ) -> Result<Option<ChannelTransactionResponse>> {
         let (tx, rx) = oneshot::channel();
         let cmd = WalletCmd::VerifyTxnRequest {
             participant,
@@ -349,6 +352,46 @@ impl Wallet {
         };
         let resp = self.call(cmd, rx).await?;
         resp
+    }
+
+    pub async fn approve_txn(
+        &self,
+        participant: AccountAddress,
+        request_id: HashValue,
+    ) -> Result<ChannelTransactionResponse> {
+        let (tx, rx) = oneshot::channel();
+        let cmd = WalletCmd::GrantTxnRequest {
+            participant,
+            request_id,
+            grant: true,
+            responder: tx,
+        };
+        let resp = self.call(cmd, rx).await??;
+        debug_assert!(
+            resp.is_some(),
+            "invalid state of channel, should return signatures"
+        );
+        Ok(resp.unwrap())
+    }
+
+    pub async fn reject_txn(
+        &self,
+        participant: AccountAddress,
+        request_id: HashValue,
+    ) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        let cmd = WalletCmd::GrantTxnRequest {
+            participant,
+            request_id,
+            grant: false,
+            responder: tx,
+        };
+        let resp = self.call(cmd, rx).await??;
+        debug_assert!(
+            resp.is_none(),
+            "invalid state of channel, should not return signatures"
+        );
+        Ok(())
     }
 
     pub async fn verify_txn_response(
@@ -462,7 +505,13 @@ pub enum WalletCmd {
     VerifyTxnRequest {
         participant: AccountAddress,
         txn_request: ChannelTransactionRequest,
-        responder: oneshot::Sender<Result<ChannelTransactionResponse>>,
+        responder: oneshot::Sender<Result<Option<ChannelTransactionResponse>>>,
+    },
+    GrantTxnRequest {
+        participant: AccountAddress,
+        request_id: HashValue,
+        grant: bool,
+        responder: oneshot::Sender<Result<Option<ChannelTransactionResponse>>>,
     },
     VerifyTxnResponse {
         participant: AccountAddress,
@@ -548,6 +597,17 @@ impl Inner {
                 responder,
             } => {
                 respond_with(responder, self.verify_txn(participant, txn_request).await);
+            }
+            WalletCmd::GrantTxnRequest {
+                participant,
+                grant,
+                request_id,
+                responder,
+            } => {
+                respond_with(
+                    responder,
+                    self.grant_txn_request(participant, request_id, grant).await,
+                );
             }
             WalletCmd::VerifyTxnResponse {
                 participant,
@@ -714,7 +774,7 @@ impl Inner {
         &mut self,
         participant: AccountAddress,
         txn_request: ChannelTransactionRequest,
-    ) -> Result<ChannelTransactionResponse> {
+    ) -> Result<Option<ChannelTransactionResponse>> {
         let request_id = txn_request.request_id();
 
         let channel_txn = txn_request.channel_txn();
@@ -748,9 +808,39 @@ impl Inner {
         };
         channel.send(msg)?;
         let sig_opt = rx.await??;
-        // FIXME: if sig_opt is none, return to node.
-        let resp = ChannelTransactionResponse::new(proposal, sig_opt.unwrap());
-        Ok(resp)
+        Ok(sig_opt.map(|s| ChannelTransactionResponse::new(proposal, s)))
+    }
+
+    async fn grant_txn_request(
+        &mut self,
+        participant: AccountAddress,
+        request_id: HashValue,
+        grant: bool,
+    ) -> Result<Option<ChannelTransactionResponse>> {
+        let (generated_channel_address, _participants) =
+            generate_channel_address(participant, self.inner.account);
+
+        let channel = self.get_channel_mut(&generated_channel_address)?;
+
+        let (tx, rx) = oneshot::channel();
+        let _msg = ChannelMsg::GetPendingChannelTransactionRequest { responder: tx };
+
+        let resp = rx.await??;
+        let txn_request = match resp {
+            Some(r) => r,
+            None => bail!("no pending txn to grant"),
+        };
+
+        let (proposal, _sigs) = txn_request.into();
+        let (tx, rx) = oneshot::channel();
+        let msg = ChannelMsg::GrantProposal {
+            channel_txn_id: request_id,
+            grant,
+            responder: tx,
+        };
+        channel.send(msg)?;
+        let resp = rx.await??;
+        Ok(resp.map(|s| ChannelTransactionResponse::new(proposal, s)))
     }
 
     async fn verify_txn_response(

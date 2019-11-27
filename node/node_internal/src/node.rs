@@ -637,7 +637,10 @@ impl NodeInner {
             let receiver_open_txn: ChannelTransactionResponse;
             match wallet.verify_txn(peer_id, &open_channel_message).await {
                 Ok(tx) => {
-                    receiver_open_txn = tx;
+                    match tx {
+                        Some(t) => receiver_open_txn = t,
+                        None => return, // it means user approval is needed.
+                    }
                 }
                 Err(e) => {
                     sender

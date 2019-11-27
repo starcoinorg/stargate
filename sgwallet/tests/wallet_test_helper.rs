@@ -67,6 +67,14 @@ pub fn open_channel(
         debug_assert!(open_txn.is_travel_txn(), "open_txn must travel txn");
 
         let receiver_open_txn = receiver_wallet.verify_txn(sender, &open_txn).await?;
+        let receiver_open_txn = match receiver_open_txn {
+            Some(t) => t,
+            None => {
+                receiver_wallet
+                    .approve_txn(sender, open_txn.request_id())
+                    .await?
+            }
+        };
 
         sender_wallet
             .verify_txn_response(receiver, &receiver_open_txn)
@@ -100,6 +108,15 @@ pub fn execute_script(
             .execute_script(receiver, package_name, script_name, args)
             .await?;
         let txn_response = receiver_wallet.verify_txn(sender, &txn_request).await?;
+        let txn_response = match txn_response {
+            Some(t) => t,
+            None => {
+                receiver_wallet
+                    .approve_txn(sender, txn_request.request_id())
+                    .await?
+            }
+        };
+
         sender_wallet
             .verify_txn_response(receiver, &txn_response)
             .await?;
@@ -150,7 +167,15 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
             .unwrap();
         debug_assert!(open_txn.is_travel_txn(), "open_txn must travel txn");
 
-        let receiver_open_txn = receiver_wallet.verify_txn(sender, &open_txn).await.unwrap();
+        let receiver_open_txn = receiver_wallet.verify_txn(sender, &open_txn).await?;
+        let receiver_open_txn = match receiver_open_txn {
+            Some(t) => t,
+            None => {
+                receiver_wallet
+                    .approve_txn(sender, open_txn.request_id())
+                    .await?
+            }
+        };
         sender_wallet
             .verify_txn_response(receiver, &receiver_open_txn)
             .await?;
@@ -182,11 +207,16 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
             .unwrap();
         debug_assert!(deposit_txn.is_travel_txn(), "open_txn must travel txn");
 
-        let receiver_deposit_txn = receiver_wallet
-            .verify_txn(sender, &deposit_txn)
-            .await
-            .unwrap();
+        let receiver_deposit_txn = receiver_wallet.verify_txn(sender, &deposit_txn).await?;
 
+        let receiver_deposit_txn = match receiver_deposit_txn {
+            Some(t) => t,
+            None => {
+                receiver_wallet
+                    .approve_txn(sender, deposit_txn.request_id())
+                    .await?
+            }
+        };
         sender_wallet
             .verify_txn_response(receiver, &receiver_deposit_txn)
             .await?;
@@ -223,10 +253,15 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
         );
         //debug!("txn:{:#?}", transfer_txn);
 
-        let receiver_transfer_txn = receiver_wallet
-            .verify_txn(sender, &transfer_txn)
-            .await
-            .unwrap();
+        let receiver_transfer_txn = match receiver_wallet.verify_txn(sender, &transfer_txn).await? {
+            Some(t) => t,
+            None => {
+                receiver_wallet
+                    .approve_txn(sender, transfer_txn.request_id())
+                    .await?
+            }
+        };
+
         // now,receiver apply the txn
         receiver_wallet
             .apply_txn(sender, &receiver_transfer_txn)
@@ -240,7 +275,14 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
             "sender should have pending txn"
         );
         // then retry the txn
-        let retried_txn = receiver_wallet.verify_txn(sender, &transfer_txn).await?;
+        let retried_txn = match receiver_wallet.verify_txn(sender, &transfer_txn).await? {
+            Some(t) => t,
+            None => {
+                receiver_wallet
+                    .approve_txn(sender, transfer_txn.request_id())
+                    .await?
+            }
+        };
         assert_eq!(receiver_transfer_txn, retried_txn, "two txn shold be equal");
 
         sender_wallet
@@ -276,10 +318,14 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
         debug_assert!(withdraw_txn.is_travel_txn(), "withdraw_txn must travel txn");
         //debug!("txn:{:#?}", withdraw_txn);
 
-        let receiver_withdraw_txn = receiver_wallet
-            .verify_txn(sender, &withdraw_txn)
-            .await
-            .unwrap();
+        let receiver_withdraw_txn = match receiver_wallet.verify_txn(sender, &withdraw_txn).await? {
+            Some(t) => t,
+            None => {
+                receiver_wallet
+                    .approve_txn(sender, withdraw_txn.request_id())
+                    .await?
+            }
+        };
 
         sender_wallet
             .verify_txn_response(receiver, &receiver_withdraw_txn)
