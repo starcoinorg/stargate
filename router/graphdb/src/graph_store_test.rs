@@ -1,7 +1,5 @@
-use failure::prelude::*;
-
 #[test]
-fn graph_test() -> Result<()> {
+fn graph_test() {
     use crate::edge::Edge;
     use crate::graph_store::GraphStore;
     use crate::vertex::{Type, Vertex};
@@ -17,19 +15,17 @@ fn graph_test() -> Result<()> {
     let edge2 = Edge::new(vertex2.clone(), Type("a".to_string()), vertex3.clone());
 
     let graph_store = GraphStore::new(false, None).unwrap();
-    graph_store.put_edge(&edge1, 1, false)?;
-    graph_store.put_edge(&edge2, 1, false)?;
+    graph_store.put_edge(&edge1, 1, false).unwrap();
+    graph_store.put_edge(&edge2, 1, false).unwrap();
 
     graph_store.print_nodes(&vertex1);
     let result = graph_store.find_path(&vertex1, &vertex3);
 
     assert_eq!(result.unwrap().expect("should have").len(), 3);
-
-    Ok(())
 }
 
 #[test]
-fn graph_storage_test() -> Result<()> {
+fn graph_storage_test() {
     use crate::edge::Edge;
     use crate::graph_store::GraphStore;
     use crate::vertex::{Type, Vertex};
@@ -55,8 +51,8 @@ fn graph_storage_test() -> Result<()> {
     info!("tmp dir is {}", dir_str);
     let dir = Path::new(&dir_str);
     let graph_store = GraphStore::new(true, Some(dir.clone())).unwrap();
-    graph_store.put_edge(&edge1, 1, false)?;
-    graph_store.put_edge(&edge2, 1, false)?;
+    graph_store.put_edge(&edge1, 1, false).unwrap();
+    graph_store.put_edge(&edge2, 1, false).unwrap();
 
     graph_store.print_nodes(&vertex1);
 
@@ -73,6 +69,4 @@ fn graph_storage_test() -> Result<()> {
     let result = graph_store.find_path(&vertex1, &vertex3);
 
     assert_eq!(result.unwrap().expect("should have").len(), 3);
-
-    Ok(())
 }
