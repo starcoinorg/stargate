@@ -1,0 +1,22 @@
+[package]
+name = "graphdb"
+version = "0.1.0"
+authors = ["Starcoin Core Dev <dev@starcoin.org>"]
+license = "Apache-2.0"
+publish = false
+edition = "2018"
+
+[dependencies]
+petgraph = "0.4.13"
+serde = { version = "1.0.89", features = ["derive"] }
+rand = "0.6.5"
+
+libra-types = { path = "../../libra/types" }
+failure = { path = "../../libra/common/failure-ext", package = "libra-failure-ext"  }
+schemadb = { path = "../../libra/storage/schemadb" }
+libra-logger = { path = "../../libra/common/logger" }
+lcs = { path = "../../libra/common/lcs", package = "libra-canonical-serialization" }
+
+[dependencies.rocksdb]
+git = "https://github.com/pingcap/rust-rocksdb.git"
+rev = "3cd18c44d160a3cdba586d6502d51b7cc67efc59"
