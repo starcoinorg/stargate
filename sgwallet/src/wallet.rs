@@ -39,8 +39,11 @@ use sgchain::star_chain_client::{ChainClient, StarChainClient};
 use sgconfig::config::WalletConfig;
 use sgstorage::channel_db::ChannelDB;
 use sgstorage::channel_store::ChannelStore;
+
 use sgstorage::storage::SgStorage;
 use sgtypes::channel::ChannelState;
+use sgtypes::channel_transaction::ChannelTransactionProposal;
+use sgtypes::pending_txn::PendingTransaction;
 use sgtypes::sg_error::SgError;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use sgtypes::{
@@ -425,18 +428,72 @@ impl Wallet {
         resp
     }
 
+    /// Called by receiver to get proposal waiting user approval.
+    pub async fn get_waiting_proposal(
+        &self,
+        participant: AccountAddress,
+    ) -> Result<Option<ChannelTransactionProposal>> {
+        let pending_txn = self.get_pending_txn(participant).await?;
+        let proposal = pending_txn.and_then(|pending| match pending {
+            PendingTransaction::WaitForSig {
+                proposal,
+                mut signatures,
+                ..
+            } => {
+                if proposal.channel_txn.proposer() == self.shared.account {
+                    None
+                } else {
+                    let _user_sigs = signatures.remove(&self.shared.account);
+                    if signatures.contains_key(&self.shared.account) {
+                        None
+                    } else {
+                        Some(proposal)
+                    }
+                }
+            }
+            PendingTransaction::WaitForApply { .. } => None,
+        });
+        Ok(proposal)
+    }
+
+    /// Get pending txn request.
     pub async fn get_pending_txn_request(
         &self,
         participant: AccountAddress,
     ) -> Result<Option<ChannelTransactionRequest>> {
+        let pending_txn = self.get_pending_txn(participant).await?;
+        let request = pending_txn.and_then(|pending| match pending {
+            PendingTransaction::WaitForSig {
+                proposal,
+                mut signatures,
+                ..
+            } => {
+                let proposer_sigs = signatures.remove(&proposal.channel_txn.proposer());
+                debug_assert!(proposer_sigs.is_some());
+
+                Some(ChannelTransactionRequest::new(
+                    proposal.clone(),
+                    proposer_sigs.unwrap(),
+                ))
+            }
+            _ => None,
+        });
+
+        Ok(request)
+    }
+
+    async fn get_pending_txn(
+        &self,
+        participant: AccountAddress,
+    ) -> Result<Option<PendingTransaction>> {
         let (tx, rx) = oneshot::channel();
-        let cmd = WalletCmd::GetPendingTxnRequest {
+        let cmd = WalletCmd::GetPendingTxn {
             participant,
             responder: tx,
         };
 
-        let resp = self.call(cmd, rx).await?;
-        resp
+        let pending_txn = self.call(cmd, rx).await??;
+        Ok(pending_txn)
     }
 
     pub async fn install_package(&self, package: ChannelScriptPackage) -> Result<()> {
@@ -544,9 +601,9 @@ pub enum WalletCmd {
         struct_tag: StructTag,
         responder: oneshot::Sender<Result<Option<Vec<u8>>>>,
     },
-    GetPendingTxnRequest {
+    GetPendingTxn {
         participant: AccountAddress,
-        responder: oneshot::Sender<Result<Option<ChannelTransactionRequest>>>,
+        responder: oneshot::Sender<Result<Option<PendingTransaction>>>,
     },
 }
 
@@ -636,14 +693,11 @@ impl Inner {
                     self.get_channel_resource(participant, struct_tag).await,
                 );
             }
-            WalletCmd::GetPendingTxnRequest {
+            WalletCmd::GetPendingTxn {
                 participant,
                 responder,
             } => {
-                respond_with(
-                    responder,
-                    self.get_pending_channel_txn_request(participant).await,
-                );
+                respond_with(responder, self.get_channel_pending_txn(participant).await);
             }
             WalletCmd::InstallPackage { package, responder } => {
                 let result = self.install_package(package);
@@ -817,21 +871,20 @@ impl Inner {
         request_id: HashValue,
         grant: bool,
     ) -> Result<Option<ChannelTransactionResponse>> {
+        let pending_txn = self.get_channel_pending_txn(participant).await?;
+        let proposal: ChannelTransactionProposal = match pending_txn {
+            Some(r) => {
+                let (p, _, _) = r.into();
+                p
+            }
+            None => bail!("no pending txn to grant"),
+        };
+
         let (generated_channel_address, _participants) =
             generate_channel_address(participant, self.inner.account);
 
         let channel = self.get_channel_mut(&generated_channel_address)?;
 
-        let (tx, rx) = oneshot::channel();
-        let _msg = ChannelMsg::GetPendingChannelTransactionRequest { responder: tx };
-
-        let resp = rx.await??;
-        let txn_request = match resp {
-            Some(r) => r,
-            None => bail!("no pending txn to grant"),
-        };
-
-        let (proposal, _sigs) = txn_request.into();
         let (tx, rx) = oneshot::channel();
         let msg = ChannelMsg::GrantProposal {
             channel_txn_id: request_id,
@@ -883,19 +936,17 @@ impl Inner {
         Ok(gas)
     }
 
-    async fn get_pending_channel_txn_request(
+    async fn get_channel_pending_txn(
         &mut self,
         participant: AccountAddress,
-    ) -> Result<Option<ChannelTransactionRequest>> {
+    ) -> Result<Option<PendingTransaction>> {
         let (generated_channel_address, _participants) =
             generate_channel_address(participant, self.inner.account);
-
         let channel = self.get_channel_mut(&generated_channel_address)?;
-
         let (tx, rx) = oneshot::channel();
-        let msg = ChannelMsg::GetPendingChannelTransactionRequest { responder: tx };
+        let msg = ChannelMsg::GetPendingTxn { responder: tx };
         channel.send(msg)?;
-        rx.await?
+        Ok(rx.await?)
     }
 
     /// get channel account resource data from channel task

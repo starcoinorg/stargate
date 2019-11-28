@@ -35,7 +35,7 @@ use sgchain::star_chain_client::ChainClient;
 use sgstorage::channel_db::ChannelDB;
 use sgstorage::channel_store::ChannelStore;
 use sgtypes::channel_transaction::{
-    ChannelOp, ChannelTransaction, ChannelTransactionProposal, ChannelTransactionRequest,
+    ChannelOp, ChannelTransaction, ChannelTransactionProposal,
 };
 use sgtypes::channel_transaction_sigs::ChannelTransactionSigs;
 use sgtypes::channel_transaction_to_commit::ChannelTransactionToApply;
@@ -70,8 +70,8 @@ pub enum ChannelMsg {
     ApplyPendingTxn {
         responder: oneshot::Sender<Result<u64>>,
     },
-    GetPendingChannelTransactionRequest {
-        responder: oneshot::Sender<Result<Option<ChannelTransactionRequest>>>,
+    GetPendingTxn {
+        responder: oneshot::Sender<Option<PendingTransaction>>,
     },
     AccessPath {
         path: AccessPath,
@@ -298,9 +298,8 @@ impl Inner {
                 let response = self.get_local(&path);
                 respond_with(responder, response);
             }
-            ChannelMsg::GetPendingChannelTransactionRequest { responder } => {
-                let response = self.get_pending_channel_txn_request();
-                respond_with(responder, Ok(response));
+            ChannelMsg::GetPendingTxn { responder } => {
+                respond_with(responder, self.pending_txn());
             }
         };
     }
@@ -667,28 +666,6 @@ impl Inner {
 
     fn pending_txn(&self) -> Option<PendingTransaction> {
         self.store.get_pending_txn()
-    }
-
-    fn get_pending_channel_txn_request(&self) -> Option<ChannelTransactionRequest> {
-        self.pending_txn()
-            .as_ref()
-            .and_then(|pending| match pending {
-                PendingTransaction::WaitForSig {
-                    proposal,
-                    output: _,
-                    signatures,
-                    ..
-                } => {
-                    let user_sig = signatures.get(&self.account_address).cloned();
-                    debug_assert!(user_sig.is_some());
-
-                    Some(ChannelTransactionRequest::new(
-                        proposal.clone(),
-                        user_sig.unwrap(),
-                    ))
-                }
-                _ => None,
-            })
     }
 
     fn stage(&self) -> ChannelStage {
