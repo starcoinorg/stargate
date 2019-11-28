@@ -9,7 +9,8 @@ use std::{sync::Arc, time::Duration};
 use tokio::runtime::TaskExecutor;
 
 use failure::prelude::*;
-use libra_crypto::HashValue;
+use libra_crypto::{hash::CryptoHash, HashValue};
+
 use libra_logger::prelude::*;
 use libra_types::{account_address::AccountAddress, account_config::AccountResource};
 use network::{NetworkMessage, NetworkService};
@@ -53,6 +54,7 @@ struct NodeInner {
     executor: TaskExecutor,
     sender: UnboundedSender<NetworkMessage>,
     message_processor: MessageProcessor<u64>,
+    network_processor: MessageProcessor<NodeNetworkMessage>,
     default_future_timeout: u64,
     network_service: NetworkService,
 }
@@ -76,6 +78,7 @@ impl Node {
             wallet: wallet_arc,
             sender,
             message_processor: MessageProcessor::new(),
+            network_processor: MessageProcessor::new(),
             default_future_timeout: 20000,
             network_service: network_service.clone(),
         };
@@ -494,6 +497,8 @@ impl Node {
                                 MessageType::ChannelTransactionRequest => node_inner.handle_receiver_channel(data[2..].to_vec()),
                                 MessageType::ChannelTransactionResponse => node_inner.handle_sender_channel(data[2..].to_vec(),peer_id),
                                 MessageType::ErrorMessage => node_inner.handle_error_message(data[2..].to_vec()),
+                                MessageType::BalanceQueryResponse => node_inner.handle_balance_query_response(data[2..].to_vec()),
+                                MessageType::BalanceQueryRequest => node_inner.handle_balance_query_request(data[2..].to_vec(),peer_id),
                                 _=>warn!("message type not found {:?}",msg_type),
                             };
                         },
@@ -708,6 +713,47 @@ impl NodeInner {
         match ErrorMessage::from_proto_bytes(&data) {
             Ok(msg) => {
                 self.message_processor.future_error(msg).unwrap();
+            }
+            Err(_e) => {
+                warn!("get wrong message");
+                return;
+            }
+        }
+    }
+
+    fn handle_balance_query_request(&self, data: Vec<u8>, sender_addr: AccountAddress) {
+        debug!("off balance query request message");
+        match BalanceQueryRequest::from_proto_bytes(&data) {
+            Ok(msg) => {
+                let response = BalanceQueryResponse::new(msg.local_addr, msg.remote_addr, 0, 0);
+                let msg = add_message_type(
+                    response.into_proto_bytes().unwrap(),
+                    MessageType::BalanceQueryResponse,
+                );
+                self.sender
+                    .unbounded_send(NetworkMessage {
+                        peer_id: sender_addr.clone(),
+                        data: msg.to_vec(),
+                    })
+                    .unwrap();
+            }
+            Err(_e) => {
+                warn!("get wrong message");
+                return;
+            }
+        }
+    }
+
+    fn handle_balance_query_response(&mut self, data: Vec<u8>) {
+        debug!("off balance query request message");
+        match BalanceQueryResponse::from_proto_bytes(&data) {
+            Ok(msg) => {
+                self.network_processor
+                    .send_response(
+                        (&msg.local_addr).hash(),
+                        NodeNetworkMessage::BalanceQueryResponseEnum(msg),
+                    )
+                    .unwrap();
             }
             Err(_e) => {
                 warn!("get wrong message");
@@ -959,6 +1005,36 @@ impl NodeInner {
                     .get_txn_by_channel_sequence_number(participant_address, channel_seq_number),
             )
             .unwrap();
+    }
+
+    async fn _query_balance(
+        &self,
+        channel_vec: Vec<(AccountAddress, AccountAddress)>,
+    ) -> Result<Vec<BalanceQueryResponse>> {
+        let mut result = Vec::new();
+        for (local_addr, remote_addr) in channel_vec.iter() {
+            let request = BalanceQueryRequest::new(local_addr.clone(), remote_addr.clone());
+            let msg = add_message_type(
+                request.into_proto_bytes().unwrap(),
+                MessageType::BalanceQueryRequest,
+            );
+            self.sender.unbounded_send(NetworkMessage {
+                peer_id: local_addr.clone(),
+                data: msg.to_vec(),
+            })?;
+            let (tx, rx) = futures_01::sync::mpsc::channel(1);
+            let message_future = MessageFuture::new(rx);
+            self.network_processor
+                .add_future(local_addr.hash(), tx.clone());
+            let response = message_future.compat().await?;
+            match response {
+                NodeNetworkMessage::BalanceQueryResponseEnum(data) => {
+                    result.push(data);
+                }
+            }
+        }
+
+        Ok(result)
     }
 
     pub fn set_timeout(&mut self, timeout: u64) {
