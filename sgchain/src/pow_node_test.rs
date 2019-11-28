@@ -494,7 +494,6 @@ fn test_pbft_single_node() {
     let mut config = node_random_conf(false, "/memory/0", 0);
     config.consensus.consensus_type = ConsensusType::PBFT;
     debug!("config : {:?}", config);
-    crate::star_chain_client::genesis_blob(&config);
     let _handler = libra_node::main_node::setup_environment(&mut config);
 
     let runtime_1 = tokio::runtime::Runtime::new().unwrap();
