@@ -7,16 +7,20 @@ use crate::channel_transaction_store::ChannelTransactionStore;
 use crate::channel_write_set_store::ChannelWriteSetStore;
 use crate::ledger_info_store::LedgerStore;
 use crate::pending_txn_store::PendingTxnStore;
+use crate::schema::participant_public_key_schema::ParticipantPublicKeySchema;
 use crate::schema_db::SchemaDB;
 use failure::prelude::*;
+use itertools::Itertools;
+use libra_crypto::ed25519::Ed25519PublicKey;
 use libra_crypto::hash::CryptoHash;
 use libra_crypto::HashValue;
 use libra_types::account_address::AccountAddress;
 use libra_types::account_state_blob::AccountStateBlob;
-use libra_types::channel::witness::Witness;
+use libra_types::channel::{Witness, WitnessData};
 use libra_types::proof::SparseMerkleProof;
 use libra_types::transaction::Version;
 use libra_types::write_set::WriteSet;
+use rocksdb::ReadOptions;
 use schemadb::SchemaBatch;
 use sgtypes::channel_transaction_info::ChannelTransactionInfo;
 use sgtypes::channel_transaction_to_commit::*;
@@ -25,6 +29,7 @@ use sgtypes::pending_txn::PendingTransaction;
 use sgtypes::proof::signed_channel_transaction_proof::SignedChannelTransactionProof;
 use sgtypes::signed_channel_transaction_with_proof::SignedChannelTransactionWithProof;
 use sgtypes::startup_info::StartupInfo;
+use std::collections::BTreeMap;
 use std::fmt::Formatter;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
@@ -39,6 +44,7 @@ pub struct ChannelStore<S> {
     pending_txn_store: PendingTxnStore<S>,
     latest_witness: Arc<RwLock<Option<Witness>>>,
     pending_txn: Arc<RwLock<Option<PendingTransaction>>>,
+    participant_keys: Arc<RwLock<BTreeMap<AccountAddress, Ed25519PublicKey>>>,
 }
 
 impl<S> core::fmt::Debug for ChannelStore<S>
@@ -76,40 +82,19 @@ where
             pending_txn_store: PendingTxnStore::new(db.clone()),
             latest_witness: Arc::new(RwLock::new(None)),
             pending_txn: Arc::new(RwLock::new(None)),
+            participant_keys: Arc::new(RwLock::new(BTreeMap::new())),
         };
 
-        // TODO refactor this
         store.ledger_store.bootstrap();
-        let witness_option = match store.ledger_store.get_latest_ledger_info_option() {
-            None => None,
-            Some(ledger_info) => {
-                let version = ledger_info.version();
-                let ws = store
-                    .write_set_store
-                    .get_write_set_by_version(version)
-                    .expect("read lastest writeset from db should work");
-                let txn = store
-                    .transaction_store
-                    .get_transaction(version)
-                    .expect("read transaction data should work");
-
-                let witness = Witness::new(
-                    txn.raw_tx.channel_sequence_number(),
-                    ws,
-                    txn.signatures
-                        .values()
-                        .map(|s| s.witness_data_signature.clone())
-                        .collect(),
-                );
-                Some(witness)
-            }
-        };
-        let pending_txn_opt = store
-            .pending_txn_store
-            .get_pending_txn()
-            .expect("read lastest pending txn from db shold work");
-        store.set_witness(witness_option);
-        store.set_pending_txn(pending_txn_opt);
+        store
+            .load_pending_txn()
+            .unwrap_or_else(|e| panic!("fail to load pending txn {}", e));
+        store
+            .load_public_keys()
+            .unwrap_or_else(|e| panic!("fail to load public keys {}", e));
+        store
+            .load_witness()
+            .unwrap_or_else(|e| panic!("fail to load witness {}", e));
         store
     }
 
@@ -133,6 +118,54 @@ where
     #[cfg(test)]
     pub fn transaction_store(&self) -> &ChannelTransactionStore<S> {
         &self.transaction_store
+    }
+
+    fn load_public_keys(&self) -> Result<()> {
+        let mut iter = self
+            .db
+            .iter::<ParticipantPublicKeySchema>(ReadOptions::default())?;
+        let keys = if iter.seek_to_first() {
+            iter.fold_results(BTreeMap::new(), |mut a, (addr, pubkey)| {
+                a.insert(addr, pubkey);
+                a
+            })?
+        //            iter.collect::<BTreeMap<AccountAddress, Ed25519PublicKey>>()
+        } else {
+            BTreeMap::default()
+        };
+        let mut write_guard = self
+            .participant_keys
+            .write()
+            .expect("should get write lock");
+        *write_guard = keys;
+        Ok(())
+    }
+
+    fn load_pending_txn(&self) -> Result<()> {
+        let pending_txn_opt = self.pending_txn_store.get_pending_txn()?;
+        self.set_pending_txn(pending_txn_opt);
+        Ok(())
+    }
+
+    fn load_witness(&self) -> Result<()> {
+        let witness_option = match self.ledger_store.get_latest_ledger_info_option() {
+            None => None,
+            Some(ledger_info) => {
+                let version = ledger_info.version();
+                let ws = self.write_set_store.get_write_set_by_version(version)?;
+                let txn = self.transaction_store.get_transaction(version)?;
+                let witness = Witness::new(
+                    WitnessData::new(txn.raw_tx.channel_sequence_number(), ws),
+                    txn.signatures
+                        .values()
+                        .map(|s| s.witness_data_signature.clone())
+                        .collect(),
+                );
+                Some(witness)
+            }
+        };
+        self.set_witness(witness_option);
+        Ok(())
     }
 }
 
@@ -159,8 +192,10 @@ where
         }
 
         let witness = Witness::new(
-            txn_to_commit.transaction().raw_tx.channel_sequence_number(),
-            txn_to_commit.write_set().clone(),
+            WitnessData::new(
+                txn_to_commit.transaction().raw_tx.channel_sequence_number(),
+                txn_to_commit.write_set().clone(),
+            ),
             txn_to_commit
                 .transaction()
                 .signatures
@@ -171,6 +206,21 @@ where
 
         // get write batch
         let mut schema_batch = SchemaBatch::default();
+
+        let mut updated_public_keys = BTreeMap::new();
+        {
+            let read_guard = self.participant_keys.read().unwrap();
+            for (addr, sigs) in txn_to_commit.transaction().signatures.iter() {
+                match read_guard.get(addr) {
+                    Some(v) if v == &sigs.public_key => {}
+                    _ => {
+                        self.save_public_key(addr, &sigs.public_key, &mut schema_batch)?;
+                        updated_public_keys.insert(addr.clone(), sigs.public_key.clone());
+                    }
+                }
+            }
+        }
+
         let new_ledger_hash = self.save_tx_impl(txn_to_commit, version, &mut schema_batch)?;
 
         if let Some(x) = ledger_info {
@@ -194,6 +244,10 @@ where
         if let Some(x) = ledger_info {
             self.ledger_store.set_latest_ledger_info(x.clone());
         }
+
+        // update public_keys cache.
+        let mut write_guard = self.participant_keys.write().unwrap();
+        write_guard.append(&mut updated_public_keys);
 
         // and cache the write set
         self.set_witness(Some(witness));
@@ -276,6 +330,15 @@ where
         Ok(new_ledger_root_hash)
     }
 
+    fn save_public_key(
+        &self,
+        address: &AccountAddress,
+        public_key: &Ed25519PublicKey,
+        sb: &mut SchemaBatch,
+    ) -> Result<()> {
+        sb.put::<ParticipantPublicKeySchema>(address, public_key)
+    }
+
     /// persist the batch into storage
     fn commit(&self, schema_batch: SchemaBatch) -> Result<()> {
         self.db.write_schemas(schema_batch)?;
@@ -331,6 +394,10 @@ where
             .expect("should get read lock")
             .deref()
             .clone()
+    }
+
+    pub fn get_participant_keys(&self) -> BTreeMap<AccountAddress, Ed25519PublicKey> {
+        self.participant_keys.read().unwrap().clone()
     }
 
     pub fn get_transaction_by_channel_seq_number(

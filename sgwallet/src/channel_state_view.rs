@@ -10,10 +10,10 @@ use sgchain::star_chain_client::ChainClient;
 
 use libra_types::account_address::AccountAddress;
 use sgtypes::channel::ChannelState;
-use std::collections::BTreeMap;
+
 
 pub struct ChannelStateView<'txn> {
-    participant_states: &'txn BTreeMap<AccountAddress, ChannelState>,
+    channel_state: &'txn ChannelState,
     latest_write_set: WriteSet,
     client_state_view: ClientStateView<'txn>,
 }
@@ -21,7 +21,7 @@ pub struct ChannelStateView<'txn> {
 impl<'txn> ChannelStateView<'txn> {
     pub fn new(
         account_address: AccountAddress,
-        participant_states: &'txn BTreeMap<AccountAddress, ChannelState>,
+        channel_state: &'txn ChannelState,
         latest_write_set: WriteSet,
         version: Option<Version>,
         client: &'txn dyn ChainClient,
@@ -31,7 +31,7 @@ impl<'txn> ChannelStateView<'txn> {
         let client_state_view =
             ClientStateView::new_with_account_state(account_address, account_state, client);
         Ok(Self {
-            participant_states,
+            channel_state,
             latest_write_set,
             client_state_view,
         })
@@ -44,7 +44,7 @@ impl<'txn> ChannelStateView<'txn> {
     }
 
     pub fn get_local(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
-        super::channel::access_local(&self.latest_write_set, self.participant_states, access_path)
+        super::channel::access_local(&self.latest_write_set, self.channel_state, access_path)
     }
 }
 

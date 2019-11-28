@@ -20,6 +20,9 @@ use libra_logger::prelude::*;
 use libra_state_view::StateView;
 use libra_types::access_path::AccessPath;
 use libra_types::byte_array::ByteArray;
+use libra_types::channel::{
+    channel_struct_tag, user_channels_struct_tag, ChannelResource, UserChannelsResource,
+};
 use libra_types::channel_account::channel_account_struct_tag;
 use libra_types::transaction::Transaction;
 use libra_types::{
@@ -39,7 +42,6 @@ use sgchain::star_chain_client::{ChainClient, StarChainClient};
 use sgconfig::config::WalletConfig;
 use sgstorage::channel_db::ChannelDB;
 use sgstorage::channel_store::ChannelStore;
-
 use sgstorage::storage::SgStorage;
 use sgtypes::channel::ChannelState;
 use sgtypes::channel_transaction::ChannelTransactionProposal;
@@ -52,6 +54,7 @@ use sgtypes::{
     script_package::{ChannelScriptPackage, ScriptCode},
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::convert::TryFrom;
 use std::path::Path;
 use std::{sync::Arc, time::Duration};
 use tokio::runtime;
@@ -726,7 +729,11 @@ impl Inner {
                     .channels
                     .values()
                     .map(|c| {
-                        let mut participants = c.participant_addresses().to_vec();
+                        let mut participants = c
+                            .participant_addresses()
+                            .iter()
+                            .map(Clone::clone)
+                            .collect::<Vec<_>>();
                         participants.retain(|e| e != c.account_address());
                         debug_assert_eq!(1, participants.len());
                         participants[0]
@@ -743,36 +750,49 @@ impl Inner {
             .inner
             .client
             .get_account_state(self.inner.account, None)?;
-        let my_channel_states = account_state.filter_channel_state(self.inner.account);
-        let version = account_state.version();
-        for (participant, my_channel_state) in my_channel_states {
-            if !self.exist_channel(&participant) {
-                let participant_account_state = self
-                    .inner
-                    .client
-                    .get_account_state(participant, Some(version))?;
-                let mut participant_channel_states =
-                    participant_account_state.filter_channel_state(participant);
-                let participant_channel_state = participant_channel_states
-                    .remove(&self.inner.account)
-                    .ok_or(format_err!(
-                        "Can not find channel {} in {}",
-                        self.inner.account,
-                        participant
-                    ))?;
-                let (channel_address, _) =
-                    generate_channel_address(self.inner.account, participant);
-                let participant_states = {
-                    let mut s = BTreeMap::new();
-                    s.insert(
-                        participant_channel_state.address(),
-                        participant_channel_state,
-                    );
-                    s.insert(my_channel_state.address(), my_channel_state);
-                    s
-                };
-                self.spawn_channel(channel_address, participant_states);
+
+        let user_channels: UserChannelsResource = account_state
+            .get_state(&DataPath::onchain_resource_path(user_channels_struct_tag()))
+            .ok_or_else(|| format_err!("user channel list not exists"))
+            .and_then(|blob| TryFrom::try_from(blob.as_slice()))?;
+
+        let mut channel_states = HashMap::new();
+        for channel_address in user_channels.channels().iter() {
+            let channel_account_state = self
+                .inner
+                .client
+                .get_account_state(channel_address.clone(), Some(account_state.version()))?;
+
+            let channel_resource_blob = channel_account_state
+                .get_state(&DataPath::onchain_resource_path(channel_struct_tag()))
+                .expect(
+                    format!(
+                        "Channel resource should exists in channel {}",
+                        channel_address
+                    )
+                    .as_str(),
+                );
+            let channel_resource = ChannelResource::make_from(channel_resource_blob).unwrap();
+            let participants = channel_resource
+                .participants()
+                .iter()
+                .map(Clone::clone)
+                .collect::<BTreeSet<_>>();
+
+            let state_blobs = channel_account_state.into_map();
+            let mut channel_state = BTreeMap::new();
+            for (path, value) in state_blobs.into_iter() {
+                match DataPath::from(&path).unwrap() {
+                    DataPath::ChannelResource { .. } => {
+                        channel_state.insert(path, value);
+                    }
+                    _ => {}
+                }
             }
+            channel_states.insert(channel_address.clone(), (participants, channel_state));
+        }
+        for (channel_address, (participants, channel_state)) in channel_states.into_iter() {
+            self.spawn_channel(channel_address, participants, channel_state);
         }
         Ok(())
     }
@@ -1022,26 +1042,22 @@ impl Inner {
         channel_address: AccountAddress,
         participants: BTreeSet<AccountAddress>,
     ) {
-        self.spawn_channel(
-            channel_address,
-            participants
-                .into_iter()
-                .map(|addr| (addr, ChannelState::empty(addr)))
-                .collect(),
-        );
+        self.spawn_channel(channel_address, participants, BTreeMap::new());
     }
 
     fn spawn_channel(
         &mut self,
         channel_address: AccountAddress,
-        participants_states: BTreeMap<AccountAddress, ChannelState>,
+        participants: BTreeSet<AccountAddress>,
+        participants_states: BTreeMap<Vec<u8>, Vec<u8>>,
     ) {
         let (channel_msg_sender, channel_msg_receiver) = mpsc::channel(1000);
 
         let mut channel = Channel::load(
             channel_address,
             self.inner.account,
-            participants_states,
+            participants,
+            ChannelState::new(channel_address, participants_states),
             self.get_channel_db(channel_address),
             channel_msg_sender,
             channel_msg_receiver,

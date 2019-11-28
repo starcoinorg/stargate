@@ -9,7 +9,7 @@ use libra_crypto::{
     test_utils::KeyPair,
     HashValue, SigningKey, Uniform,
 };
-use libra_types::channel::witness::Witness;
+use libra_types::channel::Witness;
 use libra_types::identifier::Identifier;
 use libra_types::language_storage::ModuleId;
 use libra_types::transaction::{ChannelTransactionPayloadBodyV2, ScriptAction};

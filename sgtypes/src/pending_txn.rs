@@ -4,7 +4,7 @@ use libra_crypto::HashValue;
 use libra_types::account_address::AccountAddress;
 use libra_types::transaction::TransactionOutput;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Every Transaction Proposal should wait for others' signature,
 /// TODO: should handle `agree or disagree`
@@ -49,7 +49,7 @@ impl PendingTransaction {
             _ => false,
         }
     }
-    pub fn try_fulfill(&mut self, participants: &[AccountAddress]) -> bool {
+    pub fn try_fulfill(&mut self, participants: &BTreeSet<AccountAddress>) -> bool {
         match self {
             PendingTransaction::WaitForSig {
                 signatures,

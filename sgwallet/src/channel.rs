@@ -18,7 +18,7 @@ use libra_crypto::test_utils::KeyPair;
 use libra_crypto::{hash::CryptoHash, HashValue, SigningKey, VerifyingKey};
 use libra_logger::prelude::*;
 use libra_state_view::StateView;
-use libra_types::channel::witness::{Witness, WitnessData};
+use libra_types::channel::{Witness, WitnessData};
 use libra_types::identifier::Identifier;
 use libra_types::language_storage::ModuleId;
 use libra_types::transaction::helpers::TransactionSigner;
@@ -34,9 +34,7 @@ use libra_types::{
 use sgchain::star_chain_client::ChainClient;
 use sgstorage::channel_db::ChannelDB;
 use sgstorage::channel_store::ChannelStore;
-use sgtypes::channel_transaction::{
-    ChannelOp, ChannelTransaction, ChannelTransactionProposal,
-};
+use sgtypes::channel_transaction::{ChannelOp, ChannelTransaction, ChannelTransactionProposal};
 use sgtypes::channel_transaction_sigs::ChannelTransactionSigs;
 use sgtypes::channel_transaction_to_commit::ChannelTransactionToApply;
 use sgtypes::pending_txn::PendingTransaction;
@@ -46,7 +44,7 @@ use sgtypes::{
     sg_error::SgError,
 };
 use std::collections::{BTreeMap, BTreeSet};
-use std::convert::TryFrom;
+
 use std::sync::Arc;
 use vm::gas_schedule::GasAlgebra;
 
@@ -85,7 +83,7 @@ enum InternalMsg {
 pub struct Channel {
     channel_address: AccountAddress,
     account_address: AccountAddress,
-    participant_addresses: Vec<AccountAddress>,
+    participant_addresses: BTreeSet<AccountAddress>,
     //    db: ChannelDB,
     //    store: ChannelStore<ChannelDB>,
     mail_sender: mpsc::Sender<ChannelMsg>,
@@ -93,49 +91,12 @@ pub struct Channel {
 }
 
 impl Channel {
-    /// create channel for participant, use `store` to store tx data.
-    pub fn new(
-        account: AccountAddress,
-        participant: AccountAddress,
-        db: ChannelDB,
-        mail_sender: mpsc::Sender<ChannelMsg>,
-        mailbox: mpsc::Receiver<ChannelMsg>,
-
-        keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
-        script_registry: Arc<PackageRegistry>,
-        chain_client: Arc<dyn ChainClient>,
-    ) -> Self {
-        let participants = {
-            let mut set = BTreeSet::new();
-            set.insert(account);
-            set.insert(participant);
-            set
-        };
-        let channel_address = AccountAddress::try_from(&participants).unwrap();
-        let participant_states = {
-            let mut states = BTreeMap::new();
-            states.insert(account, ChannelState::empty(account));
-            states.insert(participant, ChannelState::empty(participant));
-            states
-        };
-        Self::load(
-            channel_address,
-            account,
-            participant_states,
-            db,
-            mail_sender,
-            mailbox,
-            keypair,
-            script_registry,
-            chain_client,
-        )
-    }
-
     /// load channel from storage
     pub fn load(
         channel_address: AccountAddress,
         account_address: AccountAddress,
-        participants_states: BTreeMap<AccountAddress, ChannelState>,
+        participant_addresses: BTreeSet<AccountAddress>,
+        channel_state: ChannelState,
         db: ChannelDB,
         mail_sender: mpsc::Sender<ChannelMsg>,
         mailbox: mpsc::Receiver<ChannelMsg>,
@@ -144,15 +105,11 @@ impl Channel {
         chain_client: Arc<dyn ChainClient>,
     ) -> Self {
         let store = ChannelStore::new(db.clone());
-        let participant_addresses = participants_states
-            .keys()
-            .map(Clone::clone)
-            .collect::<Vec<_>>();
         let inner = Inner {
             channel_address,
             account_address,
-            participant_addresses: BTreeMap::new(),
-            participants_states,
+            participant_addresses: participant_addresses.clone(),
+            channel_state,
             store: store.clone(),
             keypair: keypair.clone(),
             script_registry: script_registry.clone(),
@@ -183,8 +140,8 @@ impl Channel {
     pub fn channel_address(&self) -> &AccountAddress {
         &self.channel_address
     }
-    pub fn participant_addresses(&self) -> &[AccountAddress] {
-        self.participant_addresses.as_slice()
+    pub fn participant_addresses(&self) -> &BTreeSet<AccountAddress> {
+        &self.participant_addresses
     }
 
     pub fn send(&self, msg: ChannelMsg) -> Result<()> {
@@ -210,8 +167,8 @@ struct Inner {
     channel_address: AccountAddress,
     account_address: AccountAddress,
     // participant contains self address, use btree to preserve address order.
-    participant_addresses: BTreeMap<AccountAddress, Ed25519PublicKey>,
-    participants_states: BTreeMap<AccountAddress, ChannelState>,
+    participant_addresses: BTreeSet<AccountAddress>,
+    channel_state: ChannelState,
     //    db: ChannelDB,
     store: ChannelStore<ChannelDB>,
     keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
@@ -222,6 +179,12 @@ struct Inner {
     mailbox: mpsc::Receiver<ChannelMsg>,
     // event produced by the channel
     // channel_event_sender: mpsc::Sender<ChannelEvent>,
+}
+
+impl Inner {
+    fn channel_address(&self) -> &AccountAddress {
+        &self.channel_address
+    }
 }
 
 impl Inner {
@@ -321,7 +284,7 @@ impl Inner {
         let latest_writeset = self.witness_data().into_write_set();
         ChannelStateView::new(
             self.account_address,
-            &self.participants_states,
+            &self.channel_state,
             latest_writeset,
             version,
             self.chain_client.as_ref(),
@@ -336,11 +299,14 @@ impl Inner {
         max_gas_amount: u64,
     ) -> Result<RawTransaction> {
         let channel_participant_size = self.participant_addresses.len();
+        let participant_keys = self.store.get_participant_keys();
+        debug_assert!(channel_participant_size == participant_keys.len());
+
         let mut keys = Vec::with_capacity(channel_participant_size);
         let mut sigs = Vec::with_capacity(channel_participant_size);
-        for (addr, key) in self.participant_addresses.iter() {
-            let sig = signatures.remove(addr);
-            keys.push(key.clone());
+        for (addr, key) in participant_keys.into_iter() {
+            let sig = signatures.remove(&addr);
+            keys.push(key);
             sigs.push(sig);
         }
         debug_assert!(signatures.len() == 0);
@@ -583,8 +549,7 @@ impl Inner {
         // TODO: check public key match proposer address
         if !channel_txn.operator().is_open() {
             ensure!(
-                self.participants_states
-                    .contains_key(&channel_txn.proposer()),
+                self.participant_addresses.contains(&channel_txn.proposer()),
                 "proposer does not belong to the channel"
             );
         }
@@ -620,20 +585,21 @@ impl Inner {
         Ok(())
     }
 
-    pub fn apply_travel_output(&self, write_set: &WriteSet) -> Result<()> {
+    // FIXME
+    pub fn apply_travel_output(&mut self, write_set: &WriteSet) -> Result<()> {
         for (ap, op) in write_set {
+            ensure!(
+                &ap.address == self.channel_address(),
+                "Unexpected witness_payload access_path {:?} apply to channel {:?}",
+                &ap.address,
+                self.channel_address()
+            );
             if ap.is_channel_resource() {
-                let state = match self.participants_states.get(&ap.address) {
-                    None => bail!(
-                        "Unexpect witness_payload access_path {:?} apply to channel {:?}",
-                        &ap.address,
-                        self.channel_address
-                    ),
-                    Some(state) => state,
-                };
                 match op {
-                    WriteOp::Value(value) => state.insert(ap.path.clone(), value.clone()),
-                    WriteOp::Deletion => state.remove(&ap.path),
+                    WriteOp::Value(value) => {
+                        self.channel_state.insert(ap.path.clone(), value.clone())
+                    }
+                    WriteOp::Deletion => self.channel_state.remove(&ap.path),
                 };
             }
         }
@@ -668,7 +634,7 @@ impl Inner {
         self.store.get_pending_txn()
     }
 
-    fn stage(&self) -> ChannelStage {
+    fn _stage(&self) -> ChannelStage {
         match self.pending_txn() {
             Some(PendingTransaction::WaitForApply { .. }) => ChannelStage::Syncing,
             Some(PendingTransaction::WaitForSig { .. }) => ChannelStage::Pending,
@@ -685,8 +651,8 @@ impl Inner {
         }
     }
 
-    fn check_stage(&self, expect_stages: Vec<ChannelStage>) -> Result<()> {
-        let current_stage = self.stage();
+    fn _check_stage(&self, expect_stages: Vec<ChannelStage>) -> Result<()> {
+        let current_stage = self._stage();
         if !expect_stages.contains(&current_stage) {
             return Err(SgError::new_invalid_channel_stage_error(current_stage).into());
         }
@@ -695,7 +661,7 @@ impl Inner {
 
     fn get_local(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
         let witness = self.witness_data();
-        access_local(witness.write_set(), &self.participants_states, access_path)
+        access_local(witness.write_set(), &self.channel_state, access_path)
     }
 
     fn generate_proposal(
@@ -931,12 +897,7 @@ impl Inner {
             output,
             signatures,
         };
-        let participants = self
-            .participants_states
-            .keys()
-            .map(Clone::clone)
-            .collect::<Vec<_>>();
-        pending_txn.try_fulfill(&participants);
+        pending_txn.try_fulfill(&self.participant_addresses);
         self.store.save_pending_txn(pending_txn, is_travel_txn)?;
         Ok(())
     }
@@ -998,7 +959,7 @@ impl Inner {
 
 pub(crate) fn access_local<'a>(
     latest_write_set: &'a WriteSet,
-    participant_states: &'a BTreeMap<AccountAddress, ChannelState>,
+    channel_state: &'a ChannelState,
     access_path: &AccessPath,
 ) -> Result<Option<Vec<u8>>> {
     match latest_write_set.get(access_path) {
@@ -1006,9 +967,12 @@ pub(crate) fn access_local<'a>(
             WriteOp::Value(value) => Ok(Some(value.clone())),
             WriteOp::Deletion => Ok(None),
         },
-        None => match participant_states.get(&access_path.address) {
-            Some(s) => Ok(s.get(&access_path.path)),
-            None => Err(format_err!("Unexpected access_path: {}", access_path)),
-        },
+        None => {
+            if channel_state.address() != &access_path.address {
+                Err(format_err!("Unexpected access_path: {}", access_path))
+            } else {
+                Ok(channel_state.get(&access_path.path).cloned())
+            }
+        }
     }
 }
