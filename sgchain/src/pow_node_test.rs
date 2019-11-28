@@ -10,7 +10,7 @@ use futures::channel::oneshot::{channel, Sender};
 use futures::future;
 use futures::StreamExt;
 use grpc_helpers::ServerHandle;
-use libra_config::config::{NetworkConfig, NodeConfig, NodeConfigHelpers, RoleType, ConsensusType};
+use libra_config::config::{ConsensusType, NetworkConfig, NodeConfig, NodeConfigHelpers, RoleType};
 use libra_config::{
     seed_peers::SeedPeersConfig,
     trusted_peers::{ConfigHelpers, ConsensusPeerInfo, NetworkPeerInfo},
@@ -305,8 +305,8 @@ fn print_ports(config: &NodeConfig) {
 #[test]
 fn test_pow_node() {
     ::libra_logger::init_for_e2e_testing();
-    let mut conf_1 = node_random_conf(true,"/memory/0", 0);
-    let mut conf_2 = node_random_conf(true,"/memory/0", 1);
+    let mut conf_1 = node_random_conf(true, "/memory/0", 0);
+    let mut conf_2 = node_random_conf(true, "/memory/0", 1);
 
     let network_signing_public_key_1: Ed25519PublicKey = conf_1.networks[0]
         .network_keypairs
@@ -469,7 +469,7 @@ fn create_keypair() -> KeyPair<Ed25519PrivateKey, Ed25519PublicKey> {
 #[test]
 fn test_pow_single_node() {
     ::libra_logger::init_for_e2e_testing();
-    let mut conf_1 = node_random_conf(true,"/memory/0", 0);
+    let mut conf_1 = node_random_conf(true, "/memory/0", 0);
     print_ports(&conf_1);
     debug!("conf1:{:?}", conf_1);
     let _handle_1 = setup_environment(&mut conf_1, false);
@@ -491,7 +491,7 @@ fn test_pow_single_node() {
 #[test]
 fn test_pbft_single_node() {
     ::libra_logger::init_for_e2e_testing();
-    let mut config = node_random_conf(false,"/memory/0", 0);
+    let mut config = node_random_conf(false, "/memory/0", 0);
     config.consensus.consensus_type = ConsensusType::PBFT;
     debug!("config : {:?}", config);
     crate::star_chain_client::genesis_blob(&config);
@@ -523,7 +523,7 @@ fn test_validator_nodes() {
 #[test]
 fn test_rollback_block() {
     ::libra_logger::init_for_e2e_testing();
-    let mut conf_1 = node_random_conf(true,"/memory/0", 0);
+    let mut conf_1 = node_random_conf(true, "/memory/0", 0);
 
     let _handle_1 = setup_environment(&mut conf_1, true);
 
