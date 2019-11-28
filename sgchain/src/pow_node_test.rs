@@ -11,6 +11,7 @@ use futures::future;
 use futures::StreamExt;
 use grpc_helpers::ServerHandle;
 use libra_config::config::{ConsensusType, NetworkConfig, NodeConfig, NodeConfigHelpers, RoleType};
+use libra_config::config::{NetworkConfig, NodeConfig, NodeConfigHelpers, RoleType};
 use libra_config::{
     seed_peers::SeedPeersConfig,
     trusted_peers::{ConfigHelpers, ConsensusPeerInfo, NetworkPeerInfo},
