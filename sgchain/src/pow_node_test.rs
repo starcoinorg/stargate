@@ -484,6 +484,7 @@ fn test_pow_single_node() {
         conf_1.admission_control.admission_control_service_port as u32,
         s,
         runtime_1.executor(),
+        true
     );
     runtime_1.shutdown_on_idle();
 }
@@ -506,6 +507,7 @@ fn test_pbft_single_node() {
         config.admission_control.admission_control_service_port as u32,
         s,
         runtime_1.executor(),
+        false
     );
     runtime_1.shutdown_on_idle();
 }
@@ -536,6 +538,7 @@ fn test_rollback_block() {
         conf_1.admission_control.admission_control_service_port as u32,
         s,
         runtime_1.executor(),
+        true,
     );
     runtime_1.shutdown_on_idle();
 }
@@ -695,7 +698,7 @@ fn check_latest_ledger(
     executor.spawn(latest_ledger_fut);
 }
 
-fn check_single_latest_ledger(port: u32, sender: Sender<()>, executor: TaskExecutor) {
+fn check_single_latest_ledger(port: u32, sender: Sender<()>, executor: TaskExecutor, pow_mode:bool) {
     let latest_ledger_fut = async move {
         let end_time = Instant::now() + Duration::from_secs(60 * 5);
         loop {
@@ -704,7 +707,7 @@ fn check_single_latest_ledger(port: u32, sender: Sender<()>, executor: TaskExecu
 
             let ledger = client.get_latest_ledger(&association_address());
 
-            if ledger.version() > 15 {
+            if (ledger.version() > 15 && pow_mode) || (ledger.version() > 150 && !pow_mode) {
                 assert!(true);
                 sender.send(()).unwrap();
                 break;
