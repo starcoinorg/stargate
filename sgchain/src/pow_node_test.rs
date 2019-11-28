@@ -484,7 +484,7 @@ fn test_pow_single_node() {
         conf_1.admission_control.admission_control_service_port as u32,
         s,
         runtime_1.executor(),
-        true
+        true,
     );
     runtime_1.shutdown_on_idle();
 }
@@ -507,7 +507,7 @@ fn test_pbft_single_node() {
         config.admission_control.admission_control_service_port as u32,
         s,
         runtime_1.executor(),
-        false
+        false,
     );
     runtime_1.shutdown_on_idle();
 }
@@ -698,7 +698,12 @@ fn check_latest_ledger(
     executor.spawn(latest_ledger_fut);
 }
 
-fn check_single_latest_ledger(port: u32, sender: Sender<()>, executor: TaskExecutor, pow_mode:bool) {
+fn check_single_latest_ledger(
+    port: u32,
+    sender: Sender<()>,
+    executor: TaskExecutor,
+    pow_mode: bool,
+) {
     let latest_ledger_fut = async move {
         let end_time = Instant::now() + Duration::from_secs(60 * 5);
         loop {
