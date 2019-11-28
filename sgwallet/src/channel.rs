@@ -11,7 +11,7 @@ use crate::wallet::{
 use failure::prelude::*;
 use futures::{
     channel::{mpsc, oneshot},
-    StreamExt,
+    SinkExt, StreamExt,
 };
 use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
 use libra_crypto::test_utils::KeyPair;
@@ -75,6 +75,9 @@ pub enum ChannelMsg {
         path: AccessPath,
         responder: oneshot::Sender<Result<Option<Vec<u8>>>>,
     },
+    Stop {
+        responder: oneshot::Sender<()>,
+    },
 }
 enum InternalMsg {
     ApplyPendingTxn, // when channel bootstrap, it will send this msg if it found pending txn.
@@ -100,6 +103,7 @@ impl Channel {
         db: ChannelDB,
         mail_sender: mpsc::Sender<ChannelMsg>,
         mailbox: mpsc::Receiver<ChannelMsg>,
+        channel_event_sender: mpsc::Sender<ChannelEvent>,
         keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
         script_registry: Arc<PackageRegistry>,
         chain_client: Arc<dyn ChainClient>,
@@ -116,6 +120,9 @@ impl Channel {
             chain_client: chain_client.clone(),
             tx_applier: TxApplier::new(store.clone()),
             mailbox,
+            channel_event_sender,
+            shutdown_signal: None,
+            should_stop: false,
         };
         let channel = Self {
             channel_address,
@@ -144,6 +151,14 @@ impl Channel {
         &self.participant_addresses
     }
 
+    pub async fn stop(&self) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        let msg = ChannelMsg::Stop { responder: tx };
+        self.send(msg)?;
+        rx.await?;
+        Ok(())
+    }
+
     pub fn send(&self, msg: ChannelMsg) -> Result<()> {
         if let Err(err) = self.mail_sender.clone().try_send(msg) {
             let err_status = if err.is_disconnected() {
@@ -163,6 +178,10 @@ impl Channel {
     }
 }
 
+pub enum ChannelEvent {
+    Stopped { channel_address: AccountAddress },
+}
+
 struct Inner {
     channel_address: AccountAddress,
     account_address: AccountAddress,
@@ -177,8 +196,10 @@ struct Inner {
     tx_applier: TxApplier,
 
     mailbox: mpsc::Receiver<ChannelMsg>,
+    shutdown_signal: Option<oneshot::Sender<()>>,
+    should_stop: bool,
     // event produced by the channel
-    // channel_event_sender: mpsc::Sender<ChannelEvent>,
+    channel_event_sender: mpsc::Sender<ChannelEvent>,
 }
 
 impl Inner {
@@ -191,7 +212,6 @@ impl Inner {
     async fn start(mut self) {
         let (internal_msg_tx, mut internal_msg_rx) = mpsc::channel(1024);
         self.bootstrap(internal_msg_tx.clone());
-
         loop {
             ::futures::select! {
                 maybe_external_msg = self.mailbox.next() => {
@@ -208,6 +228,24 @@ impl Inner {
                     break;
                 }
             }
+            if self.should_stop {
+                if self.shutdown_signal.is_some() {
+                    respond_with(self.shutdown_signal.take().unwrap(), ());
+                }
+                break;
+            }
+        }
+        if let Err(e) = self
+            .channel_event_sender
+            .send(ChannelEvent::Stopped {
+                channel_address: self.channel_address.clone(),
+            })
+            .await
+        {
+            error!(
+                "channel[{:?}]: fail to emit stopped event, error: {:?}",
+                &self.channel_address, e
+            );
         }
         crit!("channel task terminated")
     }
@@ -263,6 +301,10 @@ impl Inner {
             }
             ChannelMsg::GetPendingTxn { responder } => {
                 respond_with(responder, self.pending_txn());
+            }
+            ChannelMsg::Stop { responder } => {
+                self.should_stop = true;
+                self.shutdown_signal = Some(responder);
             }
         };
     }
@@ -479,6 +521,10 @@ impl Inner {
                     Ok(Some(user_sigs))
                 } else {
                     self.clear_pending_txn()?;
+
+                    if proposal.channel_txn.operator().is_open() {
+                        self.should_stop = true;
+                    }
                     Ok(None)
                 }
             }

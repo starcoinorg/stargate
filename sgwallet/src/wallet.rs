@@ -1,6 +1,6 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
-use crate::channel::ChannelMsg;
+use crate::channel::{ChannelEvent, ChannelMsg};
 use crate::{channel::Channel, scripts::*};
 use chrono::Utc;
 use failure::prelude::*;
@@ -110,13 +110,15 @@ impl Wallet {
             client,
             script_registry,
         };
-
+        let (channel_event_sender, channel_event_receiver) = mpsc::channel(128);
         let inner = Inner {
             inner: inner1.clone(),
             channels: HashMap::new(),
             sgdb: sgdb.clone(),
             runtime,
             mailbox,
+            channel_event_sender,
+            channel_event_receiver,
         };
         let wallet = Wallet {
             mailbox_sender: mail_sender.clone(),
@@ -608,6 +610,10 @@ pub enum WalletCmd {
         participant: AccountAddress,
         responder: oneshot::Sender<Result<Option<PendingTransaction>>>,
     },
+    StopChannel {
+        participant: AccountAddress,
+        responder: oneshot::Sender<Result<()>>,
+    },
 }
 
 pub struct Inner {
@@ -616,7 +622,8 @@ pub struct Inner {
     sgdb: Arc<SgStorage>,
     runtime: tokio::runtime::Runtime,
     mailbox: mpsc::Receiver<WalletCmd>,
-    //    channel_event_receiver: mpsc::Receiver<ChannelEvent>,
+    channel_event_receiver: mpsc::Receiver<ChannelEvent>,
+    channel_event_sender: mpsc::Sender<ChannelEvent>,
 }
 
 impl Inner {
@@ -632,12 +639,25 @@ impl Inner {
                        self.handle_external_cmd(cmd).await;
                    }
                }
+               channel_event = self.channel_event_receiver.next() => {
+                   if let Some(event) = channel_event {
+                       self.handle_channel_event(event).await;
+                   }
+               }
                complete => {
                    break;
                }
             }
         }
         crit!("wallet dispatcher task terminated");
+    }
+
+    async fn handle_channel_event(&mut self, event: ChannelEvent) {
+        match event {
+            ChannelEvent::Stopped { channel_address } => {
+                self.channels.remove(&channel_address);
+            }
+        }
     }
 
     async fn handle_external_cmd(&mut self, cmd: WalletCmd) {
@@ -741,6 +761,10 @@ impl Inner {
                     .collect::<HashSet<_>>();
                 respond_with(responder, Ok(all_channels));
             }
+            WalletCmd::StopChannel {
+                responder,
+                participant,
+            } => respond_with(responder, self.stop_channel(participant).await),
         }
     }
 
@@ -989,6 +1013,15 @@ impl Inner {
         rx.await?
     }
 
+    async fn stop_channel(&mut self, participant: AccountAddress) -> Result<()> {
+        let (generated_channel_address, _participants) =
+            generate_channel_address(participant, self.inner.account);
+        let channel = self.get_channel_mut(&generated_channel_address)?;
+        channel.stop().await?;
+        self.channels.remove(&generated_channel_address);
+        Ok(())
+    }
+
     fn install_package(&self, package: ChannelScriptPackage) -> Result<()> {
         //TODO(jole) package should limit channel?
         self.inner.script_registry.install_package(package)?;
@@ -1061,6 +1094,7 @@ impl Inner {
             self.get_channel_db(channel_address),
             channel_msg_sender,
             channel_msg_receiver,
+            self.channel_event_sender.clone(),
             self.inner.keypair.clone(),
             self.inner.script_registry.clone(),
             self.inner.client.clone(),
