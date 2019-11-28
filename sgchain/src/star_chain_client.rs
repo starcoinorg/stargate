@@ -16,7 +16,9 @@ use libra_config::config::NodeConfigHelpers;
 use libra_config::trusted_peers::ConfigHelpers;
 use libra_logger::prelude::*;
 use libra_prost_ext::MessageExt;
+use libra_types::crypto_proxies::LedgerInfoWithSignatures;
 use libra_types::get_with_proof::ResponseItem;
+use libra_types::ledger_info::LedgerInfo;
 use libra_types::{
     account_address::AccountAddress,
     account_config::{association_address, AccountResource},
@@ -119,7 +121,7 @@ pub trait ChainClient: Send + Sync {
         address: &AccountAddress,
         seq: u64,
     ) -> Result<(Option<TransactionWithProof>, Option<AccountStateWithProof>)> {
-        let end_time = Instant::now() + Duration::from_millis(10_000);
+        let end_time = Instant::now() + Duration::from_millis(50_000);
         loop {
             let timeout_time = Instant::now() + Duration::from_millis(1000);
             delay(timeout_time).await;
@@ -177,6 +179,15 @@ pub trait ChainClient: Send + Sync {
             blob,
             proof.transaction_info_to_account_proof().clone(),
         ))
+    }
+
+    fn get_latest_ledger(&self, account_address: &AccountAddress) -> LedgerInfo {
+        let req = RequestItem::GetAccountState {
+            address: account_address.clone(),
+        };
+        let resp = self.do_request(&build_request(req, None));
+        let a: LedgerInfoWithSignatures = resp.ledger_info_with_sigs.unwrap().try_into().unwrap();
+        a.ledger_info().clone()
     }
 
     fn account_exist(&self, account_address: &AccountAddress, version: Option<Version>) -> bool {
