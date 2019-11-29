@@ -10,3 +10,5 @@ edition = "2018"
 rand = "0.6.5"
 
 libra-logger = { path = "../../libra/common/logger" }
+libra-crypto = { path = "../../libra/crypto/crypto"}
+
