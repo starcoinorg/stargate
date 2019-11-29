@@ -5,22 +5,12 @@ use libra_crypto::{
     HashValue,
 };
 
+use sgtypes::s_value::SValue;
+
 pub fn generate() -> u128 {
     let mut rng = rand::thread_rng();
 
     rng.gen::<u128>()
-}
-
-pub struct SValue([u8; 33]);
-
-impl SValue {
-    pub fn new(data: [u8; 33]) -> Self {
-        SValue(data)
-    }
-
-    pub fn get_r(self) -> HashValue {
-        return HashValue::from_sha3_256(&self.0[1..33]);
-    }
 }
 
 pub struct SValueGenerator {
@@ -52,6 +42,6 @@ impl SValueGenerator {
             result[0] = 1;
         }
         result[1..33].copy_from_slice(self.get_r().as_ref());
-        SValue(result)
+        SValue::new(result)
     }
 }

@@ -1,7 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::channel_transaction::ChannelTransactionRequest;
+use crate::s_value::SValue;
 use crate::sg_error::SgError;
 use bytes::IntoBuf;
 use failure::prelude::*;
@@ -432,6 +432,99 @@ impl From<BalanceQueryResponse> for crate::proto::sgtypes::BalanceQueryResponse 
             remote_addr: value.remote_addr.to_vec(),
             local_balance: value.local_balance,
             remote_balance: value.remote_balance,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VertexInfo {
+    pub addr: AccountAddress,
+}
+
+impl VertexInfo {
+    pub fn new(addr: AccountAddress) -> Self {
+        Self { addr }
+    }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+    where
+        B: IntoBuf,
+    {
+        crate::proto::sgtypes::VertexInfo::decode(buf)?.try_into()
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(TryInto::<crate::proto::sgtypes::VertexInfo>::try_into(self)?.to_vec()?)
+    }
+}
+
+impl TryFrom<crate::proto::sgtypes::VertexInfo> for VertexInfo {
+    type Error = Error;
+
+    fn try_from(value: crate::proto::sgtypes::VertexInfo) -> Result<Self> {
+        Ok(Self::new(value.addr.try_into()?))
+    }
+}
+
+impl From<VertexInfo> for crate::proto::sgtypes::VertexInfo {
+    fn from(value: VertexInfo) -> Self {
+        Self {
+            addr: value.addr.to_vec(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AntMessage {
+    pub s_value: SValue,
+    pub vertex_list: Vec<VertexInfo>,
+}
+
+impl AntMessage {
+    pub fn new(s_value: SValue, vertex_list: Vec<VertexInfo>) -> Self {
+        Self {
+            s_value,
+            vertex_list,
+        }
+    }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+    where
+        B: IntoBuf,
+    {
+        crate::proto::sgtypes::AntMessage::decode(buf)?.try_into()
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(TryInto::<crate::proto::sgtypes::AntMessage>::try_into(self)?.to_vec()?)
+    }
+}
+
+impl TryFrom<crate::proto::sgtypes::AntMessage> for AntMessage {
+    type Error = Error;
+
+    fn try_from(value: crate::proto::sgtypes::AntMessage) -> Result<Self> {
+        let vertex_list: Result<Vec<VertexInfo>> = value
+            .vertex_list
+            .iter()
+            .clone()
+            .map(|v| VertexInfo::try_from(v.clone()))
+            .collect();
+
+        Ok(Self::new(value.s_value.try_into()?, vertex_list?))
+    }
+}
+
+impl From<AntMessage> for crate::proto::sgtypes::AntMessage {
+    fn from(value: AntMessage) -> Self {
+        Self {
+            s_value: value.s_value.to_vec(),
+            vertex_list: value
+                .vertex_list
+                .iter()
+                .cloned()
+                .map(|v| v.into())
+                .collect(),
         }
     }
 }

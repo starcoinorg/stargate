@@ -53,3 +53,12 @@ message BalanceQueryResponse{
     bytes remote_addr = 3;
     uint64 remote_balance = 4;
 }
+
+message VertexInfo {
+    bytes addr = 1;
+}
+
+message AntMessage {
+    bytes s_value = 1;
+    repeated VertexInfo vertex_list= 2;
+}
