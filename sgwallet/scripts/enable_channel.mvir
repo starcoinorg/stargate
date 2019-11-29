@@ -1,0 +1,5 @@
+import 0x0.ChannelAccount;
+main() {
+    ChannelAccount.enable_channel();
+    return;
+}

@@ -13,7 +13,6 @@ use node_proto::{
     OpenChannelRequest, PayRequest, QueryTransactionQuest, WithdrawRequest,
 };
 use sg_config::config::NodeConfig;
-use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use std::convert::TryFrom;
 use std::sync::Arc;
 
@@ -217,13 +216,7 @@ impl node_proto::proto::node::Node for NodeService {
                 .await;
             match rx {
                 Ok(rx) => {
-                    let resp = SignedChannelTransaction::new(
-                        rx.raw_tx,
-                        rx.sender_signature,
-                        rx.receiver_signature,
-                    )
-                    .into();
-                    sink.success(resp);
+                    sink.success(rx.into());
                 }
                 Err(e) => {
                     set_failure_message(

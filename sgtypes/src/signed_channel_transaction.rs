@@ -1,35 +1,34 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::impl_hash;
 use crate::{
     channel_transaction::ChannelTransaction, channel_transaction_sigs::ChannelTransactionSigs,
-    hash::SignedChannelTransactionHasher, impl_hash,
 };
 use failure::prelude::*;
+
+use libra_crypto::HashValue;
+use libra_crypto_derive::CryptoHasher;
+use libra_types::account_address::AccountAddress;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
-#[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, CryptoHasher)]
 pub struct SignedChannelTransaction {
     pub raw_tx: ChannelTransaction,
-    pub sender_signature: ChannelTransactionSigs,
-    pub receiver_signature: ChannelTransactionSigs,
+    // use BTree to preserve order.
+    pub signatures: BTreeMap<AccountAddress, ChannelTransactionSigs>,
 }
 
 impl SignedChannelTransaction {
     pub fn new(
         raw_tx: ChannelTransaction,
-        sender_signature: ChannelTransactionSigs,
-        receiver_signature: ChannelTransactionSigs,
+        signatures: BTreeMap<AccountAddress, ChannelTransactionSigs>,
     ) -> Self {
-        Self {
-            raw_tx,
-            sender_signature,
-            receiver_signature,
-        }
+        Self { raw_tx, signatures }
     }
 }
-
 impl_hash!(SignedChannelTransaction, SignedChannelTransactionHasher);
 
 impl TryFrom<crate::proto::sgtypes::SignedChannelTransaction> for SignedChannelTransaction {
@@ -39,24 +38,40 @@ impl TryFrom<crate::proto::sgtypes::SignedChannelTransaction> for SignedChannelT
         signed_transaction: crate::proto::sgtypes::SignedChannelTransaction,
     ) -> Result<Self> {
         let raw_tx = ChannelTransaction::try_from(signed_transaction.raw_tx.unwrap())?;
-        let sender_signature =
-            ChannelTransactionSigs::try_from(signed_transaction.sender_signature.unwrap())?;
-        let receiver_signature =
-            ChannelTransactionSigs::try_from(signed_transaction.receiver_signature.unwrap())?;
-        Ok(SignedChannelTransaction {
-            raw_tx,
-            sender_signature,
-            receiver_signature,
-        })
+        let signers = signed_transaction
+            .signers
+            .into_iter()
+            .map(AccountAddress::try_from)
+            .collect::<Result<Vec<_>>>()?;
+        let signatures = signed_transaction
+            .signatures
+            .into_iter()
+            .map(ChannelTransactionSigs::try_from)
+            .collect::<Result<Vec<_>>>()?;
+        ensure!(signers.len() == signatures.len());
+        let signatures = signers
+            .into_iter()
+            .zip(signatures.into_iter())
+            .collect::<BTreeMap<_, _>>();
+        Ok(SignedChannelTransaction { raw_tx, signatures })
     }
 }
 
 impl From<SignedChannelTransaction> for crate::proto::sgtypes::SignedChannelTransaction {
     fn from(signed_transaction: SignedChannelTransaction) -> Self {
+        let SignedChannelTransaction { raw_tx, signatures } = signed_transaction;
+
+        let mut signers = Vec::with_capacity(signatures.len());
+        let mut signs = Vec::with_capacity(signatures.len());
+
+        for (addr, sig) in signatures.into_iter() {
+            signers.push(addr.to_vec());
+            signs.push(sig.into());
+        }
         Self {
-            raw_tx: Some(signed_transaction.raw_tx.into()),
-            sender_signature: Some(signed_transaction.sender_signature.into()),
-            receiver_signature: Some(signed_transaction.receiver_signature.into()),
+            raw_tx: Some(raw_tx.into()),
+            signers,
+            signatures: signs,
         }
     }
 }

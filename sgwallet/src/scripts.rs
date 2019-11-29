@@ -8,18 +8,21 @@ use include_dir::Dir;
 
 use failure::prelude::*;
 
+use ir_to_bytecode::compiler::compile_script;
+use ir_to_bytecode::parser::ast;
+use ir_to_bytecode::parser::parse_script;
 use lazy_static::lazy_static;
 use libra_logger::prelude::*;
+use libra_types::transaction::Script;
+use libra_types::{
+    account_address::AccountAddress, account_config::coin_struct_tag, language_storage::StructTag,
+};
 use sgcompiler::{Compiler, ScriptFile};
 use sgtypes::{
     channel_transaction::ChannelOp,
     script_package::{ChannelScriptPackage, ScriptCode},
 };
-
-use libra_types::transaction::{Script, TransactionArgument};
-use libra_types::{
-    account_address::AccountAddress, account_config::coin_struct_tag, language_storage::StructTag,
-};
+use stdlib::stdlib_modules;
 
 static SCRIPTS_DIR: Dir = include_dir!("scripts");
 
@@ -28,6 +31,30 @@ pub static DEFAULT_PACKAGE: &str = "libra";
 lazy_static! {
     static ref ASSET_SCRIPT_FOLDERS: Vec<(&'static str, StructTag)> =
         vec![("libra", coin_struct_tag())];
+}
+
+/// Returns the source code for create-account transaction script.
+fn enable_channel_script() -> &'static str {
+    include_str!("../scripts/enable_channel.mvir")
+}
+lazy_static! {
+    static ref ENABLE_CHANNEL_TXN_BODY: ast::Script =
+        { parse_script(enable_channel_script()).unwrap() };
+    static ref ENABLE_CHANNEL_TXN: Vec<u8> = { compile(&ENABLE_CHANNEL_TXN_BODY) };
+}
+
+fn compile(body: &ast::Script) -> Vec<u8> {
+    let compiled_script = compile_script(AccountAddress::default(), body.clone(), stdlib_modules())
+        .unwrap()
+        .0;
+    let mut script_bytes = vec![];
+    compiled_script.serialize(&mut script_bytes).unwrap();
+    script_bytes
+}
+
+#[inline]
+pub fn encode_enable_channel_script() -> Script {
+    Script::new(ENABLE_CHANNEL_TXN.clone(), vec![])
 }
 
 #[derive(Debug, Clone)]
@@ -113,29 +140,6 @@ impl PackageRegistry {
 
     pub fn close_script(&self) -> ScriptCode {
         self.close_script.clone()
-    }
-
-    pub fn channel_op_to_script(
-        &self,
-        channel_op: &ChannelOp,
-        args: Vec<TransactionArgument>,
-    ) -> Result<Script> {
-        let script_code = match channel_op {
-            ChannelOp::Open => self.open_script(),
-            ChannelOp::Close => self.close_script(),
-            ChannelOp::Execute {
-                package_name,
-                script_name,
-            } => self
-                .get_script(package_name, script_name)
-                .ok_or(format_err!(
-                    "Can not find script by package {} and script name {}",
-                    package_name,
-                    script_name
-                ))?,
-        };
-        let script = script_code.encode_script(args);
-        Ok(script)
     }
 }
 

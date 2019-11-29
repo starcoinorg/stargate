@@ -14,6 +14,7 @@ pub struct ChannelTransactionToApply {
     pub signed_channel_txn: SignedChannelTransaction,
     /// tx output related
     pub write_set: Option<WriteSet>,
+    pub travel: bool,
     // other tx output fields for later usage
     pub events: Vec<ContractEvent>,
     pub major_status: StatusCode,
@@ -23,6 +24,7 @@ pub struct ChannelTransactionToApply {
 pub struct ChannelTransactionToCommit {
     signed_txn: SignedChannelTransaction,
     write_set: WriteSet,
+    travel: bool,
     witness_states: BTreeMap<AccountAddress, AccountStateBlob>,
     events: Vec<ContractEvent>,
     major_status: StatusCode,
@@ -32,6 +34,7 @@ impl
     Into<(
         SignedChannelTransaction,
         WriteSet,
+        bool,
         BTreeMap<AccountAddress, AccountStateBlob>,
         Vec<ContractEvent>,
         StatusCode,
@@ -42,6 +45,7 @@ impl
     ) -> (
         SignedChannelTransaction,
         WriteSet,
+        bool,
         BTreeMap<AccountAddress, AccountStateBlob>,
         Vec<ContractEvent>,
         StatusCode,
@@ -49,11 +53,19 @@ impl
         let ChannelTransactionToCommit {
             signed_txn,
             write_set,
+            travel,
             witness_states,
             events,
             major_status,
         } = self;
-        (signed_txn, write_set, witness_states, events, major_status)
+        (
+            signed_txn,
+            write_set,
+            travel,
+            witness_states,
+            events,
+            major_status,
+        )
     }
 }
 
@@ -61,6 +73,7 @@ impl ChannelTransactionToCommit {
     pub fn new(
         signed_txn: SignedChannelTransaction,
         write_set: WriteSet,
+        travel: bool,
         witness_states: BTreeMap<AccountAddress, AccountStateBlob>,
         events: Vec<ContractEvent>,
         major_status: StatusCode,
@@ -68,6 +81,7 @@ impl ChannelTransactionToCommit {
         Self {
             signed_txn,
             write_set,
+            travel,
             witness_states,
             events,
             major_status,
@@ -79,6 +93,9 @@ impl ChannelTransactionToCommit {
     }
     pub fn write_set(&self) -> &WriteSet {
         &self.write_set
+    }
+    pub fn travel(&self) -> bool {
+        self.travel
     }
     pub fn witness_states(&self) -> &BTreeMap<AccountAddress, AccountStateBlob> {
         &self.witness_states
