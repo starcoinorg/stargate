@@ -21,15 +21,16 @@ use libra_state_view::StateView;
 use libra_types::access_path::AccessPath;
 use libra_types::byte_array::ByteArray;
 use libra_types::channel::{
-    channel_struct_tag, user_channels_struct_tag, ChannelResource, UserChannelsResource,
+    channel_mirror_struct_tag, channel_participant_struct_tag, channel_struct_tag,
+    user_channels_struct_tag, ChannelMirrorResource, ChannelParticipantAccountResource,
+    ChannelResource, UserChannelsResource,
 };
-use libra_types::channel_account::channel_account_struct_tag;
+
 use libra_types::transaction::Transaction;
 use libra_types::{
     access_path::DataPath,
     account_address::AccountAddress,
     account_config::{coin_struct_tag, AccountResource},
-    channel_account::ChannelAccountResource,
     language_storage::StructTag,
     transaction::{
         helpers::{create_signed_payload_txn, ChannelPayloadSigner, TransactionSigner},
@@ -175,34 +176,34 @@ impl Wallet {
 }
 
 impl Wallet {
-    pub async fn channel_account_resource(
-        &self,
-        participant: AccountAddress,
-    ) -> Result<Option<ChannelAccountResource>> {
+    pub async fn channel_sequence_number(&self, participant: AccountAddress) -> Result<u64> {
+        let (channel_address, _) = generate_channel_address(participant, self.shared.account);
         let (tx, rx) = oneshot::channel();
         let cmd = WalletCmd::GetChannelResource {
             participant,
-            struct_tag: channel_account_struct_tag(),
+            address: channel_address, // channel mirror resource is a shared resource
+            struct_tag: channel_mirror_struct_tag(),
             responder: tx,
         };
 
-        let resp = self.call(cmd, rx).await?;
-        resp?
-            .map(|blob| ChannelAccountResource::make_from(blob))
-            .transpose()
+        let resp = self.call(cmd, rx).await??;
+        let mirror = resp
+            .map(|blob| ChannelMirrorResource::make_from(blob))
+            .transpose()?;
+        Ok(mirror.map(|r| r.channel_sequence_number()).unwrap_or(0))
     }
 
-    pub async fn channel_sequence_number(&self, participant: AccountAddress) -> Result<u64> {
+    pub async fn participant_channel_balance(&self, participant: AccountAddress) -> Result<u64> {
         Ok(self
-            .channel_account_resource(participant)
+            .channel_participant_account_resource(participant, participant)
             .await?
-            .map(|account| account.channel_sequence_number())
+            .map(|account| account.balance())
             .unwrap_or(0))
     }
 
     pub async fn channel_balance(&self, participant: AccountAddress) -> Result<u64> {
         Ok(self
-            .channel_account_resource(participant)
+            .channel_participant_account_resource(participant, self.shared.account)
             .await?
             .map(|account| account.balance())
             .unwrap_or(0))
@@ -545,6 +546,25 @@ impl Wallet {
         resp
     }
 
+    async fn channel_participant_account_resource(
+        &self,
+        participant: AccountAddress,
+        address: AccountAddress,
+    ) -> Result<Option<ChannelParticipantAccountResource>> {
+        let (tx, rx) = oneshot::channel();
+        let cmd = WalletCmd::GetChannelResource {
+            participant,
+            address,
+            struct_tag: channel_participant_struct_tag(),
+            responder: tx,
+        };
+
+        let resp = self.call(cmd, rx).await?;
+        resp?
+            .map(|blob| ChannelParticipantAccountResource::make_from(blob))
+            .transpose()
+    }
+
     async fn call<T>(&self, cmd: WalletCmd, rx: oneshot::Receiver<T>) -> Result<T> {
         if let Err(_e) = self.mailbox_sender.clone().try_send(cmd) {
             bail!("wallet mailbox is full or close");
@@ -603,6 +623,7 @@ pub enum WalletCmd {
     },
     GetChannelResource {
         participant: AccountAddress,
+        address: AccountAddress,
         struct_tag: StructTag,
         responder: oneshot::Sender<Result<Option<Vec<u8>>>>,
     },
@@ -708,12 +729,14 @@ impl Inner {
             }
             WalletCmd::GetChannelResource {
                 participant,
+                address,
                 struct_tag,
                 responder,
             } => {
                 respond_with(
                     responder,
-                    self.get_channel_resource(participant, struct_tag).await,
+                    self.get_channel_resource(participant, address, struct_tag)
+                        .await,
                 );
             }
             WalletCmd::GetPendingTxn {
@@ -997,15 +1020,16 @@ impl Inner {
     async fn get_channel_resource(
         &mut self,
         participant: AccountAddress,
+        address: AccountAddress,
         struct_tag: StructTag,
     ) -> Result<Option<Vec<u8>>> {
         let (generated_channel_address, _participants) =
             generate_channel_address(participant, self.inner.account);
         let (tx, rx) = oneshot::channel();
 
-        let data_path = DataPath::channel_resource_path(participant, struct_tag);
+        let data_path = DataPath::channel_resource_path(address, struct_tag);
         let msg = ChannelMsg::AccessPath {
-            path: AccessPath::new_for_data_path(self.inner.account, data_path),
+            path: AccessPath::new_for_data_path(generated_channel_address, data_path),
             responder: tx,
         };
         let channel = self.get_channel_mut(&generated_channel_address)?;
