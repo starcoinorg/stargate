@@ -121,6 +121,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ant"
+version = "0.1.0"
+dependencies = [
+ "libra-logger 0.1.0",
+ "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "arc-swap"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
