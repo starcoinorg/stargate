@@ -403,6 +403,22 @@ impl Wallet {
         Ok(())
     }
 
+    /// After receiver reject the txn, sender should cancel his local pending txn to cleanup state.
+    pub async fn cancel_pending_request(
+        &self,
+        participant: AccountAddress,
+        request_id: HashValue,
+    ) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        let cmd = WalletCmd::CancelTxnRequest {
+            request_id,
+            participant,
+            responder: tx,
+        };
+        let _ = self.call(cmd, rx).await??;
+        Ok(())
+    }
+
     pub async fn verify_txn_response(
         &self,
         participant: AccountAddress,
@@ -595,6 +611,11 @@ pub enum WalletCmd {
         grant: bool,
         responder: oneshot::Sender<Result<Option<ChannelTransactionResponse>>>,
     },
+    CancelTxnRequest {
+        participant: AccountAddress,
+        request_id: HashValue,
+        responder: oneshot::Sender<Result<()>>,
+    },
     VerifyTxnResponse {
         participant: AccountAddress,
         txn_response: ChannelTransactionResponse,
@@ -708,6 +729,16 @@ impl Inner {
                 respond_with(
                     responder,
                     self.grant_txn_request(participant, request_id, grant).await,
+                );
+            }
+            WalletCmd::CancelTxnRequest {
+                participant,
+                request_id,
+                responder,
+            } => {
+                respond_with(
+                    responder,
+                    self.cancel_txn_request(participant, request_id).await,
                 );
             }
             WalletCmd::VerifyTxnResponse {
@@ -961,6 +992,26 @@ impl Inner {
         channel.send(msg)?;
         let resp = rx.await??;
         Ok(resp.map(|s| ChannelTransactionResponse::new(proposal, s)))
+    }
+
+    async fn cancel_txn_request(
+        &mut self,
+        participant: AccountAddress,
+        request_id: HashValue,
+    ) -> Result<()> {
+        let (generated_channel_address, _participants) =
+            generate_channel_address(participant, self.inner.account);
+
+        let channel = self.get_channel_mut(&generated_channel_address)?;
+
+        let (tx, rx) = oneshot::channel();
+        let msg = ChannelMsg::CancelPendingTxn {
+            channel_txn_id: request_id,
+            responder: tx,
+        };
+        channel.send(msg)?;
+        let _resp = rx.await??;
+        Ok(())
     }
 
     async fn verify_txn_response(

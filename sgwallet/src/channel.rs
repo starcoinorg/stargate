@@ -65,6 +65,10 @@ pub enum ChannelMsg {
         grant: bool,
         responder: oneshot::Sender<Result<Option<ChannelTransactionSigs>>>,
     },
+    CancelPendingTxn {
+        channel_txn_id: HashValue,
+        responder: oneshot::Sender<Result<()>>,
+    },
     ApplyPendingTxn {
         responder: oneshot::Sender<Result<u64>>,
     },
@@ -291,6 +295,12 @@ impl Inner {
                 let response = self.grant_proposal_async(channel_txn_id, grant).await;
                 respond_with(responder, response);
             }
+            ChannelMsg::CancelPendingTxn {
+                channel_txn_id,
+                responder,
+            } => {
+                respond_with(responder, self.cancel_pending_txn(channel_txn_id));
+            }
             ChannelMsg::ApplyPendingTxn { responder } => {
                 let response = self.apply_pending_txn_async().await;
                 respond_with(responder, response);
@@ -496,39 +506,49 @@ impl Inner {
         channel_txn_id: HashValue,
         grant: bool,
     ) -> Result<Option<ChannelTransactionSigs>> {
-        match self.pending_txn() {
-            None | Some(PendingTransaction::WaitForApply { .. }) => {
-                bail!("no pending txn to grant")
-            }
-            Some(PendingTransaction::WaitForSig {
-                proposal,
-                output,
-                signatures,
-            }) => {
-                if channel_txn_id != CryptoHash::hash(&proposal.channel_txn) {
-                    let err = format_err!("channel_txn_id conflict with local pending txn");
-                    return Err(err);
-                }
-                if grant {
-                    // maybe already grant the proposal
-                    if !signatures.contains_key(&self.account_address) {
-                        self.do_grant_proposal(proposal, output, signatures)?;
-                    }
-                    let pending = self.pending_txn().expect("pending txn must exists");
-                    let user_sigs = pending
-                        .get_signature(&self.account_address)
-                        .expect("user signature must exists");
-                    Ok(Some(user_sigs))
-                } else {
-                    self.clear_pending_txn()?;
-
-                    if proposal.channel_txn.operator().is_open() {
-                        self.should_stop = true;
-                    }
-                    Ok(None)
-                }
-            }
+        let pending_txn = self.pending_txn();
+        ensure!(pending_txn.is_some(), "no pending txn");
+        let pending_txn = pending_txn.unwrap();
+        ensure!(!pending_txn.fulfilled(), "pending txn is already fulfilled");
+        let (proposal, output, signatures) = pending_txn.into();
+        if channel_txn_id != CryptoHash::hash(&proposal.channel_txn) {
+            let err = format_err!("channel_txn_id conflict with local pending txn");
+            return Err(err);
         }
+        if grant {
+            // maybe already grant the proposal
+            if !signatures.contains_key(&self.account_address) {
+                self.do_grant_proposal(proposal, output, signatures)?;
+            }
+            let pending = self.pending_txn().expect("pending txn must exists");
+            let user_sigs = pending
+                .get_signature(&self.account_address)
+                .expect("user signature must exists");
+            Ok(Some(user_sigs))
+        } else {
+            self.clear_pending_txn()?;
+            if proposal.channel_txn.operator().is_open() {
+                self.should_stop = true;
+            }
+            Ok(None)
+        }
+    }
+
+    fn cancel_pending_txn(&mut self, channel_txn_id: HashValue) -> Result<()> {
+        let pending_txn = self.pending_txn();
+        ensure!(pending_txn.is_some(), "no pending txn");
+        let pending_txn = pending_txn.unwrap();
+        ensure!(!pending_txn.fulfilled(), "pending txn is already fulfilled");
+        let (proposal, _output, _signature) = pending_txn.into();
+        if channel_txn_id != CryptoHash::hash(&proposal.channel_txn) {
+            let err = format_err!("channel_txn_id conflict with local pending txn");
+            return Err(err);
+        }
+        self.clear_pending_txn()?;
+        if proposal.channel_txn.operator().is_open() {
+            self.should_stop = true;
+        }
+        Ok(())
     }
 
     async fn apply_pending_txn_async(&mut self) -> Result<u64> {
