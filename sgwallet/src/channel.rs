@@ -18,7 +18,11 @@ use libra_crypto::test_utils::KeyPair;
 use libra_crypto::{hash::CryptoHash, HashValue, SigningKey, VerifyingKey};
 use libra_logger::prelude::*;
 use libra_state_view::StateView;
-use libra_types::channel::{Witness, WitnessData};
+use libra_types::access_path::DataPath;
+use libra_types::channel::{
+    channel_participant_struct_tag, ChannelMirrorResource, ChannelParticipantAccountResource,
+    Witness, WitnessData,
+};
 use libra_types::identifier::Identifier;
 use libra_types::language_storage::ModuleId;
 use libra_types::transaction::helpers::TransactionSigner;
@@ -28,23 +32,19 @@ use libra_types::transaction::{
 };
 use libra_types::write_set::WriteSet;
 use libra_types::{
-    access_path::AccessPath, account_address::AccountAddress,
-    channel_account::ChannelAccountResource, transaction::TransactionOutput, write_set::WriteOp,
+    access_path::AccessPath, account_address::AccountAddress, transaction::TransactionOutput,
+    write_set::WriteOp,
 };
 use sgchain::star_chain_client::ChainClient;
 use sgstorage::channel_db::ChannelDB;
 use sgstorage::channel_store::ChannelStore;
+use sgtypes::channel::ChannelState;
 use sgtypes::channel_transaction::{ChannelOp, ChannelTransaction, ChannelTransactionProposal};
 use sgtypes::channel_transaction_sigs::ChannelTransactionSigs;
 use sgtypes::channel_transaction_to_commit::ChannelTransactionToApply;
 use sgtypes::pending_txn::PendingTransaction;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
-use sgtypes::{
-    channel::{ChannelStage, ChannelState},
-    sg_error::SgError,
-};
 use std::collections::{BTreeMap, BTreeSet};
-
 use std::sync::Arc;
 use vm::gas_schedule::GasAlgebra;
 
@@ -677,53 +677,59 @@ impl Inner {
     }
 
     fn channel_sequence_number(&self) -> u64 {
-        match self.channel_account_resource() {
+        let access_path = AccessPath::new_for_data_path(
+            self.channel_address,
+            DataPath::channel_resource_path(self.channel_address, channel_participant_struct_tag()),
+        );
+        let channel_mirror_resource = self
+            .get_local(&access_path)
+            .unwrap()
+            .and_then(|value| ChannelMirrorResource::make_from(value).ok());
+        match channel_mirror_resource {
             None => 0,
-            Some(account_resource) => account_resource.channel_sequence_number(),
+            Some(r) => r.channel_sequence_number(),
         }
     }
 
-    /// FIXME: Once the detail of channel account path is determined,
-    /// this should be implemented
-    pub fn channel_account_resource(&self) -> Option<ChannelAccountResource> {
-        //        let access_path = AccessPath::new_for_data_path(
-        //            self.account_address,
-        //            DataPath::channel_account_path(self.participant.address()),
-        //        );
-        //        self.get_local(&access_path)
-        //            .unwrap()
-        //            .and_then(|value| ChannelAccountResource::make_from(value).ok())
-        unimplemented!()
+    fn channel_account_resource(&self) -> Option<ChannelParticipantAccountResource> {
+        let access_path = AccessPath::new_for_data_path(
+            self.channel_address,
+            DataPath::channel_resource_path(self.account_address, channel_participant_struct_tag()),
+        );
+        self.get_local(&access_path)
+            .unwrap()
+            .and_then(|value| ChannelParticipantAccountResource::make_from(value).ok())
     }
 
     fn pending_txn(&self) -> Option<PendingTransaction> {
         self.store.get_pending_txn()
     }
 
-    fn _stage(&self) -> ChannelStage {
-        match self.pending_txn() {
-            Some(PendingTransaction::WaitForApply { .. }) => ChannelStage::Syncing,
-            Some(PendingTransaction::WaitForSig { .. }) => ChannelStage::Pending,
-            None => match self.channel_account_resource() {
-                Some(resource) => {
-                    if resource.closed() {
-                        ChannelStage::Closed
-                    } else {
-                        ChannelStage::Idle
-                    }
-                }
-                None => ChannelStage::Opening,
-            },
-        }
-    }
-
-    fn _check_stage(&self, expect_stages: Vec<ChannelStage>) -> Result<()> {
-        let current_stage = self._stage();
-        if !expect_stages.contains(&current_stage) {
-            return Err(SgError::new_invalid_channel_stage_error(current_stage).into());
-        }
-        Ok(())
-    }
+    // TODO: should stage is needed?
+    //    fn _stage(&self) -> ChannelStage {
+    //        match self.pending_txn() {
+    //            Some(PendingTransaction::WaitForApply { .. }) => ChannelStage::Syncing,
+    //            Some(PendingTransaction::WaitForSig { .. }) => ChannelStage::Pending,
+    //            None => match self.channel_account_resource() {
+    //                Some(resource) => {
+    //                    if resource.closed() {
+    //                        ChannelStage::Closed
+    //                    } else {
+    //                        ChannelStage::Idle
+    //                    }
+    //                }
+    //                None => ChannelStage::Opening,
+    //            },
+    //        }
+    //    }
+    //
+    //    fn _check_stage(&self, expect_stages: Vec<ChannelStage>) -> Result<()> {
+    //        let current_stage = self._stage();
+    //        if !expect_stages.contains(&current_stage) {
+    //            return Err(SgError::new_invalid_channel_stage_error(current_stage).into());
+    //        }
+    //        Ok(())
+    //    }
 
     fn get_local(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
         let witness = self.witness_data();
@@ -979,14 +985,26 @@ impl Inner {
         args: Vec<TransactionArgument>,
     ) -> Result<ScriptAction> {
         match op {
-            ChannelOp::Open => Ok(ScriptAction::new_code(
-                self.script_registry.open_script().byte_code().clone(),
-                args,
-            )),
-            ChannelOp::Close => Ok(ScriptAction::new_code(
-                self.script_registry.close_script().byte_code().clone(),
-                args,
-            )),
+            ChannelOp::Open => {
+                let module_id =
+                    ModuleId::new(AccountAddress::default(), Identifier::new("LibraAccount")?);
+
+                Ok(ScriptAction::new_call(
+                    module_id,
+                    Identifier::new("open_channel")?,
+                    args,
+                ))
+            }
+            ChannelOp::Close => {
+                let module_id =
+                    ModuleId::new(AccountAddress::default(), Identifier::new("LibraAccount")?);
+
+                Ok(ScriptAction::new_call(
+                    module_id,
+                    Identifier::new("close")?,
+                    args,
+                ))
+            }
             ChannelOp::Execute {
                 package_name,
                 script_name,

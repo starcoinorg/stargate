@@ -21,9 +21,9 @@ use libra_state_view::StateView;
 use libra_types::access_path::AccessPath;
 use libra_types::byte_array::ByteArray;
 use libra_types::channel::{
-    channel_mirror_struct_tag, channel_participant_struct_tag, channel_struct_tag,
-    user_channels_struct_tag, ChannelMirrorResource, ChannelParticipantAccountResource,
-    ChannelResource, UserChannelsResource,
+    channel_mirror_struct_tag, channel_participant_struct_tag,
+    channel_struct_tag, user_channels_struct_tag, ChannelMirrorResource,
+    ChannelParticipantAccountResource, ChannelResource, UserChannelsResource,
 };
 
 use libra_types::transaction::Transaction;
@@ -176,6 +176,28 @@ impl Wallet {
 }
 
 impl Wallet {
+    pub async fn enable_channel(&self) -> Result<u64> {
+        let seq_number = self.sequence_number()?;
+        let raw_txn = RawTransaction::new_script(
+            self.shared.account,
+            seq_number,
+            encode_enable_channel_script(),
+            1000_000 as u64,
+            1,
+            Duration::from_secs(u64::max_value()),
+        );
+        let signed_txn = raw_txn
+            .sign(
+                &self.shared.keypair.private_key,
+                self.shared.keypair.public_key.clone(),
+            )?
+            .into_inner();
+        let _ = submit_transaction(self.shared.client.as_ref(), signed_txn).await?;
+        let _proof =
+            watch_transaction(self.shared.client.as_ref(), self.shared.account, seq_number).await?;
+        Ok(_proof.proof.transaction_info().gas_used())
+    }
+
     pub async fn channel_sequence_number(&self, participant: AccountAddress) -> Result<u64> {
         let (channel_address, _) = generate_channel_address(participant, self.shared.account);
         let (tx, rx) = oneshot::channel();
@@ -214,7 +236,7 @@ impl Wallet {
         &self,
         participant: AccountAddress,
         sender_amount: u64,
-        receiver_amount: u64, // TODO: delete me
+        receiver_amount: u64,
     ) -> Result<ChannelTransactionRequest> {
         info!(
             "wallet.open receiver:{}, sender_amount:{}, receiver_amount:{}",
@@ -227,6 +249,7 @@ impl Wallet {
             vec![
                 TransactionArgument::ByteArray(ByteArray::new(participant.to_vec())),
                 TransactionArgument::U64(sender_amount),
+                TransactionArgument::U64(receiver_amount),
             ],
         )
         .await
@@ -235,24 +258,18 @@ impl Wallet {
     pub async fn deposit(
         &self,
         receiver: AccountAddress,
-        sender_amount: u64,
-        receiver_amount: u64,
+        amount: u64,
     ) -> Result<ChannelTransactionRequest> {
-        info!(
-            "wallet.deposit receiver:{}, sender_amount:{}, receiver_amount:{}",
-            receiver, sender_amount, receiver_amount
-        );
+        info!("wallet.deposit receiver:{}, amount:{}", receiver, amount);
 
         self.execute_async(
             receiver,
-            ChannelOp::Execute {
-                package_name: DEFAULT_PACKAGE.to_owned(),
-                script_name: "deposit".to_string(),
+            ChannelOp::Action {
+                module_address: AccountAddress::default(),
+                module_name: "ChannelScript".to_string(), // FIXME:change to ChannelScript
+                function_name: "deposit".to_string(),
             },
-            vec![
-                TransactionArgument::U64(sender_amount),
-                TransactionArgument::U64(receiver_amount),
-            ],
+            vec![TransactionArgument::U64(amount)],
         )
         .await
     }
@@ -266,9 +283,10 @@ impl Wallet {
 
         self.execute_async(
             receiver,
-            ChannelOp::Execute {
-                package_name: DEFAULT_PACKAGE.to_owned(),
-                script_name: "transfer".to_string(),
+            ChannelOp::Action {
+                module_address: AccountAddress::default(),
+                module_name: "ChannelScript".to_string(), // FIXME:change to ChannelScript
+                function_name: "transfer".to_string(),
             },
             vec![TransactionArgument::U64(amount)],
         )
@@ -278,24 +296,18 @@ impl Wallet {
     pub async fn withdraw(
         &self,
         receiver: AccountAddress,
-        sender_amount: u64,
-        receiver_amount: u64,
+        amount: u64,
     ) -> Result<ChannelTransactionRequest> {
-        info!(
-            "wallet.withdraw receiver:{}, sender_amount:{}, receiver_amount:{}",
-            receiver, sender_amount, receiver_amount
-        );
+        info!("wallet.withdraw receiver:{}, amount: {}", receiver, amount);
 
         self.execute_async(
             receiver,
-            ChannelOp::Execute {
-                package_name: DEFAULT_PACKAGE.to_owned(),
-                script_name: "withdraw".to_string(),
+            ChannelOp::Action {
+                module_address: AccountAddress::default(),
+                module_name: "ChannelScript".to_string(), // FIXME:change to ChannelScript
+                function_name: "withdraw".to_string(),
             },
-            vec![
-                TransactionArgument::U64(sender_amount),
-                TransactionArgument::U64(receiver_amount),
-            ],
+            vec![TransactionArgument::U64(amount)],
         )
         .await
     }

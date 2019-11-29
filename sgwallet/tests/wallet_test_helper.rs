@@ -24,11 +24,11 @@ use std::{
 };
 use tokio::runtime::Runtime;
 
-fn faucet_sync(client: Arc<dyn ChainClient>, receiver: AccountAddress, amount: u64) -> Result<()> {
-    let rt = Runtime::new().expect("faucet runtime err.");
-    let f = async move { client.faucet(receiver, amount).await };
-    rt.block_on(f)
-}
+//fn faucet_sync(client: Arc<dyn ChainClient>, receiver: AccountAddress, amount: u64) -> Result<()> {
+//    let rt = Runtime::new().expect("faucet runtime err.");
+//    let f = async move { client.faucet(receiver, amount).await };
+//    rt.block_on(f)
+//}
 
 pub fn setup_wallet(client: Arc<dyn ChainClient>, init_balance: u64) -> Result<Wallet> {
     let mut seed_rng = rand::rngs::OsRng::new().expect("can't access OsRng");
@@ -38,8 +38,27 @@ pub fn setup_wallet(client: Arc<dyn ChainClient>, init_balance: u64) -> Result<W
         Arc::new(KeyPair::generate_for_testing(&mut rng0));
 
     let account = AccountAddress::from_public_key(&account_keypair.public_key);
-    faucet_sync(client.clone(), account, init_balance)?;
-    let wallet = Wallet::new_with_client(account, account_keypair, client, TempPath::new())?;
+    let rt = Runtime::new().expect("faucet runtime err.");
+    let f = {
+        let c = client.clone();
+        async move { c.faucet(account, init_balance).await }
+    };
+    rt.block_on(f)?;
+
+    // enable channel for wallet
+    let wallet =
+        Wallet::new_with_client(account, account_keypair, client.clone(), TempPath::new())?;
+    let f = {
+        let wallet = &wallet;
+        async move { wallet.enable_channel().await }
+    };
+    let gas = rt.block_on(f)?;
+    let f = {
+        let c = client.clone();
+        async move { c.faucet(account, gas).await }
+    };
+    rt.block_on(f)?;
+
     let wallet_balance = wallet.balance()?;
     assert_eq!(
         init_balance, wallet_balance,
@@ -144,12 +163,12 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
     let transfer_amount = 1_000_000;
 
     let sender_withdraw_amount: u64 = 4_000_000;
-    let receiver_withdraw_amount: u64 = 5_000_000;
+    let _receiver_withdraw_amount: u64 = 5_000_000;
 
     let rt = Runtime::new()?;
 
-    let mut sender_wallet = setup_wallet(chain_client.clone(), sender_amount).unwrap();
-    let mut receiver_wallet = setup_wallet(chain_client.clone(), receiver_amount).unwrap();
+    let mut sender_wallet = setup_wallet(chain_client.clone(), sender_amount)?;
+    let mut receiver_wallet = setup_wallet(chain_client.clone(), receiver_amount)?;
     sender_wallet.start(rt.executor().clone())?;
     receiver_wallet.start(rt.executor().clone())?;
 
@@ -163,8 +182,8 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
     let f = async move {
         let open_txn = sender_wallet
             .open(receiver, sender_fund_amount, receiver_fund_amount)
-            .await
-            .unwrap();
+            .await?;
+
         debug_assert!(open_txn.is_travel_txn(), "open_txn must travel txn");
 
         let receiver_open_txn = receiver_wallet.verify_txn(sender, &open_txn).await?;
@@ -181,19 +200,18 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
             .await?;
         let sender_gas = sender_wallet
             .apply_txn(receiver, &receiver_open_txn)
-            .await
-            .unwrap();
+            .await?;
+
         let _receiver_gas = receiver_wallet
             .apply_txn(sender, &receiver_open_txn)
-            .await
-            .unwrap();
+            .await?;
 
         sender_gas_used += sender_gas;
 
-        let sender_channel_balance = sender_wallet.channel_balance(receiver).await.unwrap();
+        let sender_channel_balance = sender_wallet.channel_balance(receiver).await?;
         assert_eq!(sender_channel_balance, sender_fund_amount);
 
-        let receiver_channel_balance = receiver_wallet.channel_balance(sender).await.unwrap();
+        let receiver_channel_balance = receiver_wallet.channel_balance(sender).await?;
         assert_eq!(receiver_channel_balance, receiver_fund_amount);
 
         debug!(
@@ -202,9 +220,9 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
         );
 
         let deposit_txn = sender_wallet
-            .deposit(receiver, sender_deposit_amount, receiver_deposit_amount)
-            .await
-            .unwrap();
+            .deposit(receiver, sender_deposit_amount)
+            .await?;
+
         debug_assert!(deposit_txn.is_travel_txn(), "open_txn must travel txn");
 
         let receiver_deposit_txn = receiver_wallet.verify_txn(sender, &deposit_txn).await?;
@@ -233,20 +251,15 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
             sender_fund_amount + sender_deposit_amount
         );
 
-        let receiver_channel_balance = receiver_wallet.channel_balance(sender).await.unwrap();
-        assert_eq!(
-            receiver_channel_balance,
-            receiver_fund_amount + receiver_deposit_amount
-        );
+        let receiver_channel_balance = receiver_wallet.channel_balance(sender).await?;
+        assert_eq!(receiver_channel_balance, receiver_fund_amount);
 
         debug!(
             "after deposit: sender_channel_balance:{}, receiver_channel_balance:{}",
             sender_channel_balance, receiver_channel_balance
         );
-        let transfer_txn = sender_wallet
-            .transfer(receiver, transfer_amount)
-            .await
-            .unwrap();
+        let transfer_txn = sender_wallet.transfer(receiver, transfer_amount).await?;
+
         debug_assert!(
             !transfer_txn.is_travel_txn(),
             "transfer_txn must not travel txn"
@@ -295,13 +308,13 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
             .apply_txn(sender, &receiver_transfer_txn)
             .await?;
 
-        let sender_channel_balance = sender_wallet.channel_balance(receiver).await.unwrap();
+        let sender_channel_balance = sender_wallet.channel_balance(receiver).await?;
         assert_eq!(
             sender_channel_balance,
             sender_fund_amount + sender_deposit_amount - transfer_amount
         );
 
-        let receiver_channel_balance = receiver_wallet.channel_balance(sender).await.unwrap();
+        let receiver_channel_balance = receiver_wallet.channel_balance(sender).await?;
         assert_eq!(
             receiver_channel_balance,
             receiver_fund_amount + receiver_deposit_amount + transfer_amount
@@ -312,9 +325,9 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
             sender_channel_balance, receiver_channel_balance
         );
         let withdraw_txn = sender_wallet
-            .withdraw(receiver, sender_withdraw_amount, receiver_withdraw_amount)
-            .await
-            .unwrap();
+            .withdraw(receiver, sender_withdraw_amount)
+            .await?;
+
         debug_assert!(withdraw_txn.is_travel_txn(), "withdraw_txn must travel txn");
         //debug!("txn:{:#?}", withdraw_txn);
 
@@ -347,7 +360,6 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
         assert_eq!(
             receiver_channel_balance,
             receiver_fund_amount + receiver_deposit_amount + transfer_amount
-                - receiver_withdraw_amount
         );
 
         debug!(
@@ -366,7 +378,6 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
         assert_eq!(
             receiver_balance,
             receiver_amount - receiver_fund_amount - receiver_deposit_amount
-                + receiver_withdraw_amount
         );
 
         drop(sender_wallet);
@@ -402,7 +413,7 @@ pub(crate) fn deploy_custom_module_and_script(
 
 pub fn compile_and_deploy_module(wallet: Arc<Wallet>, test_case: &str) -> Result<()> {
     let path = get_test_case_path(test_case);
-    let module_source = std::fs::read_to_string(path.join("module.mvir")).unwrap();
+    let module_source = std::fs::read_to_string(path.join("module.mvir"))?;
 
     let client_state_view = ClientStateView::new(None, wallet.client());
     let module_loader = StateViewModuleLoader::new(&client_state_view);
