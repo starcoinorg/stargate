@@ -19,11 +19,11 @@ use libra_crypto::{
 use libra_logger::prelude::*;
 use libra_state_view::StateView;
 use libra_types::access_path::AccessPath;
-use libra_types::byte_array::ByteArray;
+
 use libra_types::channel::{
-    channel_mirror_struct_tag, channel_participant_struct_tag,
-    channel_struct_tag, user_channels_struct_tag, ChannelMirrorResource,
-    ChannelParticipantAccountResource, ChannelResource, UserChannelsResource,
+    channel_mirror_struct_tag, channel_participant_struct_tag, channel_struct_tag,
+    user_channels_struct_tag, ChannelMirrorResource, ChannelParticipantAccountResource,
+    ChannelResource, UserChannelsResource,
 };
 
 use libra_types::transaction::Transaction;
@@ -247,7 +247,7 @@ impl Wallet {
             participant,
             ChannelOp::Open,
             vec![
-                TransactionArgument::ByteArray(ByteArray::new(participant.to_vec())),
+                TransactionArgument::Address(participant),
                 TransactionArgument::U64(sender_amount),
                 TransactionArgument::U64(receiver_amount),
             ],
@@ -288,7 +288,10 @@ impl Wallet {
                 module_name: "ChannelScript".to_string(), // FIXME:change to ChannelScript
                 function_name: "transfer".to_string(),
             },
-            vec![TransactionArgument::U64(amount)],
+            vec![
+                TransactionArgument::Address(receiver),
+                TransactionArgument::U64(amount),
+            ],
         )
         .await
     }
@@ -500,7 +503,7 @@ impl Wallet {
             PendingTransaction::WaitForSig {
                 proposal,
                 mut signatures,
-                ..
+                output,
             } => {
                 let proposer_sigs = signatures.remove(&proposal.channel_txn.proposer());
                 debug_assert!(proposer_sigs.is_some());
@@ -508,6 +511,7 @@ impl Wallet {
                 Some(ChannelTransactionRequest::new(
                     proposal.clone(),
                     proposer_sigs.unwrap(),
+                    output.is_travel_txn(),
                 ))
             }
             _ => None,
@@ -928,8 +932,8 @@ impl Inner {
             responder: tx,
         };
         channel.send(msg)?;
-        let (proposal, sigs) = rx.await??;
-        let request = ChannelTransactionRequest::new(proposal, sigs);
+        let (proposal, sigs, output) = rx.await??;
+        let request = ChannelTransactionRequest::new(proposal, sigs, output.is_travel_txn());
         Ok(request)
     }
 
@@ -963,7 +967,7 @@ impl Inner {
 
         let channel = self.get_channel_mut(&generated_channel_address)?;
 
-        let (proposal, sigs) = txn_request.into();
+        let (proposal, sigs, _) = txn_request.into();
         let (tx, rx) = oneshot::channel();
         let msg = ChannelMsg::CollectProposalWithSigs {
             proposal: proposal.clone(),
@@ -1051,15 +1055,19 @@ impl Inner {
     async fn apply_txn(
         &mut self,
         participant: AccountAddress,
-        _txn_response: ChannelTransactionResponse,
+        txn_response: ChannelTransactionResponse,
     ) -> Result<u64> {
         let (generated_channel_address, _participants) =
             generate_channel_address(participant, self.inner.account);
 
         let channel = self.get_channel_mut(&generated_channel_address)?;
 
+        let (proposal, _) = txn_response.into();
         let (tx, rx) = oneshot::channel();
-        let msg = ChannelMsg::ApplyPendingTxn { responder: tx };
+        let msg = ChannelMsg::ApplyPendingTxn {
+            proposal,
+            responder: tx,
+        };
         channel.send(msg)?;
 
         let gas = rx.await??;
@@ -1242,6 +1250,7 @@ pub(crate) fn execute_transaction(
     transaction: SignedTransaction,
 ) -> Result<TransactionOutput> {
     let tx_hash = transaction.raw_txn().hash();
+    debug!("execute txn {}: {:#?}", &tx_hash, transaction.raw_txn());
     let output = MoveVM::execute_block(
         vec![Transaction::UserTransaction(transaction)],
         &VM_CONFIG,
@@ -1249,7 +1258,7 @@ pub(crate) fn execute_transaction(
     )?
     .pop()
     .expect("at least return 1 output.");
-    debug!("execute txn:{} output: {}", tx_hash, output);
+    debug!("txn:{} output: {}", tx_hash, output);
     match output.status() {
         TransactionStatus::Discard(vm_status) => {
             bail!("transaction execute fail for: {:#?}", vm_status)

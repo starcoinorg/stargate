@@ -69,6 +69,7 @@ fn request_roundtrip_canonical_serialization() {
     let requests = vec![ChannelTransactionRequest::new(
         proposal,
         channel_txn_signatures,
+        false,
     )];
     for request in requests {
         let serialized_bytes = lcs::to_bytes(&request).unwrap();

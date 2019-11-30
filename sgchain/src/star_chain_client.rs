@@ -59,16 +59,23 @@ pub trait ChainClient: Send + Sync {
         account: AccountAddress,
         version: Option<Version>,
     ) -> Result<AccountState> {
-        let (version, state_blob, proof) = self
-            .get_account_state_with_proof(&account, version)
+        match self.get_account_state_option(account, version)? {
+            Some(s) => Ok(s),
+            None => bail!("can not find account by address:{}", account),
+        }
+    }
+
+    fn get_account_state_option(
+        &self,
+        account: AccountAddress,
+        version: Option<Version>,
+    ) -> Result<Option<AccountState>> {
+        self.get_account_state_with_proof(&account, version)
             .and_then(|(version, state, proof)| {
-                Ok((
-                    version,
-                    state.ok_or(format_err!("can not find account by address:{}", account))?,
-                    proof,
-                ))
-            })?;
-        AccountState::from_account_state_blob(version, state_blob, proof)
+                state
+                    .map(|s| AccountState::from_account_state_blob(version, s, proof))
+                    .transpose()
+            })
     }
 
     fn get_account_state_with_proof(

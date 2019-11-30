@@ -11,7 +11,6 @@ use sgchain::star_chain_client::ChainClient;
 use libra_types::account_address::AccountAddress;
 use sgtypes::channel::ChannelState;
 
-
 pub struct ChannelStateView<'txn> {
     channel_state: &'txn ChannelState,
     latest_write_set: WriteSet,
@@ -27,9 +26,14 @@ impl<'txn> ChannelStateView<'txn> {
         client: &'txn dyn ChainClient,
     ) -> Result<Self> {
         // TODO: make it async
-        let account_state = client.get_account_state(account_address, version)?;
-        let client_state_view =
-            ClientStateView::new_with_account_state(account_address, account_state, client);
+        let client_state_view = match version {
+            None => {
+                let account_state = client.get_account_state(account_address, version)?;
+                ClientStateView::new_with_account_state(account_address, account_state, client)
+            }
+            Some(v) => ClientStateView::new(Some(v), client),
+        };
+
         Ok(Self {
             channel_state,
             latest_write_set,

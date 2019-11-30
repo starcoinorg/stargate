@@ -7,6 +7,7 @@ import "transaction.proto";
 message ChannelTransactionRequest {
     ChannelTransactionProposal proposal = 1;
     ChannelTransactionSigs channel_txn_sigs = 2;
+    bool travel = 3;
 }
 
 message ChannelTransactionResponse {

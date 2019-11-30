@@ -48,6 +48,7 @@ pub fn setup_wallet(client: Arc<dyn ChainClient>, init_balance: u64) -> Result<W
     // enable channel for wallet
     let wallet =
         Wallet::new_with_client(account, account_keypair, client.clone(), TempPath::new())?;
+    //    let wallet = Arc::new(wallet);
     let f = {
         let wallet = &wallet;
         async move { wallet.enable_channel().await }
@@ -158,12 +159,12 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
     let receiver_fund_amount: u64 = 0;
 
     let sender_deposit_amount: u64 = 5_000_000;
-    let receiver_deposit_amount: u64 = 4_000_000;
+    //    let receiver_deposit_amount: u64 = 4_000_000;
 
     let transfer_amount = 1_000_000;
 
     let sender_withdraw_amount: u64 = 4_000_000;
-    let _receiver_withdraw_amount: u64 = 5_000_000;
+    //    let _receiver_withdraw_amount: u64 = 5_000_000;
 
     let rt = Runtime::new()?;
 
@@ -218,6 +219,8 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
             "after open: sender_channel_balance:{}, receiver_channel_balance:{}",
             sender_channel_balance, receiver_channel_balance
         );
+        let channel_seq_number = sender_wallet.channel_sequence_number(receiver).await?;
+        assert_eq!(1, channel_seq_number);
 
         let deposit_txn = sender_wallet
             .deposit(receiver, sender_deposit_amount)
@@ -317,7 +320,7 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
         let receiver_channel_balance = receiver_wallet.channel_balance(sender).await?;
         assert_eq!(
             receiver_channel_balance,
-            receiver_fund_amount + receiver_deposit_amount + transfer_amount
+            receiver_fund_amount + transfer_amount
         );
 
         debug!(
@@ -359,7 +362,7 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
         let receiver_channel_balance = receiver_wallet.channel_balance(sender).await?;
         assert_eq!(
             receiver_channel_balance,
-            receiver_fund_amount + receiver_deposit_amount + transfer_amount
+            receiver_fund_amount + transfer_amount
         );
 
         debug!(
@@ -375,10 +378,7 @@ pub fn test_wallet(chain_client: Arc<dyn ChainClient>) -> Result<()> {
             sender_amount - sender_gas_used - sender_fund_amount - sender_deposit_amount
                 + sender_withdraw_amount
         );
-        assert_eq!(
-            receiver_balance,
-            receiver_amount - receiver_fund_amount - receiver_deposit_amount
-        );
+        assert_eq!(receiver_balance, receiver_amount - receiver_fund_amount);
 
         drop(sender_wallet);
         drop(receiver_wallet);

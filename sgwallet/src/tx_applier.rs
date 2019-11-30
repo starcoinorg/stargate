@@ -129,6 +129,7 @@ impl TxApplier {
             travel: _,
             events,
             major_status,
+            gas_used,
             ..
         } = tx_to_apply;
         let channel_seq_number = signed_channel_txn.raw_tx.channel_sequence_number();
@@ -166,6 +167,7 @@ impl TxApplier {
             HashValue::default(), // TODO: event_tree.root_hash(),
             major_status,
             travel,
+            gas_used,
         );
 
         let new_txn_accumulator = self
@@ -194,6 +196,7 @@ impl TxApplier {
             witness_states,
             events,
             major_status,
+            gas_used,
         );
 
         self.store

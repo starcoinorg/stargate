@@ -193,7 +193,7 @@ where
 
         let witness = Witness::new(
             WitnessData::new(
-                txn_to_commit.transaction().raw_tx.channel_sequence_number(),
+                txn_to_commit.transaction().raw_tx.channel_sequence_number() + 1,
                 txn_to_commit.write_set().clone(),
             ),
             txn_to_commit
@@ -298,7 +298,8 @@ where
         version: Version,
         mut schema_batch: &mut SchemaBatch,
     ) -> Result<HashValue> {
-        let (signed_txn, write_set, travel, witness_states, _events, major_status) = tx.into();
+        let (signed_txn, write_set, travel, witness_states, _events, major_status, gas_used) =
+            tx.into();
         let state_root_hash =
             self.state_store
                 .put_channel_state_set(witness_states, version, &mut schema_batch)?;
@@ -322,6 +323,7 @@ where
             HashValue::default(),
             major_status,
             travel,
+            gas_used,
         );
         // TODO: save to ledger store
         let new_ledger_root_hash =

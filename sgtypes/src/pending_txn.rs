@@ -1,6 +1,5 @@
 use crate::channel_transaction::ChannelTransactionProposal;
 use crate::channel_transaction_sigs::ChannelTransactionSigs;
-
 use libra_types::account_address::AccountAddress;
 use libra_types::transaction::TransactionOutput;
 use serde::{Deserialize, Serialize};

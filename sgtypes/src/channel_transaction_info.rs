@@ -32,6 +32,8 @@ pub struct ChannelTransactionInfo {
 
     /// whether the channel txn is travel onchain.
     travel: bool,
+
+    gas_used: u64,
 }
 
 impl ChannelTransactionInfo {
@@ -44,6 +46,7 @@ impl ChannelTransactionInfo {
         event_root_hash: HashValue,
         major_status: StatusCode,
         travel: bool,
+        gas_used: u64,
     ) -> ChannelTransactionInfo {
         ChannelTransactionInfo {
             signed_transaction_hash,
@@ -52,6 +55,7 @@ impl ChannelTransactionInfo {
             event_root_hash,
             major_status,
             travel,
+            gas_used,
         }
     }
 
@@ -82,6 +86,9 @@ impl ChannelTransactionInfo {
 
     pub fn travel(&self) -> bool {
         self.travel
+    }
+    pub fn gas_used(&self) -> u64 {
+        self.gas_used
     }
 }
 

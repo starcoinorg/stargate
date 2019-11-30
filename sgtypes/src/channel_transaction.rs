@@ -297,15 +297,19 @@ impl ChannelTransactionProposal {
 pub struct ChannelTransactionRequest {
     proposal: ChannelTransactionProposal,
     channel_txn_sigs: ChannelTransactionSigs,
+    travel: bool,
 }
 
-impl Into<(ChannelTransactionProposal, ChannelTransactionSigs)> for ChannelTransactionRequest {
-    fn into(self) -> (ChannelTransactionProposal, ChannelTransactionSigs) {
+impl Into<(ChannelTransactionProposal, ChannelTransactionSigs, bool)>
+    for ChannelTransactionRequest
+{
+    fn into(self) -> (ChannelTransactionProposal, ChannelTransactionSigs, bool) {
         let ChannelTransactionRequest {
             proposal,
             channel_txn_sigs,
+            travel,
         } = self;
-        (proposal, channel_txn_sigs)
+        (proposal, channel_txn_sigs, travel)
     }
 }
 
@@ -313,10 +317,12 @@ impl ChannelTransactionRequest {
     pub fn new(
         proposal: ChannelTransactionProposal,
         channel_txn_sigs: ChannelTransactionSigs,
+        travel: bool,
     ) -> Self {
         Self {
             proposal,
             channel_txn_sigs,
+            travel,
         }
     }
 
@@ -339,7 +345,7 @@ impl ChannelTransactionRequest {
     }
 
     pub fn is_travel_txn(&self) -> bool {
-        unimplemented!()
+        self.travel
     }
 
     pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
@@ -416,6 +422,7 @@ impl TryFrom<crate::proto::sgtypes::ChannelTransactionRequest> for ChannelTransa
         Ok(ChannelTransactionRequest {
             proposal,
             channel_txn_sigs,
+            travel: value.travel,
         })
     }
 }
@@ -425,6 +432,7 @@ impl From<ChannelTransactionRequest> for crate::proto::sgtypes::ChannelTransacti
         Self {
             proposal: Some(value.proposal.into()),
             channel_txn_sigs: Some(value.channel_txn_sigs.into()),
+            travel: value.travel,
         }
     }
 }

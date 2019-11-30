@@ -39,13 +39,13 @@ fn enable_channel_script() -> &'static str {
 }
 lazy_static! {
     static ref ENABLE_CHANNEL_TXN_BODY: ast::Script =
-        { parse_script(enable_channel_script()).unwrap() };
+        { parse_script(enable_channel_script()).expect("fail to parse enable_channel script") };
     static ref ENABLE_CHANNEL_TXN: Vec<u8> = { compile(&ENABLE_CHANNEL_TXN_BODY) };
 }
 
 fn compile(body: &ast::Script) -> Vec<u8> {
     let compiled_script = compile_script(AccountAddress::default(), body.clone(), stdlib_modules())
-        .unwrap()
+        .expect("fail to compile enable_channel script")
         .0;
     let mut script_bytes = vec![];
     compiled_script.serialize(&mut script_bytes).unwrap();

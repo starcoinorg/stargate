@@ -18,6 +18,7 @@ pub struct ChannelTransactionToApply {
     // other tx output fields for later usage
     pub events: Vec<ContractEvent>,
     pub major_status: StatusCode,
+    pub gas_used: u64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -28,6 +29,7 @@ pub struct ChannelTransactionToCommit {
     witness_states: BTreeMap<AccountAddress, AccountStateBlob>,
     events: Vec<ContractEvent>,
     major_status: StatusCode,
+    gas_used: u64,
 }
 
 impl
@@ -38,6 +40,7 @@ impl
         BTreeMap<AccountAddress, AccountStateBlob>,
         Vec<ContractEvent>,
         StatusCode,
+        u64,
     )> for ChannelTransactionToCommit
 {
     fn into(
@@ -49,6 +52,7 @@ impl
         BTreeMap<AccountAddress, AccountStateBlob>,
         Vec<ContractEvent>,
         StatusCode,
+        u64,
     ) {
         let ChannelTransactionToCommit {
             signed_txn,
@@ -57,6 +61,7 @@ impl
             witness_states,
             events,
             major_status,
+            gas_used,
         } = self;
         (
             signed_txn,
@@ -65,6 +70,7 @@ impl
             witness_states,
             events,
             major_status,
+            gas_used,
         )
     }
 }
@@ -77,6 +83,7 @@ impl ChannelTransactionToCommit {
         witness_states: BTreeMap<AccountAddress, AccountStateBlob>,
         events: Vec<ContractEvent>,
         major_status: StatusCode,
+        gas_used: u64,
     ) -> Self {
         Self {
             signed_txn,
@@ -85,6 +92,7 @@ impl ChannelTransactionToCommit {
             witness_states,
             events,
             major_status,
+            gas_used,
         }
     }
 
@@ -106,5 +114,8 @@ impl ChannelTransactionToCommit {
     }
     pub fn major_status(&self) -> StatusCode {
         self.major_status
+    }
+    pub fn gas_used(&self) -> u64 {
+        self.gas_used
     }
 }
