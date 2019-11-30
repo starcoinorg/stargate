@@ -1,5 +1,5 @@
-import 0x0.ChannelAccount;
+import 0x0.LibraAccount;
 main() {
-    ChannelAccount.close();
+    LibraAccount.close();
     return;
 }

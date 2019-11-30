@@ -1,6 +1,6 @@
-import 0x0.ChannelAccount;
+import 0x0.ChannelScript;
 
-main(sender_amount:u64, receiver_amount:u64) {
-    ChannelAccount.deposit(move(sender_amount), move(receiver_amount));
+main(amount:u64) {
+    ChannelScript.deposit(move(amount));
     return;
 }

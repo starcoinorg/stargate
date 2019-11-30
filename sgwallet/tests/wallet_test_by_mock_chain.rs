@@ -24,7 +24,10 @@ fn test_wallet_with_mock_client() {
 
 #[test]
 fn test_wallet_install_package() {
-    run_test_wallet_install_package().unwrap();
+    if let Err(e) = run_test_wallet_install_package() {
+        println!("err: {:?}", e);
+        assert!(false)
+    }
 }
 
 #[test]
@@ -99,7 +102,10 @@ fn run_test_wallet_install_package() -> Result<()> {
         bob.clone(),
         "test",
         "transfer",
-        vec![TransactionArgument::U64(10000)],
+        vec![
+            TransactionArgument::Address(bob.account()),
+            TransactionArgument::U64(10000),
+        ],
     )?;
     Ok(())
 }

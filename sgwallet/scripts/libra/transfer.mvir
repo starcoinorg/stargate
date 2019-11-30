@@ -1,6 +1,6 @@
-import 0x0.ChannelAccount;
+import 0x0.ChannelScript;
 
-main(amount:u64) {
-    ChannelAccount.transfer(move(amount));
+main(payee: address, amount:u64) {
+    ChannelScript.transfer(move(payee), move(amount));
     return;
 }
