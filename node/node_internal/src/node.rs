@@ -61,7 +61,7 @@ struct NodeInner {
 impl Node {
     pub fn new(
         executor: TaskExecutor,
-        wallet: Wallet,
+        wallet: Arc<Wallet>,
         network_service: NetworkService,
         sender: UnboundedSender<NetworkMessage>,
         receiver: UnboundedReceiver<NetworkMessage>,
@@ -71,7 +71,7 @@ impl Node {
         let (event_sender, event_receiver) = futures_01::sync::mpsc::unbounded();
         let (command_sender, command_receiver) = futures_01::sync::mpsc::unbounded();
 
-        let wallet_arc = Arc::new(wallet);
+        let wallet_arc = wallet.clone();
         let node_inner = NodeInner {
             executor: executor_clone,
             wallet: wallet_arc.clone(),
@@ -91,7 +91,7 @@ impl Node {
             event_receiver: Some(event_receiver),
             command_receiver: Some(command_receiver),
             network_service_close_tx: Some(net_close_tx),
-            wallet: wallet_arc,
+            wallet,
         }
     }
 
@@ -697,7 +697,10 @@ impl NodeInner {
                 Ok(tx) => {
                     match tx {
                         Some(t) => receiver_open_txn = t,
-                        None => return, // it means user approval is needed.
+                        None => {
+                            receiver_open_txn =
+                                wallet.approve_txn(peer_id, request_id).await.unwrap()
+                        } // it means user approval is needed.
                     }
                 }
                 Err(e) => {

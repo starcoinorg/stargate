@@ -68,7 +68,7 @@ fn node_test() -> Result<()> {
 
         let deposit_amount = 10000;
         node2
-            .deposit_async(addr1, deposit_amount, deposit_amount)
+            .deposit_async(addr1, deposit_amount)
             .await
             .unwrap()
             .compat()
@@ -108,7 +108,7 @@ fn node_test() -> Result<()> {
 
         let wd_amount = 10000;
         node2
-            .withdraw_async(addr1, wd_amount, wd_amount)
+            .withdraw_async(addr1, wd_amount)
             .await
             .unwrap()
             .compat()
