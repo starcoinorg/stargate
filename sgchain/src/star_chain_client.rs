@@ -16,6 +16,8 @@ use libra_config::config::NodeConfigHelpers;
 use libra_config::trusted_peers::ConfigHelpers;
 use libra_logger::prelude::*;
 use libra_prost_ext::MessageExt;
+use libra_types::access_path::AccessPath;
+use libra_types::contract_event::EventWithProof;
 use libra_types::crypto_proxies::LedgerInfoWithSignatures;
 use libra_types::get_with_proof::ResponseItem;
 use libra_types::ledger_info::LedgerInfo;
@@ -223,6 +225,23 @@ pub trait ChainClient: Send + Sync {
             }
             None => None,
         }
+    }
+
+    fn get_events(
+        &self,
+        access_path: AccessPath,
+        start_event_seq_num: u64,
+        ascending: bool,
+        limit: u64,
+    ) -> Result<(Vec<EventWithProof>, AccountStateWithProof)> {
+        let req = RequestItem::GetEventsByEventAccessPath {
+            access_path,
+            start_event_seq_num,
+            ascending,
+            limit,
+        };
+        let resp = parse_response(self.do_request(&build_request(req, None)));
+        resp.into_get_events_by_access_path_response()
     }
 }
 

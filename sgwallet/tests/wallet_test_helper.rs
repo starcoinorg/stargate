@@ -10,6 +10,8 @@ use libra_crypto::{
 };
 use libra_logger::prelude::*;
 use libra_tools::tempdir::TempPath;
+use libra_types::access_path::AccessPath;
+use libra_types::channel_account::ChannelEvent;
 use libra_types::{account_address::AccountAddress, transaction::TransactionArgument};
 use rand::prelude::*;
 use sgchain::{client_state_view::ClientStateView, star_chain_client::ChainClient};
@@ -105,6 +107,22 @@ pub fn open_channel(
         let _receiver_gas_used = receiver_wallet
             .apply_txn(sender, &receiver_open_txn)
             .await?;
+
+        let (mut events, _) = sender_wallet.client().get_events(
+            AccessPath::new_for_channel_global_event(),
+            0,
+            false,
+            1,
+        )?;
+        let event = events.pop().expect("get channel global event fail.");
+        let channel_event = ChannelEvent::make_from(event.event.event_data())?;
+        assert_eq!(
+            channel_event.channel_address(),
+            open_txn.channel_address(),
+            "event's channel address {} should equals txn channel address: {}",
+            channel_event.channel_address(),
+            open_txn.channel_address()
+        );
 
         Ok::<u64, Error>(gas_used)
     };
