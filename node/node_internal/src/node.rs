@@ -14,7 +14,7 @@ use libra_logger::prelude::*;
 use libra_types::{account_address::AccountAddress, account_config::AccountResource};
 use network::{NetworkMessage, NetworkService};
 use node_proto::{
-    DeployModuleResponse, DepositResponse, ExecuteScriptResponse,
+    DeployModuleResponse, DepositResponse, EmptyResponse, ExecuteScriptResponse,
     GetChannelTransactionProposalResponse, OpenChannelResponse, PayResponse, WithdrawResponse,
 };
 use sgtypes::script_package::ChannelScriptPackage;
@@ -476,6 +476,37 @@ impl Node {
         resp_receiver
     }
 
+    pub async fn channel_transaction_proposal_async(
+        &self,
+        participant_address: AccountAddress,
+        transaction_hash: HashValue,
+        approve: bool,
+    ) -> Result<EmptyResponse> {
+        let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
+
+        self.command_sender
+            .unbounded_send(NodeMessage::ChannelTransactionProposal {
+                participant_address,
+                transaction_hash,
+                approve,
+                responder: resp_sender,
+            })
+            .unwrap();
+
+        match resp_receiver.await? {
+            Ok(_) => {
+                info!(
+                    "approve txn {} with {} ",
+                    transaction_hash, participant_address
+                );
+                return Ok(EmptyResponse::new());
+            }
+            Err(e) => {
+                return Err(e);
+            }
+        }
+    }
+
     async fn start(
         mut node_inner: NodeInner,
         receiver: UnboundedReceiver<NetworkMessage>,
@@ -625,6 +656,20 @@ impl NodeInner {
             } => {
                 self.set_timeout(default_future_timeout);
             }
+            NodeMessage::ChannelTransactionProposal {
+                participant_address,
+                transaction_hash,
+                approve,
+                responder,
+            } => {
+                self.channel_transaction_proposal(
+                    participant_address,
+                    transaction_hash,
+                    approve,
+                    responder,
+                )
+                .await;
+            }
         }
     }
 
@@ -665,32 +710,44 @@ impl NodeInner {
                     return;
                 }
             }
-            let msg = add_message_type(
-                receiver_open_txn.clone().into_proto_bytes().unwrap(),
-                MessageType::ChannelTransactionResponse,
-            );
-            debug!("send msg to {:?}", peer_id);
-            sender
-                .unbounded_send(NetworkMessage {
-                    peer_id,
-                    data: msg.to_vec(),
-                })
-                .unwrap();
-            match wallet.apply_txn(peer_id, &receiver_open_txn).await {
-                Ok(_) => {}
-                Err(e) => {
-                    warn!("apply tx fail, err: {:?}", &e);
-                    sender
-                        .unbounded_send(NetworkMessage {
-                            peer_id,
-                            data: error_message(e, request_id).to_vec(),
-                        })
-                        .unwrap();
-                    return;
-                }
-            };
+
+            Self::apply_txn(peer_id, request_id, receiver_open_txn, sender, wallet).await;
         };
+
         self.executor.spawn(f);
+    }
+
+    async fn apply_txn(
+        peer_id: AccountAddress,
+        request_id: HashValue,
+        receiver_open_txn: ChannelTransactionResponse,
+        sender: UnboundedSender<NetworkMessage>,
+        wallet: Arc<Wallet>,
+    ) {
+        let msg = add_message_type(
+            receiver_open_txn.clone().into_proto_bytes().unwrap(),
+            MessageType::ChannelTransactionResponse,
+        );
+        debug!("send msg to {:?}", peer_id);
+        sender
+            .unbounded_send(NetworkMessage {
+                peer_id,
+                data: msg.to_vec(),
+            })
+            .unwrap();
+        match wallet.apply_txn(peer_id, &receiver_open_txn).await {
+            Ok(_) => {}
+            Err(e) => {
+                warn!("apply tx fail, err: {:?}", &e);
+                sender
+                    .unbounded_send(NetworkMessage {
+                        peer_id,
+                        data: error_message(e, request_id).to_vec(),
+                    })
+                    .unwrap();
+                return;
+            }
+        };
     }
 
     fn handle_sender_channel(&self, data: Vec<u8>, peer_id: AccountAddress) {
@@ -1006,6 +1063,57 @@ impl NodeInner {
 
     pub fn set_timeout(&mut self, timeout: u64) {
         self.default_future_timeout = timeout;
+    }
+
+    async fn channel_transaction_proposal(
+        &self,
+        participant_address: AccountAddress,
+        transaction_hash: HashValue,
+        approve: bool,
+        responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
+    ) {
+        if approve {
+            match self
+                .wallet
+                .approve_txn(participant_address, transaction_hash)
+                .await
+            {
+                Ok(t) => {
+                    Self::apply_txn(
+                        participant_address,
+                        transaction_hash,
+                        t,
+                        self.sender.clone(),
+                        self.wallet.clone(),
+                    )
+                    .await;
+                }
+                Err(e) => {
+                    warn!("approve txn {} failed,{}", e, transaction_hash);
+                }
+            }
+        } else {
+            match self
+                .wallet
+                .reject_txn(participant_address, transaction_hash)
+                .await
+            {
+                Ok(_) => {
+                    info!("reject txn {} succ ", transaction_hash);
+                }
+                Err(e) => {
+                    warn!("reject txn {} failed,{}", e, transaction_hash);
+                }
+            }
+        }
+
+        let (tx, rx) = futures_01::sync::mpsc::channel(1);
+        let message_future = MessageFuture::new(rx);
+        self.message_processor
+            .add_future(transaction_hash.clone(), tx);
+        self.future_timeout(transaction_hash, self.default_future_timeout);
+
+        respond_with(responder, Ok(message_future));
     }
 }
 

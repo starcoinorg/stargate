@@ -5,11 +5,11 @@ use failure::{bail, Result};
 use grpcio::{ChannelBuilder, Environment};
 use node_proto::proto::node::NodeClient as GrpcNodeClient;
 use node_proto::{
-    ChannelBalanceRequest, ChannelBalanceResponse, DeployModuleRequest, DeployModuleResponse,
-    DepositRequest, DepositResponse, ExecuteScriptRequest, ExecuteScriptResponse,
-    GetChannelTransactionProposalResponse, InstallChannelScriptPackageRequest,
-    InstallChannelScriptPackageResponse, OpenChannelRequest, OpenChannelResponse, PayRequest,
-    PayResponse, WithdrawRequest, WithdrawResponse,
+    ChannelBalanceRequest, ChannelBalanceResponse, ChannelTransactionProposalRequest,
+    DeployModuleRequest, DeployModuleResponse, DepositRequest, DepositResponse, EmptyResponse,
+    ExecuteScriptRequest, ExecuteScriptResponse, GetChannelTransactionProposalResponse,
+    InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse, OpenChannelRequest,
+    OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest, WithdrawResponse,
 };
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -106,6 +106,17 @@ impl NodeClient {
             Ok(proto_response) => Ok(GetChannelTransactionProposalResponse::try_from(
                 proto_response,
             )?),
+            Err(err) => bail!("GRPC error: {}", err),
+        }
+    }
+
+    pub fn channel_transaction_proposal(
+        &self,
+        request: ChannelTransactionProposalRequest,
+    ) -> Result<EmptyResponse> {
+        let proto_request = request.into();
+        match self.client.channel_transaction_proposal(&proto_request) {
+            Ok(proto_response) => Ok(EmptyResponse::try_from(proto_response)?),
             Err(err) => bail!("GRPC error: {}", err),
         }
     }

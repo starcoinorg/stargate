@@ -8,9 +8,10 @@ use grpcio::{EnvBuilder, RpcStatus, RpcStatusCode};
 use node_internal::node::Node as Node_Internal;
 use node_proto::proto::node::create_node;
 use node_proto::{
-    ChannelBalanceRequest, ChannelBalanceResponse, DeployModuleRequest, DepositRequest,
-    ExecuteScriptRequest, InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse,
-    OpenChannelRequest, PayRequest, QueryTransactionQuest, WithdrawRequest,
+    ChannelBalanceRequest, ChannelBalanceResponse, ChannelTransactionProposalRequest,
+    DeployModuleRequest, DepositRequest, ExecuteScriptRequest, InstallChannelScriptPackageRequest,
+    InstallChannelScriptPackageResponse, OpenChannelRequest, PayRequest, QueryTransactionQuest,
+    WithdrawRequest,
 };
 use sg_config::config::NodeConfig;
 use std::convert::TryFrom;
@@ -202,7 +203,7 @@ impl node_proto::proto::node::Node for NodeService {
 
             let rx = node
                 .get_txn_by_channel_sequence_number(
-                    request.partipant_address,
+                    request.participant_address,
                     request.channel_seq_number,
                 )
                 .await;
@@ -235,6 +236,39 @@ impl node_proto::proto::node::Node for NodeService {
                 .get_channel_transaction_proposal_oneshot(request.remote_addr)
                 .await;
             process_response(rx, sink).await;
+        };
+        ctx.spawn(f.boxed().unit_error().compat());
+    }
+
+    fn channel_transaction_proposal(
+        &mut self,
+        ctx: ::grpcio::RpcContext,
+        req: node_proto::proto::node::ChannelTransactionProposalRequest,
+        sink: ::grpcio::UnarySink<node_proto::proto::node::EmptyResponse>,
+    ) {
+        let node = self.node.clone();
+        let f = async move {
+            let request = ChannelTransactionProposalRequest::try_from(req).unwrap();
+
+            let result = node
+                .channel_transaction_proposal_async(
+                    request.participant_address,
+                    request.transaction_hash,
+                    request.approve,
+                )
+                .await;
+            match result {
+                Ok(rx) => {
+                    sink.success(rx.into());
+                }
+                Err(e) => {
+                    set_failure_message(
+                        RpcStatusCode::UNKNOWN,
+                        format!("Failed to process request: {}", e),
+                        sink,
+                    );
+                }
+            }
         };
         ctx.spawn(f.boxed().unit_error().compat());
     }

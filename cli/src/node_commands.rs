@@ -90,12 +90,12 @@ impl Command for NodeCommandPay {
         vec!["pay", "p"]
     }
 
-    fn get_description(&self) -> &'static str {
-        "off chain pay"
-    }
-
     fn get_params_help(&self) -> &'static str {
         "<remote_addr> <amount>"
+    }
+
+    fn get_description(&self) -> &'static str {
+        "off chain pay"
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
@@ -199,6 +199,36 @@ impl Command for NodeCommandQueryProposal {
                 }
                 None => println!("no channel transaction proposal"),
             },
+            Err(e) => report_error("Error pay account", e),
+        }
+    }
+}
+
+pub struct NodeCommandProposal {}
+
+impl Command for NodeCommandProposal {
+    fn get_aliases(&self) -> Vec<&'static str> {
+        vec!["transaction proposal action", "tpa"]
+    }
+
+    fn get_params_help(&self) -> &'static str {
+        "<remote_addr> <transaction_hash> <approve/reject>"
+    }
+
+    fn get_description(&self) -> &'static str {
+        "action transaction proposal"
+    }
+
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
+        if params.len() < 4 {
+            println!("Invalid number of arguments for action transaction proposal");
+            return;
+        }
+
+        match client.channel_transaction_proposal(params) {
+            Ok(_) => {
+                println!("success!");
+            }
             Err(e) => report_error("Error pay account", e),
         }
     }

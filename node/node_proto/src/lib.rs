@@ -5,6 +5,7 @@
 //mod protobuf_conversion_test;
 
 use failure::prelude::*;
+use libra_crypto::HashValue;
 use libra_types::account_address::AccountAddress;
 use libra_types::transaction::TransactionWithProof;
 use sgtypes::channel_transaction::ChannelTransaction;
@@ -512,14 +513,14 @@ impl From<ExecuteScriptResponse> for crate::proto::node::ExecuteScriptResponse {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct QueryTransactionQuest {
-    pub partipant_address: AccountAddress,
+    pub participant_address: AccountAddress,
     pub channel_seq_number: u64,
 }
 
 impl QueryTransactionQuest {
-    pub fn new(partipant_address: AccountAddress, channel_seq_number: u64) -> Self {
+    pub fn new(participant_address: AccountAddress, channel_seq_number: u64) -> Self {
         Self {
-            partipant_address,
+            participant_address,
             channel_seq_number,
         }
     }
@@ -529,7 +530,7 @@ impl TryFrom<crate::proto::node::QueryTransactionQuest> for QueryTransactionQues
     type Error = Error;
 
     fn try_from(request: crate::proto::node::QueryTransactionQuest) -> Result<Self> {
-        let participant_address = AccountAddress::try_from(request.partipant_address)?;
+        let participant_address = AccountAddress::try_from(request.participant_address)?;
         Ok(Self::new(participant_address, request.channel_seq_number))
     }
 }
@@ -537,7 +538,7 @@ impl TryFrom<crate::proto::node::QueryTransactionQuest> for QueryTransactionQues
 impl From<QueryTransactionQuest> for crate::proto::node::QueryTransactionQuest {
     fn from(request: QueryTransactionQuest) -> Self {
         Self {
-            partipant_address: request.partipant_address.to_vec(),
+            participant_address: request.participant_address.to_vec(),
             channel_seq_number: request.channel_seq_number,
         }
     }
@@ -587,6 +588,77 @@ impl From<GetChannelTransactionProposalResponse>
                 channel_transaction: None,
             },
         }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ChannelTransactionProposalRequest {
+    pub participant_address: AccountAddress,
+    pub transaction_hash: HashValue,
+    pub approve: bool,
+}
+
+impl ChannelTransactionProposalRequest {
+    pub fn new(
+        participant_address: AccountAddress,
+        transaction_hash: HashValue,
+        approve: bool,
+    ) -> Self {
+        Self {
+            participant_address,
+            transaction_hash,
+            approve,
+        }
+    }
+}
+
+impl TryFrom<crate::proto::node::ChannelTransactionProposalRequest>
+    for ChannelTransactionProposalRequest
+{
+    type Error = Error;
+
+    fn try_from(request: crate::proto::node::ChannelTransactionProposalRequest) -> Result<Self> {
+        let participant_address = AccountAddress::try_from(request.participant_address)?;
+        Ok(Self::new(
+            participant_address,
+            HashValue::from_slice(&request.transaction_hash)?,
+            request.approve,
+        ))
+    }
+}
+
+impl From<ChannelTransactionProposalRequest>
+    for crate::proto::node::ChannelTransactionProposalRequest
+{
+    fn from(request: ChannelTransactionProposalRequest) -> Self {
+        Self {
+            participant_address: request.participant_address.to_vec(),
+            transaction_hash: request.transaction_hash.to_vec(),
+            approve: request.approve,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EmptyResponse {}
+
+impl EmptyResponse {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl TryFrom<crate::proto::node::EmptyResponse> for EmptyResponse {
+    type Error = Error;
+
+    fn try_from(_value: crate::proto::node::EmptyResponse) -> Result<Self> {
+        Ok(Self::new())
+    }
+}
+
+impl From<EmptyResponse> for crate::proto::node::EmptyResponse {
+    fn from(_value: EmptyResponse) -> Self {
+        Self::default()
     }
 }
 
