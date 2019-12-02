@@ -7,6 +7,7 @@
 use failure::prelude::*;
 use libra_types::account_address::AccountAddress;
 use libra_types::transaction::TransactionWithProof;
+use sgtypes::channel_transaction::ChannelTransaction;
 use sgtypes::script_package::ChannelScriptPackage;
 use std::convert::{TryFrom, TryInto};
 
@@ -538,6 +539,53 @@ impl From<QueryTransactionQuest> for crate::proto::node::QueryTransactionQuest {
         Self {
             partipant_address: request.partipant_address.to_vec(),
             channel_seq_number: request.channel_seq_number,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GetChannelTransactionProposalResponse {
+    pub channel_transaction: Option<ChannelTransaction>,
+}
+
+impl GetChannelTransactionProposalResponse {
+    pub fn new(channel_transaction: Option<ChannelTransaction>) -> Self {
+        Self {
+            channel_transaction,
+        }
+    }
+}
+
+impl TryFrom<crate::proto::node::GetChannelTransactionProposalResponse>
+    for GetChannelTransactionProposalResponse
+{
+    type Error = Error;
+
+    fn try_from(
+        request: crate::proto::node::GetChannelTransactionProposalResponse,
+    ) -> Result<Self> {
+        match request.channel_transaction {
+            Some(t) => {
+                return Ok(Self::new(Some(t.try_into()?)));
+            }
+            None => {
+                return Ok(Self::new(None));
+            }
+        }
+    }
+}
+
+impl From<GetChannelTransactionProposalResponse>
+    for crate::proto::node::GetChannelTransactionProposalResponse
+{
+    fn from(request: GetChannelTransactionProposalResponse) -> Self {
+        match request.channel_transaction {
+            Some(t) => Self {
+                channel_transaction: Some(t.into()),
+            },
+            None => Self {
+                channel_transaction: None,
+            },
         }
     }
 }

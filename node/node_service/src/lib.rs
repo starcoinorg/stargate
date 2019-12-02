@@ -221,6 +221,23 @@ impl node_proto::proto::node::Node for NodeService {
         };
         ctx.spawn(f.boxed().unit_error().compat());
     }
+
+    fn get_channel_transaction_proposal(
+        &mut self,
+        ctx: ::grpcio::RpcContext,
+        req: node_proto::proto::node::ChannelBalanceRequest,
+        sink: ::grpcio::UnarySink<node_proto::proto::node::GetChannelTransactionProposalResponse>,
+    ) {
+        let request = ChannelBalanceRequest::try_from(req).unwrap();
+        let node = self.node.clone();
+        let f = async move {
+            let rx = node
+                .get_channel_transaction_proposal_oneshot(request.remote_addr)
+                .await;
+            process_response(rx, sink).await;
+        };
+        ctx.spawn(f.boxed().unit_error().compat());
+    }
 }
 
 async fn process_response<T, S>(resp: oneshot::Receiver<Result<T>>, sink: grpcio::UnarySink<S>)

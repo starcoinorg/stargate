@@ -14,8 +14,8 @@ use libra_logger::prelude::*;
 use libra_types::{account_address::AccountAddress, account_config::AccountResource};
 use network::{NetworkMessage, NetworkService};
 use node_proto::{
-    DeployModuleResponse, DepositResponse, ExecuteScriptResponse, OpenChannelResponse, PayResponse,
-    WithdrawResponse,
+    DeployModuleResponse, DepositResponse, ExecuteScriptResponse,
+    GetChannelTransactionProposalResponse, OpenChannelResponse, PayResponse, WithdrawResponse,
 };
 use sgtypes::script_package::ChannelScriptPackage;
 use sgtypes::{
@@ -46,6 +46,7 @@ pub struct Node {
     event_receiver: Option<UnboundedReceiver<Event>>,
     command_receiver: Option<UnboundedReceiver<NodeMessage>>,
     network_service_close_tx: Option<oneshot::Sender<()>>,
+    wallet: Arc<Wallet>,
 }
 
 struct NodeInner {
@@ -73,7 +74,7 @@ impl Node {
         let wallet_arc = Arc::new(wallet);
         let node_inner = NodeInner {
             executor: executor_clone,
-            wallet: wallet_arc,
+            wallet: wallet_arc.clone(),
             sender,
             message_processor: MessageProcessor::new(),
             default_future_timeout: 20000,
@@ -90,6 +91,7 @@ impl Node {
             event_receiver: Some(event_receiver),
             command_receiver: Some(command_receiver),
             network_service_close_tx: Some(net_close_tx),
+            wallet: wallet_arc,
         }
     }
 
@@ -432,6 +434,46 @@ impl Node {
         })?;
 
         resp_receiver.await?
+    }
+
+    pub async fn get_channel_transaction_proposal_async(
+        &self,
+        participant_address: AccountAddress,
+    ) -> Result<GetChannelTransactionProposalResponse> {
+        let proposal = self
+            .wallet
+            .get_waiting_proposal(participant_address)
+            .await?;
+        match proposal {
+            Some(t) => Ok(GetChannelTransactionProposalResponse::new(Some(
+                t.channel_txn,
+            ))),
+            None => {
+                return Ok(GetChannelTransactionProposalResponse::new(None));
+            }
+        }
+    }
+
+    pub async fn get_channel_transaction_proposal_oneshot(
+        &self,
+        participant_address: AccountAddress,
+    ) -> futures::channel::oneshot::Receiver<Result<GetChannelTransactionProposalResponse>> {
+        let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
+        match self
+            .get_channel_transaction_proposal_async(participant_address)
+            .await
+        {
+            Ok(msg_future) => resp_sender
+                .send(Ok(msg_future))
+                .expect("Did open channel processor thread panic?"),
+            Err(e) => {
+                resp_sender
+                    .send(Err(failure::Error::from(e)))
+                    .expect("Failed to send error message.");
+                return resp_receiver;
+            }
+        };
+        resp_receiver
     }
 
     async fn start(

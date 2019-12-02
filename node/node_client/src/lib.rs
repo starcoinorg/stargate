@@ -7,8 +7,9 @@ use node_proto::proto::node::NodeClient as GrpcNodeClient;
 use node_proto::{
     ChannelBalanceRequest, ChannelBalanceResponse, DeployModuleRequest, DeployModuleResponse,
     DepositRequest, DepositResponse, ExecuteScriptRequest, ExecuteScriptResponse,
-    InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse, OpenChannelRequest,
-    OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest, WithdrawResponse,
+    GetChannelTransactionProposalResponse, InstallChannelScriptPackageRequest,
+    InstallChannelScriptPackageResponse, OpenChannelRequest, OpenChannelResponse, PayRequest,
+    PayResponse, WithdrawRequest, WithdrawResponse,
 };
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -92,6 +93,19 @@ impl NodeClient {
         let proto_request = request.into();
         match self.client.execute_script(&proto_request) {
             Ok(proto_response) => Ok(ExecuteScriptResponse::try_from(proto_response)?),
+            Err(err) => bail!("GRPC error: {}", err),
+        }
+    }
+
+    pub fn get_channel_transaction_proposal(
+        &self,
+        request: ChannelBalanceRequest,
+    ) -> Result<GetChannelTransactionProposalResponse> {
+        let proto_request = request.into();
+        match self.client.get_channel_transaction_proposal(&proto_request) {
+            Ok(proto_response) => Ok(GetChannelTransactionProposalResponse::try_from(
+                proto_response,
+            )?),
             Err(err) => bail!("GRPC error: {}", err),
         }
     }

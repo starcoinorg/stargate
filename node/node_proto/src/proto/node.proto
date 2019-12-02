@@ -69,6 +69,14 @@ service Node {
                body: "*"
             };
     }
+
+    rpc GetChannelTransactionProposal (ChannelBalanceRequest) returns (GetChannelTransactionProposalResponse) {
+        option (google.api.http) = {
+           get: "/node/channel_transaction_proposal"
+           body: "*"
+        };
+    }
+
 }
 
 message QueryTransactionQuest {
@@ -146,4 +154,8 @@ message ExecuteScriptRequest {
 
 message ExecuteScriptResponse {
     uint64 channel_sequence_number = 1;
+}
+
+message GetChannelTransactionProposalResponse{
+    sgtypes.ChannelTransaction channel_transaction = 1;
 }

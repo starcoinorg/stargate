@@ -13,9 +13,9 @@ use libra_wallet::wallet_library::WalletLibrary;
 use node_client::NodeClient;
 use node_proto::{
     ChannelBalanceRequest, ChannelBalanceResponse, DeployModuleRequest, DeployModuleResponse,
-    DepositRequest, DepositResponse, ExecuteScriptRequest, InstallChannelScriptPackageRequest,
-    OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest,
-    WithdrawResponse,
+    DepositRequest, DepositResponse, ExecuteScriptRequest, GetChannelTransactionProposalResponse,
+    InstallChannelScriptPackageRequest, OpenChannelRequest, OpenChannelResponse, PayRequest,
+    PayResponse, WithdrawRequest, WithdrawResponse,
 };
 use sgchain::{
     client_state_view::ClientStateView,
@@ -217,6 +217,15 @@ impl SGClientProxy {
         );
         let _response = self.node_client.execute_script(execute_request)?;
         Ok(())
+    }
+
+    pub fn get_channel_transaction_proposal(
+        &mut self,
+        space_delim_strings: &[&str],
+    ) -> Result<GetChannelTransactionProposalResponse> {
+        let remote_addr = AccountAddress::from_hex_literal(space_delim_strings[1])?;
+        self.node_client
+            .get_channel_transaction_proposal(ChannelBalanceRequest::new(remote_addr))
     }
 
     pub fn get_account_address_from_parameter(&self, para: &str) -> Result<AccountAddress> {
