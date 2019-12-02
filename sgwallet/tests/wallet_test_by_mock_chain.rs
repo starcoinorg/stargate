@@ -42,17 +42,6 @@ fn test_deploy_custom_module_by_mock_client() {
 }
 
 #[test]
-fn test_vector() {
-    match run_test_vector() {
-        Err(e) => {
-            println!("err: {:?}", e);
-            assert!(false)
-        }
-        Ok(_) => {}
-    }
-}
-
-#[test]
 fn test_gobang() {
     match run_test_gobang() {
         Err(e) => {
@@ -115,57 +104,6 @@ fn run_test_deploy_custom_module_by_mock_client() -> Result<()> {
     let (mock_chain_service, _handle) = MockChainClient::new();
     let chain_client = Arc::new(mock_chain_service);
     test_deploy_custom_module(chain_client)
-}
-
-fn run_test_vector() -> Result<()> {
-    ::libra_logger::try_init_for_testing();
-    let init_balance = 1000000;
-
-    let (mock_chain_service, _handle) = MockChainClient::new();
-    let client = Arc::new(mock_chain_service);
-
-    let rt = Runtime::new()?;
-    let mut alice = setup_wallet(client.clone(), init_balance)?;
-    let mut bob = setup_wallet(client.clone(), init_balance)?;
-    alice.start(rt.executor().clone())?;
-    bob.start(rt.executor().clone())?;
-    let alice = Arc::new(alice);
-    let bob = Arc::new(bob);
-
-    deploy_custom_module_and_script(alice.clone(), bob.clone(), "test_vector")?;
-
-    open_channel(alice.clone(), bob.clone(), 100000, 100000)?;
-
-    execute_script(
-        alice.clone(),
-        bob.clone(),
-        "scripts",
-        "move_vector_to_sender",
-        vec![],
-    )?;
-    execute_script(
-        alice.clone(),
-        bob.clone(),
-        "scripts",
-        "move_vector_from_sender",
-        vec![],
-    )?;
-
-    execute_script(
-        alice.clone(),
-        bob.clone(),
-        "scripts",
-        "move_vector_to_receiver",
-        vec![],
-    )?;
-    execute_script(
-        alice.clone(),
-        bob.clone(),
-        "scripts",
-        "move_vector_from_receiver",
-        vec![],
-    )?;
-    Ok(())
 }
 
 fn run_test_gobang() -> Result<()> {

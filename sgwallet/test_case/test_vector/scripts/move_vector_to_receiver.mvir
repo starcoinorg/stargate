@@ -1,6 +1,0 @@
-import Transaction.VecTest;
-
-main() {
-    VecTest.test_move_vec_to_receiver();
-    return;
-}
