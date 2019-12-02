@@ -77,6 +77,7 @@ fn generate_txn_to_apply(
         events: vec![],
         travel: false,
         major_status: StatusCode::ABORTED,
+        gas_used: 0,
     };
 
     txn_to_apply

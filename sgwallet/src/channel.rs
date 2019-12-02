@@ -597,7 +597,11 @@ impl Inner {
                 "txn {} already applied!",
                 &CryptoHash::hash(&proposal.channel_txn)
             );
-            return Ok(signed_txn.proof.transaction_info().gas_used());
+            if signed_txn.proof.transaction_info().travel() {
+                return Ok(signed_txn.proof.transaction_info().gas_used());
+            } else {
+                return Ok(0);
+            }
         }
 
         debug!("user {} apply txn", self.account_address);
