@@ -89,7 +89,6 @@ message OpenChannelResponse {
 message DepositRequest {
     bytes remote_addr = 1;
     uint64 local_amount = 2;
-    uint64 remote_amount = 3;
 }
 
 message DepositResponse {
@@ -99,7 +98,6 @@ message DepositResponse {
 message WithdrawRequest {
     bytes remote_addr = 1;
     uint64 local_amount = 2;
-    uint64 remote_amount = 3;
 }
 
 message WithdrawResponse {

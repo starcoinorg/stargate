@@ -156,13 +156,9 @@ impl Node {
         &self,
         receiver: AccountAddress,
         sender_amount: u64,
-        receiver_amount: u64,
     ) -> futures::channel::oneshot::Receiver<Result<DepositResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
-        let f = match self
-            .deposit_async(receiver, sender_amount, receiver_amount)
-            .await
-        {
+        let f = match self.deposit_async(receiver, sender_amount).await {
             Ok(msg_future) => msg_future,
             Err(e) => {
                 resp_sender
@@ -186,14 +182,7 @@ impl Node {
         &self,
         receiver: AccountAddress,
         sender_amount: u64,
-        receiver_amount: u64,
     ) -> Result<MessageFuture<u64>> {
-        if receiver_amount > self.default_max_deposit {
-            bail!("deposit coin amount too big")
-        }
-        if receiver_amount > sender_amount {
-            bail!("sender amount should bigger than receiver amount.")
-        }
         let is_receiver_connected = self.network_service.is_connected(receiver);
         if !is_receiver_connected {
             bail!("could not connect to receiver")
@@ -202,7 +191,6 @@ impl Node {
         self.command_sender.unbounded_send(NodeMessage::Deposit {
             receiver,
             sender_amount,
-            receiver_amount,
             responder,
         })?;
 
@@ -213,13 +201,9 @@ impl Node {
         &self,
         receiver: AccountAddress,
         sender_amount: u64,
-        receiver_amount: u64,
     ) -> futures::channel::oneshot::Receiver<Result<WithdrawResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
-        let f = match self
-            .withdraw_async(receiver, sender_amount, receiver_amount)
-            .await
-        {
+        let f = match self.withdraw_async(receiver, sender_amount).await {
             Ok(msg_future) => msg_future,
             Err(e) => {
                 resp_sender
@@ -244,26 +228,17 @@ impl Node {
         &self,
         receiver: AccountAddress,
         sender_amount: u64,
-        receiver_amount: u64,
     ) -> Result<MessageFuture<u64>> {
-        if receiver_amount < sender_amount {
-            bail!("sender amount should smaller than receiver amount.")
-        }
-
         let is_receiver_connected = self.network_service.is_connected(receiver);
         if !is_receiver_connected {
             bail!("could not connect to receiver")
         }
-        info!(
-            "start to withdraw with {:?} {} {}",
-            receiver, sender_amount, receiver_amount
-        );
+        info!("start to withdraw with {:?} {} ", receiver, sender_amount);
 
         let (responder, resp_receiver) = futures::channel::oneshot::channel();
         self.command_sender.unbounded_send(NodeMessage::Withdraw {
             receiver,
             sender_amount,
-            receiver_amount,
             responder,
         })?;
 
@@ -551,11 +526,9 @@ impl NodeInner {
             NodeMessage::Deposit {
                 receiver,
                 sender_amount,
-                receiver_amount,
                 responder,
             } => {
-                self.deposit(receiver, sender_amount, receiver_amount, responder)
-                    .await;
+                self.deposit(receiver, sender_amount, responder).await;
             }
             NodeMessage::OpenChannel {
                 receiver,
@@ -570,11 +543,9 @@ impl NodeInner {
             NodeMessage::Withdraw {
                 receiver,
                 sender_amount,
-                receiver_amount,
                 responder,
             } => {
-                self.withdraw(receiver, sender_amount, receiver_amount, responder)
-                    .await;
+                self.withdraw(receiver, sender_amount, responder).await;
             }
             NodeMessage::ChannelPay {
                 receiver_address,
@@ -920,15 +891,10 @@ impl NodeInner {
         &self,
         receiver: AccountAddress,
         sender_amount: u64,
-        receiver_amount: u64,
         responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
     ) {
         info!("start deposit ");
-        let channel_txn = self
-            .wallet
-            .deposit(receiver, sender_amount, receiver_amount)
-            .await
-            .unwrap();
+        let channel_txn = self.wallet.deposit(receiver, sender_amount).await.unwrap();
         info!("get deposit txn");
         let result = self.channel_txn_onchain(
             receiver,
@@ -942,15 +908,10 @@ impl NodeInner {
         &self,
         receiver: AccountAddress,
         sender_amount: u64,
-        receiver_amount: u64,
         responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
     ) {
         info!("start withdraw ");
-        let channel_txn = self
-            .wallet
-            .withdraw(receiver, sender_amount, receiver_amount)
-            .await
-            .unwrap();
+        let channel_txn = self.wallet.withdraw(receiver, sender_amount).await.unwrap();
         info!("get withdraw txn");
         let result = self.channel_txn_onchain(
             receiver,

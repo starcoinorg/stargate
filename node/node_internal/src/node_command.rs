@@ -23,7 +23,6 @@ pub enum NodeMessage {
     Deposit {
         receiver: AccountAddress,
         sender_amount: u64,
-        receiver_amount: u64,
         responder: oneshot::Sender<Result<MessageFuture<u64>>>,
     },
     OpenChannel {
@@ -35,7 +34,6 @@ pub enum NodeMessage {
     Withdraw {
         receiver: AccountAddress,
         sender_amount: u64,
-        receiver_amount: u64,
         responder: oneshot::Sender<Result<MessageFuture<u64>>>,
     },
     ChannelPay {

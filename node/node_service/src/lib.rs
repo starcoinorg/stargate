@@ -88,11 +88,7 @@ impl node_proto::proto::node::Node for NodeService {
         let node = self.node.clone();
         let f = async move {
             let rx = node
-                .deposit_oneshot(
-                    request.remote_addr,
-                    request.local_amount,
-                    request.remote_amount,
-                )
+                .deposit_oneshot(request.remote_addr, request.local_amount)
                 .await;
             process_response(rx, sink).await;
         };
@@ -109,11 +105,7 @@ impl node_proto::proto::node::Node for NodeService {
         let node = self.node.clone();
         let f = async move {
             let rx = node
-                .withdraw_oneshot(
-                    request.remote_addr,
-                    request.local_amount,
-                    request.remote_amount,
-                )
+                .withdraw_oneshot(request.remote_addr, request.local_amount)
                 .await;
             process_response(rx, sink).await;
         };

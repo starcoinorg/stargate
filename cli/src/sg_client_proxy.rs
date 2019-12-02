@@ -93,7 +93,6 @@ impl SGClientProxy {
         let response = self.node_client.withdraw(WithdrawRequest {
             remote_addr: AccountAddress::from_hex_literal(space_delim_strings[1])?,
             local_amount: space_delim_strings[2].parse::<u64>()?,
-            remote_amount: space_delim_strings[3].parse::<u64>()?,
         })?;
         Ok(response)
     }
@@ -110,7 +109,6 @@ impl SGClientProxy {
         let response = self.node_client.deposit(DepositRequest {
             remote_addr: AccountAddress::from_hex_literal(space_delim_strings[1])?,
             local_amount: space_delim_strings[2].parse::<u64>()?,
-            remote_amount: space_delim_strings[3].parse::<u64>()?,
         })?;
         Ok(response)
     }

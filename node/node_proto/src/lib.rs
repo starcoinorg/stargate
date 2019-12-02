@@ -136,15 +136,13 @@ impl From<PayResponse> for crate::proto::node::PayResponse {
 pub struct DepositRequest {
     pub remote_addr: AccountAddress,
     pub local_amount: u64,
-    pub remote_amount: u64,
 }
 
 impl DepositRequest {
-    pub fn new(remote_addr: AccountAddress, local_amount: u64, remote_amount: u64) -> Self {
+    pub fn new(remote_addr: AccountAddress, local_amount: u64) -> Self {
         Self {
             remote_addr,
             local_amount,
-            remote_amount,
         }
     }
 }
@@ -156,7 +154,6 @@ impl TryFrom<crate::proto::node::DepositRequest> for DepositRequest {
         Ok(Self {
             remote_addr: value.remote_addr.try_into()?,
             local_amount: value.local_amount,
-            remote_amount: value.remote_amount,
         })
     }
 }
@@ -166,7 +163,6 @@ impl From<DepositRequest> for crate::proto::node::DepositRequest {
         Self {
             remote_addr: value.remote_addr.into(),
             local_amount: value.local_amount,
-            remote_amount: value.remote_amount,
         }
     }
 }
@@ -198,15 +194,13 @@ impl From<DepositResponse> for crate::proto::node::DepositResponse {
 pub struct WithdrawRequest {
     pub remote_addr: AccountAddress,
     pub local_amount: u64,
-    pub remote_amount: u64,
 }
 
 impl WithdrawRequest {
-    pub fn new(remote_addr: AccountAddress, local_amount: u64, remote_amount: u64) -> Self {
+    pub fn new(remote_addr: AccountAddress, local_amount: u64) -> Self {
         Self {
             remote_addr,
             local_amount,
-            remote_amount,
         }
     }
 }
@@ -218,7 +212,6 @@ impl TryFrom<crate::proto::node::WithdrawRequest> for WithdrawRequest {
         Ok(Self {
             remote_addr: value.remote_addr.try_into()?,
             local_amount: value.local_amount,
-            remote_amount: value.remote_amount,
         })
     }
 }
@@ -228,7 +221,6 @@ impl From<WithdrawRequest> for crate::proto::node::WithdrawRequest {
         Self {
             remote_addr: value.remote_addr.into(),
             local_amount: value.local_amount,
-            remote_amount: value.remote_amount,
         }
     }
 }
