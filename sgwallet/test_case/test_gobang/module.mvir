@@ -1,6 +1,5 @@
-
 module TheFive {
-    import 0x0.ChannelAccount;
+    import 0x0.ChannelUtil;
     import 0x0.Vector;
 
     resource T {
@@ -12,7 +11,7 @@ module TheFive {
         total: u64,
     }
 
-    public new(): u64 {
+    public new(receiver: address): u64 {
         let t: Self.T;
         let grid: Vector.T<Vector.T<bool>>;
         let row: Vector.T<bool>;
@@ -20,15 +19,17 @@ module TheFive {
         let y: u64;
         let is_black: bool;
         let t1: Self.Score;
+        let sender: address;
 
-        if (!ChannelAccount.native_exist_channel<Self.Score>(true)) {
+        sender = get_txn_sender();
+        if (!ChannelUtil.exist_channel_participant<Self.Score>(copy(sender))) {
             t1 = Score {
                 total: 0,
             };
-            ChannelAccount.native_move_to_channel<Self.Score>(move(t1), true);
+            ChannelUtil.move_to_participant<Self.Score>(copy(sender),move(t1));
         }
 
-        is_black = !ChannelAccount.native_exist_channel<Self.T>(false); // first come first play
+        is_black = !ChannelUtil.exist_channel_participant<Self.T>(copy(receiver)); // first come first play
         if (move(is_black)) {
             grid = Vector.empty<Vector.T<bool>>();
             y = 0;
@@ -48,13 +49,12 @@ module TheFive {
                 grid: move(grid),
                 is_my_turn: true,
             };
-            ChannelAccount.native_move_to_channel<Self.T>(move(t), true);
+            ChannelUtil.move_to_participant<Self.T>(copy(sender), move(t));
 
             return 0;
         } else {
             return 1;
         }
-
     }
 
     public join(): u64 {
@@ -64,12 +64,14 @@ module TheFive {
         let x: u64;
         let y: u64;
         let t1: Self.Score;
+        let sender: address;
 
-        if (!ChannelAccount.native_exist_channel<Self.Score>(true)) {
+        sender = get_txn_sender();
+        if (!ChannelUtil.exist_channel_participant<Self.Score>(copy(sender))) {
             t1 = Score {
                 total: 0,
             };
-            ChannelAccount.native_move_to_channel<Self.Score>(move(t1), true);
+            ChannelUtil.move_to_participant<Self.Score>(copy(sender), move(t1));
         }
 
         grid = Vector.empty<Vector.T<bool>>();
@@ -90,7 +92,7 @@ module TheFive {
             grid: move(grid),
             is_my_turn: false,
         };
-        ChannelAccount.native_move_to_channel<Self.T>(move(t), true);
+        ChannelUtil.move_to_participant<Self.T>(copy(sender), move(t));
         return 0;
     }
 
@@ -106,30 +108,32 @@ module TheFive {
         return !*copy(value_ref);
     }
 
-    is_blank(x: u64, y: u64): bool {
+    is_blank(x: u64, y: u64, receiver: address): bool {
         let t_ref_sender: &mut Self.T;
         let t_ref_receiver: &mut Self.T;
         let is_blank_1: bool;
         let is_blank_2: bool;
+        let sender: address;
 
+        sender = get_txn_sender();
         if ((copy(x) < 1) || (copy(x) > 20) || (copy(y) < 1) || (copy(y) > 20)) {
             return false;
         }
 
-        t_ref_sender = ChannelAccount.native_borrow_channel<Self.T>(true);
+        t_ref_sender = ChannelUtil.borrow_from_participant_mut<Self.T>(copy(sender));
         is_blank_1 = Self.is_blank_internal(move(t_ref_sender), copy(x), copy(y));
 
-        t_ref_receiver = ChannelAccount.native_borrow_channel<Self.T>(false);
+        t_ref_receiver = ChannelUtil.borrow_from_participant_mut<Self.T>(copy(receiver));
         is_blank_2 = Self.is_blank_internal(move(t_ref_receiver), copy(x), copy(y));
 
         return move(is_blank_1) && move(is_blank_2);
     }
 
-    let_receiver_play() {
+    let_receiver_play(receiver: address) {
         let t_ref: &mut Self.T;
         let is_my_turn_ref: &mut bool;
 
-        t_ref = ChannelAccount.native_borrow_channel<Self.T>(false);
+        t_ref = ChannelUtil.borrow_from_participant_mut<Self.T>(copy(receiver));
         is_my_turn_ref = &mut copy(t_ref).is_my_turn;
         *copy(is_my_turn_ref) = true;
 
@@ -137,14 +141,16 @@ module TheFive {
     }
 
 
-    set_value(x: u64, y: u64) {
+    set_value(x: u64, y: u64, receiver: address) {
         let t_ref: &mut Self.T;
         let grid_ref: &mut Vector.T<Vector.T<bool>>;
         let row_ref: &mut Vector.T<bool>;
         let value_ref: &mut bool;
         let is_my_turn_ref: &mut bool;
+        let sender: address;
 
-        t_ref = ChannelAccount.native_borrow_channel<Self.T>(true);
+        sender = get_txn_sender();
+        t_ref = ChannelUtil.borrow_from_participant_mut<Self.T>(copy(sender));
         grid_ref = &mut copy(t_ref).grid;
         row_ref = Vector.borrow_mut<Vector.T<bool>>(move(grid_ref), move(y));
         value_ref = Vector.borrow_mut<bool>(move(row_ref), move(x));
@@ -152,7 +158,7 @@ module TheFive {
 
         is_my_turn_ref = &mut copy(t_ref).is_my_turn;
         *copy(is_my_turn_ref) = false;
-        Self.let_receiver_play();
+        Self.let_receiver_play(copy(receiver));
 
         return;
     }
@@ -160,8 +166,10 @@ module TheFive {
     public is_my_turn(): bool {
         let t_ref_sender: &mut Self.T;
         let is_my_turn_ref: &bool;
+        let sender: address;
 
-        t_ref_sender = ChannelAccount.native_borrow_channel<Self.T>(true);
+        sender = get_txn_sender();
+        t_ref_sender = ChannelUtil.borrow_from_participant_mut<Self.T>(copy(sender));
         is_my_turn_ref = &copy(t_ref_sender).is_my_turn;
 
         if (*copy(is_my_turn_ref)) {
@@ -293,8 +301,10 @@ module TheFive {
         let t_ref: &mut Self.T;
         let result: bool;
         let direction: u64;
+        let sender: address;
 
-        t_ref = ChannelAccount.native_borrow_channel<Self.T>(true);
+        sender = get_txn_sender();
+        t_ref = ChannelUtil.borrow_from_participant_mut<Self.T>(copy(sender));
         direction = 0;
         while (copy(direction) < 4) {
             result = Self.logic(copy(t_ref), copy(x), copy(y), copy(direction));
@@ -315,12 +325,14 @@ module TheFive {
         return;
     }
 
-    end_game() {
+    end_game(receiver: address) {
         let t1: Self.T;
         let t2: Self.T;
+        let sender: address;
 
-        t1 = ChannelAccount.native_move_from_channel<Self.T>(true);
-        t2 = ChannelAccount.native_move_from_channel<Self.T>(false);
+        sender = get_txn_sender();
+        t1 = ChannelUtil.move_from_participant<Self.T>(copy(sender));
+        t2 = ChannelUtil.move_from_participant<Self.T>(copy(receiver));
         Self.unwrap_T(move(t1));
         Self.unwrap_T(move(t2));
 
@@ -331,29 +343,31 @@ module TheFive {
     update_score() {
         let score_ref: &mut Self.Score;
         let total_ref: &mut u64;
+        let sender: address;
 
-        score_ref = ChannelAccount.native_borrow_channel<Self.Score>(true);
+        sender = get_txn_sender();
+        score_ref = ChannelUtil.borrow_from_participant_mut<Self.Score>(copy(sender));
         total_ref = &mut copy(score_ref).total;
         *copy(total_ref) = *copy(total_ref) + 1;
         return;
     }
 
-    public play(x: u64, y: u64): u64 {
+    public play(receiver: address, x: u64, y: u64): u64 {
         let win: bool;
 
         if (!Self.is_my_turn()) {
             return 1;
         }
 
-        if (!Self.is_blank(copy(x), copy(y))) {
+        if (!Self.is_blank(copy(x), copy(y), copy(receiver))) {
             return 2;
         }
 
-        Self.set_value(copy(x), copy(y));
+        Self.set_value(copy(x), copy(y), copy(receiver));
         win = Self.is_five(move(x), move(y));
 
         if (move(win)) {
-            Self.end_game();
+            Self.end_game(copy(receiver));
         }
         return 0;
     }
@@ -361,8 +375,10 @@ module TheFive {
     public get_score(): u64 {
         let score_ref: &mut Self.Score;
         let total_ref: &mut u64;
+        let sender: address;
 
-        score_ref = ChannelAccount.native_borrow_channel<Self.Score>(true);
+        sender = get_txn_sender();
+        score_ref = ChannelUtil.borrow_from_participant_mut<Self.Score>(copy(sender));
         total_ref = &mut copy(score_ref).total;
         return *copy(total_ref);
     }
@@ -370,10 +386,11 @@ module TheFive {
     public clean_score() {
         let score: Self.Score;
         let total: u64;
+        let sender: address;
 
-        score = ChannelAccount.native_move_from_channel<Self.Score>(true);
+        sender = get_txn_sender();
+        score = ChannelUtil.move_from_participant<Self.Score>(copy(sender));
         Score { total } = move(score);
         return;
     }
-
 }
