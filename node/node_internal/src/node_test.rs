@@ -68,7 +68,7 @@ fn node_test() -> Result<()> {
 
         let deposit_amount = 10000;
         node2
-            .deposit_async(addr1, deposit_amount, deposit_amount)
+            .deposit_async(addr1, deposit_amount)
             .await
             .unwrap()
             .compat()
@@ -83,7 +83,7 @@ fn node_test() -> Result<()> {
         );
         assert_eq!(
             node1.channel_balance_async(addr2).await.unwrap(),
-            fund_amount + deposit_amount
+            fund_amount
         );
 
         let transfer_amount = 1_000;
@@ -103,12 +103,12 @@ fn node_test() -> Result<()> {
         );
         assert_eq!(
             node1.channel_balance_async(addr2).await.unwrap(),
-            fund_amount + transfer_amount + deposit_amount
+            fund_amount + transfer_amount
         );
 
         let wd_amount = 10000;
         node2
-            .withdraw_async(addr1, wd_amount, wd_amount)
+            .withdraw_async(addr1, wd_amount)
             .await
             .unwrap()
             .compat()
@@ -122,16 +122,19 @@ fn node_test() -> Result<()> {
         );
         assert_eq!(
             node1.channel_balance_async(addr2).await.unwrap(),
-            fund_amount + transfer_amount - wd_amount + deposit_amount
+            fund_amount + transfer_amount
         );
 
+        node1.wallet().stop().await?;
+        node2.wallet().stop().await?;
         node1.shutdown().unwrap();
         node2.shutdown().unwrap();
+        Ok::<_, Error>(())
     };
-    rt.block_on(f);
+    rt.block_on(f)?;
+    rt.shutdown_on_idle();
 
     debug!("here");
-    //rt.shutdown_on_idle().wait().unwrap();
     Ok(())
 }
 

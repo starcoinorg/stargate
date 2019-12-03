@@ -65,9 +65,8 @@ where
         cs: &mut SchemaBatch,
     ) -> Result<()> {
         let channel_seq_number = transaction.raw_tx.channel_sequence_number();
-        let sender = transaction.raw_tx.sender();
-        let _receiver = transaction.raw_tx.receiver();
-        cs.put::<TransactionByAccountSchema>(&(sender, channel_seq_number), &version)?;
+        let proposer = transaction.raw_tx.proposer();
+        cs.put::<TransactionByAccountSchema>(&(proposer, channel_seq_number), &version)?;
 
         cs.put::<SignedChannelTransactionSchema>(&version, &transaction)?;
 

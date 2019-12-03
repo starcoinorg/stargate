@@ -8,12 +8,12 @@ use grpcio::{EnvBuilder, RpcStatus, RpcStatusCode};
 use node_internal::node::Node as Node_Internal;
 use node_proto::proto::node::create_node;
 use node_proto::{
-    ChannelBalanceRequest, ChannelBalanceResponse, DeployModuleRequest, DepositRequest,
-    ExecuteScriptRequest, InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse,
-    OpenChannelRequest, PayRequest, QueryTransactionQuest, WithdrawRequest,
+    ChannelBalanceRequest, ChannelBalanceResponse, ChannelTransactionProposalRequest,
+    DeployModuleRequest, DepositRequest, ExecuteScriptRequest, InstallChannelScriptPackageRequest,
+    InstallChannelScriptPackageResponse, OpenChannelRequest, PayRequest, QueryTransactionQuest,
+    WithdrawRequest,
 };
 use sg_config::config::NodeConfig;
-use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use std::convert::TryFrom;
 use std::sync::Arc;
 
@@ -89,11 +89,7 @@ impl node_proto::proto::node::Node for NodeService {
         let node = self.node.clone();
         let f = async move {
             let rx = node
-                .deposit_oneshot(
-                    request.remote_addr,
-                    request.local_amount,
-                    request.remote_amount,
-                )
+                .deposit_oneshot(request.remote_addr, request.local_amount)
                 .await;
             process_response(rx, sink).await;
         };
@@ -110,11 +106,7 @@ impl node_proto::proto::node::Node for NodeService {
         let node = self.node.clone();
         let f = async move {
             let rx = node
-                .withdraw_oneshot(
-                    request.remote_addr,
-                    request.local_amount,
-                    request.remote_amount,
-                )
+                .withdraw_oneshot(request.remote_addr, request.local_amount)
                 .await;
             process_response(rx, sink).await;
         };
@@ -211,19 +203,63 @@ impl node_proto::proto::node::Node for NodeService {
 
             let rx = node
                 .get_txn_by_channel_sequence_number(
-                    request.partipant_address,
+                    request.participant_address,
                     request.channel_seq_number,
                 )
                 .await;
             match rx {
                 Ok(rx) => {
-                    let resp = SignedChannelTransaction::new(
-                        rx.raw_tx,
-                        rx.sender_signature,
-                        rx.receiver_signature,
-                    )
-                    .into();
-                    sink.success(resp);
+                    sink.success(rx.into());
+                }
+                Err(e) => {
+                    set_failure_message(
+                        RpcStatusCode::UNKNOWN,
+                        format!("Failed to process request: {}", e),
+                        sink,
+                    );
+                }
+            }
+        };
+        ctx.spawn(f.boxed().unit_error().compat());
+    }
+
+    fn get_channel_transaction_proposal(
+        &mut self,
+        ctx: ::grpcio::RpcContext,
+        req: node_proto::proto::node::ChannelBalanceRequest,
+        sink: ::grpcio::UnarySink<node_proto::proto::node::GetChannelTransactionProposalResponse>,
+    ) {
+        let request = ChannelBalanceRequest::try_from(req).unwrap();
+        let node = self.node.clone();
+        let f = async move {
+            let rx = node
+                .get_channel_transaction_proposal_oneshot(request.remote_addr)
+                .await;
+            process_response(rx, sink).await;
+        };
+        ctx.spawn(f.boxed().unit_error().compat());
+    }
+
+    fn channel_transaction_proposal(
+        &mut self,
+        ctx: ::grpcio::RpcContext,
+        req: node_proto::proto::node::ChannelTransactionProposalRequest,
+        sink: ::grpcio::UnarySink<node_proto::proto::node::EmptyResponse>,
+    ) {
+        let node = self.node.clone();
+        let f = async move {
+            let request = ChannelTransactionProposalRequest::try_from(req).unwrap();
+
+            let result = node
+                .channel_transaction_proposal_async(
+                    request.participant_address,
+                    request.transaction_hash,
+                    request.approve,
+                )
+                .await;
+            match result {
+                Ok(rx) => {
+                    sink.success(rx.into());
                 }
                 Err(e) => {
                     set_failure_message(

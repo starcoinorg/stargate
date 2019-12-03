@@ -24,6 +24,7 @@ libra-logger = { path = "../libra/common/logger" }
 libra-types = { path = "../libra/types"}
 lcs = { path = "../libra/common/lcs", package = "libra-canonical-serialization"}
 libra-crypto = { path = "../libra/crypto/crypto" }
+libra-crypto-derive = { path = "../libra/crypto/crypto-derive"}
 failure = { path = "../libra/common/failure-ext", package = "libra-failure-ext"  }
 vm-runtime-types = { path = "../libra/language/vm/vm-runtime/vm-runtime-types"}
 vm = { path = "../libra/language/vm"}
