@@ -8,6 +8,7 @@ use super::schema::{
     SIGNED_CHANNEL_TRANSACTION_CF_NAME, STALE_NODE_INDEX_CF_NAME, TRANSACTION_BY_ACCOUNT_CF_NAME,
 };
 use crate::rocksdb_utils::FixedPrefixSliceTransform;
+use crate::schema::PARTICIPANT_PUBLIC_KEY_CF_NAME;
 use failure::prelude::*;
 use libra_logger::prelude::*;
 use libra_types::account_address::{AccountAddress, ADDRESS_LENGTH};
@@ -87,6 +88,10 @@ impl SgStorage {
             ),
             (
                 PENDING_CHANNEL_TRANSACTION_CF_NAME,
+                default_column_family_options(),
+            ),
+            (
+                PARTICIPANT_PUBLIC_KEY_CF_NAME,
                 default_column_family_options(),
             ),
         ]

@@ -1,8 +1,8 @@
 import Transaction.TheFive;
 
-main(){
+main(receiver: address){
     let result: u64;
-    result = TheFive.new();
+    result = TheFive.new(move(receiver));
     assert(move(result) == 0, 61);
     return;
 }

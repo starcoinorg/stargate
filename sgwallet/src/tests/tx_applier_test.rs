@@ -22,9 +22,9 @@ fn test_tx_applier() {
         apply_result.is_ok(),
         format!("err: {:?}", apply_result.unwrap_err())
     );
-    let ws = store.get_latest_write_set();
+    let ws = store.get_latest_witness();
     assert!(ws.is_some());
-    assert!(ws.unwrap().len() > 0);
+    assert!(ws.unwrap().write_set().len() > 0);
 
     let txn = store.get_transaction_by_channel_seq_number(0, false);
     assert!(txn.is_ok(), format!("err: {:?}", txn.unwrap_err()));

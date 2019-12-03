@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{commands::*, sg_client_proxy::SGClientProxy};
+use libra_crypto::hash::CryptoHash;
 
 /// Major command for account related operations.
 pub struct NodeCommand {}
@@ -89,12 +90,12 @@ impl Command for NodeCommandPay {
         vec!["pay", "p"]
     }
 
-    fn get_description(&self) -> &'static str {
-        "off chain pay"
-    }
-
     fn get_params_help(&self) -> &'static str {
         "<remote_addr> <amount>"
+    }
+
+    fn get_description(&self) -> &'static str {
+        "off chain pay"
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
@@ -145,12 +146,12 @@ impl Command for NodeCommandChannelBalance {
         vec!["channel balance ", "cb"]
     }
 
-    fn get_description(&self) -> &'static str {
-        "get balance of channel"
-    }
-
     fn get_params_help(&self) -> &'static str {
         "<remote_addr>"
+    }
+
+    fn get_description(&self) -> &'static str {
+        "get balance of channel"
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
@@ -161,6 +162,73 @@ impl Command for NodeCommandChannelBalance {
 
         match client.channel_balance(params, true) {
             Ok(result) => println!("balance is {}", result.balance),
+            Err(e) => report_error("Error pay account", e),
+        }
+    }
+}
+
+pub struct NodeCommandQueryProposal {}
+
+impl Command for NodeCommandQueryProposal {
+    fn get_aliases(&self) -> Vec<&'static str> {
+        vec!["transaction proposal ", "tp"]
+    }
+
+    fn get_params_help(&self) -> &'static str {
+        "<remote_addr>"
+    }
+
+    fn get_description(&self) -> &'static str {
+        "get transaction proposal"
+    }
+
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
+        if params.len() < 2 {
+            println!("Invalid number of arguments for get transaction proposal");
+            return;
+        }
+
+        match client.get_channel_transaction_proposal(params) {
+            Ok(result) => match result.channel_transaction {
+                Some(t) => {
+                    println!(
+                        "channel transction from {},hash is {}",
+                        t.channel_address(),
+                        t.hash()
+                    );
+                }
+                None => println!("no channel transaction proposal"),
+            },
+            Err(e) => report_error("Error pay account", e),
+        }
+    }
+}
+
+pub struct NodeCommandProposal {}
+
+impl Command for NodeCommandProposal {
+    fn get_aliases(&self) -> Vec<&'static str> {
+        vec!["transaction proposal action", "tpa"]
+    }
+
+    fn get_params_help(&self) -> &'static str {
+        "<remote_addr> <transaction_hash> <approve/reject>"
+    }
+
+    fn get_description(&self) -> &'static str {
+        "action transaction proposal"
+    }
+
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
+        if params.len() < 4 {
+            println!("Invalid number of arguments for action transaction proposal");
+            return;
+        }
+
+        match client.channel_transaction_proposal(params) {
+            Ok(_) => {
+                println!("success!");
+            }
             Err(e) => report_error("Error pay account", e),
         }
     }
