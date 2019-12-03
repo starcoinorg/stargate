@@ -4,6 +4,7 @@ use crate::channel::{ChannelEvent, ChannelMsg};
 use crate::{channel::Channel, scripts::*};
 use chrono::Utc;
 use failure::prelude::*;
+use futures::stream::FuturesUnordered;
 use futures::{
     channel::{mpsc, oneshot},
     StreamExt,
@@ -19,13 +20,11 @@ use libra_crypto::{
 use libra_logger::prelude::*;
 use libra_state_view::StateView;
 use libra_types::access_path::AccessPath;
-
 use libra_types::channel::{
     channel_mirror_struct_tag, channel_participant_struct_tag, channel_struct_tag,
     user_channels_struct_tag, ChannelMirrorResource, ChannelParticipantAccountResource,
     ChannelResource, UserChannelsResource,
 };
-
 use libra_types::transaction::Transaction;
 use libra_types::{
     access_path::DataPath,
@@ -57,7 +56,7 @@ use sgtypes::{
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::path::Path;
-use std::{sync::Arc, time::Duration};
+use std::{sync::Arc, thread, time::Duration};
 use tokio::runtime;
 use vm_runtime::{MoveVM, VMExecutor};
 
@@ -105,7 +104,7 @@ impl Wallet {
         let mut builder = runtime::Builder::new();
         let runtime = builder.name_prefix("wallet").core_threads(4).build()?;
 
-        let inner1 = Shared {
+        let shared = Shared {
             account,
             keypair,
             client,
@@ -113,17 +112,18 @@ impl Wallet {
         };
         let (channel_event_sender, channel_event_receiver) = mpsc::channel(128);
         let inner = Inner {
-            inner: inner1.clone(),
+            inner: shared.clone(),
             channels: HashMap::new(),
             sgdb: sgdb.clone(),
-            runtime,
+            runtime: Some(runtime),
             mailbox,
             channel_event_sender,
             channel_event_receiver,
+            should_stop: false,
         };
         let wallet = Wallet {
             mailbox_sender: mail_sender.clone(),
-            shared: inner1,
+            shared,
             sgdb: sgdb.clone(),
             inner: Some(inner),
         };
@@ -597,6 +597,12 @@ impl Wallet {
             .transpose()
     }
 
+    pub async fn stop(&self) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        let resp = self.call(WalletCmd::Stop { responder: tx }, rx).await?;
+        resp
+    }
+
     async fn call<T>(&self, cmd: WalletCmd, rx: oneshot::Receiver<T>) -> Result<T> {
         if let Err(_e) = self.mailbox_sender.clone().try_send(cmd) {
             bail!("wallet mailbox is full or close");
@@ -672,16 +678,20 @@ pub enum WalletCmd {
         participant: AccountAddress,
         responder: oneshot::Sender<Result<()>>,
     },
+    Stop {
+        responder: oneshot::Sender<Result<()>>,
+    },
 }
 
 pub struct Inner {
     inner: Shared,
     channels: HashMap<AccountAddress, Channel>,
     sgdb: Arc<SgStorage>,
-    runtime: tokio::runtime::Runtime,
+    runtime: Option<tokio::runtime::Runtime>,
     mailbox: mpsc::Receiver<WalletCmd>,
     channel_event_receiver: mpsc::Receiver<ChannelEvent>,
     channel_event_sender: mpsc::Sender<ChannelEvent>,
+    should_stop: bool,
 }
 
 impl Inner {
@@ -706,8 +716,11 @@ impl Inner {
                    break;
                }
             }
+            if self.should_stop {
+                break;
+            }
         }
-        crit!("wallet dispatcher task terminated");
+        crit!("wallet {} task stopped", self.inner.account);
     }
 
     async fn handle_channel_event(&mut self, event: ChannelEvent) {
@@ -834,7 +847,32 @@ impl Inner {
             WalletCmd::StopChannel {
                 responder,
                 participant,
-            } => respond_with(responder, self.stop_channel(participant).await),
+            } => {
+                let (generated_channel_address, _participants) =
+                    generate_channel_address(participant, self.inner.account);
+                respond_with(
+                    responder,
+                    self.stop_channel(generated_channel_address).await,
+                );
+            }
+            WalletCmd::Stop { responder } => {
+                let channels = self.channels.keys().map(Clone::clone).collect::<Vec<_>>();
+                for channel_address in channels.into_iter() {
+                    if let Err(e) = self.stop_channel(channel_address).await {
+                        error!("fail to stop channel {}, err: {}", &channel_address, e);
+                    }
+                }
+                if let Some(mut rt) = self.runtime.take() {
+                    let handle = thread::spawn(|| {
+                        rt.shutdown_on_idle();
+                    });
+                    if let Err(e) = handle.join() {
+                        error!("fail to shutdown wallet runtime, e: {:#?}", e)
+                    }
+                }
+                self.should_stop = true;
+                respond_with(responder, Ok(()));
+            }
         }
     }
 
@@ -1108,9 +1146,7 @@ impl Inner {
         rx.await?
     }
 
-    async fn stop_channel(&mut self, participant: AccountAddress) -> Result<()> {
-        let (generated_channel_address, _participants) =
-            generate_channel_address(participant, self.inner.account);
+    async fn stop_channel(&mut self, generated_channel_address: AccountAddress) -> Result<()> {
         let channel = self.get_channel_mut(&generated_channel_address)?;
         channel.stop().await?;
         self.channels.remove(&generated_channel_address);
@@ -1194,7 +1230,7 @@ impl Inner {
             self.inner.script_registry.clone(),
             self.inner.client.clone(),
         );
-        channel.start(self.runtime.executor().clone());
+        channel.start(self.runtime.as_ref().unwrap().executor());
 
         // TODO: should wait signal of channel saying it's started
         self.channels.insert(channel_address, channel);

@@ -261,7 +261,7 @@ impl Inner {
                 &self.channel_address, e
             );
         }
-        crit!("channel task terminated")
+        crit!("channel {} task terminated", self.channel_address);
     }
 
     fn bootstrap(&mut self, mut internal_msg_tx: mpsc::Sender<InternalMsg>) {

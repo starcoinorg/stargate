@@ -125,13 +125,16 @@ fn node_test() -> Result<()> {
             fund_amount + transfer_amount
         );
 
+        node1.wallet().stop().await?;
+        node2.wallet().stop().await?;
         node1.shutdown().unwrap();
         node2.shutdown().unwrap();
+        Ok::<_, Error>(())
     };
-    rt.block_on(f);
+    rt.block_on(f)?;
+    rt.shutdown_on_idle();
 
     debug!("here");
-    //rt.shutdown_on_idle().wait().unwrap();
     Ok(())
 }
 

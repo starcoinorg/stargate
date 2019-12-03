@@ -552,6 +552,12 @@ impl Node {
     }
 }
 
+impl Node {
+    pub fn wallet(&self) -> Arc<Wallet> {
+        self.wallet.clone()
+    }
+}
+
 impl NodeInner {
     async fn handle_network_msg(&mut self, msg: NetworkMessage) {
         info!("receive message ");
