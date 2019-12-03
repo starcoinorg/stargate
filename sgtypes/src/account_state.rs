@@ -11,10 +11,7 @@ use libra_types::{
     proof::SparseMerkleProof,
     transaction::Version,
 };
-use std::{
-    collections::{BTreeMap},
-    convert::TryFrom,
-};
+use std::{collections::BTreeMap, convert::TryFrom};
 
 #[derive(Clone, Debug)]
 pub struct AccountState {
@@ -125,7 +122,7 @@ impl Into<AccountStateBlob> for &AccountState {
 
 #[cfg(test)]
 mod tests {
-    use libra_types::{account_config::AccountResource};
+    use libra_types::account_config::AccountResource;
 
     use super::*;
 

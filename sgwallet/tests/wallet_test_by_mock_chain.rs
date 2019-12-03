@@ -124,80 +124,80 @@ fn run_test_gobang() -> Result<()> {
 
     deploy_custom_module_and_script(alice.clone(), bob.clone(), "test_gobang")?;
 
-//    open_channel(alice.clone(), bob.clone(), 100, 100)?;
+    //    open_channel(alice.clone(), bob.clone(), 100, 100)?;
 
-//    execute_script(alice.clone(), bob.clone(), "scripts", "new", vec![TransactionArgument::Address(bob.account())])?;
-//    execute_script(bob.clone(), alice.clone(), "scripts", "join", vec![])?;
-//    execute_script(
-//        alice.clone(),
-//        bob.clone(),
-//        "scripts",
-//        "play",
-//        vec![TransactionArgument::U64(2), TransactionArgument::U64(2), TransactionArgument::Address(bob.account())],
-//    )?;
-//    execute_script(
-//        bob.clone(),
-//        alice.clone(),
-//        "scripts",
-//        "play",
-//        vec![TransactionArgument::U64(3), TransactionArgument::U64(2), TransactionArgument::Address(alice.account())],
-//    )?;
-//    execute_script(
-//        alice.clone(),
-//        bob.clone(),
-//        "scripts",
-//        "play",
-//        vec![TransactionArgument::U64(2), TransactionArgument::U64(3), TransactionArgument::Address(bob.account())],
-//    )?;
-//    execute_script(
-//        bob.clone(),
-//        alice.clone(),
-//        "scripts",
-//        "play",
-//        vec![TransactionArgument::U64(3), TransactionArgument::U64(3), TransactionArgument::Address(alice.account())],
-//    )?;
-//    execute_script(
-//        alice.clone(),
-//        bob.clone(),
-//        "scripts",
-//        "play",
-//        vec![TransactionArgument::U64(2), TransactionArgument::U64(4), TransactionArgument::Address(bob.account())],
-//    )?;
-//    execute_script(
-//        bob.clone(),
-//        alice.clone(),
-//        "scripts",
-//        "play",
-//        vec![TransactionArgument::U64(3), TransactionArgument::U64(4), TransactionArgument::Address(alice.account())],
-//    )?;
-//    execute_script(
-//        alice.clone(),
-//        bob.clone(),
-//        "scripts",
-//        "play",
-//        vec![TransactionArgument::U64(2), TransactionArgument::U64(5), TransactionArgument::Address(bob.account())],
-//    )?;
-//    execute_script(
-//        bob.clone(),
-//        alice.clone(),
-//        "scripts",
-//        "play",
-//        vec![TransactionArgument::U64(3), TransactionArgument::U64(5), TransactionArgument::Address(alice.account())],
-//    )?;
-//    execute_script(
-//        alice.clone(),
-//        bob.clone(),
-//        "scripts",
-//        "play",
-//        vec![TransactionArgument::U64(2), TransactionArgument::U64(6), TransactionArgument::Address(bob.account())],
-//    )?;
-//    execute_script(
-//        alice.clone(),
-//        bob.clone(),
-//        "scripts",
-//        "check_score",
-//        vec![TransactionArgument::U64(1)],
-//    )?;
+    //    execute_script(alice.clone(), bob.clone(), "scripts", "new", vec![TransactionArgument::Address(bob.account())])?;
+    //    execute_script(bob.clone(), alice.clone(), "scripts", "join", vec![])?;
+    //    execute_script(
+    //        alice.clone(),
+    //        bob.clone(),
+    //        "scripts",
+    //        "play",
+    //        vec![TransactionArgument::U64(2), TransactionArgument::U64(2), TransactionArgument::Address(bob.account())],
+    //    )?;
+    //    execute_script(
+    //        bob.clone(),
+    //        alice.clone(),
+    //        "scripts",
+    //        "play",
+    //        vec![TransactionArgument::U64(3), TransactionArgument::U64(2), TransactionArgument::Address(alice.account())],
+    //    )?;
+    //    execute_script(
+    //        alice.clone(),
+    //        bob.clone(),
+    //        "scripts",
+    //        "play",
+    //        vec![TransactionArgument::U64(2), TransactionArgument::U64(3), TransactionArgument::Address(bob.account())],
+    //    )?;
+    //    execute_script(
+    //        bob.clone(),
+    //        alice.clone(),
+    //        "scripts",
+    //        "play",
+    //        vec![TransactionArgument::U64(3), TransactionArgument::U64(3), TransactionArgument::Address(alice.account())],
+    //    )?;
+    //    execute_script(
+    //        alice.clone(),
+    //        bob.clone(),
+    //        "scripts",
+    //        "play",
+    //        vec![TransactionArgument::U64(2), TransactionArgument::U64(4), TransactionArgument::Address(bob.account())],
+    //    )?;
+    //    execute_script(
+    //        bob.clone(),
+    //        alice.clone(),
+    //        "scripts",
+    //        "play",
+    //        vec![TransactionArgument::U64(3), TransactionArgument::U64(4), TransactionArgument::Address(alice.account())],
+    //    )?;
+    //    execute_script(
+    //        alice.clone(),
+    //        bob.clone(),
+    //        "scripts",
+    //        "play",
+    //        vec![TransactionArgument::U64(2), TransactionArgument::U64(5), TransactionArgument::Address(bob.account())],
+    //    )?;
+    //    execute_script(
+    //        bob.clone(),
+    //        alice.clone(),
+    //        "scripts",
+    //        "play",
+    //        vec![TransactionArgument::U64(3), TransactionArgument::U64(5), TransactionArgument::Address(alice.account())],
+    //    )?;
+    //    execute_script(
+    //        alice.clone(),
+    //        bob.clone(),
+    //        "scripts",
+    //        "play",
+    //        vec![TransactionArgument::U64(2), TransactionArgument::U64(6), TransactionArgument::Address(bob.account())],
+    //    )?;
+    //    execute_script(
+    //        alice.clone(),
+    //        bob.clone(),
+    //        "scripts",
+    //        "check_score",
+    //        vec![TransactionArgument::U64(1)],
+    //    )?;
 
     Ok(())
 }
