@@ -19,6 +19,7 @@ pub mod proto;
 pub mod resource;
 #[cfg(test)]
 mod resource_test;
+pub mod s_value;
 pub mod script_package;
 pub mod sg_error;
 pub mod signed_channel_transaction;

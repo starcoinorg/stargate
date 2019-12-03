@@ -1,0 +1,16 @@
+[package]
+name = "ant"
+version = "0.1.0"
+authors = ["Starcoin Core Dev <dev@starcoin.org>"]
+license = "Apache-2.0"
+publish = false
+edition = "2018"
+
+[dependencies]
+rand = "0.6.5"
+
+libra-logger = { path = "../../libra/common/logger" }
+libra-crypto = { path = "../../libra/crypto/crypto"}
+sgtypes = { path = "../../sgtypes" }
+failure = { path = "../../libra/common/failure-ext", package = "libra-failure-ext"  }
+

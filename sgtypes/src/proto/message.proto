@@ -41,3 +41,24 @@ message ErrorMessage {
     uint32 error_code=2;
     string error_message =3 ;
 }
+
+message BalanceQueryRequest {
+    bytes local_addr = 1;
+    bytes remote_addr = 2;
+}
+
+message BalanceQueryResponse{
+    bytes local_addr = 1;
+    uint64 local_balance = 2;
+    bytes remote_addr = 3;
+    uint64 remote_balance = 4;
+}
+
+message VertexInfo {
+    bytes addr = 1;
+}
+
+message AntMessage {
+    bytes s_value = 1;
+    repeated VertexInfo vertex_list= 2;
+}
