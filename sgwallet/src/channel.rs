@@ -516,10 +516,6 @@ impl Inner {
 
         self.verify_txn_sigs(&payload_body, &output, &sigs)?;
 
-        debug!(
-            "user {} receive sig from {}",
-            self.account_address, sigs.address
-        );
         verified_signatures.insert(sigs.address, sigs);
 
         // if the output modifies user's channel state, permission need to be granted by user.
@@ -932,14 +928,16 @@ impl Inner {
             None
         };
 
-        Ok(ChannelTransactionSigs::new(
+        let generated_sigs = ChannelTransactionSigs::new(
             self.account_address,
             self.keypair.public_key.clone(),
             payload_body_signature,
             witness_data_hash,
             witness_data_signature,
             travel_output_witness_signature,
-        ))
+        );
+
+        Ok(generated_sigs)
     }
 
     fn verify_txn_sigs(

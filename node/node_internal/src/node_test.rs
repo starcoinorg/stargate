@@ -83,7 +83,7 @@ fn node_test() -> Result<()> {
         );
         assert_eq!(
             node1.channel_balance_async(addr2).await.unwrap(),
-            fund_amount + deposit_amount
+            fund_amount
         );
 
         let transfer_amount = 1_000;
@@ -103,7 +103,7 @@ fn node_test() -> Result<()> {
         );
         assert_eq!(
             node1.channel_balance_async(addr2).await.unwrap(),
-            fund_amount + transfer_amount + deposit_amount
+            fund_amount + transfer_amount
         );
 
         let wd_amount = 10000;
@@ -122,7 +122,7 @@ fn node_test() -> Result<()> {
         );
         assert_eq!(
             node1.channel_balance_async(addr2).await.unwrap(),
-            fund_amount + transfer_amount - wd_amount + deposit_amount
+            fund_amount + transfer_amount
         );
 
         node1.shutdown().unwrap();

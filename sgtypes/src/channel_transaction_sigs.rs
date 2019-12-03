@@ -65,7 +65,7 @@ impl TryFrom<crate::proto::sgtypes::ChannelTransactionSigs> for ChannelTransacti
             None
         } else {
             Some(Ed25519Signature::try_from(
-                proto.witness_data_signature.as_slice(),
+                proto.travel_output_witness_signature.as_slice(),
             )?)
         };
         Ok(ChannelTransactionSigs {
