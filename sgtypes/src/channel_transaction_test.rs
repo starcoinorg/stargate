@@ -7,13 +7,13 @@ use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     hash::CryptoHash,
     test_utils::KeyPair,
-    HashValue, Uniform,
+    HashValue, SigningKey, Uniform,
 };
-use libra_types::{
-    account_address::AccountAddress,
-    transaction::{helpers::ChannelPayloadSigner, ChannelScriptBody, ChannelWriteSetBody, Script},
-    write_set::WriteSet,
-};
+use libra_types::channel::Witness;
+use libra_types::identifier::Identifier;
+use libra_types::language_storage::ModuleId;
+use libra_types::transaction::{ChannelTransactionPayloadBodyV2, ScriptAction};
+use libra_types::{account_address::AccountAddress, transaction::Script};
 use rand::prelude::*;
 use std::time::Duration;
 
@@ -24,63 +24,53 @@ fn request_roundtrip_canonical_serialization() {
     let keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey> =
         KeyPair::generate_for_testing(&mut rng0);
     let sender = AccountAddress::from_public_key(&keypair.public_key);
-    let receiver = AccountAddress::random();
-    let script = Script::new(vec![], vec![]);
-    let channel_script_payload = ChannelScriptBody::new(0, WriteSet::default(), receiver, script);
+    let _receiver = AccountAddress::random();
+    let _script = Script::new(vec![], vec![]);
+    let action = ScriptAction::new_call(
+        ModuleId::new(AccountAddress::default(), Identifier::new("M").unwrap()),
+        Identifier::new("f").unwrap(),
+        vec![],
+    );
+    let channel_payload = ChannelTransactionPayloadBodyV2::new(
+        AccountAddress::random(),
+        sender,
+        action,
+        Witness::default(),
+    );
     let signature = keypair
-        .sign_script_payload(&channel_script_payload)
-        .unwrap();
+        .private_key
+        .sign_message(&CryptoHash::hash(&channel_payload));
+
     let sequence_number = rng0.next_u64();
     let channel_sequence_number = rng0.next_u64();
 
-    let requests = vec![
-        ChannelTransactionRequest::new(
-            ChannelTransaction::new(
-                rng0.next_u64(),
-                ChannelOp::Open,
-                sender,
-                sequence_number,
-                receiver,
-                channel_sequence_number,
-                Duration::from_secs(rng0.next_u64()),
-                Vec::new(),
-            ),
-            ChannelTransactionSigs::new(
-                keypair.public_key.clone(),
-                TxnSignature::SenderSig {
-                    channel_txn_signature: signature.clone(),
-                },
-                ChannelWriteSetBody::new(channel_sequence_number, WriteSet::default(), receiver)
-                    .hash(),
-                signature.clone(),
-            ),
-            true,
-        ),
-        ChannelTransactionRequest::new(
-            ChannelTransaction::new(
-                rng0.next_u64(),
-                ChannelOp::Execute {
-                    package_name: "Test".to_string(),
-                    script_name: "Test".to_string(),
-                },
-                sender,
-                sequence_number,
-                receiver,
-                channel_sequence_number,
-                Duration::from_secs(rng0.next_u64()),
-                Vec::new(),
-            ),
-            ChannelTransactionSigs::new(
-                keypair.public_key.clone(),
-                TxnSignature::ReceiverSig {
-                    channel_script_body_signature: signature.clone(),
-                },
-                HashValue::default(),
-                signature.clone(),
-            ),
-            false,
-        ),
-    ];
+    let txn = ChannelTransaction::new(
+        rng0.next_u64(),
+        AccountAddress::random(),
+        channel_sequence_number,
+        ChannelOp::Open,
+        Vec::new(),
+        sender,
+        sequence_number,
+        Duration::from_secs(rng0.next_u64()),
+    );
+
+    let txn_signature = keypair.private_key.sign_message(&CryptoHash::hash(&txn));
+    let proposal = ChannelTransactionProposal::new(txn, keypair.public_key.clone(), txn_signature);
+    let channel_txn_signatures = ChannelTransactionSigs::new(
+        sender,
+        keypair.public_key.clone(),
+        signature.clone(),
+        HashValue::random(),
+        signature.clone(),
+        None,
+    );
+
+    let requests = vec![ChannelTransactionRequest::new(
+        proposal,
+        channel_txn_signatures,
+        false,
+    )];
     for request in requests {
         let serialized_bytes = lcs::to_bytes(&request).unwrap();
 

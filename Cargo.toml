@@ -17,6 +17,7 @@ members = [
     "sgstorage",
     "router",
     "router/graphdb",
+    "router/ant",
 ]
 
 exclude = ["libra"]

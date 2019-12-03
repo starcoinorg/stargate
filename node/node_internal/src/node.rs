@@ -9,13 +9,14 @@ use std::{sync::Arc, time::Duration};
 use tokio::runtime::TaskExecutor;
 
 use failure::prelude::*;
-use libra_crypto::HashValue;
+use libra_crypto::{hash::CryptoHash, HashValue};
+
 use libra_logger::prelude::*;
 use libra_types::{account_address::AccountAddress, account_config::AccountResource};
 use network::{NetworkMessage, NetworkService};
 use node_proto::{
-    DeployModuleResponse, DepositResponse, ExecuteScriptResponse, OpenChannelResponse, PayResponse,
-    WithdrawResponse,
+    DeployModuleResponse, DepositResponse, EmptyResponse, ExecuteScriptResponse,
+    GetChannelTransactionProposalResponse, OpenChannelResponse, PayResponse, WithdrawResponse,
 };
 use sgtypes::script_package::ChannelScriptPackage;
 use sgtypes::{
@@ -46,6 +47,7 @@ pub struct Node {
     event_receiver: Option<UnboundedReceiver<Event>>,
     command_receiver: Option<UnboundedReceiver<NodeMessage>>,
     network_service_close_tx: Option<oneshot::Sender<()>>,
+    wallet: Arc<Wallet>,
 }
 
 struct NodeInner {
@@ -53,6 +55,7 @@ struct NodeInner {
     executor: TaskExecutor,
     sender: UnboundedSender<NetworkMessage>,
     message_processor: MessageProcessor<u64>,
+    network_processor: MessageProcessor<NodeNetworkMessage>,
     default_future_timeout: u64,
     network_service: NetworkService,
 }
@@ -73,9 +76,10 @@ impl Node {
         let wallet_arc = Arc::new(wallet);
         let node_inner = NodeInner {
             executor: executor_clone,
-            wallet: wallet_arc,
+            wallet: wallet_arc.clone(),
             sender,
             message_processor: MessageProcessor::new(),
+            network_processor: MessageProcessor::new(),
             default_future_timeout: 20000,
             network_service: network_service.clone(),
         };
@@ -90,6 +94,7 @@ impl Node {
             event_receiver: Some(event_receiver),
             command_receiver: Some(command_receiver),
             network_service_close_tx: Some(net_close_tx),
+            wallet: wallet_arc,
         }
     }
 
@@ -156,13 +161,9 @@ impl Node {
         &self,
         receiver: AccountAddress,
         sender_amount: u64,
-        receiver_amount: u64,
     ) -> futures::channel::oneshot::Receiver<Result<DepositResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
-        let f = match self
-            .deposit_async(receiver, sender_amount, receiver_amount)
-            .await
-        {
+        let f = match self.deposit_async(receiver, sender_amount).await {
             Ok(msg_future) => msg_future,
             Err(e) => {
                 resp_sender
@@ -186,14 +187,7 @@ impl Node {
         &self,
         receiver: AccountAddress,
         sender_amount: u64,
-        receiver_amount: u64,
     ) -> Result<MessageFuture<u64>> {
-        if receiver_amount > self.default_max_deposit {
-            bail!("deposit coin amount too big")
-        }
-        if receiver_amount > sender_amount {
-            bail!("sender amount should bigger than receiver amount.")
-        }
         let is_receiver_connected = self.network_service.is_connected(receiver);
         if !is_receiver_connected {
             bail!("could not connect to receiver")
@@ -202,7 +196,6 @@ impl Node {
         self.command_sender.unbounded_send(NodeMessage::Deposit {
             receiver,
             sender_amount,
-            receiver_amount,
             responder,
         })?;
 
@@ -213,13 +206,9 @@ impl Node {
         &self,
         receiver: AccountAddress,
         sender_amount: u64,
-        receiver_amount: u64,
     ) -> futures::channel::oneshot::Receiver<Result<WithdrawResponse>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
-        let f = match self
-            .withdraw_async(receiver, sender_amount, receiver_amount)
-            .await
-        {
+        let f = match self.withdraw_async(receiver, sender_amount).await {
             Ok(msg_future) => msg_future,
             Err(e) => {
                 resp_sender
@@ -244,26 +233,17 @@ impl Node {
         &self,
         receiver: AccountAddress,
         sender_amount: u64,
-        receiver_amount: u64,
     ) -> Result<MessageFuture<u64>> {
-        if receiver_amount < sender_amount {
-            bail!("sender amount should smaller than receiver amount.")
-        }
-
         let is_receiver_connected = self.network_service.is_connected(receiver);
         if !is_receiver_connected {
             bail!("could not connect to receiver")
         }
-        info!(
-            "start to withdraw with {:?} {} {}",
-            receiver, sender_amount, receiver_amount
-        );
+        info!("start to withdraw with {:?} {} ", receiver, sender_amount);
 
         let (responder, resp_receiver) = futures::channel::oneshot::channel();
         self.command_sender.unbounded_send(NodeMessage::Withdraw {
             receiver,
             sender_amount,
-            receiver_amount,
             responder,
         })?;
 
@@ -459,6 +439,77 @@ impl Node {
         resp_receiver.await?
     }
 
+    pub async fn get_channel_transaction_proposal_async(
+        &self,
+        participant_address: AccountAddress,
+    ) -> Result<GetChannelTransactionProposalResponse> {
+        let proposal = self
+            .wallet
+            .get_waiting_proposal(participant_address)
+            .await?;
+        match proposal {
+            Some(t) => Ok(GetChannelTransactionProposalResponse::new(Some(
+                t.channel_txn,
+            ))),
+            None => {
+                return Ok(GetChannelTransactionProposalResponse::new(None));
+            }
+        }
+    }
+
+    pub async fn get_channel_transaction_proposal_oneshot(
+        &self,
+        participant_address: AccountAddress,
+    ) -> futures::channel::oneshot::Receiver<Result<GetChannelTransactionProposalResponse>> {
+        let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
+        match self
+            .get_channel_transaction_proposal_async(participant_address)
+            .await
+        {
+            Ok(msg_future) => resp_sender
+                .send(Ok(msg_future))
+                .expect("Did open channel processor thread panic?"),
+            Err(e) => {
+                resp_sender
+                    .send(Err(failure::Error::from(e)))
+                    .expect("Failed to send error message.");
+                return resp_receiver;
+            }
+        };
+        resp_receiver
+    }
+
+    pub async fn channel_transaction_proposal_async(
+        &self,
+        participant_address: AccountAddress,
+        transaction_hash: HashValue,
+        approve: bool,
+    ) -> Result<EmptyResponse> {
+        let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
+
+        self.command_sender
+            .unbounded_send(NodeMessage::ChannelTransactionProposal {
+                participant_address,
+                transaction_hash,
+                approve,
+                responder: resp_sender,
+            })
+            .unwrap();
+
+        match resp_receiver.await? {
+            Ok(_) => {
+                info!(
+                    "approve txn {} with {} ",
+                    transaction_hash, participant_address
+                );
+                return Ok(EmptyResponse::new());
+            }
+            Err(e) => {
+                return Err(e);
+            }
+        }
+    }
+
     async fn start(
         mut node_inner: NodeInner,
         receiver: UnboundedReceiver<NetworkMessage>,
@@ -482,111 +533,15 @@ impl Node {
         loop {
             futures::select! {
                 message = receiver.select_next_some() => {
-                    info!("receive message ");
                     match message {
-                        Ok(msg)=>{
-                            let peer_id = msg.peer_id;
-                            let data = bytes::Bytes::from(msg.data);
-                            let msg_type=parse_message_type(&data);
-                            debug!("message type is {:?}",msg_type);
-                            match msg_type {
-                                MessageType::OpenChannelNodeNegotiateMessage => {},
-                                MessageType::ChannelTransactionRequest => node_inner.handle_receiver_channel(data[2..].to_vec()),
-                                MessageType::ChannelTransactionResponse => node_inner.handle_sender_channel(data[2..].to_vec(),peer_id),
-                                MessageType::ErrorMessage => node_inner.handle_error_message(data[2..].to_vec()),
-                                _=>warn!("message type not found {:?}",msg_type),
-                            };
-                        },
-                        Err(e)=>{
-
-                        }
+                        Ok(msg) => node_inner.handle_network_msg(msg).await,
+                        Err(_) => {}
                     }
                 },
                 node_message = command_receiver.select_next_some()=>{
-                    match node_message{
-                        Ok(msg) => {
-                            match msg {
-                                NodeMessage::Install{
-                                    channel_script_package,
-                                    responder,
-                                } =>{
-                                    node_inner.install_package(channel_script_package,responder).await;
-                                },
-                                NodeMessage::Execute{
-                                    receiver_address,
-                                    package_name,
-                                    script_name,
-                                    transaction_args,
-                                    responder,
-                                } =>{
-                                    node_inner.execute_script(receiver_address,package_name,script_name,transaction_args,responder).await;
-                                },
-                                NodeMessage::Deposit {
-                                    receiver,
-                                    sender_amount,
-                                    receiver_amount,
-                                    responder,
-                                }=> {
-                                    node_inner.deposit(receiver,sender_amount,receiver_amount,responder).await;
-                                },
-                                NodeMessage::OpenChannel {
-                                    receiver,
-                                    sender_amount,
-                                    receiver_amount,
-                                    responder,
-                                }=> {
-                                    info!("get open channel message");
-                                    node_inner.open_channel(receiver,sender_amount,receiver_amount,responder).await;
-                                },
-                                NodeMessage::Withdraw {
-                                    receiver,
-                                    sender_amount,
-                                    receiver_amount,
-                                    responder,
-                                }=> {
-                                    node_inner.withdraw(receiver,sender_amount,receiver_amount,responder).await;
-                                },
-                                NodeMessage::ChannelPay {
-                                    receiver_address,
-                                    amount,
-                                    responder,
-                                }=> {
-                                    node_inner.off_chain_pay(receiver_address,amount,responder).await;
-                                },
-                                NodeMessage::ChannelBalance {
-                                    participant,
-                                    responder,
-                                }=> {
-                                    node_inner.channel_balance(participant,responder).await;
-                                },
-                                NodeMessage::DeployModule {
-                                    module_code,
-                                    responder,
-                                }=>{
-                                    node_inner.deploy_module(module_code,responder).await;
-                                },
-                                NodeMessage::ChainBalance {
-                                    responder,
-                                }=>{
-                                    node_inner.chain_balance(responder).await;
-                                },
-                                NodeMessage::TxnBySn {
-                                    participant_address,
-                                    channel_seq_number,
-                                    responder,
-                                }=>{
-                                    node_inner.tnx_by_sn(participant_address,channel_seq_number,responder).await;
-                                },
-                                NodeMessage::SetTimeout {
-                                    default_future_timeout
-                                }=>{
-                                    node_inner.set_timeout(default_future_timeout);
-                                },
-                            }
-                        },
-                        Err(e) => {
-
-                        }
+                    match node_message {
+                        Ok(msg) => node_inner.handle_node_msg(msg).await,
+                        Err(_) => {}
                     }
                 },
                 _ = event_receiver.select_next_some() => {
@@ -600,8 +555,140 @@ impl Node {
     }
 }
 
+impl Node {
+    pub fn wallet(&self) -> Arc<Wallet> {
+        self.wallet.clone()
+    }
+}
+
 impl NodeInner {
-    fn handle_receiver_channel(&self, data: Vec<u8>) {
+    async fn handle_network_msg(&mut self, msg: NetworkMessage) {
+        info!("receive message ");
+        let peer_id = msg.peer_id;
+        let data = bytes::Bytes::from(msg.data);
+        let msg_type = parse_message_type(&data);
+        debug!("message type is {:?}", msg_type);
+        match msg_type {
+            MessageType::OpenChannelNodeNegotiateMessage => {}
+            MessageType::ChannelTransactionRequest => {
+                self.handle_receiver_channel(data[2..].to_vec(), peer_id)
+            }
+            MessageType::ChannelTransactionResponse => {
+                self.handle_sender_channel(data[2..].to_vec(), peer_id)
+            }
+            MessageType::ErrorMessage => self.handle_error_message(data[2..].to_vec()),
+            MessageType::BalanceQueryResponse => {
+                self.handle_balance_query_response(data[2..].to_vec())
+            }
+            MessageType::BalanceQueryRequest => {
+                self.handle_balance_query_request(data[2..].to_vec(), peer_id)
+            }
+        };
+    }
+
+    async fn handle_node_msg(&mut self, msg: NodeMessage) {
+        match msg {
+            NodeMessage::Install {
+                channel_script_package,
+                responder,
+            } => {
+                self.install_package(channel_script_package, responder)
+                    .await;
+            }
+            NodeMessage::Execute {
+                receiver_address,
+                package_name,
+                script_name,
+                transaction_args,
+                responder,
+            } => {
+                self.execute_script(
+                    receiver_address,
+                    package_name,
+                    script_name,
+                    transaction_args,
+                    responder,
+                )
+                .await;
+            }
+            NodeMessage::Deposit {
+                receiver,
+                sender_amount,
+                responder,
+            } => {
+                self.deposit(receiver, sender_amount, responder).await;
+            }
+            NodeMessage::OpenChannel {
+                receiver,
+                sender_amount,
+                receiver_amount,
+                responder,
+            } => {
+                info!("get open channel message");
+                self.open_channel(receiver, sender_amount, receiver_amount, responder)
+                    .await;
+            }
+            NodeMessage::Withdraw {
+                receiver,
+                sender_amount,
+                responder,
+            } => {
+                self.withdraw(receiver, sender_amount, responder).await;
+            }
+            NodeMessage::ChannelPay {
+                receiver_address,
+                amount,
+                responder,
+            } => {
+                self.off_chain_pay(receiver_address, amount, responder)
+                    .await;
+            }
+            NodeMessage::ChannelBalance {
+                participant,
+                responder,
+            } => {
+                self.channel_balance(participant, responder).await;
+            }
+            NodeMessage::DeployModule {
+                module_code,
+                responder,
+            } => {
+                self.deploy_module(module_code, responder).await;
+            }
+            NodeMessage::ChainBalance { responder } => {
+                self.chain_balance(responder).await;
+            }
+            NodeMessage::TxnBySn {
+                participant_address,
+                channel_seq_number,
+                responder,
+            } => {
+                self.tnx_by_sn(participant_address, channel_seq_number, responder)
+                    .await;
+            }
+            NodeMessage::SetTimeout {
+                default_future_timeout,
+            } => {
+                self.set_timeout(default_future_timeout);
+            }
+            NodeMessage::ChannelTransactionProposal {
+                participant_address,
+                transaction_hash,
+                approve,
+                responder,
+            } => {
+                self.channel_transaction_proposal(
+                    participant_address,
+                    transaction_hash,
+                    approve,
+                    responder,
+                )
+                .await;
+            }
+        }
+    }
+
+    fn handle_receiver_channel(&self, data: Vec<u8>, peer_id: AccountAddress) {
         debug!("receive channel");
         let open_channel_message: ChannelTransactionRequest;
         //TODO refactor error handle.
@@ -614,58 +701,75 @@ impl NodeInner {
                 return;
             }
         }
-        let sender_addr = open_channel_message.sender();
-        if open_channel_message.receiver() == self.wallet.account() {
-            // sign message ,verify messsage,no send back
-            let wallet = self.wallet.clone();
-            let sender = self.sender.clone();
-            let request_id = open_channel_message.request_id();
-            let f = async move {
-                let receiver_open_txn: ChannelTransactionResponse;
-                match wallet.verify_txn(&open_channel_message).await {
-                    Ok(tx) => {
-                        receiver_open_txn = tx;
-                    }
-                    Err(e) => {
-                        sender
-                            .unbounded_send(NetworkMessage {
-                                peer_id: sender_addr,
-                                data: error_message(e, request_id).to_vec(),
-                            })
-                            .unwrap();
-                        return;
+
+        // sign message ,verify messsage,no send back
+        let wallet = self.wallet.clone();
+        let sender = self.sender.clone();
+        let request_id = open_channel_message.request_id();
+        let f = async move {
+            let receiver_open_txn: ChannelTransactionResponse;
+            match wallet.verify_txn(peer_id, &open_channel_message).await {
+                Ok(tx) => {
+                    match tx {
+                        Some(t) => receiver_open_txn = t,
+                        None => {
+                            receiver_open_txn =
+                                wallet.approve_txn(peer_id, request_id).await.unwrap()
+                        } // it means user approval is needed.
                     }
                 }
-                let msg = add_message_type(
-                    receiver_open_txn.clone().into_proto_bytes().unwrap(),
-                    MessageType::ChannelTransactionResponse,
-                );
-                debug!("send msg to {:?}", sender_addr);
-                sender
-                    .unbounded_send(NetworkMessage {
-                        peer_id: sender_addr,
-                        data: msg.to_vec(),
-                    })
-                    .unwrap();
-                match wallet.apply_txn(sender_addr, &receiver_open_txn).await {
-                    Ok(_) => {}
-                    Err(e) => {
-                        warn!("apply tx fail, err: {:?}", &e);
-                        sender
-                            .unbounded_send(NetworkMessage {
-                                peer_id: sender_addr,
-                                data: error_message(e, request_id).to_vec(),
-                            })
-                            .unwrap();
-                        return;
-                    }
-                };
-            };
-            self.executor.spawn(f);
-        }
+                Err(e) => {
+                    warn!("verify error {}", e);
+                    sender
+                        .unbounded_send(NetworkMessage {
+                            peer_id,
+                            data: error_message(e, request_id).to_vec(),
+                        })
+                        .unwrap();
+                    return;
+                }
+            }
+
+            Self::apply_txn(peer_id, request_id, receiver_open_txn, sender, wallet).await;
+        };
+
+        self.executor.spawn(f);
     }
 
-    fn handle_sender_channel(&self, data: Vec<u8>, receiver_addr: AccountAddress) {
+    async fn apply_txn(
+        peer_id: AccountAddress,
+        request_id: HashValue,
+        receiver_open_txn: ChannelTransactionResponse,
+        sender: UnboundedSender<NetworkMessage>,
+        wallet: Arc<Wallet>,
+    ) {
+        let msg = add_message_type(
+            receiver_open_txn.clone().into_proto_bytes().unwrap(),
+            MessageType::ChannelTransactionResponse,
+        );
+        debug!("send msg to {:?}", peer_id);
+        sender
+            .unbounded_send(NetworkMessage {
+                peer_id,
+                data: msg.to_vec(),
+            })
+            .unwrap();
+        match wallet.apply_txn(peer_id, &receiver_open_txn).await {
+            Ok(_) => {}
+            Err(e) => {
+                warn!("apply tx fail, err: {:?}", &e);
+                sender
+                    .unbounded_send(NetworkMessage {
+                        peer_id,
+                        data: error_message(e, request_id).to_vec(),
+                    })
+                    .unwrap();
+                return;
+            }
+        };
+    }
+
+    fn handle_sender_channel(&self, data: Vec<u8>, peer_id: AccountAddress) {
         debug!("sender channel");
         let open_channel_message: ChannelTransactionResponse;
 
@@ -682,14 +786,27 @@ impl NodeInner {
         let wallet = self.wallet.clone();
         let mut message_processor = self.message_processor.clone();
         let f = async move {
-            match wallet.apply_txn(receiver_addr, &open_channel_message).await {
+            match wallet
+                .verify_txn_response(peer_id, &open_channel_message)
+                .await
+            {
+                Ok(_) => {}
+                Err(e) => {
+                    error!(
+                        "verify txn response failure, peer {:?}, error: {:?}",
+                        peer_id, e
+                    );
+                    return;
+                }
+            };
+            match wallet.apply_txn(peer_id, &open_channel_message).await {
                 Ok(_) => {}
                 Err(e) => {
                     warn!("apply tx fail, err: {:?}", e);
                     return;
                 }
             };
-            let channel_seq_number = match wallet.channel_sequence_number(receiver_addr).await {
+            let channel_seq_number = match wallet.channel_sequence_number(peer_id).await {
                 Ok(n) => n,
                 Err(e) => {
                     error!("fail to get channel sequence number, err: {:?}", e);
@@ -716,16 +833,57 @@ impl NodeInner {
         }
     }
 
+    fn handle_balance_query_request(&self, data: Vec<u8>, sender_addr: AccountAddress) {
+        debug!("off balance query request message");
+        match BalanceQueryRequest::from_proto_bytes(&data) {
+            Ok(msg) => {
+                let response = BalanceQueryResponse::new(msg.local_addr, msg.remote_addr, 0, 0);
+                let msg = add_message_type(
+                    response.into_proto_bytes().unwrap(),
+                    MessageType::BalanceQueryResponse,
+                );
+                self.sender
+                    .unbounded_send(NetworkMessage {
+                        peer_id: sender_addr.clone(),
+                        data: msg.to_vec(),
+                    })
+                    .unwrap();
+            }
+            Err(_e) => {
+                warn!("get wrong message");
+                return;
+            }
+        }
+    }
+
+    fn handle_balance_query_response(&mut self, data: Vec<u8>) {
+        debug!("off balance query request message");
+        match BalanceQueryResponse::from_proto_bytes(&data) {
+            Ok(msg) => {
+                self.network_processor
+                    .send_response(
+                        (&msg.local_addr).hash(),
+                        NodeNetworkMessage::BalanceQueryResponseEnum(msg),
+                    )
+                    .unwrap();
+            }
+            Err(_e) => {
+                warn!("get wrong message");
+                return;
+            }
+        }
+    }
+
     fn channel_txn_onchain(
         &self,
+        peer_id: AccountAddress,
         open_channel_message: ChannelTransactionRequest,
         msg_type: MessageType,
     ) -> Result<MessageFuture<u64>> {
         let hash_value = open_channel_message.request_id();
-        let addr = open_channel_message.receiver().clone();
         let msg = add_message_type(open_channel_message.into_proto_bytes().unwrap(), msg_type);
         self.sender.unbounded_send(NetworkMessage {
-            peer_id: addr,
+            peer_id,
             data: msg.to_vec(),
         })?;
         let (tx, rx) = futures_01::sync::mpsc::channel(1);
@@ -880,7 +1038,11 @@ impl NodeInner {
             .await
             .unwrap();
         info!("get open channel txn");
-        let result = self.channel_txn_onchain(channel_txn, MessageType::ChannelTransactionRequest);
+        let result = self.channel_txn_onchain(
+            receiver,
+            channel_txn,
+            MessageType::ChannelTransactionRequest,
+        );
         respond_with(responder, result);
     }
 
@@ -888,17 +1050,16 @@ impl NodeInner {
         &self,
         receiver: AccountAddress,
         sender_amount: u64,
-        receiver_amount: u64,
         responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
     ) {
         info!("start deposit ");
-        let channel_txn = self
-            .wallet
-            .deposit(receiver, sender_amount, receiver_amount)
-            .await
-            .unwrap();
+        let channel_txn = self.wallet.deposit(receiver, sender_amount).await.unwrap();
         info!("get deposit txn");
-        let result = self.channel_txn_onchain(channel_txn, MessageType::ChannelTransactionRequest);
+        let result = self.channel_txn_onchain(
+            receiver,
+            channel_txn,
+            MessageType::ChannelTransactionRequest,
+        );
         respond_with(responder, result);
     }
 
@@ -906,17 +1067,16 @@ impl NodeInner {
         &self,
         receiver: AccountAddress,
         sender_amount: u64,
-        receiver_amount: u64,
         responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
     ) {
         info!("start withdraw ");
-        let channel_txn = self
-            .wallet
-            .withdraw(receiver, sender_amount, receiver_amount)
-            .await
-            .unwrap();
+        let channel_txn = self.wallet.withdraw(receiver, sender_amount).await.unwrap();
         info!("get withdraw txn");
-        let result = self.channel_txn_onchain(channel_txn, MessageType::ChannelTransactionRequest);
+        let result = self.channel_txn_onchain(
+            receiver,
+            channel_txn,
+            MessageType::ChannelTransactionRequest,
+        );
         respond_with(responder, result);
     }
 
@@ -961,8 +1121,89 @@ impl NodeInner {
             .unwrap();
     }
 
+    async fn _query_balance(
+        &self,
+        channel_vec: Vec<(AccountAddress, AccountAddress)>,
+    ) -> Result<Vec<BalanceQueryResponse>> {
+        let mut result = Vec::new();
+        for (local_addr, remote_addr) in channel_vec.iter() {
+            let request = BalanceQueryRequest::new(local_addr.clone(), remote_addr.clone());
+            let msg = add_message_type(
+                request.into_proto_bytes().unwrap(),
+                MessageType::BalanceQueryRequest,
+            );
+            self.sender.unbounded_send(NetworkMessage {
+                peer_id: local_addr.clone(),
+                data: msg.to_vec(),
+            })?;
+            let (tx, rx) = futures_01::sync::mpsc::channel(1);
+            let message_future = MessageFuture::new(rx);
+            self.network_processor
+                .add_future(local_addr.hash(), tx.clone());
+            let response = message_future.compat().await?;
+            match response {
+                NodeNetworkMessage::BalanceQueryResponseEnum(data) => {
+                    result.push(data);
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
     pub fn set_timeout(&mut self, timeout: u64) {
         self.default_future_timeout = timeout;
+    }
+
+    async fn channel_transaction_proposal(
+        &self,
+        participant_address: AccountAddress,
+        transaction_hash: HashValue,
+        approve: bool,
+        responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
+    ) {
+        if approve {
+            match self
+                .wallet
+                .approve_txn(participant_address, transaction_hash)
+                .await
+            {
+                Ok(t) => {
+                    Self::apply_txn(
+                        participant_address,
+                        transaction_hash,
+                        t,
+                        self.sender.clone(),
+                        self.wallet.clone(),
+                    )
+                    .await;
+                }
+                Err(e) => {
+                    warn!("approve txn {} failed,{}", e, transaction_hash);
+                }
+            }
+        } else {
+            match self
+                .wallet
+                .reject_txn(participant_address, transaction_hash)
+                .await
+            {
+                Ok(_) => {
+                    info!("reject txn {} succ ", transaction_hash);
+                }
+                Err(e) => {
+                    warn!("reject txn {} failed,{}", e, transaction_hash);
+                }
+            }
+        }
+
+        let (tx, rx) = futures_01::sync::mpsc::channel(1);
+        let message_future = MessageFuture::new(rx);
+        self.message_processor
+            .add_future(transaction_hash.clone(), tx);
+        self.future_timeout(transaction_hash, self.default_future_timeout);
+
+        respond_with(responder, Ok(message_future));
     }
 }
 
@@ -1020,7 +1261,6 @@ mod tests {
             Delay::new(Duration::from_millis(1000)).await;
             println!("ok");
         };
-        rt.spawn(task);
-        rt.shutdown_on_idle();
+        rt.block_on(task);
     }
 }

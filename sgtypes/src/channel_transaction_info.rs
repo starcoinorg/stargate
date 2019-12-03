@@ -29,6 +29,11 @@ pub struct ChannelTransactionInfo {
     /// particularly high fidelity in the presence of sub statuses but, the major status does
     /// determine whether or not the transaction is applied to the global state or not.
     major_status: StatusCode,
+
+    /// whether the channel txn is travel onchain.
+    travel: bool,
+
+    gas_used: u64,
 }
 
 impl ChannelTransactionInfo {
@@ -39,16 +44,18 @@ impl ChannelTransactionInfo {
         write_set_root_hash: HashValue,
         state_root_hash: HashValue,
         event_root_hash: HashValue,
-
         major_status: StatusCode,
+        travel: bool,
+        gas_used: u64,
     ) -> ChannelTransactionInfo {
         ChannelTransactionInfo {
             signed_transaction_hash,
             write_set_root_hash,
             state_root_hash,
             event_root_hash,
-
             major_status,
+            travel,
+            gas_used,
         }
     }
 
@@ -75,6 +82,13 @@ impl ChannelTransactionInfo {
 
     pub fn major_status(&self) -> StatusCode {
         self.major_status
+    }
+
+    pub fn travel(&self) -> bool {
+        self.travel
+    }
+    pub fn gas_used(&self) -> u64 {
+        self.gas_used
     }
 }
 

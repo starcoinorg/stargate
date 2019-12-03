@@ -69,10 +69,24 @@ service Node {
                body: "*"
             };
     }
+
+    rpc GetChannelTransactionProposal (ChannelBalanceRequest) returns (GetChannelTransactionProposalResponse) {
+        option (google.api.http) = {
+           get: "/node/channel_transaction_proposal"
+        };
+    }
+
+    rpc ChannelTransactionProposal (ChannelTransactionProposalRequest) returns (EmptyResponse) {
+        option (google.api.http) = {
+           post: "/node/channel_transaction_proposal"
+           body: "*"
+        };
+    }
+
 }
 
 message QueryTransactionQuest {
-     bytes partipant_address = 1;
+     bytes participant_address = 1;
      uint64 channel_seq_number = 2;
 }
 
@@ -89,7 +103,6 @@ message OpenChannelResponse {
 message DepositRequest {
     bytes remote_addr = 1;
     uint64 local_amount = 2;
-    uint64 remote_amount = 3;
 }
 
 message DepositResponse {
@@ -99,7 +112,6 @@ message DepositResponse {
 message WithdrawRequest {
     bytes remote_addr = 1;
     uint64 local_amount = 2;
-    uint64 remote_amount = 3;
 }
 
 message WithdrawResponse {
@@ -148,4 +160,18 @@ message ExecuteScriptRequest {
 
 message ExecuteScriptResponse {
     uint64 channel_sequence_number = 1;
+}
+
+message GetChannelTransactionProposalResponse{
+    sgtypes.ChannelTransaction channel_transaction = 1;
+}
+
+message ChannelTransactionProposalRequest{
+    bytes participant_address = 1;
+    bytes transaction_hash = 2;
+    bool approve = 3;
+}
+
+message EmptyResponse{
+
 }

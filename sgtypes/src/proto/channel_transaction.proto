@@ -5,62 +5,65 @@ package sgtypes;
 import "transaction.proto";
 
 message ChannelTransactionRequest {
-    bytes request_id = 1;
-    ChannelTransaction channel_txn = 2;
-    ChannelTransactionSigs channel_txn_sigs = 3;
-    bool travel = 4;
+    ChannelTransactionProposal proposal = 1;
+    ChannelTransactionSigs channel_txn_sigs = 2;
+    bool travel = 3;
 }
 
 message ChannelTransactionResponse {
-    bytes request_id = 1;
+    ChannelTransactionProposal proposal = 1;
     ChannelTransactionSigs channel_txn_sigs = 2;
 }
 
 message ChannelTransactionSigs {
-    bytes public_key = 1;
-    TxnSignature signature = 2;
-    bytes write_set_payload_hash = 3;
-    bytes write_set_payload_signature = 4;
+    bytes address = 1;
+    bytes public_key = 2;
+    bytes channel_payload_signature = 3;
+    bytes witness_data_hash = 4;
+    bytes witness_data_signature = 5;
+    bytes travel_output_witness_signature = 6;
 }
 
 message SignedChannelTransaction {
     ChannelTransaction raw_tx = 1;
-    ChannelTransactionSigs sender_signature = 2;
-    ChannelTransactionSigs receiver_signature = 3;
+    repeated bytes signers = 2;
+    repeated ChannelTransactionSigs signatures = 3;
 }
 
-message TxnSignature {
-    // The channel txn signature. Empty if `type` is ReceiverSig.
-    bytes channel_txn_signature = 1;
-    // The channel script body signature. Empty if `type` is SenderSig.
-    bytes channel_script_body_signature = 2;
-    TxnSignatureType sign_type = 3;
-}
-enum TxnSignatureType {
-    SenderSig = 0;
-    ReceiverSig = 1;
+message ChannelTransactionProposal {
+    ChannelTransaction channel_txn = 1;
+    bytes proposer_public_key = 2;
+    bytes proposer_signature = 3;
 }
 
 message ChannelTransaction {
     uint64 version = 1;
-    ChannelOp operator = 2;
-    bytes sender = 3;
-    uint64 sequence_number = 4;
-    bytes receiver = 5;
-    uint64 channel_sequence_number = 6;
-    uint64 expiration_time = 7;
-    repeated types.TransactionArgument args = 8;
+    bytes channel_address = 2;
+    uint64 channel_sequence_number = 3;
+    ChannelOp operator = 4;
+    repeated types.TransactionArgument args = 5;
+    bytes proposer = 6;
+    uint64 sequence_number = 7;
+    uint64 expiration_time = 8;
 }
 
 message ChannelOp {
+    ChannelOpType op_type = 1;
+
     // The op package name. Empty if `type` is Open/Close.
-    string package_name = 1;
+    string package_name = 2;
     // The op script name. Empty if `type` is Open/Close.
-    string script_name = 2;
-    ChannelOpType op_type = 3;
+    string script_name = 3;
+
+    // used when op_type is ChannelOp.Action
+    bytes module_address = 4;
+    string module_name = 5;
+    string function_name = 6;
 }
+
 enum ChannelOpType {
     Open = 0;
     Execute = 1;
-    Close = 2;
+    Action = 2;
+    Close = 3;
 }

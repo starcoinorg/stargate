@@ -3,6 +3,7 @@
 use crate::commands::*;
 use failure::prelude::*;
 use grpcio::EnvBuilder;
+use libra_crypto::HashValue;
 use libra_types::{
     account_address::{AccountAddress, ADDRESS_LENGTH},
     proof::SparseMerkleProof,
@@ -12,16 +13,18 @@ use libra_wallet::key_factory::ChildNumber;
 use libra_wallet::wallet_library::WalletLibrary;
 use node_client::NodeClient;
 use node_proto::{
-    ChannelBalanceRequest, ChannelBalanceResponse, DeployModuleRequest, DeployModuleResponse,
-    DepositRequest, DepositResponse, ExecuteScriptRequest, InstallChannelScriptPackageRequest,
-    OpenChannelRequest, OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest,
-    WithdrawResponse,
+    ChannelBalanceRequest, ChannelBalanceResponse, ChannelTransactionProposalRequest,
+    DeployModuleRequest, DeployModuleResponse, DepositRequest, DepositResponse, EmptyResponse,
+    ExecuteScriptRequest, GetChannelTransactionProposalResponse,
+    InstallChannelScriptPackageRequest, OpenChannelRequest, OpenChannelResponse, PayRequest,
+    PayResponse, WithdrawRequest, WithdrawResponse,
 };
 use sgchain::{
     client_state_view::ClientStateView,
     star_chain_client::{faucet_sync, ChainClient, StarChainClient},
 };
 use sgcompiler::{Compiler, StateViewModuleLoader};
+use std::str::FromStr;
 use std::{convert::TryFrom, fs, path::Path, sync::Arc};
 
 /// Enum used for error formatting.
@@ -93,7 +96,6 @@ impl SGClientProxy {
         let response = self.node_client.withdraw(WithdrawRequest {
             remote_addr: AccountAddress::from_hex_literal(space_delim_strings[1])?,
             local_amount: space_delim_strings[2].parse::<u64>()?,
-            remote_amount: space_delim_strings[3].parse::<u64>()?,
         })?;
         Ok(response)
     }
@@ -110,7 +112,6 @@ impl SGClientProxy {
         let response = self.node_client.deposit(DepositRequest {
             remote_addr: AccountAddress::from_hex_literal(space_delim_strings[1])?,
             local_amount: space_delim_strings[2].parse::<u64>()?,
-            remote_amount: space_delim_strings[3].parse::<u64>()?,
         })?;
         Ok(response)
     }
@@ -221,6 +222,31 @@ impl SGClientProxy {
         Ok(())
     }
 
+    pub fn get_channel_transaction_proposal(
+        &mut self,
+        space_delim_strings: &[&str],
+    ) -> Result<GetChannelTransactionProposalResponse> {
+        let remote_addr = AccountAddress::from_hex_literal(space_delim_strings[1])?;
+        self.node_client
+            .get_channel_transaction_proposal(ChannelBalanceRequest::new(remote_addr))
+    }
+
+    pub fn channel_transaction_proposal(
+        &mut self,
+        space_delim_strings: &[&str],
+    ) -> Result<EmptyResponse> {
+        let remote_addr = AccountAddress::from_hex_literal(space_delim_strings[1])?;
+        let transaction_hash = from_hex_literal(space_delim_strings[2])?;
+        let approve = bool::from_str(space_delim_strings[3])?;
+
+        self.node_client
+            .channel_transaction_proposal(ChannelTransactionProposalRequest::new(
+                remote_addr,
+                transaction_hash,
+                approve,
+            ))
+    }
+
     pub fn get_account_address_from_parameter(&self, para: &str) -> Result<AccountAddress> {
         match is_address(para) {
             true => SGClientProxy::address_from_strings(para),
@@ -313,4 +339,24 @@ fn format_parse_data_error<T: std::fmt::Debug>(
         value,
         error
     )
+}
+
+fn from_hex_literal(literal: &str) -> Result<HashValue> {
+    let mut hex_string = String::from(&literal[2..]);
+    if hex_string.len() % 2 != 0 {
+        hex_string.insert(0, '0');
+    }
+
+    let mut result = hex::decode(hex_string.as_str())?;
+    let len = result.len();
+    if len < 32 {
+        result.reverse();
+        for _ in len..32 {
+            result.push(0);
+        }
+        result.reverse();
+    }
+
+    assert!(result.len() >= 32);
+    HashValue::from_slice(&result)
 }

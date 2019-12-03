@@ -6,6 +6,7 @@ use libra_types::{account_address::AccountAddress, account_config::AccountResour
 use sgtypes::script_package::ChannelScriptPackage;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 
+use libra_crypto::HashValue;
 use node_proto::DeployModuleResponse;
 
 pub enum NodeMessage {
@@ -23,7 +24,6 @@ pub enum NodeMessage {
     Deposit {
         receiver: AccountAddress,
         sender_amount: u64,
-        receiver_amount: u64,
         responder: oneshot::Sender<Result<MessageFuture<u64>>>,
     },
     OpenChannel {
@@ -35,7 +35,6 @@ pub enum NodeMessage {
     Withdraw {
         receiver: AccountAddress,
         sender_amount: u64,
-        receiver_amount: u64,
         responder: oneshot::Sender<Result<MessageFuture<u64>>>,
     },
     ChannelPay {
@@ -61,5 +60,11 @@ pub enum NodeMessage {
     },
     SetTimeout {
         default_future_timeout: u64,
+    },
+    ChannelTransactionProposal {
+        participant_address: AccountAddress,
+        transaction_hash: HashValue,
+        approve: bool,
+        responder: oneshot::Sender<Result<MessageFuture<u64>>>,
     },
 }

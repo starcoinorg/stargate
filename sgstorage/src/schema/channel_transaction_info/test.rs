@@ -15,6 +15,8 @@ fn test_encode_decode() {
         HashValue::random(),
         HashValue::random(),
         StatusCode::EXECUTED,
+        false,
+        0,
     );
     assert_encode_decode::<ChannelTransactionInfoSchema>(&0u64, &txn_info);
 }
