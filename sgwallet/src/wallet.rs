@@ -4,7 +4,6 @@ use crate::channel::{ChannelEvent, ChannelMsg};
 use crate::{channel::Channel, scripts::*};
 use chrono::Utc;
 use failure::prelude::*;
-use futures::stream::FuturesUnordered;
 use futures::{
     channel::{mpsc, oneshot},
     StreamExt,
@@ -862,7 +861,7 @@ impl Inner {
                         error!("fail to stop channel {}, err: {}", &channel_address, e);
                     }
                 }
-                if let Some(mut rt) = self.runtime.take() {
+                if let Some(rt) = self.runtime.take() {
                     let handle = thread::spawn(|| {
                         rt.shutdown_on_idle();
                     });

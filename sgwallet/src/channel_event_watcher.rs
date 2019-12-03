@@ -11,14 +11,26 @@ use libra_types::contract_event::ContractEvent;
 use libra_types::{
     get_with_proof::RequestItem, proto::types::UpdateToLatestLedgerRequest, transaction::Version,
 };
-use sgchain::star_chain_client::{ChainClient, StarChainClient};
+use sgchain::star_chain_client::ChainClient;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-pub fn get_event_watcher(_start_event_number: u64, _chain_client: Arc<dyn ChainClient>) {}
+//pub fn get_event_watcher(
+//    chain_client: Arc<dyn ChainClient>,
+//    start_number: u64,
+//    limit: u64,
+//) -> impl Stream<Item = Result<(u64, ContractEvent)>> {
+//    unimplemented!()
+//    //    EventStream::new(
+//    //        chain_client,
+//    //        AccessPath::new_for_channel_global_event(),
+//    //        start_number,
+//    //        limit,
+//    //    )
+//}
 
 #[async_trait]
 pub trait EventQuerier {
@@ -31,7 +43,10 @@ pub trait EventQuerier {
 }
 
 pub struct EventStream {
+    evt_access_path: AccessPath,
     start_number: u64,
+    limit: u64,
+
     event_querier: Arc<dyn EventQuerier>,
     cache: BTreeMap<u64, ContractEvent>,
     delay: Option<Delay>,
@@ -39,9 +54,16 @@ pub struct EventStream {
 }
 
 impl EventStream {
-    pub fn new(event_querier: Arc<dyn EventQuerier>, start_number: u64) -> Self {
+    pub fn new(
+        event_querier: Arc<dyn EventQuerier>,
+        evt_access_path: AccessPath,
+        start_number: u64,
+        limit: u64,
+    ) -> Self {
         Self {
+            evt_access_path,
             start_number,
+            limit,
             event_querier,
             cache: BTreeMap::new(),
             delay: None,
@@ -85,13 +107,11 @@ impl Stream for EventStream {
                         Poll::Pending => return Poll::Pending,
                     }
                 }
-                // FIXME
-                let ap = AccessPath::default();
                 debug_assert!(s.cache.is_empty());
 
                 let event_query = s
                     .event_querier
-                    .query_events(ap, s.start_number, 1000)
+                    .query_events(s.evt_access_path.clone(), s.start_number, s.limit)
                     .poll_unpin(cx);
 
                 match event_query {
@@ -125,7 +145,7 @@ impl Stream for EventStream {
 }
 
 #[async_trait]
-impl EventQuerier for StarChainClient {
+impl<T: ChainClient> EventQuerier for T {
     async fn query_events(
         &self,
         access_path: AccessPath,
@@ -302,7 +322,12 @@ mod test {
             ];
             for q in qs.into_iter() {
                 info!("test on {:#?}", &q);
-                let mut s = EventStream::new(Arc::new(q), 0);
+                let mut s = EventStream::new(
+                    Arc::new(q),
+                    AccessPath::new_for_channel_global_event(),
+                    0,
+                    1000,
+                );
                 for i in 0u64..5 {
                     match s.try_next().await {
                         Ok(Some((idx, _))) => assert_eq!(i, idx),
