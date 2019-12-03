@@ -278,6 +278,8 @@ fn node_random_conf(pow_mode: bool, listen_address: &str, times: usize) -> NodeC
             conf.listen_address = listen_address.parse().unwrap();
             conf.role = RoleType::Validator;
         }
+    } else {
+        config.consensus.consensus_type = ConsensusType::PBFT;
     }
 
     debug!("config : {:?}", config);
@@ -493,7 +495,7 @@ fn test_pow_single_node() {
 fn test_pbft_single_node() {
     ::libra_logger::init_for_e2e_testing();
     let mut config = node_random_conf(false, "/memory/0", 0);
-    config.consensus.consensus_type = ConsensusType::PBFT;
+
     debug!("config : {:?}", config);
     let _handler = libra_node::main_node::setup_environment(&mut config);
 
@@ -540,6 +542,38 @@ fn test_rollback_block() {
         runtime_1.executor(),
         true,
     );
+    runtime_1.shutdown_on_idle();
+}
+
+#[test]
+fn test_coin_base() {
+    ::libra_logger::init_for_e2e_testing();
+    let mut conf_1 = node_random_conf(true, "/memory/0", 0);
+
+    let consensus_address = conf_1
+        .consensus
+        .consensus_keypair
+        .consensus_address()
+        .expect("consensus_address is none.");
+    let _handle_1 = setup_environment(&mut conf_1, true);
+
+    let runtime_1 = tokio::runtime::Runtime::new().unwrap();
+
+    sleep(Duration::from_secs(30));
+
+    let client = StarChainClient::new(
+        "127.0.0.1",
+        conf_1.admission_control.admission_control_service_port as u32,
+    );
+    let account_state = client
+        .get_account_state(consensus_address, None)
+        .expect("get account state err.");
+    let balance = account_state
+        .get_account_resource()
+        .expect("balance is none.")
+        .balance();
+    println!("address {:?} , balance :{}", consensus_address, balance);
+    assert!(balance > 50_000_000);
     runtime_1.shutdown_on_idle();
 }
 

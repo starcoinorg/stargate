@@ -11,8 +11,8 @@ use core::borrow::Borrow;
 use failure::prelude::*;
 use futures::channel::oneshot::Sender;
 use grpcio::{ChannelBuilder, EnvBuilder};
-use libra_config::config::NodeConfig;
 use libra_config::config::NodeConfigHelpers;
+use libra_config::config::{ConsensusType, NodeConfig};
 use libra_config::trusted_peers::ConfigHelpers;
 use libra_logger::prelude::*;
 use libra_prost_ext::MessageExt;
@@ -40,7 +40,7 @@ use tokio::runtime::Runtime;
 use tokio::runtime::TaskExecutor;
 use tokio::timer::delay;
 use transaction_builder::{encode_create_account_script, encode_transfer_script};
-use vm_genesis::{encode_genesis_transaction_with_validator, GENESIS_KEYPAIR};
+use vm_genesis::{encode_genesis_transaction_with_validator_and_consensus, GENESIS_KEYPAIR};
 
 #[async_trait]
 pub trait ChainClient: Send + Sync {
@@ -347,10 +347,11 @@ pub fn genesis_blob(config: &NodeConfig) {
     info!("Write genesis_blob to {}", path.as_path().to_string_lossy());
     let (_validator_keys, test_consensus_peers, test_network_peers) =
         ConfigHelpers::gen_validator_nodes(1, None);
-    let genesis_checked_txn = encode_genesis_transaction_with_validator(
+    let genesis_checked_txn = encode_genesis_transaction_with_validator_and_consensus(
         &GENESIS_KEYPAIR.0,
         GENESIS_KEYPAIR.1.clone(),
         test_consensus_peers.get_validator_set(&test_network_peers),
+        config.consensus.consensus_type == ConsensusType::POW,
     );
     let genesis_txn = genesis_checked_txn.into_inner();
     let mut genesis_file = File::create(path).expect("open genesis file err.");
