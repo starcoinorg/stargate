@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use core::borrow::Borrow;
 use failure::prelude::*;
 use futures::channel::oneshot::Sender;
+use futures_timer::Delay;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use libra_config::config::NodeConfig;
 use libra_config::config::NodeConfigHelpers;
@@ -40,7 +41,6 @@ use std::{
 };
 use tokio::runtime::Runtime;
 use tokio::runtime::TaskExecutor;
-use tokio::timer::delay;
 use transaction_builder::{encode_create_account_script, encode_transfer_script};
 use vm_genesis::{encode_genesis_transaction_with_validator, GENESIS_KEYPAIR};
 
@@ -133,7 +133,7 @@ pub trait ChainClient: Send + Sync {
         let end_time = Instant::now() + Duration::from_millis(50_000);
         loop {
             let timeout_time = Instant::now() + Duration::from_millis(1000);
-            delay(timeout_time).await;
+            Delay::new(Duration::from_millis(1000)).await;
             debug!("watch address : {:?}, seq number : {}", address, seq);
             let (tx_proof, account_proof) = self.get_transaction_by_seq_num(address, seq)?;
             let flag = timeout_time >= end_time;

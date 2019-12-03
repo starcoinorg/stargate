@@ -34,15 +34,15 @@ pub fn gen_node(
     let mut wallet =
         Wallet::new_with_client(account_address, keypair.clone(), client, store_path.path())
             .unwrap();
+    wallet
+        .enable_channel()
+        .boxed()
+        .unit_error()
+        .compat()
+        .wait()
+        .unwrap()
+        .unwrap();
     wallet.start(executor.clone()).unwrap();
-
-    let wallet = Arc::new(wallet);
-
-    let wallet_arc = wallet.clone();
-    let f = async move {
-        wallet_arc.enable_channel().await.unwrap();
-    };
-    f.boxed().unit_error().compat().wait().unwrap();
 
     let (network, tx, rx, close_tx) = build_network_service(config, keypair.clone());
     let _identify = network.identify();

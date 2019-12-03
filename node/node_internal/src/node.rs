@@ -61,7 +61,7 @@ struct NodeInner {
 impl Node {
     pub fn new(
         executor: TaskExecutor,
-        wallet: Arc<Wallet>,
+        wallet: Wallet,
         network_service: NetworkService,
         sender: UnboundedSender<NetworkMessage>,
         receiver: UnboundedReceiver<NetworkMessage>,
@@ -71,7 +71,7 @@ impl Node {
         let (event_sender, event_receiver) = futures_01::sync::mpsc::unbounded();
         let (command_sender, command_receiver) = futures_01::sync::mpsc::unbounded();
 
-        let wallet_arc = wallet.clone();
+        let wallet_arc = Arc::new(wallet);
         let node_inner = NodeInner {
             executor: executor_clone,
             wallet: wallet_arc.clone(),
@@ -91,7 +91,7 @@ impl Node {
             event_receiver: Some(event_receiver),
             command_receiver: Some(command_receiver),
             network_service_close_tx: Some(net_close_tx),
-            wallet,
+            wallet: wallet_arc,
         }
     }
 
@@ -704,6 +704,7 @@ impl NodeInner {
                     }
                 }
                 Err(e) => {
+                    warn!("verify error {}", e);
                     sender
                         .unbounded_send(NetworkMessage {
                             peer_id,
@@ -1174,7 +1175,6 @@ mod tests {
             Delay::new(Duration::from_millis(1000)).await;
             println!("ok");
         };
-        rt.spawn(task);
-        rt.shutdown_on_idle();
+        rt.block_on(task);
     }
 }
