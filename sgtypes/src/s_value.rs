@@ -2,7 +2,6 @@ use libra_crypto::HashValue;
 use std::{convert::TryFrom, fmt};
 
 use failure::prelude::*;
-use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy)]
 pub struct SValue([u8; S_VALUE_LENGTH]);
