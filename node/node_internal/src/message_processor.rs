@@ -78,7 +78,7 @@ where
             .or_insert(sender.clone());
     }
 
-    pub fn send_response(&mut self, hash: HashValue, value: T) -> Result<()> {
+    pub fn send_response(&self, hash: HashValue, value: T) -> Result<()> {
         let mut tx_map = self.tx_map.lock().unwrap();
         match tx_map.get(&hash) {
             Some(tx) => {

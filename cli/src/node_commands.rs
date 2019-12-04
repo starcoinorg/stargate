@@ -63,7 +63,7 @@ impl Command for NodeCommandDepositChannel {
     }
 
     fn get_params_help(&self) -> &'static str {
-        "<remote_addr> <local_amount> <remote_amount>"
+        "<remote_addr> <local_amount>"
     }
 
     fn get_description(&self) -> &'static str {
@@ -71,7 +71,7 @@ impl Command for NodeCommandDepositChannel {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 4 {
+        if params.len() < 3 {
             println!("Invalid number of arguments for deposit channel");
             return;
         }
@@ -119,7 +119,7 @@ impl Command for NodeCommandWithdrawChannel {
     }
 
     fn get_params_help(&self) -> &'static str {
-        "<remote_addr> <local_amount> <remote_amount>"
+        "<remote_addr> <local_amount>"
     }
 
     fn get_description(&self) -> &'static str {
@@ -127,7 +127,7 @@ impl Command for NodeCommandWithdrawChannel {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 4 {
+        if params.len() < 3 {
             println!("Invalid number of arguments for withdrawl from channel");
             return;
         }

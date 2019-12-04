@@ -24,6 +24,7 @@ pub fn gen_node(
     executor: TaskExecutor,
     config: &NetworkConfig,
     client: Arc<MockChainClient>,
+    auto_approve: bool,
 ) -> (Node, AccountAddress) {
     let amount: u64 = 10_000_000;
     let mut rng: StdRng = SeedableRng::seed_from_u64(get_unix_ts()); //SeedableRng::from_seed([0; 32]);
@@ -48,7 +49,15 @@ pub fn gen_node(
     let _identify = network.identify();
     thread::sleep(Duration::from_millis(1000));
     (
-        Node::new(executor.clone(), wallet, network, tx, rx, close_tx),
+        Node::new(
+            executor.clone(),
+            wallet,
+            network,
+            tx,
+            rx,
+            close_tx,
+            auto_approve,
+        ),
         account_address,
     )
 }

@@ -95,6 +95,7 @@ fn gen_node(
         sender,
         receiver,
         close_tx,
+        true,
     )
 }
 

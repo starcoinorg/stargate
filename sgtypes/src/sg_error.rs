@@ -34,6 +34,7 @@ pub enum SgErrorCode {
     TIMEOUT = 2,
     CHANNEL_NOT_EXIST = 3,
     INVALID_CHANNEL_STAGE = 4,
+    REJECT = 5,
 }
 
 impl std::fmt::Display for SgErrorCode {
