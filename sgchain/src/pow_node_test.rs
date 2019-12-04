@@ -1,6 +1,3 @@
-// Copyright (c) The Libra Core Contributors
-// SPDX-License-Identifier: Apache-2.0
-
 use crate::star_chain_client::{faucet_async, submit_txn_async, ChainClient, StarChainClient};
 use admission_control_service::runtime::AdmissionControlRuntime;
 use async_std::task;
@@ -61,6 +58,8 @@ use tokio::runtime::{Builder, Runtime};
 use tokio::timer::Interval;
 use transaction_builder::{encode_create_account_script, encode_transfer_script};
 use vm_genesis::GENESIS_KEYPAIR;
+use failure::prelude::*;
+use rusty_fork::{rusty_fork_id, rusty_fork_test, rusty_fork_test_name};
 
 pub fn setup_network(
     peer_id: PeerId,
@@ -304,8 +303,15 @@ fn print_ports(config: &NodeConfig) {
     debug!("{}", config.storage.port);
 }
 
-#[test]
-fn test_pow_node() {
+rusty_fork_test! {
+    #[test]
+    fn test_pow_with_fork() {
+        test_pow_node().unwrap();
+    }
+}
+
+
+fn test_pow_node() -> Result<()> {
     ::libra_logger::init_for_e2e_testing();
     let mut conf_1 = node_random_conf(true, "/memory/0", 0);
     let mut conf_2 = node_random_conf(true, "/memory/0", 1);
@@ -459,6 +465,8 @@ fn test_pow_node() {
 
     runtime_1.shutdown_on_idle();
     runtime_2.shutdown_on_idle();
+
+    Ok(())
 }
 
 fn create_keypair() -> KeyPair<Ed25519PrivateKey, Ed25519PublicKey> {
