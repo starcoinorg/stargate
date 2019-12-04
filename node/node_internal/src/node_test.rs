@@ -3,14 +3,16 @@
 
 use failure::prelude::*;
 
+use crate::node::Node;
 use libra_crypto::{
     ed25519::Ed25519PrivateKey,
-    hash::{CryptoHasher, TestOnlyHasher},
+    hash::{CryptoHash, CryptoHasher, TestOnlyHasher},
     traits::SigningKey,
 };
 use libra_types::account_address::AccountAddress;
 use sgtypes::message::*;
 use sgtypes::sg_error::SgError;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 #[test]
@@ -29,7 +31,7 @@ fn node_test() -> Result<()> {
     let (mock_chain_service, _handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
     let network_config1 = create_node_network_config("/ip4/127.0.0.1/tcp/5000".to_string(), vec![]);
-    let (mut node1, addr1) = gen_node(executor.clone(), &network_config1, client.clone());
+    let (mut node1, addr1) = gen_node(executor.clone(), &network_config1, client.clone(), true);
     node1.start_server();
 
     let addr1_hex = hex::encode(addr1);
@@ -41,7 +43,7 @@ fn node_test() -> Result<()> {
     );
     let network_config2 =
         create_node_network_config("/ip4/127.0.0.1/tcp/5001".to_string(), vec![seed]);
-    let (mut node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone());
+    let (mut node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone(), true);
     node2.start_server();
 
     let f = async move {
@@ -138,9 +140,183 @@ fn node_test() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn node_test_approve() -> Result<()> {
+    use crate::test_helper::*;
+    use futures::compat::Future01CompatExt;
+    use libra_logger::prelude::*;
+    use sgchain::star_chain_client::MockChainClient;
+    use std::sync::Arc;
+    use tokio::runtime::Runtime;
+
+    libra_logger::init_for_e2e_testing();
+    let rt = Runtime::new().unwrap();
+    let executor = rt.executor();
+
+    let (mock_chain_service, _handle) = MockChainClient::new();
+    let client = Arc::new(mock_chain_service);
+    let network_config1 = create_node_network_config("/ip4/127.0.0.1/tcp/5000".to_string(), vec![]);
+    let (mut node1, addr1) = gen_node(executor.clone(), &network_config1, client.clone(), false);
+    node1.start_server();
+
+    let addr1_hex = hex::encode(addr1);
+
+    let seed = format!(
+        "{}/p2p/{}",
+        "/ip4/127.0.0.1/tcp/5000".to_string(),
+        addr1_hex
+    );
+    let network_config2 =
+        create_node_network_config("/ip4/127.0.0.1/tcp/5001".to_string(), vec![seed]);
+    let (mut node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone(), true);
+    node2.start_server();
+
+    let node1 = Arc::new(node1);
+
+    let f = async move {
+        _delay(Duration::from_millis(1000)).await;
+
+        let fund_amount = 1000000;
+
+        executor.spawn(_confirm(
+            node1.clone(),
+            Duration::from_millis(2000),
+            addr2,
+            true,
+        ));
+
+        let _result = node2
+            .open_channel_async(addr1, fund_amount, fund_amount)
+            .await
+            .unwrap()
+            .compat()
+            .await
+            .unwrap();
+
+        _delay(Duration::from_millis(500)).await;
+        assert_eq!(
+            node2.channel_balance_async(addr1).await.unwrap(),
+            fund_amount
+        );
+        assert_eq!(
+            node1.channel_balance_async(addr2).await.unwrap(),
+            fund_amount
+        );
+
+        node1.wallet().stop().await?;
+        node2.wallet().stop().await?;
+        node1.shutdown().unwrap();
+        node2.shutdown().unwrap();
+        Ok::<_, Error>(())
+    };
+    rt.block_on(f)?;
+    rt.shutdown_on_idle();
+
+    debug!("here");
+    Ok(())
+}
+
+#[test]
+fn node_test_reject() -> Result<()> {
+    use crate::test_helper::*;
+    use futures::compat::Future01CompatExt;
+    use libra_logger::prelude::*;
+    use sgchain::star_chain_client::MockChainClient;
+    use std::sync::Arc;
+    use tokio::runtime::Runtime;
+
+    libra_logger::init_for_e2e_testing();
+    let rt = Runtime::new().unwrap();
+    let executor = rt.executor();
+
+    let (mock_chain_service, _handle) = MockChainClient::new();
+    let client = Arc::new(mock_chain_service);
+    let network_config1 = create_node_network_config("/ip4/127.0.0.1/tcp/5000".to_string(), vec![]);
+    let (mut node1, addr1) = gen_node(executor.clone(), &network_config1, client.clone(), false);
+    node1.start_server();
+
+    let addr1_hex = hex::encode(addr1);
+
+    let seed = format!(
+        "{}/p2p/{}",
+        "/ip4/127.0.0.1/tcp/5000".to_string(),
+        addr1_hex
+    );
+    let network_config2 =
+        create_node_network_config("/ip4/127.0.0.1/tcp/5001".to_string(), vec![seed]);
+    let (mut node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone(), true);
+    node2.start_server();
+
+    let node1 = Arc::new(node1);
+
+    let f = async move {
+        _delay(Duration::from_millis(1000)).await;
+
+        let fund_amount = 1000000;
+
+        executor.spawn(_confirm(
+            node1.clone(),
+            Duration::from_millis(2000),
+            addr2,
+            false,
+        ));
+
+        let result = node2
+            .open_channel_async(addr1, fund_amount, fund_amount)
+            .await
+            .unwrap()
+            .compat()
+            .await;
+
+        match result {
+            Ok(_) => {
+                assert_eq!(1, 0);
+                info!("should not be here");
+            }
+            Err(_) => {
+                assert_eq!(1, 1);
+                info!("should be here");
+            }
+        }
+
+        node1.wallet().stop().await?;
+        node2.wallet().stop().await?;
+        node1.shutdown().unwrap();
+        node2.shutdown().unwrap();
+        Ok::<_, Error>(())
+    };
+    rt.block_on(f)?;
+    rt.shutdown_on_idle();
+
+    debug!("here");
+    Ok(())
+}
+
 async fn _delay(duration: Duration) {
     let timeout_time = Instant::now() + duration;
     tokio::timer::delay(timeout_time).await;
+}
+
+async fn _confirm(node: Arc<Node>, duration: Duration, addr: AccountAddress, approve: bool) {
+    let timeout_time = Instant::now() + duration;
+    tokio::timer::delay(timeout_time).await;
+
+    let mut transaction_proposal_response = node
+        .get_channel_transaction_proposal_async(addr)
+        .await
+        .unwrap();
+
+    node.channel_transaction_proposal_async(
+        addr,
+        transaction_proposal_response
+            .channel_transaction
+            .take()
+            .expect("should have")
+            .hash(),
+        approve,
+    )
+    .await
+    .unwrap();
 }
 
 #[test]
