@@ -152,6 +152,10 @@ impl Wallet {
         self.shared.client.as_ref()
     }
 
+    pub fn get_chain_client(&self) -> Arc<dyn ChainClient> {
+        self.shared.client.clone()
+    }
+
     /// TODO: use async version of cient
     pub fn account_resource(&self) -> Result<AccountResource> {
         // account_resource must exist.

@@ -1,11 +1,9 @@
-// Copyright (c) The Libra Core Contributors
-// SPDX-License-Identifier: Apache-2.0
-
 use crate::star_chain_client::{faucet_async, submit_txn_async, ChainClient, StarChainClient};
 use admission_control_service::runtime::AdmissionControlRuntime;
 use async_std::task;
 use consensus::consensus_provider::make_pow_consensus_provider;
 use consensus::MineClient;
+use failure::prelude::*;
 use futures::channel::oneshot::{channel, Sender};
 use futures::future;
 use futures::StreamExt;
@@ -45,6 +43,7 @@ use network::{
 use parity_multiaddr::Multiaddr;
 use rand::prelude::*;
 use rand::{rngs::StdRng, SeedableRng};
+use rusty_fork::{rusty_fork_id, rusty_fork_test, rusty_fork_test_name};
 use state_synchronizer::StateSynchronizer;
 use std::collections::HashMap;
 use std::thread::sleep;
@@ -278,6 +277,8 @@ fn node_random_conf(pow_mode: bool, listen_address: &str, times: usize) -> NodeC
             conf.listen_address = listen_address.parse().unwrap();
             conf.role = RoleType::Validator;
         }
+    } else {
+        config.consensus.consensus_type = ConsensusType::PBFT;
     }
 
     debug!("config : {:?}", config);
@@ -302,8 +303,14 @@ fn print_ports(config: &NodeConfig) {
     debug!("{}", config.storage.port);
 }
 
-#[test]
-fn test_pow_node() {
+rusty_fork_test! {
+    #[test]
+    fn test_pow_with_fork() {
+        test_pow_node().unwrap();
+    }
+}
+
+fn test_pow_node() -> Result<()> {
     ::libra_logger::init_for_e2e_testing();
     let mut conf_1 = node_random_conf(true, "/memory/0", 0);
     let mut conf_2 = node_random_conf(true, "/memory/0", 1);
@@ -457,6 +464,8 @@ fn test_pow_node() {
 
     runtime_1.shutdown_on_idle();
     runtime_2.shutdown_on_idle();
+
+    Ok(())
 }
 
 fn create_keypair() -> KeyPair<Ed25519PrivateKey, Ed25519PublicKey> {
@@ -493,7 +502,7 @@ fn test_pow_single_node() {
 fn test_pbft_single_node() {
     ::libra_logger::init_for_e2e_testing();
     let mut config = node_random_conf(false, "/memory/0", 0);
-    config.consensus.consensus_type = ConsensusType::PBFT;
+
     debug!("config : {:?}", config);
     let _handler = libra_node::main_node::setup_environment(&mut config);
 
@@ -540,6 +549,38 @@ fn test_rollback_block() {
         runtime_1.executor(),
         true,
     );
+    runtime_1.shutdown_on_idle();
+}
+
+#[test]
+fn test_coin_base() {
+    ::libra_logger::init_for_e2e_testing();
+    let mut conf_1 = node_random_conf(true, "/memory/0", 0);
+
+    let consensus_address = conf_1
+        .consensus
+        .consensus_keypair
+        .consensus_address()
+        .expect("consensus_address is none.");
+    let _handle_1 = setup_environment(&mut conf_1, true);
+
+    let runtime_1 = tokio::runtime::Runtime::new().unwrap();
+
+    sleep(Duration::from_secs(30));
+
+    let client = StarChainClient::new(
+        "127.0.0.1",
+        conf_1.admission_control.admission_control_service_port as u32,
+    );
+    let account_state = client
+        .get_account_state(consensus_address, None)
+        .expect("get account state err.");
+    let balance = account_state
+        .get_account_resource()
+        .expect("balance is none.")
+        .balance();
+    println!("address {:?} , balance :{}", consensus_address, balance);
+    assert!(balance > 50_000_000);
     runtime_1.shutdown_on_idle();
 }
 

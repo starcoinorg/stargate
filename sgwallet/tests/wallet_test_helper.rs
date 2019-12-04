@@ -3,6 +3,7 @@
 
 use failure::prelude::*;
 
+use futures::TryStreamExt;
 use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
@@ -18,6 +19,7 @@ use sgchain::{client_state_view::ClientStateView, star_chain_client::ChainClient
 use sgcompiler::{Compiler, StateViewModuleLoader};
 use sgtypes::script_package::ChannelScriptPackage;
 use sgwallet::wallet::Wallet;
+use sgwallet::{get_channel_events, ChannelChangeEvent};
 use std::time::Duration;
 use std::{
     path::{Path, PathBuf},
@@ -78,6 +80,12 @@ pub fn open_channel(
     receiver_fund_amount: u64,
 ) -> Result<()> {
     let rt = Runtime::new()?;
+    let test_event_watcher = test_channel_event_watcher_async(
+        sender_wallet.clone(),
+        receiver_wallet.clone(),
+        sender_fund_amount,
+        receiver_fund_amount,
+    );
     let f = async move {
         let sender = sender_wallet.account();
         let receiver = receiver_wallet.account();
@@ -111,7 +119,7 @@ pub fn open_channel(
         let (mut events, _) = sender_wallet.client().get_events(
             AccessPath::new_for_channel_global_event(),
             0,
-            false,
+            true,
             1,
         )?;
         let event = events.pop().expect("get channel global event fail.");
@@ -127,6 +135,40 @@ pub fn open_channel(
         Ok::<u64, Error>(gas_used)
     };
     rt.block_on(f)?;
+
+    rt.block_on(test_event_watcher)?;
+    Ok(())
+}
+
+pub async fn test_channel_event_watcher_async(
+    sender_wallet: Arc<Wallet>,
+    receiver_wallet: Arc<Wallet>,
+    sender_fund_amount: u64,
+    receiver_fund_amount: u64,
+) -> Result<()> {
+    let chain_client = sender_wallet.get_chain_client();
+    let s = get_channel_events(chain_client, 0, 100);
+    let mut s = Box::pin(s);
+    let open_event = s.try_next().await?;
+
+    let mut balances = match open_event {
+        None => bail!("should have channel event"),
+        Some((idx, e)) => {
+            assert_eq!(0, idx);
+            match e {
+                ChannelChangeEvent::Opened { balances, .. } => balances,
+                _ => bail!("should be channel opened event"),
+            }
+        }
+    };
+    match balances.remove(&sender_wallet.account()) {
+        Some(b) => assert_eq!(sender_fund_amount, b),
+        None => bail!("should contain participant address"),
+    };
+    match balances.remove(&receiver_wallet.account()) {
+        Some(b) => assert_eq!(receiver_fund_amount, b),
+        None => bail!("should contain participant address"),
+    };
     Ok(())
 }
 
