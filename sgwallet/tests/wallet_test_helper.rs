@@ -12,7 +12,7 @@ use libra_crypto::{
 use libra_logger::prelude::*;
 use libra_tools::tempdir::TempPath;
 use libra_types::access_path::AccessPath;
-use libra_types::channel_account::ChannelEvent;
+use libra_types::channel::ChannelEvent;
 use libra_types::{account_address::AccountAddress, transaction::TransactionArgument};
 use rand::prelude::*;
 use sgchain::{client_state_view::ClientStateView, star_chain_client::ChainClient};

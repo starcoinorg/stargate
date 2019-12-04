@@ -11,7 +11,7 @@ use futures::{
 use lazy_static::lazy_static;
 use libra_config::config::VMConfig;
 use libra_crypto::{
-    ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature},
+    ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     hash::CryptoHash,
     test_utils::KeyPair,
     HashValue,
@@ -31,7 +31,7 @@ use libra_types::{
     account_config::{coin_struct_tag, AccountResource},
     language_storage::StructTag,
     transaction::{
-        helpers::{create_signed_payload_txn, ChannelPayloadSigner, TransactionSigner},
+        helpers::{create_signed_payload_txn, TransactionSigner},
         Module, RawTransaction, SignedTransaction, TransactionArgument, TransactionOutput,
         TransactionPayload, TransactionStatus, TransactionWithProof,
     },
@@ -1249,12 +1249,6 @@ impl Inner {
 impl TransactionSigner for Wallet {
     fn sign_txn(&self, raw_txn: RawTransaction) -> Result<SignedTransaction> {
         self.shared.keypair.sign_txn(raw_txn)
-    }
-}
-
-impl ChannelPayloadSigner for Wallet {
-    fn sign_bytes(&self, bytes: Vec<u8>) -> Result<Ed25519Signature> {
-        self.shared.keypair.sign_bytes(bytes)
     }
 }
 

@@ -738,7 +738,7 @@ impl Inner {
         }
     }
 
-    fn channel_account_resource(&self) -> Option<ChannelParticipantAccountResource> {
+    pub fn channel_account_resource(&self) -> Option<ChannelParticipantAccountResource> {
         let access_path = AccessPath::new_for_data_path(
             self.channel_address,
             DataPath::channel_resource_path(self.account_address, channel_participant_struct_tag()),
