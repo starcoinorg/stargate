@@ -7,7 +7,8 @@ pub mod scripts;
 pub mod tx_applier;
 pub mod wallet;
 pub use crate::channel_state_view::ChannelStateView;
-pub mod channel_event_watcher;
+mod channel_event_watcher;
+pub use channel_event_watcher::{get_channel_events, ChannelChangeEvent};
 #[macro_use]
 extern crate include_dir;
 
