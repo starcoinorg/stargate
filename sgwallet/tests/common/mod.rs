@@ -1,16 +1,58 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::wallet_test_helper::setup_wallet;
 use failure::prelude::*;
+use libra_crypto::{
+    ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
+    test_utils::KeyPair,
+    Uniform,
+};
+use libra_tools::tempdir::TempPath;
+use libra_types::{account_address::AccountAddress, transaction::TransactionArgument};
+use rand::prelude::*;
 use sgchain::star_chain_client::ChainClient;
 use sgwallet::wallet::Wallet;
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-    thread::sleep,
-};
+use std::sync::Arc;
 use tokio::runtime::Runtime;
+
+pub fn setup_wallet(client: Arc<dyn ChainClient>, init_balance: u64) -> Result<Wallet> {
+    let mut seed_rng = rand::rngs::OsRng::new().expect("can't access OsRng");
+    let seed_buf: [u8; 32] = seed_rng.gen();
+    let mut rng0: StdRng = SeedableRng::from_seed(seed_buf);
+    let account_keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>> =
+        Arc::new(KeyPair::generate_for_testing(&mut rng0));
+
+    let account = AccountAddress::from_public_key(&account_keypair.public_key);
+    let rt = Runtime::new().expect("faucet runtime err.");
+    let f = {
+        let c = client.clone();
+        async move { c.faucet(account, init_balance).await }
+    };
+    rt.block_on(f)?;
+
+    // enable channel for wallet
+    let wallet =
+        Wallet::new_with_client(account, account_keypair, client.clone(), TempPath::new())?;
+    //    let wallet = Arc::new(wallet);
+    let f = {
+        let wallet = &wallet;
+        async move { wallet.enable_channel().await }
+    };
+    let gas = rt.block_on(f)?;
+    let f = {
+        let c = client.clone();
+        async move { c.faucet(account, gas).await }
+    };
+    rt.block_on(f)?;
+
+    let wallet_balance = wallet.balance()?;
+    assert_eq!(
+        init_balance, wallet_balance,
+        "not equal, balance: {:?}",
+        wallet_balance
+    );
+    Ok(wallet)
+}
 
 pub fn with_wallet<T, F>(chain_client: Arc<dyn ChainClient>, f: F) -> Result<T>
 where
@@ -105,4 +147,169 @@ pub async fn open_channel(
     let sender_gas = sender_wallet.apply_txn(receiver, &resp).await?;
     let _receiver_gas = receiver_wallet.apply_txn(sender, &resp).await?;
     Ok(sender_gas)
+}
+pub async fn deposit(
+    sender_wallet: Arc<Wallet>,
+    receiver_wallet: Arc<Wallet>,
+    sender_deposit_amount: u64,
+) -> Result<u64> {
+    let sender = sender_wallet.account();
+    let receiver = receiver_wallet.account();
+
+    let deposit_txn = sender_wallet
+        .deposit(receiver, sender_deposit_amount)
+        .await?;
+
+    debug_assert!(deposit_txn.is_travel_txn(), "open_txn must travel txn");
+
+    let receiver_deposit_txn = receiver_wallet.verify_txn(sender, &deposit_txn).await?;
+
+    let receiver_deposit_txn = match receiver_deposit_txn {
+        Some(t) => t,
+        None => {
+            receiver_wallet
+                .approve_txn(sender, deposit_txn.request_id())
+                .await?
+        }
+    };
+    sender_wallet
+        .verify_txn_response(receiver, &receiver_deposit_txn)
+        .await?;
+    let sender_gas_used = sender_wallet
+        .apply_txn(receiver, &receiver_deposit_txn)
+        .await?;
+    receiver_wallet
+        .apply_txn(sender, &receiver_deposit_txn)
+        .await?;
+    Ok(sender_gas_used)
+}
+
+pub async fn transfer(
+    sender_wallet: Arc<Wallet>,
+    receiver_wallet: Arc<Wallet>,
+    transfer_amount: u64,
+) -> Result<u64> {
+    let sender = sender_wallet.account();
+    let receiver = receiver_wallet.account();
+
+    let transfer_txn = sender_wallet.transfer(receiver, transfer_amount).await?;
+
+    debug_assert!(
+        !transfer_txn.is_travel_txn(),
+        "transfer_txn must not travel txn"
+    );
+    //debug!("txn:{:#?}", transfer_txn);
+
+    let receiver_transfer_txn = match receiver_wallet.verify_txn(sender, &transfer_txn).await? {
+        Some(t) => t,
+        None => {
+            receiver_wallet
+                .approve_txn(sender, transfer_txn.request_id())
+                .await?
+        }
+    };
+
+    // now,receiver apply the txn
+    receiver_wallet
+        .apply_txn(sender, &receiver_transfer_txn)
+        .await?;
+    // then sender still pending
+    assert!(
+        sender_wallet
+            .get_pending_txn_request(receiver_wallet.account())
+            .await?
+            .is_some(),
+        "sender should have pending txn"
+    );
+    // then retry the txn
+    let retried_txn = match receiver_wallet.verify_txn(sender, &transfer_txn).await? {
+        Some(t) => t,
+        None => {
+            receiver_wallet
+                .approve_txn(sender, transfer_txn.request_id())
+                .await?
+        }
+    };
+    assert_eq!(receiver_transfer_txn, retried_txn, "two txn shold be equal");
+
+    sender_wallet
+        .verify_txn_response(receiver, &receiver_transfer_txn)
+        .await?;
+    let sender_gas_used = sender_wallet
+        .apply_txn(receiver, &receiver_transfer_txn)
+        .await?;
+    let _ = receiver_wallet
+        .apply_txn(sender, &receiver_transfer_txn)
+        .await?;
+    Ok(sender_gas_used)
+}
+
+pub async fn withdraw(
+    sender_wallet: Arc<Wallet>,
+    receiver_wallet: Arc<Wallet>,
+    sender_withdraw_amount: u64,
+) -> Result<u64> {
+    let sender = sender_wallet.account();
+    let receiver = receiver_wallet.account();
+
+    let withdraw_txn = sender_wallet
+        .withdraw(receiver, sender_withdraw_amount)
+        .await?;
+
+    debug_assert!(withdraw_txn.is_travel_txn(), "withdraw_txn must travel txn");
+    //debug!("txn:{:#?}", withdraw_txn);
+
+    let receiver_withdraw_txn = match receiver_wallet.verify_txn(sender, &withdraw_txn).await? {
+        Some(t) => t,
+        None => {
+            receiver_wallet
+                .approve_txn(sender, withdraw_txn.request_id())
+                .await?
+        }
+    };
+
+    sender_wallet
+        .verify_txn_response(receiver, &receiver_withdraw_txn)
+        .await?;
+    let sender_gas_used = sender_wallet
+        .apply_txn(receiver, &receiver_withdraw_txn)
+        .await?;
+    receiver_wallet
+        .apply_txn(sender, &receiver_withdraw_txn)
+        .await?;
+    Ok(sender_gas_used)
+}
+
+pub async fn execute_script(
+    sender_wallet: Arc<Wallet>,
+    receiver_wallet: Arc<Wallet>,
+    package_name: &'static str,
+    script_name: &'static str,
+    args: Vec<TransactionArgument>,
+) -> Result<u64> {
+    let sender = sender_wallet.account();
+    let receiver = receiver_wallet.account();
+
+    let txn_request = sender_wallet
+        .execute_script(receiver, package_name, script_name, args)
+        .await?;
+    let txn_response = receiver_wallet.verify_txn(sender, &txn_request).await?;
+    let txn_response = match txn_response {
+        Some(t) => t,
+        None => {
+            receiver_wallet
+                .approve_txn(sender, txn_request.request_id())
+                .await?
+        }
+    };
+
+    sender_wallet
+        .verify_txn_response(receiver, &txn_response)
+        .await?;
+    let sender_future = sender_wallet.apply_txn(receiver, &txn_response);
+    let receiver_future = receiver_wallet.apply_txn(sender, &txn_response);
+
+    let gas_used = sender_future.await?;
+    receiver_future.await?;
+    Ok(gas_used)
 }

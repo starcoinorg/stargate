@@ -2,21 +2,24 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::wallet_test_helper::{
-    deploy_custom_module_and_script, execute_script, open_channel, setup_wallet,
-    test_deploy_custom_module, test_wallet,
+    deploy_custom_module_and_script, test_deploy_custom_module, test_wallet_async,
 };
 use failure::prelude::*;
 use libra_types::transaction::TransactionArgument;
-use sgchain::star_chain_client::MockChainClient;
+use sgchain::star_chain_client::{ChainClient, MockChainClient};
 use sgtypes::script_package::ChannelScriptPackage;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::runtime::Runtime;
+mod common;
 pub mod wallet_test_helper;
 
 #[test]
 fn test_wallet_with_mock_client() {
-    if let Err(e) = run_test_wallet_with_mock_client() {
+    if let Err(e) = run_with_mock_client(|chain_client| {
+        common::with_wallet(chain_client, |rt, sender, receiver| {
+            rt.block_on(test_wallet_async(sender, receiver))
+        })
+    }) {
         println!("err: {:?}", e);
         assert!(false)
     }
@@ -32,97 +35,66 @@ fn test_wallet_install_package() {
 
 #[test]
 fn test_deploy_custom_module_by_mock_client() {
-    match run_test_deploy_custom_module_by_mock_client() {
-        Err(e) => {
-            println!("err: {:?}", e);
-            assert!(false)
-        }
-        Ok(_) => {}
-    };
+    if let Err(e) = run_test_deploy_custom_module_by_mock_client() {
+        println!("err: {:?}", e);
+        assert!(false)
+    }
 }
 
 #[test]
 fn test_gobang() {
-    match run_test_gobang() {
-        Err(e) => {
-            println!("err: {:?}", e);
-            assert!(false)
-        }
-        Ok(_) => {}
+    if let Err(e) = run_test_gobang() {
+        println!("err: {:?}", e);
+        assert!(false)
     }
 }
 
-fn run_test_wallet_with_mock_client() -> Result<()> {
-    libra_logger::try_init_for_testing();
-    let (mock_chain_service, _handle) = MockChainClient::new();
-    std::thread::sleep(Duration::from_millis(1500));
-    let chain_client = Arc::new(mock_chain_service);
-    test_wallet(chain_client)
-}
-
 fn run_test_wallet_install_package() -> Result<()> {
-    libra_logger::try_init_for_testing();
-    let init_balance = 1000000;
-
-    let (mock_chain_service, _handle) = MockChainClient::new();
-    let client = Arc::new(mock_chain_service);
-    let rt = Runtime::new()?;
-
-    let mut alice = setup_wallet(client.clone(), init_balance)?;
-    let mut bob = setup_wallet(client.clone(), init_balance)?;
-    alice.start(rt.executor().clone())?;
-    bob.start(rt.executor().clone())?;
-    let alice = Arc::new(alice);
-    let bob = Arc::new(bob);
-    rt.block_on(async {
-        let transfer_code = alice
-            .get_script("libra".to_string(), "transfer".to_string())
-            .await?
-            .unwrap();
-        let package = ChannelScriptPackage::new("test".to_string(), vec![transfer_code]);
-        alice.install_package(package.clone()).await?;
-        bob.install_package(package.clone()).await
+    run_with_mock_client(|chain_client| {
+        common::with_wallet(chain_client, |rt, alice, bob| {
+            rt.block_on(async move {
+                let transfer_code = alice
+                    .get_script("libra".to_string(), "transfer".to_string())
+                    .await?
+                    .unwrap();
+                let package = ChannelScriptPackage::new("test".to_string(), vec![transfer_code]);
+                alice.install_package(package.clone()).await?;
+                bob.install_package(package.clone()).await?;
+                common::open_channel(alice.clone(), bob.clone(), 100000, 100000).await?;
+                common::execute_script(
+                    alice.clone(),
+                    bob.clone(),
+                    "test",
+                    "transfer",
+                    vec![
+                        TransactionArgument::Address(bob.account()),
+                        TransactionArgument::U64(10000),
+                    ],
+                )
+                .await?;
+                Ok(())
+            })
+        })
     })?;
 
-    open_channel(alice.clone(), bob.clone(), 100000, 100000)?;
-
-    execute_script(
-        alice.clone(),
-        bob.clone(),
-        "test",
-        "transfer",
-        vec![
-            TransactionArgument::Address(bob.account()),
-            TransactionArgument::U64(10000),
-        ],
-    )?;
     Ok(())
 }
 
 fn run_test_deploy_custom_module_by_mock_client() -> Result<()> {
     ::libra_logger::try_init_for_testing();
     let (mock_chain_service, _handle) = MockChainClient::new();
-    let chain_client = Arc::new(mock_chain_service);
-    test_deploy_custom_module(chain_client)
+    let _chain_client = Arc::new(mock_chain_service);
+    run_with_mock_client(|chain_client| test_deploy_custom_module(chain_client))
 }
 
 fn run_test_gobang() -> Result<()> {
-    ::libra_logger::try_init_for_testing();
-    let init_balance = 1000000;
-
-    let (mock_chain_service, _handle) = MockChainClient::new();
-    let client = Arc::new(mock_chain_service);
-
-    let rt = Runtime::new()?;
-
-    let mut alice = setup_wallet(client.clone(), init_balance)?;
-    let mut bob = setup_wallet(client.clone(), init_balance)?;
-    alice.start(rt.executor().clone())?;
-    bob.start(rt.executor().clone())?;
-    let alice = Arc::new(alice);
-    let bob = Arc::new(bob);
-
-    deploy_custom_module_and_script(alice.clone(), bob.clone(), "test_gobang")?;
+    run_with_mock_client(|chain_client| {
+        common::with_wallet(chain_client, |rt, alice, bob| {
+            rt.block_on(async move {
+                deploy_custom_module_and_script(alice.clone(), bob.clone(), "test_gobang").await
+            })
+        })
+    })
 
     //    open_channel(alice.clone(), bob.clone(), 100, 100)?;
 
@@ -198,6 +170,15 @@ fn run_test_gobang() -> Result<()> {
     //        "check_score",
     //        vec![TransactionArgument::U64(1)],
     //    )?;
+}
 
-    Ok(())
+fn run_with_mock_client<F, T>(mut f: F) -> T
+where
+    F: FnMut(Arc<dyn ChainClient>) -> T,
+{
+    libra_logger::try_init_for_testing();
+    let (mock_chain_service, _handle) = MockChainClient::new();
+    std::thread::sleep(Duration::from_millis(1500));
+    let chain_client = Arc::new(mock_chain_service);
+    f(chain_client)
 }

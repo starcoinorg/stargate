@@ -7,10 +7,7 @@ use libra_crypto::HashValue;
 use sgwallet::wallet::Wallet;
 use std::sync::Arc;
 
-pub(crate) async fn transfer_htlc(
-    sender_wallet: Arc<Wallet>,
-    receiver_wallet: Arc<Wallet>,
-) -> Result<()> {
+pub async fn transfer_htlc(sender_wallet: Arc<Wallet>, receiver_wallet: Arc<Wallet>) -> Result<()> {
     let fund_amount = 10000;
     open_channel(
         sender_wallet.clone(),
@@ -21,7 +18,7 @@ pub(crate) async fn transfer_htlc(
     .await?;
     let preimage = HashValue::random().to_vec();
     let transfer_amount = 1000;
-    send_payment(
+    let _ = send_payment(
         sender_wallet.clone(),
         receiver_wallet.clone(),
         transfer_amount,
@@ -41,7 +38,7 @@ pub(crate) async fn transfer_htlc(
             .channel_balance(sender_wallet.account())
             .await?
     );
-    receive_payment(receiver_wallet.clone(), sender_wallet.clone(), preimage).await?;
+    let _ = receive_payment(receiver_wallet.clone(), sender_wallet.clone(), preimage).await?;
     assert_eq!(
         fund_amount - transfer_amount,
         sender_wallet
