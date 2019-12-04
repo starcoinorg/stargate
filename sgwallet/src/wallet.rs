@@ -19,6 +19,7 @@ use libra_crypto::{
 use libra_logger::prelude::*;
 use libra_state_view::StateView;
 use libra_types::access_path::AccessPath;
+use libra_types::byte_array::ByteArray;
 use libra_types::channel::{
     channel_mirror_struct_tag, channel_participant_struct_tag, channel_struct_tag,
     user_channels_struct_tag, ChannelMirrorResource, ChannelParticipantAccountResource,
@@ -273,6 +274,75 @@ impl Wallet {
                 function_name: "deposit".to_string(),
             },
             vec![TransactionArgument::U64(amount)],
+        )
+        .await
+    }
+
+    /// send payment to `participant`
+    /// who use his `preimage` hashed in `hash_lock` to retrieve the money
+    /// within the `timeout` duration of blocks from now.
+    pub async fn send_payment(
+        &self,
+        participant: AccountAddress,
+        amount: u64,
+        hash_lock: Vec<u8>,
+        timeout: u64,
+    ) -> Result<ChannelTransactionRequest> {
+        info!(
+            "wallet.send_payment receiver: {}, amount: {}, hash_lock: {:#?}",
+            &participant, amount, &hash_lock
+        );
+        self.execute_async(
+            participant,
+            ChannelOp::Action {
+                module_address: AccountAddress::default(),
+                module_name: "ChannelScript".to_string(),
+                function_name: "send_payment".to_string(),
+            },
+            vec![
+                TransactionArgument::Address(participant),
+                TransactionArgument::U64(amount),
+                TransactionArgument::ByteArray(ByteArray::new(hash_lock)),
+                TransactionArgument::U64(timeout),
+            ],
+        )
+        .await
+    }
+
+    pub async fn receive_payment(
+        &self,
+        participant: AccountAddress,
+        preimage: Vec<u8>,
+    ) -> Result<ChannelTransactionRequest> {
+        info!("wallet.receive_payment participant: {}", &participant);
+        self.execute_async(
+            participant,
+            ChannelOp::Action {
+                module_address: AccountAddress::default(),
+                module_name: "ChannelScript".to_string(),
+                function_name: "receive_payment".to_string(),
+            },
+            vec![TransactionArgument::ByteArray(ByteArray::new(preimage))],
+        )
+        .await
+    }
+    /// sender can recall payment if the payment is timeouted
+    pub async fn recall_timeout_payment(
+        &self,
+        participant: AccountAddress,
+    ) -> Result<ChannelTransactionRequest> {
+        info!(
+            "wallet.recall_timeout_payment participant: {}",
+            &participant
+        );
+        self.execute_async(
+            participant,
+            ChannelOp::Action {
+                module_address: AccountAddress::default(),
+                module_name: "ChannelScript".to_string(),
+                function_name: "cancel_payment_after_timeout".to_string(),
+            },
+            vec![],
         )
         .await
     }
