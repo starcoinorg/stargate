@@ -27,7 +27,7 @@ use libra_types::identifier::Identifier;
 use libra_types::language_storage::ModuleId;
 use libra_types::transaction::helpers::TransactionSigner;
 use libra_types::transaction::{
-    ChannelTransactionPayloadBodyV2, ChannelTransactionPayloadV2, RawTransaction, ScriptAction,
+    ChannelTransactionPayload, ChannelTransactionPayloadBody, RawTransaction, ScriptAction,
     TransactionArgument, TransactionPayload, Version,
 };
 use libra_types::write_set::WriteSet;
@@ -363,7 +363,7 @@ impl Inner {
 
     fn build_raw_txn_from_channel_txn(
         &self,
-        channel_payload_body: ChannelTransactionPayloadBodyV2,
+        channel_payload_body: ChannelTransactionPayloadBody,
         channel_txn: &ChannelTransaction,
         txn_signatures: Option<&BTreeMap<AccountAddress, ChannelTransactionSigs>>,
         max_gas_amount: u64,
@@ -392,9 +392,8 @@ impl Inner {
             .map(|p| p.1)
             .collect::<Vec<_>>();
 
-        let channel_txn_payload =
-            ChannelTransactionPayloadV2::new(channel_payload_body, keys, sigs);
-        let txn_payload = TransactionPayload::ChannelV2(channel_txn_payload);
+        let channel_txn_payload = ChannelTransactionPayload::new(channel_payload_body, keys, sigs);
+        let txn_payload = TransactionPayload::Channel(channel_txn_payload);
         let raw_txn = RawTransaction::new(
             channel_txn.proposer(),
             channel_txn.sequence_number(),
@@ -407,15 +406,15 @@ impl Inner {
     }
 
     /// build channel txn payload version 2.
-    fn build_and_sign_channel_txn_payload_body_v2(
+    fn build_and_sign_channel_txn_payload_body(
         &self,
         channel_witness: Witness,
         channel_txn: &ChannelTransaction,
-    ) -> Result<(ChannelTransactionPayloadBodyV2, Ed25519Signature)> {
+    ) -> Result<(ChannelTransactionPayloadBody, Ed25519Signature)> {
         let action =
             self.channel_op_to_action(channel_txn.operator(), channel_txn.args().to_vec())?;
 
-        let body = ChannelTransactionPayloadBodyV2::new(
+        let body = ChannelTransactionPayloadBody::new(
             channel_txn.channel_address(),
             channel_txn.proposer(),
             action,
@@ -498,7 +497,7 @@ impl Inner {
                 verified_signatures = signatures;
 
                 let (payload_body, payload_body_signature) = self
-                    .build_and_sign_channel_txn_payload_body_v2(
+                    .build_and_sign_channel_txn_payload_body(
                         self.witness_data(),
                         &proposal.channel_txn,
                     )?;
@@ -613,8 +612,8 @@ impl Inner {
                     (output.gas_used() as f64 * 1.1) as u64,
                     MAX_GAS_AMOUNT_ONCHAIN,
                 );
-                let (payload_body, _) = self
-                    .build_and_sign_channel_txn_payload_body_v2(self.witness_data(), channel_txn)?;
+                let (payload_body, _) =
+                    self.build_and_sign_channel_txn_payload_body(self.witness_data(), channel_txn)?;
 
                 let new_raw_txn = self.build_raw_txn_from_channel_txn(
                     payload_body,
@@ -831,13 +830,13 @@ impl Inner {
         &self,
         proposal: &ChannelTransactionProposal,
     ) -> Result<(
-        ChannelTransactionPayloadBodyV2,
+        ChannelTransactionPayloadBody,
         Ed25519Signature,
         TransactionOutput,
     )> {
         let channel_txn = &proposal.channel_txn;
         let (payload_body, payload_body_signature) =
-            self.build_and_sign_channel_txn_payload_body_v2(self.witness_data(), channel_txn)?;
+            self.build_and_sign_channel_txn_payload_body(self.witness_data(), channel_txn)?;
 
         let output = {
             // create mocked txn to execute
@@ -903,7 +902,7 @@ impl Inner {
         output: &TransactionOutput,
     ) -> Result<ChannelTransactionSigs> {
         let (_, payload_body_signature) =
-            self.build_and_sign_channel_txn_payload_body_v2(self.witness_data(), channel_txn)?;
+            self.build_and_sign_channel_txn_payload_body(self.witness_data(), channel_txn)?;
 
         let ws = if output.is_travel_txn() {
             WriteSet::default()
@@ -942,7 +941,7 @@ impl Inner {
 
     fn verify_txn_sigs(
         &self,
-        payload_body: &ChannelTransactionPayloadBodyV2,
+        payload_body: &ChannelTransactionPayloadBody,
         output: &TransactionOutput,
         channel_txn_sigs: &ChannelTransactionSigs,
     ) -> Result<()> {
