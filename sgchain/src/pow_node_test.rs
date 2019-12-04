@@ -3,6 +3,7 @@ use admission_control_service::runtime::AdmissionControlRuntime;
 use async_std::task;
 use consensus::consensus_provider::make_pow_consensus_provider;
 use consensus::MineClient;
+use failure::prelude::*;
 use futures::channel::oneshot::{channel, Sender};
 use futures::future;
 use futures::StreamExt;
@@ -42,6 +43,7 @@ use network::{
 use parity_multiaddr::Multiaddr;
 use rand::prelude::*;
 use rand::{rngs::StdRng, SeedableRng};
+use rusty_fork::{rusty_fork_id, rusty_fork_test, rusty_fork_test_name};
 use state_synchronizer::StateSynchronizer;
 use std::collections::HashMap;
 use std::thread::sleep;
@@ -58,8 +60,6 @@ use tokio::runtime::{Builder, Runtime};
 use tokio::timer::Interval;
 use transaction_builder::{encode_create_account_script, encode_transfer_script};
 use vm_genesis::GENESIS_KEYPAIR;
-use failure::prelude::*;
-use rusty_fork::{rusty_fork_id, rusty_fork_test, rusty_fork_test_name};
 
 pub fn setup_network(
     peer_id: PeerId,
@@ -309,7 +309,6 @@ rusty_fork_test! {
         test_pow_node().unwrap();
     }
 }
-
 
 fn test_pow_node() -> Result<()> {
     ::libra_logger::init_for_e2e_testing();
