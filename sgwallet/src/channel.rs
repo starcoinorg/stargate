@@ -1008,14 +1008,14 @@ impl Inner {
         output: TransactionOutput,
         signatures: BTreeMap<AccountAddress, ChannelTransactionSigs>,
     ) -> Result<()> {
-        let is_travel_txn = output.is_travel_txn();
         let mut pending_txn = PendingTransaction::WaitForSig {
             proposal,
             output,
             signatures,
         };
         pending_txn.try_fulfill(&self.participant_addresses);
-        self.store.save_pending_txn(pending_txn, is_travel_txn)?;
+        // always persist pending txn
+        self.store.save_pending_txn(pending_txn, true)?;
         Ok(())
     }
 
