@@ -566,7 +566,7 @@ fn test_coin_base() {
 
     let runtime_1 = tokio::runtime::Runtime::new().unwrap();
 
-    sleep(Duration::from_secs(30));
+    sleep(Duration::from_secs(40));
 
     let client = StarChainClient::new(
         "127.0.0.1",
@@ -580,7 +580,7 @@ fn test_coin_base() {
         .expect("balance is none.")
         .balance();
     println!("address {:?} , balance :{}", consensus_address, balance);
-    assert!(balance > 50_000_000);
+    assert!(balance >= 50_000_000);
     runtime_1.shutdown_on_idle();
 }
 
