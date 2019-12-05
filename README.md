@@ -3,6 +3,7 @@
 ---
 
 ![](https://github.com/starcoinorg/stargate/workflows/Pull%20Request%20Workflow/badge.svg)
+![](https://github.com/starcoinorg/stargate/workflows/Security%20audit/badge.svg)
 [![License](https://img.shields.io/badge/license-Apache-green.svg)](LICENSE)
 
 Stargate is the layer2 state channel protocol and implements of Starcoin. 
