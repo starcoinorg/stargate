@@ -45,8 +45,11 @@ fn register_signals(term: Arc<AtomicBool>) {
 
 fn main() {
     let args = Args::from_args();
-    let (_config, _logger, _handler) =
-        run_node(args.config.as_ref().map(PathBuf::as_path), args.no_logging);
+    let (_config, _logger, _handler) = run_node(
+        args.config.as_ref().map(PathBuf::as_path),
+        args.no_logging,
+        false,
+    );
     let term = Arc::new(AtomicBool::new(false));
     register_signals(Arc::clone(&term));
     while !term.load(Ordering::Acquire) {

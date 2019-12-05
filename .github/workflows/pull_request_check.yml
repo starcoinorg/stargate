@@ -1,8 +1,42 @@
-name: PR
+name: Pull Request Workflow
 on: pull_request
 jobs:
-  fmt_build_test:
-    name: fmt_build_test
+  check-fmt:
+    name: check fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          submodules: recursive
+      - name: setup rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.39.0
+          components: rustfmt,clippy
+      - name: run fmt check
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: -- --check
+  build-all:
+    name: build project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          submodules: recursive
+      - name: setup rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.39.0
+      - name: setup environment
+        run: bash ./scripts/dev_setup.sh
+      - name: build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --all
+  test-sgwallet:
     runs-on: ${{matrix.os}}
     strategy:
       matrix:
@@ -11,28 +45,12 @@ jobs:
       - uses: actions/checkout@v1
         with:
           submodules: recursive
-
       - name: setup rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: beta
-          components: rustfmt,clippy
-
-      - name: run fmt check
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check
-
+          toolchain: 1.39.0
       - name: dev setup
         run: bash ./scripts/dev_setup.sh
-
-      - name: build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --all
-
       - name: test
         env:
           RUST_LOG: info
@@ -40,4 +58,73 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all -- --test-threads=1 --nocapture
+          args: --all-targets -p sgwallet -- --nocapture
+  test-sgchain:
+    runs-on: ${{matrix.os}}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          submodules: recursive
+      - name: setup rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.39.0
+      - name: dev setup
+        run: bash ./scripts/dev_setup.sh
+      - name: test
+        env:
+          RUST_LOG: info
+          RUST_BACKTRACE: full
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --all-targets -p sgchain -- --nocapture
+  test-node:
+    runs-on: ${{matrix.os}}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          submodules: recursive
+      - name: setup rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.39.0
+      - name: dev setup
+        run: bash ./scripts/dev_setup.sh
+      - name: test
+        env:
+          RUST_LOG: info
+          RUST_BACKTRACE: full
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --all-targets -p node_internal -- --nocapture
+  test-others:
+    runs-on: ${{matrix.os}}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          submodules: recursive
+      - name: setup rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.39.0
+      - name: dev setup
+        run: bash ./scripts/dev_setup.sh
+      - name: test
+        env:
+          RUST_LOG: info
+          RUST_BACKTRACE: full
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --all-targets --workspace --exclude node_internal --exclude sgwallet --exclude sgchain  -- --nocapture
