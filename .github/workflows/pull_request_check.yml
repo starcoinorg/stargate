@@ -35,7 +35,9 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --all
+          args: --all -j 4
+      - name: check for changed and untracked files
+        run: bash ./libra/scripts/changed-files.sh
   test-sgwallet:
     runs-on: ${{matrix.os}}
     strategy:
@@ -55,7 +57,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all-targets -p sgwallet --no-run
+          args: --all-targets -p sgwallet --no-run -j 4
       - name: test
         env:
           RUST_LOG: info
@@ -83,7 +85,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all-targets -p sgchain --no-run
+          args: --all-targets -p sgchain --no-run -j 4
       - name: test
         env:
           RUST_LOG: info
@@ -111,7 +113,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all-targets -p node_internal --no-run
+          args: --all-targets -p node_internal --no-run -j 4
       - name: test
         env:
           RUST_LOG: info
@@ -139,7 +141,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all-targets --workspace --exclude node_internal --exclude sgwallet --exclude sgchain --no-run
+          args: --all-targets --workspace --exclude node_internal --exclude sgwallet --exclude sgchain --no-run -j 4
       - name: test
         env:
           RUST_LOG: info

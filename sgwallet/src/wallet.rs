@@ -289,7 +289,7 @@ impl Wallet {
         timeout: u64,
     ) -> Result<ChannelTransactionRequest> {
         info!(
-            "wallet.send_payment receiver: {}, amount: {}, hash_lock: {:#?}",
+            "wallet.send_payment receiver: {}, amount: {}, hash_lock: {:?}",
             &participant, amount, &hash_lock
         );
         self.execute_async(
