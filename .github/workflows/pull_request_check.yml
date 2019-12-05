@@ -51,6 +51,11 @@ jobs:
           toolchain: 1.39.0
       - name: dev setup
         run: bash ./scripts/dev_setup.sh
+      - name: build testbin
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --all-targets -p sgwallet --no-run
       - name: test
         env:
           RUST_LOG: info
@@ -74,6 +79,11 @@ jobs:
           toolchain: 1.39.0
       - name: dev setup
         run: bash ./scripts/dev_setup.sh
+      - name: build testbin
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --all-targets -p sgchain --no-run
       - name: test
         env:
           RUST_LOG: info
@@ -97,6 +107,11 @@ jobs:
           toolchain: 1.39.0
       - name: dev setup
         run: bash ./scripts/dev_setup.sh
+      - name: build testbin
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --all-targets -p node_internal --no-run
       - name: test
         env:
           RUST_LOG: info
@@ -104,7 +119,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all-targets -p node_internal -- --nocapture
+          args: --all-targets -p node_internal -- --nocapture --test-threads=1
   test-others:
     runs-on: ${{matrix.os}}
     strategy:
@@ -120,6 +135,11 @@ jobs:
           toolchain: 1.39.0
       - name: dev setup
         run: bash ./scripts/dev_setup.sh
+      - name: build testbin
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --all-targets --workspace --exclude node_internal --exclude sgwallet --exclude sgchain --no-run
       - name: test
         env:
           RUST_LOG: info
