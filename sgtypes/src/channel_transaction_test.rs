@@ -12,7 +12,7 @@ use libra_crypto::{
 use libra_types::channel::Witness;
 use libra_types::identifier::Identifier;
 use libra_types::language_storage::ModuleId;
-use libra_types::transaction::{ChannelTransactionPayloadBodyV2, ScriptAction};
+use libra_types::transaction::{ChannelTransactionPayloadBody, ScriptAction};
 use libra_types::{account_address::AccountAddress, transaction::Script};
 use rand::prelude::*;
 use std::time::Duration;
@@ -31,7 +31,7 @@ fn request_roundtrip_canonical_serialization() {
         Identifier::new("f").unwrap(),
         vec![],
     );
-    let channel_payload = ChannelTransactionPayloadBodyV2::new(
+    let channel_payload = ChannelTransactionPayloadBody::new(
         AccountAddress::random(),
         sender,
         action,

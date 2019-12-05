@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use failure::prelude::*;
-use libra_types::channel_account::ChannelAccountResource;
 use libra_types::{access_path::DataPath, account_address::AccountAddress};
 use std::collections::{BTreeMap, HashSet};
 use std::ops::{Deref, DerefMut};
@@ -83,20 +82,5 @@ impl AsRef<BTreeMap<Vec<u8>, Vec<u8>>> for ChannelState {
 impl AsMut<BTreeMap<Vec<u8>, Vec<u8>>> for ChannelState {
     fn as_mut(&mut self) -> &mut BTreeMap<Vec<u8>, Vec<u8>> {
         &mut self.state
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct ChannelInfo {
-    pub stage: ChannelStage,
-    pub channel_account: ChannelAccountResource,
-}
-
-impl ChannelInfo {
-    pub fn new(stage: ChannelStage, channel_account: ChannelAccountResource) -> Self {
-        Self {
-            stage,
-            channel_account,
-        }
     }
 }

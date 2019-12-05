@@ -8,8 +8,9 @@ use futures_timer::Delay;
 use libra_logger::prelude::*;
 use libra_types::access_path::{AccessPath, DataPath};
 use libra_types::account_address::AccountAddress;
-use libra_types::channel::{channel_event_struct_tag, channel_struct_tag, ChannelResource};
-use libra_types::channel_account::ChannelEvent;
+use libra_types::channel::{
+    channel_event_struct_tag, channel_struct_tag, ChannelEvent, ChannelResource,
+};
 use libra_types::contract_event::{ContractEvent, EventWithProof};
 use libra_types::language_storage::TypeTag;
 use libra_types::{

@@ -7,9 +7,8 @@ use libra_crypto::test_utils::KeyPair;
 use libra_crypto::{HashValue, SigningKey, Uniform};
 use libra_types::access_path::AccessPath;
 use libra_types::account_address::AccountAddress;
-use libra_types::transaction::{helpers::ChannelPayloadSigner, ChannelScriptBody, Script};
 use libra_types::vm_error::StatusCode;
-use libra_types::write_set::{WriteOp, WriteSet, WriteSetMut};
+use libra_types::write_set::{WriteOp, WriteSetMut};
 use rand::prelude::*;
 use sgtypes::channel_transaction::{ChannelOp, ChannelTransaction, ChannelTransactionProposal};
 use sgtypes::channel_transaction_sigs::ChannelTransactionSigs;
@@ -20,24 +19,19 @@ use std::time::Duration;
 
 fn generate_txn_to_apply(
     sender: AccountAddress,
-    receiver: AccountAddress,
+    _receiver: AccountAddress,
     channel_sequence_number: u64,
 ) -> ChannelTransactionToApply {
     let mut rng0: StdRng = SeedableRng::from_seed([0; 32]);
 
     let keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey> =
         KeyPair::generate_for_testing(&mut rng0);
-
-    let script = Script::new(vec![], vec![]);
-    let channel_script_payload = ChannelScriptBody::new(0, WriteSet::default(), receiver, script);
-
-    let signature = keypair
-        .sign_script_payload(&channel_script_payload)
-        .unwrap();
+    let channel_address = AccountAddress::random();
+    let signature = keypair.private_key.sign_message(&HashValue::random());
 
     let txn = ChannelTransaction::new(
         rng0.next_u64(),
-        AccountAddress::random(),
+        channel_address,
         channel_sequence_number,
         ChannelOp::Open,
         Vec::new(),
