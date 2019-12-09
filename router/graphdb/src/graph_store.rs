@@ -22,6 +22,9 @@ pub struct GraphStore {
     storage: Option<Storage>,
 }
 
+unsafe impl Send for GraphStore {}
+unsafe impl Sync for GraphStore {}
+
 impl GraphStore {
     pub fn new(persist_data: bool, path: Option<&Path>) -> Result<Self> {
         if persist_data {
