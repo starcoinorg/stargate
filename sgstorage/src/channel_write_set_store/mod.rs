@@ -6,7 +6,7 @@ use super::schema::{
 };
 use crate::schema_db::SchemaDB;
 use accumulator::{HashReader, MerkleAccumulator};
-use failure::prelude::*;
+use anyhow::Result;
 use libra_crypto::hash::CryptoHash;
 use libra_crypto::HashValue;
 use libra_types::access_path::AccessPath;

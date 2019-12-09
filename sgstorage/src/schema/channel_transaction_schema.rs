@@ -16,8 +16,8 @@
 //! numeric value.
 
 use crate::schema::{ensure_slice_len_eq, SIGNED_CHANNEL_TRANSACTION_CF_NAME};
+use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt};
-use failure::prelude::*;
 use libra_types::transaction::Version;
 use schemadb::{
     define_schema,

@@ -1,7 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use failure::prelude::*;
+use anyhow::{ensure, format_err, Result};
 use itertools::Itertools;
 use libra_crypto::hash::{
     CryptoHash, EventAccumulatorHasher, HashValue, SPARSE_MERKLE_PLACEHOLDER_HASH,

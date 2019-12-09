@@ -1,7 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use failure::prelude::*;
+use anyhow::{format_err, Result};
 use libra_types::{
     account_config::{account_struct_tag, AccountResource},
     language_storage::StructTag,

@@ -3,7 +3,7 @@
 
 use crate::channel_db::ChannelAddressProvider;
 use crate::schema_db::SchemaDB;
-use failure::prelude::*;
+use anyhow::{ensure, Result};
 use jellyfish_merkle::{
     node_type::{LeafNode, Node, NodeKey},
     JellyfishMerkleTree, TreeReader,

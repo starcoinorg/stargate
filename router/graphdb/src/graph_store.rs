@@ -1,7 +1,7 @@
 use crate::edge::Edge;
 use crate::storage::{EdgeSchema, Storage, VertexSchema};
 use crate::vertex::Vertex;
-use failure::prelude::*;
+use anyhow::{bail, Result};
 use libra_logger::prelude::*;
 use petgraph::algo::astar;
 use petgraph::prelude::*;

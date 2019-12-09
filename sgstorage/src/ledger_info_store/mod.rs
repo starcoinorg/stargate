@@ -12,7 +12,7 @@ use crate::schema::channel_transaction_info::*;
 use crate::schema::{channel_transaction_accumulator::*, ledger_info_schema::*};
 use crate::schema_db::SchemaDB;
 use accumulator::{HashReader, MerkleAccumulator};
-use failure::prelude::*;
+use anyhow::{format_err, Result};
 use libra_crypto::{hash::CryptoHash, HashValue};
 use libra_types::proof::position::Position;
 use libra_types::proof::AccumulatorConsistencyProof;

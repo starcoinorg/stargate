@@ -1,6 +1,6 @@
 use crate::edge::Edge;
 use crate::vertex::Vertex;
-use failure::prelude::*;
+use anyhow::{format_err, Error, Result};
 use libra_logger::prelude::*;
 use libra_types::account_address::AccountAddress;
 use rocksdb::{rocksdb_options::ColumnFamilyDescriptor, CFHandle, DBOptions, ReadOptions};
@@ -226,7 +226,7 @@ fn db_exists(path: &Path) -> bool {
     rocksdb_current_file.is_file()
 }
 
-fn convert_rocksdb_err(msg: String) -> failure::Error {
+fn convert_rocksdb_err(msg: String) -> Error {
     format_err!("RocksDB internal error: {}.", msg)
 }
 

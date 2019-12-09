@@ -14,10 +14,10 @@ libra-prost-ext = { path = "../libra/common/prost-ext" }
 protobuf = "2.7"
 grpc-helpers = { path = "../libra/common/grpc-helpers" }
 libra-types = { path = "../libra/types" }
-futures = { version = "=0.3.0-alpha.19", package = "futures-preview", features = ["async-await", "io-compat", "compat"] }
+futures = { version = "0.3.0", features = ["compat"] }
 sgtypes = { path = "../sgtypes" }
 libra-crypto = { path = "../libra/crypto/crypto" }
-failure = { path = "../libra/common/failure-ext", package = "libra-failure-ext"  }
+anyhow = "1.0"
 admission-control-proto = { path = "../libra/admission_control/admission-control-proto" }
 admission-control-service = { path = "../libra/admission_control/admission-control-service", version = "0.1.0"}
 vm-genesis = { path = "../libra/language/vm/vm-genesis" }
@@ -33,7 +33,7 @@ storage-client = { path = "../libra/storage/storage-client" }
 storage-service = { path = "../libra/storage/storage-service" }
 vm-runtime = { path = "../libra/language/vm/vm-runtime" }
 vm-validator = { path = "../libra/vm-validator" }
-tokio = "=0.2.0-alpha.6"
+tokio = { version = "0.2", features = ["full"] }
 atomic_refcell = "0.1.3"
 libra-state-view = {path = "../libra/storage/state-view"}
 signal-hook = "0.1.10"
@@ -51,5 +51,6 @@ async-std = { version = "1.0.1", features = ["unstable"]}
 channel = { path = "../libra/common/channel", version = "0.1.0" }
 futures-timer = "1.0.2"
 rusty-fork = "0.2.1"
+tokio-timer = "0.2"
 
 [dev-dependencies]

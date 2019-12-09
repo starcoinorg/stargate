@@ -1,5 +1,5 @@
 use executable_helpers::helpers::setup_executable;
-use libra_config::config::{NodeConfig, NodeConfigHelpers};
+use libra_config::config::NodeConfig;
 use libra_logger::prelude::*;
 use libra_node::main_node::LibraHandle;
 use slog_scope::GlobalLoggerGuard;
@@ -11,7 +11,7 @@ pub fn run_node(
 ) -> (NodeConfig, Option<GlobalLoggerGuard>, LibraHandle) {
     let (mut config, logger) = setup_executable(config, no_logging);
     if random_ports {
-        NodeConfigHelpers::randomize_config_ports(&mut config);
+        config.randomize_ports();
     }
     debug!("config : {:?}", config);
     crate::star_chain_client::genesis_blob(&config);

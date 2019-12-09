@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 use crate::channel::{ChannelEvent, ChannelMsg};
 use crate::{channel::Channel, scripts::*};
+use anyhow::{bail, ensure, format_err, Error, Result};
 use chrono::Utc;
-use failure::prelude::*;
 use futures::{
     channel::{mpsc, oneshot},
     StreamExt,
@@ -102,7 +102,11 @@ impl Wallet {
         let script_registry = Arc::new(PackageRegistry::build()?);
 
         let mut builder = runtime::Builder::new();
-        let runtime = builder.name_prefix("wallet").core_threads(4).build()?;
+        let runtime = builder
+            .thread_name("wallet-")
+            .threaded_scheduler()
+            .enable_all()
+            .build()?;
 
         let shared = Shared {
             account,
@@ -129,7 +133,7 @@ impl Wallet {
         };
         Ok(wallet)
     }
-    pub fn start(&mut self, executor: runtime::TaskExecutor) -> Result<()> {
+    pub fn start(&mut self, executor: runtime::Handle) -> Result<()> {
         let inner = self.inner.take().expect("wallet already started");
         executor.spawn(inner.start());
         Ok(())
@@ -937,7 +941,7 @@ impl Inner {
                 }
                 if let Some(rt) = self.runtime.take() {
                     let handle = thread::spawn(|| {
-                        rt.shutdown_on_idle();
+                        //TODO:shutdown
                     });
                     if let Err(e) = handle.join() {
                         error!("fail to shutdown wallet runtime, e: {:#?}", e)
@@ -1303,7 +1307,7 @@ impl Inner {
             self.inner.script_registry.clone(),
             self.inner.client.clone(),
         );
-        channel.start(self.runtime.as_ref().unwrap().executor());
+        channel.start(self.runtime.as_ref().unwrap().handle().clone());
 
         // TODO: should wait signal of channel saying it's started
         self.channels.insert(channel_address, channel);

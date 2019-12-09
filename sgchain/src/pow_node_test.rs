@@ -1,9 +1,9 @@
 use crate::star_chain_client::{faucet_async, submit_txn_async, ChainClient, StarChainClient};
 use admission_control_service::runtime::AdmissionControlRuntime;
+use anyhow::Result;
 use async_std::task;
 use consensus::consensus_provider::make_pow_consensus_provider;
 use consensus::MineClient;
-use failure::prelude::*;
 use futures::channel::oneshot::{channel, Sender};
 use futures::future;
 use futures::StreamExt;

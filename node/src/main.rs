@@ -5,7 +5,7 @@ mod wallet_utils;
 use std::sync::Arc;
 
 use crate::wallet_utils::WalletLibrary;
-use failure::*;
+use anyhow::Result;
 use futures_01::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},

@@ -4,7 +4,7 @@
 use crate::schema_db::{SchemaDB, SchemaIterator};
 use crate::storage::SgStorage;
 use crate::utils;
-use failure::prelude::*;
+use anyhow::{format_err, Error, Result};
 use lazy_static::lazy_static;
 use libra_logger::prelude::*;
 use libra_metrics::OpMetrics;
@@ -173,8 +173,8 @@ impl ChannelAddressProvider for ChannelDB {
 }
 
 /// All the RocksDB methods return `std::result::Result<T, String>`. Since our methods return
-/// `failure::Result<T>`, manual conversion is needed.
-fn convert_rocksdb_err(msg: String) -> failure::Error {
+/// `Result<T>`, manual conversion is needed.
+fn convert_rocksdb_err(msg: String) -> Error {
     format_err!("RocksDB internal error: {}.", msg)
 }
 

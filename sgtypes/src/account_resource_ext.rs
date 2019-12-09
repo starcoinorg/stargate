@@ -1,7 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use failure::prelude::*;
+use anyhow::Result;
 use libra_types::account_config::AccountResource;
 
 pub fn to_bytes(account_resource: &AccountResource) -> Result<Vec<u8>> {

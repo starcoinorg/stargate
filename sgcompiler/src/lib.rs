@@ -3,8 +3,8 @@
 
 use std::path::{Path, PathBuf};
 
+use anyhow::{bail, format_err, Result};
 use bytecode_verifier::VerifiedModule;
-use failure::prelude::*;
 use ir_to_bytecode::parser::{
     ast::{ImportDefinition, ModuleIdent},
     parse_module, parse_program, parse_script,

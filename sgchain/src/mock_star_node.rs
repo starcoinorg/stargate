@@ -4,6 +4,7 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use anyhow::Result;
 use std::collections::{BTreeMap, HashSet};
 use std::{
     sync::{Arc, Mutex},
@@ -13,7 +14,7 @@ use std::{
 
 use futures::executor::block_on;
 use futures::{future, StreamExt};
-use tokio::timer::Interval;
+use tokio::time::interval;
 
 use admission_control_proto::proto::admission_control::{
     SubmitTransactionRequest, SubmitTransactionResponse,
@@ -49,7 +50,7 @@ fn setup_ac<R>(
     r: Arc<R>,
     upstream_proxy_sender: mpsc::Sender<(
         SubmitTransactionRequest,
-        oneshot::Sender<failure::Result<SubmitTransactionResponse>>,
+        oneshot::Sender<Result<SubmitTransactionResponse>>,
     )>,
 ) -> (
     CoreMemPoolClient,
@@ -149,7 +150,7 @@ fn commit_block(
 ) -> Sender<()> {
     let (shutdown_sender, mut shutdown_receiver) = oneshot::channel::<()>();
     let mut height = 1;
-    let task = Interval::new(Instant::now(), Duration::from_secs(3))
+    let task = interval(Duration::from_secs(3))
         .take_while(move |_| match shutdown_receiver.try_recv() {
             Err(_) | Ok(Some(_)) => {
                 info!("Build block task exit.");
@@ -217,7 +218,6 @@ fn commit_block(
     thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.spawn(task);
-        rt.shutdown_on_idle();
     });
 
     shutdown_sender

@@ -4,7 +4,7 @@
 use crate::wallet_test_helper::{
     deploy_custom_module_and_script, test_deploy_custom_module, test_wallet_async,
 };
-use failure::prelude::*;
+use anyhow::Result;
 use libra_types::transaction::TransactionArgument;
 use sgchain::star_chain_client::{ChainClient, MockChainClient};
 use sgtypes::script_package::ChannelScriptPackage;

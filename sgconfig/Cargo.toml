@@ -19,7 +19,7 @@ toml = "0.4"
 libra-crypto = { path = "../libra/crypto/crypto" }
 prost = "0.5.0"
 libra-logger = { path = "../libra/common/logger" }
-failure = { path = "../libra/common/failure-ext", package = "libra-failure-ext"  }
+anyhow = "1.0"
 libra-types = { path = "../libra/types" }
 
 [dev-dependencies]

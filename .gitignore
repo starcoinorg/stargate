@@ -2,6 +2,7 @@
 **/*.rs.bk
 .idea
 *.iml
+sgfaucet/target
 
 # Ignore generated files in proto folders
 **/proto/*.rs

@@ -8,7 +8,7 @@ use crate::wallet::{
     execute_transaction, respond_with, submit_transaction, txn_expiration, watch_transaction,
     GAS_UNIT_PRICE, MAX_GAS_AMOUNT_OFFCHAIN, MAX_GAS_AMOUNT_ONCHAIN,
 };
-use failure::prelude::*;
+use anyhow::{bail, ensure, format_err, Result};
 use futures::{
     channel::{mpsc, oneshot},
     SinkExt, StreamExt,
@@ -148,10 +148,12 @@ impl Channel {
         channel
     }
 
-    pub fn start(&mut self, executor: tokio::runtime::TaskExecutor) {
+    pub fn start(&mut self, executor: tokio::runtime::Handle) {
         let inner = self.inner.take().expect("channel already started");
         // TODO: wait channel start?
-        executor.spawn(inner.start())
+        executor.spawn(async {
+            inner.start().await;
+        });
     }
 
     pub fn account_address(&self) -> &AccountAddress {

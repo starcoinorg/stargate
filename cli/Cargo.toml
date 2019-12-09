@@ -16,7 +16,7 @@ hyper = "0.12.33"
 itertools = "0.8.0"
 proptest = "0.9.2"
 rustyline = "4.1.0"
-tokio = "0.1.22"
+tokio = { version = "0.2", features = ["full"] }
 rust_decimal = "1.0.1"
 num-traits = "0.2"
 serde = { version = "1.0.96", features = ["derive"] }
@@ -25,7 +25,7 @@ structopt = "0.2.15"
 
 libra-config = { path = "../libra/config" }
 libra-crypto = { path = "../libra/crypto/crypto" }
-failure = { package = "libra-failure-ext" , path = "../libra/common/failure-ext" }
+anyhow = "1.0"
 libc = "0.2.60"
 libra-logger =  { path = "../libra/common/logger" }
 prost = "0.5.0"

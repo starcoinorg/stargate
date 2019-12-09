@@ -12,10 +12,10 @@ futures01 = { package = "futures", version = "0.1.26" }
 futures03 = { package = "futures-preview", version = "=0.3.0-alpha.19", features = ["compat"] }
 serde = { version = "1.0.96", features = ["derive"] }
 rand = "0.6.5"
-tokio = "=0.2.0-alpha.6"
+tokio = { version = "0.2", features = ["full"] }
 
 node_internal = { path = "../node_internal" }
-failure = { path = "../../libra/common/failure-ext", package = "libra-failure-ext"  }
+anyhow = "1.0"
 sgtypes = { path = "../../sgtypes" }
 prost = "0.5.0"
 grpc-helpers = { path = "../../libra/common/grpc-helpers" }

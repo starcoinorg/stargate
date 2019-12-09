@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::star_chain_client::ChainClient;
+use anyhow::Result;
 use atomic_refcell::AtomicRefCell;
-use failure::prelude::*;
 use libra_state_view::StateView;
 use libra_types::{access_path::AccessPath, account_address::AccountAddress, transaction::Version};
 use sgtypes::account_state::AccountState;

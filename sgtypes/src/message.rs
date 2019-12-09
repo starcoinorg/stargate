@@ -3,8 +3,8 @@
 
 use crate::s_value::SValue;
 use crate::sg_error::SgError;
+use anyhow::{bail, format_err, Error, Result};
 use bytes::IntoBuf;
-use failure::prelude::*;
 use libra_crypto::{ed25519::Ed25519Signature, HashValue};
 use libra_prost_ext::MessageExt;
 use libra_types::account_address::AccountAddress;

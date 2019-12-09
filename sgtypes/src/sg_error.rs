@@ -4,10 +4,10 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
 
-use failure::prelude::*;
 use libra_types::account_address::AccountAddress;
 
 use crate::channel::ChannelStage;
+use thiserror::Error;
 
 #[allow(non_camel_case_types)]
 #[derive(
@@ -43,10 +43,9 @@ impl std::fmt::Display for SgErrorCode {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Fail)]
-#[fail(
-    display = "error code is  {}, error message is {}",
-    error_code, error_message
+#[derive(Clone, Debug, Eq, PartialEq, Error)]
+#[error("error code is  {0}, error message is {1}",
+    self.error_code, self.error_message
 )]
 pub struct SgError {
     pub error_code: SgErrorCode,

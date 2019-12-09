@@ -1,7 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use failure::prelude::*;
+use anyhow::{Error, Result};
 use libra_crypto::hash::{CryptoHash, CryptoHasher, TestOnlyHasher};
 use libra_crypto::HashValue;
 use libra_types::transaction::{Script, TransactionArgument};

@@ -9,7 +9,7 @@ pub mod channel_write_set_schema;
 pub mod ledger_info_schema;
 pub mod participant_public_key_schema;
 pub mod pending_transaction_schema;
-use failure::prelude::*;
+use anyhow::{ensure, Result};
 use schemadb::ColumnFamilyName;
 
 //pub const EVENT_ACCUMULATOR_CF_NAME: ColumnFamilyName = "event_accumulator";

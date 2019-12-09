@@ -1,5 +1,5 @@
 use crate::message_processor::MessageFuture;
-use failure::prelude::*;
+use anyhow::Result;
 use futures::channel::oneshot;
 use libra_types::{account_address::AccountAddress, account_config::AccountResource};
 

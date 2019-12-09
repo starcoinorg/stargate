@@ -12,7 +12,7 @@ use futures_01::{
     Async, Future, Poll, Stream,
 };
 
-use failure::prelude::*;
+use anyhow::Result;
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use sgtypes::{message::ErrorMessage, sg_error::SgError};

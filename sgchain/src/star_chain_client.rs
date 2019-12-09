@@ -6,15 +6,13 @@ use admission_control_proto::proto::admission_control::{
     AdmissionControlClient, SubmitTransactionRequest, SubmitTransactionResponse,
 };
 use admission_control_service::admission_control_mock_client::AdmissionControlMockClient;
+use anyhow::{bail, Result};
 use async_trait::async_trait;
 use core::borrow::Borrow;
-use failure::prelude::*;
 use futures::channel::oneshot::Sender;
 use futures_timer::Delay;
 use grpcio::{ChannelBuilder, EnvBuilder};
-use libra_config::config::NodeConfigHelpers;
 use libra_config::config::{ConsensusType, NodeConfig};
-use libra_config::trusted_peers::ConfigHelpers;
 use libra_logger::prelude::*;
 use libra_prost_ext::MessageExt;
 use libra_types::access_path::AccessPath;
@@ -39,8 +37,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::runtime::Runtime;
-use tokio::runtime::TaskExecutor;
+use tokio::runtime::{Handle, Runtime};
 use transaction_builder::{encode_create_account_script, encode_transfer_script};
 use vm_genesis::{encode_genesis_transaction_with_validator_and_consensus, GENESIS_KEYPAIR};
 
@@ -288,15 +285,14 @@ pub struct MockChainClient {
 
 impl MockChainClient {
     pub fn new() -> (Self, StarHandle) {
-        let mut config =
-            NodeConfigHelpers::get_single_node_test_config(false /* random ports */);
+        let mut config = NodeConfig::default_node_config();
         // TODO: test the circleci
         config.storage.address = "127.0.0.1".to_string();
         info!("MockChainClient config: {:?} ", config);
         genesis_blob(&config);
 
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let executor = rt.executor();
+        let executor = rt.handle().clone();
 
         let (_handle, shutdown_sender, ac, proxy) = setup_environment(&mut config);
         (
@@ -335,12 +331,12 @@ pub fn faucet_sync<C>(client: C, receiver: AccountAddress, amount: u64) -> Resul
 where
     C: 'static + ChainClient,
 {
-    let rt = Runtime::new().expect("faucet runtime err.");
+    let mut rt = Runtime::new().expect("faucet runtime err.");
     let f = async move { client.faucet(receiver, amount).await };
     rt.block_on(f)
 }
 
-pub fn faucet_async<C>(client: C, executor: TaskExecutor, receiver: AccountAddress, amount: u64)
+pub fn faucet_async<C>(client: C, executor: Handle, receiver: AccountAddress, amount: u64)
 where
     C: 'static + ChainClient,
 {
@@ -351,7 +347,7 @@ where
     ()
 }
 
-pub fn submit_txn_async<C>(client: C, executor: TaskExecutor, txn: SignedTransaction)
+pub fn submit_txn_async<C>(client: C, executor: Handle, txn: SignedTransaction)
 where
     C: 'static + ChainClient,
 {
@@ -369,14 +365,22 @@ fn parse_response(mut resp: UpdateToLatestLedgerResponse) -> ResponseItem {
 }
 
 pub fn genesis_blob(config: &NodeConfig) {
-    let path = config.get_genesis_transaction_file();
+    let path = config.execution.genesis_file_location();
     info!("Write genesis_blob to {}", path.as_path().to_string_lossy());
-    let (_validator_keys, test_consensus_peers, test_network_peers) =
-        ConfigHelpers::gen_validator_nodes(1, None);
+    //    let (_validator_keys, test_consensus_peers, test_network_peers) =
+    //        ConfigHelpers::gen_validator_nodes(1, None);
+    let validator_network = if let Some(n) = &config.validator_network {
+        Some(n.clone_for_template())
+    } else {
+        None
+    };
     let genesis_checked_txn = encode_genesis_transaction_with_validator_and_consensus(
         &GENESIS_KEYPAIR.0,
         GENESIS_KEYPAIR.1.clone(),
-        test_consensus_peers.get_validator_set(&test_network_peers),
+        config
+            .consensus
+            .consensus_peers
+            .get_validator_set(&validator_network.unwrap().network_peers),
         config.consensus.consensus_type == ConsensusType::POW,
     );
     let genesis_txn = genesis_checked_txn.into_inner();

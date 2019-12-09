@@ -9,7 +9,7 @@ use crate::ledger_info_store::LedgerStore;
 use crate::pending_txn_store::PendingTxnStore;
 use crate::schema::participant_public_key_schema::ParticipantPublicKeySchema;
 use crate::schema_db::SchemaDB;
-use failure::prelude::*;
+use anyhow::{bail, ensure, Result};
 use itertools::Itertools;
 use libra_crypto::ed25519::Ed25519PublicKey;
 use libra_crypto::hash::CryptoHash;

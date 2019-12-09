@@ -1,7 +1,7 @@
+use anyhow::{bail, Result};
 use async_trait::async_trait;
 use backoff::backoff::Backoff;
 use backoff::ExponentialBackoff;
-use failure::prelude::*;
 use futures::task::Context;
 use futures::{FutureExt, Poll, Stream, TryStreamExt};
 use futures_timer::Delay;
@@ -277,8 +277,8 @@ fn build_request(req: RequestItem, ver: Option<Version>) -> UpdateToLatestLedger
 #[cfg(test)]
 mod test {
     use crate::channel_event_watcher::EventStream;
+    use anyhow::Result;
     use async_trait::async_trait;
-    use failure::prelude::*;
     use futures::TryStreamExt;
     use futures_timer::Delay;
     use libra_crypto::HashValue;
