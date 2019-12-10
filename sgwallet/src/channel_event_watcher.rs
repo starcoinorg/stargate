@@ -23,6 +23,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
+#[derive(Clone, Debug)]
 pub enum ChannelChangeEvent {
     Opened {
         channel_address: AccountAddress,
@@ -108,7 +109,7 @@ fn parse_channel_event(event: &ContractEvent) -> Result<ChannelEvent> {
 }
 
 #[async_trait]
-pub trait EventQuerier {
+pub trait EventQuerier: Send + Sync {
     async fn query_events(
         &self,
         access_path: AccessPath,

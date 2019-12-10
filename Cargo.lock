@@ -3941,6 +3941,21 @@ dependencies = [
 [[package]]
 name = "router"
 version = "0.1.0"
+dependencies = [
+ "futures-preview 0.3.0-alpha.19 (registry+https://github.com/rust-lang/crates.io-index)",
+ "graphdb 0.1.0",
+ "libra-canonical-serialization 0.1.0",
+ "libra-crypto 0.1.0",
+ "libra-failure-ext 0.1.0",
+ "libra-logger 0.1.0",
+ "libra-tools 0.1.0",
+ "libra-types 0.1.0",
+ "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "sgchain 0.1.0",
+ "sgtypes 0.1.0",
+ "sgwallet 0.1.0",
+ "tokio 0.2.0-alpha.6 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "rust-argon2"

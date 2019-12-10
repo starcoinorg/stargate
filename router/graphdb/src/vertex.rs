@@ -29,6 +29,11 @@ impl Vertex {
     pub fn new(id: AccountAddress, t: Type) -> Self {
         Self { id, t }
     }
+
+    pub fn new_with_bi_type(id: AccountAddress) -> Self {
+        let t = Type("BI".to_string());
+        Self { t, id }
+    }
 }
 
 impl PartialEq for Vertex {

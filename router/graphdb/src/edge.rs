@@ -22,4 +22,15 @@ impl Edge {
             inbound_id,
         }
     }
+
+    pub fn from_vertexes(mut ids: Vec<Vertex>) -> Self {
+        assert_eq!(ids.len(), 2);
+        let t = Type("BI".to_string());
+
+        Self {
+            outbound_id: ids.remove(0),
+            t,
+            inbound_id: ids.remove(0),
+        }
+    }
 }

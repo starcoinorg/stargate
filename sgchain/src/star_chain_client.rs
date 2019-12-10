@@ -351,6 +351,13 @@ where
     ()
 }
 
+pub async fn faucet_async_2<C>(client: C, receiver: AccountAddress, amount: u64) -> Result<()>
+where
+    C: 'static + ChainClient,
+{
+    client.faucet(receiver, amount).await
+}
+
 pub fn submit_txn_async<C>(client: C, executor: TaskExecutor, txn: SignedTransaction)
 where
     C: 'static + ChainClient,
