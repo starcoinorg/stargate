@@ -17,7 +17,7 @@ lazy_static = "1.3.0"
 include_dir = "0.2.1"
 tokio = { version = "0.2", features = ["full"] }
 futures_01 = { package = "futures", version = "0.1.28" }
-futures = { version = "=0.3.0-alpha.19", package = "futures-preview", features = ["async-await", "io-compat", "compat"] }
+futures = { version = "0.3.0", features = ["io-compat", "compat"] }
 futures-timer = "2.0.2"
 futures_locks = { version = "=0.3.0", package = "futures-locks", features=["tokio"]}
 chrono = { version = "0.4.7", default-features = false }

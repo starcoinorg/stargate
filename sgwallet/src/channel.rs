@@ -739,6 +739,7 @@ impl Inner {
         }
     }
 
+    #[allow(dead_code)]
     pub fn channel_account_resource(&self) -> Option<ChannelParticipantAccountResource> {
         let access_path = AccessPath::new_for_data_path(
             self.channel_address,

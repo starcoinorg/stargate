@@ -133,7 +133,7 @@ impl Wallet {
         };
         Ok(wallet)
     }
-    pub fn start(&mut self, executor: runtime::Handle) -> Result<()> {
+    pub fn start(&mut self, executor: &runtime::Handle) -> Result<()> {
         let inner = self.inner.take().expect("wallet already started");
         executor.spawn(inner.start());
         Ok(())
@@ -939,7 +939,7 @@ impl Inner {
                         error!("fail to stop channel {}, err: {}", &channel_address, e);
                     }
                 }
-                if let Some(rt) = self.runtime.take() {
+                if let Some(_rt) = self.runtime.take() {
                     let handle = thread::spawn(|| {
                         //TODO:shutdown
                     });

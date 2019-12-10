@@ -23,7 +23,7 @@ pub fn setup_wallet(client: Arc<dyn ChainClient>, init_balance: u64) -> Result<W
         Arc::new(KeyPair::generate_for_testing(&mut rng0));
 
     let account = AccountAddress::from_public_key(&account_keypair.public_key);
-    let rt = Runtime::new().expect("faucet runtime err.");
+    let mut rt = Runtime::new().expect("faucet runtime err.");
     let f = {
         let c = client.clone();
         async move { c.faucet(account, init_balance).await }
@@ -56,21 +56,21 @@ pub fn setup_wallet(client: Arc<dyn ChainClient>, init_balance: u64) -> Result<W
 
 pub fn with_wallet<T, F>(chain_client: Arc<dyn ChainClient>, f: F) -> Result<T>
 where
-    F: Fn(&Runtime, Arc<Wallet>, Arc<Wallet>) -> Result<T>,
+    F: Fn(&mut Runtime, Arc<Wallet>, Arc<Wallet>) -> Result<T>,
 {
     let init_amount = 10_000_000;
-    let rt = Runtime::new()?;
+    let mut rt = Runtime::new()?;
     let mut sender_wallet = setup_wallet(chain_client.clone(), init_amount)?;
     let mut receiver_wallet = setup_wallet(chain_client.clone(), init_amount)?;
-    sender_wallet.start(rt.executor().clone())?;
-    receiver_wallet.start(rt.executor().clone())?;
+    sender_wallet.start(rt.handle())?;
+    receiver_wallet.start(rt.handle())?;
     let sender_wallet = Arc::new(sender_wallet);
     let receiver_wallet = Arc::new(receiver_wallet);
 
-    let res = f(&rt, sender_wallet.clone(), receiver_wallet.clone());
+    let res = f(&mut rt, sender_wallet.clone(), receiver_wallet.clone());
     rt.block_on(sender_wallet.stop())?;
     rt.block_on(receiver_wallet.stop())?;
-    rt.shutdown_on_idle();
+    //rt.shutdown_on_idle();
     res
 }
 

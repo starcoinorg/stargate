@@ -5,6 +5,7 @@ use crate::tx_applier::TxApplier;
 use libra_crypto::hash::CryptoHash;
 use sgstorage::channel_db::ChannelAddressProvider;
 use sgstorage::generate_random_channel_store;
+
 #[test]
 fn test_tx_applier() {
     libra_logger::try_init_for_testing();
