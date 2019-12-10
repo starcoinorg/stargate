@@ -1,6 +1,7 @@
+use crate::star_chain_client::gen_node_config_with_genesis;
 use crate::star_chain_client::{faucet_async, submit_txn_async, ChainClient, StarChainClient};
 use admission_control_service::runtime::AdmissionControlRuntime;
-use anyhow::{Result, ensure};
+use anyhow::{ensure, Result};
 use async_std::task;
 use consensus::consensus_provider::make_pow_consensus_provider;
 use consensus::MineClient;
@@ -10,6 +11,7 @@ use grpc_helpers::ServerHandle;
 use libra_config::config::{ConsensusType, NetworkConfig, NodeConfig, RoleType, TestConfig};
 use libra_config::generator;
 use libra_crypto::traits::Uniform;
+use libra_crypto::x25519::X25519StaticPrivateKey;
 use libra_crypto::ValidKey;
 use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
@@ -43,13 +45,17 @@ use state_synchronizer::StateSynchronizer;
 use std::collections::HashMap;
 use std::thread::sleep;
 use std::time::Duration;
-use std::{convert::{TryFrom, TryInto}, str::FromStr, sync::Arc, thread};
+use std::{
+    convert::{TryFrom, TryInto},
+    str::FromStr,
+    sync::Arc,
+    thread,
+};
 use storage_service::start_storage_service;
-use tokio::runtime::{Handle, Builder, Runtime};
-use tokio::time::{Instant, interval_at, interval};
+use tokio::runtime::{Builder, Handle, Runtime};
+use tokio::time::{interval, interval_at, Instant};
 use transaction_builder::{encode_create_account_script, encode_transfer_script};
 use vm_genesis::GENESIS_KEYPAIR;
-use libra_crypto::x25519::X25519StaticPrivateKey;
 
 pub fn setup_network(
     config: &mut NetworkConfig,
@@ -107,13 +113,13 @@ pub fn setup_network(
         .signing_keys((signing_private, signing_public))
         .discovery_interval_ms(config.discovery_interval_ms);
 
-//    network_builder.transport(TransportType::PermissionlessMemoryNoise(Some((
-//        config.network_keypairs.get_network_identity_private(),
-//        config
-//            .network_keypairs
-//            .get_network_identity_public()
-//            .clone(),
-//    ))));
+    //    network_builder.transport(TransportType::PermissionlessMemoryNoise(Some((
+    //        config.network_keypairs.get_network_identity_private(),
+    //        config
+    //            .network_keypairs
+    //            .get_network_identity_public()
+    //            .clone(),
+    //    ))));
 
     let (_listen_addr, network_provider) = network_builder.build();
     (runtime, network_provider)
@@ -222,27 +228,6 @@ pub fn setup_environment(node_config: &mut NodeConfig, rollback_flag: bool) -> L
     }
 }
 
-//fn node_random_conf(pow_mode: bool, listen_address: &str, times: usize) -> NodeConfig {
-//    let mut config = NodeConfigHelpers::get_single_node_test_config_times(true, times);
-//
-//    if pow_mode {
-//        for conf in &mut (&mut config).networks {
-//            conf.is_permissioned = false;
-//            conf.is_public_network = true;
-//            conf.enable_encryption_and_authentication = true;
-//            conf.listen_address = listen_address.parse().unwrap();
-//            conf.role = RoleType::Validator;
-//        }
-//    } else {
-//        config.consensus.consensus_type = ConsensusType::PBFT;
-//    }
-//
-//    debug!("config : {:?}", config);
-//    crate::star_chain_client::genesis_blob(&config);
-//
-//    config
-//}
-
 fn print_ports(config: &NodeConfig) {
     debug!(
         "{}",
@@ -267,14 +252,23 @@ fn print_ports(config: &NodeConfig) {
 //}
 
 #[test]
+#[ignore]
 fn test_pow_node() -> Result<()> {
     ::libra_logger::init_for_e2e_testing();
-    let mut conf_1 = gen_node_config_with_genesis(1, true, true);
+    let mut conf_1 = gen_node_config_with_genesis(1, true, true, Some("/memory/0"));
     let (peer_1, peer_info_1) = conf_1.validator_network.as_ref().unwrap().get_peer_info();
-    let mut conf_2 = gen_node_config_with_genesis(2, true,true);
+    let mut conf_2 = gen_node_config_with_genesis(2, true, true, Some("/memory/0"));
     let (peer_2, peer_info_2) = conf_2.validator_network.as_ref().unwrap().get_peer_info();
-    conf_1.validator_network.as_mut().unwrap().add_peer(peer_2, peer_info_2);
-    conf_2.validator_network.as_mut().unwrap().add_peer(peer_1, peer_info_1);
+    conf_1
+        .validator_network
+        .as_mut()
+        .unwrap()
+        .add_peer(peer_2, peer_info_2);
+    conf_2
+        .validator_network
+        .as_mut()
+        .unwrap()
+        .add_peer(peer_1, peer_info_1);
 
     print_ports(&conf_1);
     debug!("conf1:{:?}", conf_1);
@@ -354,9 +348,10 @@ fn create_keypair() -> KeyPair<Ed25519PrivateKey, Ed25519PublicKey> {
 }
 
 #[test]
+#[ignore]
 fn test_pow_single_node() {
     ::libra_logger::init_for_e2e_testing();
-    let mut conf_1 = gen_node_config_with_genesis(1, true, true);
+    let mut conf_1 = gen_node_config_with_genesis(1, true, true, Some("/memory/0"));
     print_ports(&conf_1);
     debug!("conf1:{:?}", conf_1);
     let _handle_1 = setup_environment(&mut conf_1, false);
@@ -377,9 +372,10 @@ fn test_pow_single_node() {
 }
 
 #[test]
+#[ignore]
 fn test_pbft_single_node() {
     ::libra_logger::init_for_e2e_testing();
-    let mut config = gen_node_config_with_genesis(1, true, false);
+    let mut config = gen_node_config_with_genesis(1, true, false, None);
     print_ports(&config);
     debug!("conf1:{:?}", config);
 
@@ -401,6 +397,7 @@ fn test_pbft_single_node() {
 }
 
 #[test]
+#[ignore]
 fn test_validator_nodes() {
     let node_conf_1 = NodeConfig::random();
     let node_conf_2 = NodeConfig::random();
@@ -409,9 +406,10 @@ fn test_validator_nodes() {
 }
 
 #[test]
+#[ignore]
 fn test_rollback_block() {
     ::libra_logger::init_for_e2e_testing();
-    let mut conf_1 = gen_node_config_with_genesis(1, true, true);
+    let mut conf_1 = gen_node_config_with_genesis(1, true, true, Some("/memory/0"));
     print_ports(&conf_1);
     debug!("conf1:{:?}", conf_1);
 
@@ -433,14 +431,12 @@ fn test_rollback_block() {
 }
 
 #[test]
+#[ignore]
 fn test_coin_base() {
     ::libra_logger::init_for_e2e_testing();
-    let mut conf_1 = gen_node_config_with_genesis(1, true, true);
+    let mut conf_1 = gen_node_config_with_genesis(1, true, true, Some("/memory/0"));
 
-    let consensus_address = conf_1
-        .consensus
-        .consensus_keypair
-        .consensus_address();
+    let consensus_address = conf_1.consensus.consensus_keypair.consensus_address();
     let _handle_1 = setup_environment(&mut conf_1, false);
 
     sleep(Duration::from_secs(60));
@@ -550,7 +546,8 @@ fn commit_tx_2(
                 count = count + 1;
 
                 future::ready(())
-            }).await;
+            })
+            .await;
     };
 
     executor.spawn(f);
@@ -576,7 +573,8 @@ fn commit_tx(port: u32, executor: Handle) -> Sender<()> {
                 let client = StarChainClient::new("127.0.0.1", port.clone());
                 faucet_async(client, faucet_executor.clone(), account, 10);
                 future::ready(())
-            }).await;
+            })
+            .await;
     };
 
     executor.spawn(f);
@@ -584,12 +582,7 @@ fn commit_tx(port: u32, executor: Handle) -> Sender<()> {
     shutdown_sender
 }
 
-fn check_latest_ledger(
-    port1: u32,
-    port2: u32,
-    sender_1: Sender<()>,
-    sender_2: Sender<()>,
-) {
+fn check_latest_ledger(port1: u32, port2: u32, sender_1: Sender<()>, sender_2: Sender<()>) {
     loop {
         sleep(Duration::from_secs(10));
         let client1 = StarChainClient::new("127.0.0.1", port1);
@@ -611,14 +604,10 @@ fn check_latest_ledger(
                 assert!(false);
             }
         }
-    };
+    }
 }
 
-fn check_single_latest_ledger(
-    port: u32,
-    sender: Sender<()>,
-    pow_mode: bool,
-) {
+fn check_single_latest_ledger(port: u32, sender: Sender<()>, pow_mode: bool) {
     let end_time = Instant::now() + Duration::from_secs(60 * 6);
     loop {
         sleep(Duration::from_secs(10));
@@ -634,7 +623,7 @@ fn check_single_latest_ledger(
         if Instant::now() >= end_time {
             assert!(false);
         }
-    };
+    }
 }
 
 #[test]
@@ -663,8 +652,8 @@ fn test_network_conf() {
 
 #[test]
 fn test_validator_conf() {
-    let conf_1 = gen_node_config_with_genesis(1, true, true);
-    let conf_2 = gen_node_config_with_genesis(2, true,true);
+    let conf_1 = gen_node_config_with_genesis(1, true, true, Some("/memory/0"));
+    let conf_2 = gen_node_config_with_genesis(2, true, true, Some("/memory/0"));
     println!("conf_1 : {:?}", conf_1);
     println!("conf_2 : {:?}", conf_2);
 }
@@ -684,7 +673,7 @@ fn test_keys() -> Result<()> {
     Ok(())
 }
 
-fn keys(times:usize) -> (Ed25519PrivateKey, X25519StaticPrivateKey) {
+fn keys(times: usize) -> (Ed25519PrivateKey, X25519StaticPrivateKey) {
     let mut rng = StdRng::from_seed([0u8; 32]);
     if times > 0 {
         for _ in 0..times {
@@ -728,28 +717,6 @@ fn test_keys_3() -> Result<()> {
 
 #[test]
 fn test_genesis() {
-    let conf = gen_node_config_with_genesis(1, false, true);
+    let conf = gen_node_config_with_genesis(1, false, true, Some("/memory/0"));
     println!("{:?}", conf);
-}
-
-fn gen_node_config_with_genesis(times: usize, network_random: bool, pow_mode:bool) -> NodeConfig {
-    let mut conf = generator::validator_swarm_for_testing_times(times, network_random).unwrap().pop().unwrap();
-
-    if pow_mode {
-//        for conf in &mut (&mut config).networks {
-            conf.validator_network.as_mut().unwrap().is_permissioned = false;
-            conf.validator_network.as_mut().unwrap().is_public_network = true;
-            conf.validator_network.as_mut().unwrap().enable_encryption_and_authentication = true;
-//            conf.listen_address = listen_address.parse().unwrap();
-//            conf.role = RoleType::Validator;
-//        }
-    } else {
-        conf.consensus.consensus_type = ConsensusType::PBFT;
-    }
-
-    conf.validator_network.as_mut().unwrap().listen_address("/memory/0");
-
-    crate::star_chain_client::genesis_blob(&mut conf);
-
-    conf
 }

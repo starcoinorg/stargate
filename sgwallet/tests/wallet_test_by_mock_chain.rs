@@ -14,6 +14,7 @@ mod common;
 pub mod wallet_test_helper;
 
 #[test]
+#[ignore]
 fn test_wallet_with_mock_client() {
     if let Err(e) = run_with_mock_client(|chain_client| {
         common::with_wallet(chain_client, |rt, sender, receiver| {
@@ -26,6 +27,7 @@ fn test_wallet_with_mock_client() {
 }
 
 #[test]
+#[ignore]
 fn test_wallet_install_package() {
     if let Err(e) = run_test_wallet_install_package() {
         println!("err: {:?}", e);
@@ -34,6 +36,7 @@ fn test_wallet_install_package() {
 }
 
 #[test]
+#[ignore]
 fn test_deploy_custom_module_by_mock_client() {
     if let Err(e) = run_test_deploy_custom_module_by_mock_client() {
         println!("err: {:?}", e);
@@ -42,6 +45,7 @@ fn test_deploy_custom_module_by_mock_client() {
 }
 
 #[test]
+#[ignore]
 fn test_gobang() {
     if let Err(e) = run_test_gobang() {
         println!("err: {:?}", e);

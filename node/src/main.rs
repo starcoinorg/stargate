@@ -21,7 +21,7 @@ use sg_config::config::{load_from, NodeConfig, WalletConfig};
 use sgchain::star_chain_client::StarChainClient;
 use sgwallet::wallet::*;
 use structopt::StructOpt;
-use tokio::runtime::{Runtime, TaskExecutor};
+use tokio::runtime::{Handle, Runtime};
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -64,7 +64,7 @@ fn load_from_keyfile(
 }
 
 fn gen_node(
-    executor: TaskExecutor,
+    executor: Handle,
     keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
     wallet_config: &WalletConfig,
     network_service: NetworkService,
@@ -108,14 +108,14 @@ fn main() {
 
     info!("swarm is {:?}", swarm.config);
     let rt = Runtime::new().unwrap();
-    let executor = rt.executor();
+    let executor = rt.handle();
 
     let keypair = Arc::new(load_from_keyfile(&args.faucet_key_path, args.child_num));
     let (network_service, tx, rx, close_tx) =
         build_network_service(&swarm.config.net_config, keypair.clone());
 
     let mut node = gen_node(
-        executor,
+        executor.clone(),
         keypair,
         &swarm.config.wallet,
         network_service,

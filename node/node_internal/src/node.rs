@@ -8,7 +8,7 @@ use futures_timer::Delay;
 use std::{sync::Arc, time::Duration};
 use tokio::runtime::Handle;
 
-use anyhow::{Error, Result, bail};
+use anyhow::{bail, Error, Result};
 use libra_crypto::{hash::CryptoHash, HashValue};
 
 use libra_logger::prelude::*;
@@ -1265,7 +1265,7 @@ mod tests {
 
     #[test]
     fn test_delay() {
-        let rt = Runtime::new().unwrap();
+        let mut rt = Runtime::new().unwrap();
 
         let task = async {
             Delay::new(Duration::from_millis(1000)).await;

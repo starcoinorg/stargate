@@ -43,7 +43,7 @@ pub fn gen_node(
         .wait()
         .unwrap()
         .unwrap();
-    wallet.start(executor.clone()).unwrap();
+    wallet.start(&executor).unwrap();
 
     let (network, tx, rx, close_tx) = build_network_service(config, keypair.clone());
     let _identify = network.identify();

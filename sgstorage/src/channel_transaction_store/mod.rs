@@ -9,7 +9,7 @@
 use crate::error::SgStorageError;
 use crate::schema::channel_transaction_schema::*;
 use crate::schema_db::SchemaDB;
-use anyhow::{Result};
+use anyhow::Result;
 use libra_types::{account_address::AccountAddress, transaction::Version};
 use libradb::schema::transaction_by_account::*;
 use schemadb::SchemaBatch;

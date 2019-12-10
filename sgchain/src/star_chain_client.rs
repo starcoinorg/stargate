@@ -8,17 +8,19 @@ use admission_control_proto::proto::admission_control::{
 use admission_control_service::admission_control_mock_client::AdmissionControlMockClient;
 use anyhow::{bail, Result};
 use async_trait::async_trait;
-use core::borrow::{Borrow};
+use core::borrow::Borrow;
 use futures::channel::oneshot::Sender;
 use futures_timer::Delay;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use libra_config::config::{ConsensusType, NodeConfig};
+use libra_config::generator;
 use libra_logger::prelude::*;
 use libra_types::access_path::AccessPath;
 use libra_types::contract_event::EventWithProof;
 use libra_types::crypto_proxies::LedgerInfoWithSignatures;
 use libra_types::get_with_proof::ResponseItem;
 use libra_types::ledger_info::LedgerInfo;
+use libra_types::transaction::Transaction;
 use libra_types::{
     account_address::AccountAddress,
     account_config::{association_address, AccountResource},
@@ -37,7 +39,6 @@ use std::{
 use tokio::runtime::{Handle, Runtime};
 use transaction_builder::{encode_create_account_script, encode_transfer_script};
 use vm_genesis::{encode_genesis_transaction_with_validator_and_consensus, GENESIS_KEYPAIR};
-use libra_types::transaction::Transaction;
 
 #[async_trait]
 pub trait ChainClient: Send + Sync {
@@ -125,7 +126,7 @@ pub trait ChainClient: Send + Sync {
         address: &AccountAddress,
         seq: u64,
     ) -> Result<(Option<TransactionWithProof>, Option<AccountStateWithProof>)> {
-        let end_time = Instant::now() + Duration::from_millis(50_000);
+        let end_time = Instant::now() + Duration::from_millis(50_000 * 2);
         loop {
             let timeout_time = Instant::now() + Duration::from_millis(1000);
             Delay::new(Duration::from_millis(1000)).await;
@@ -283,7 +284,7 @@ pub struct MockChainClient {
 
 impl MockChainClient {
     pub fn new() -> (Self, StarHandle) {
-        let mut config = NodeConfig::default_node_config();
+        let mut config = gen_node_config_with_genesis(1, false, false, Some("/memory/0"));
         // TODO: test the circleci
         config.storage.address = "127.0.0.1".to_string();
         info!("MockChainClient config: {:?} ", config);
@@ -292,7 +293,8 @@ impl MockChainClient {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let executor = rt.handle().clone();
 
-        let (_handle, shutdown_sender, ac, proxy) = setup_environment(&mut config);
+        let (_handle, shutdown_sender, ac, proxy) =
+            setup_environment(&mut config, executor.clone());
         (
             MockChainClient {
                 ac_client: Arc::new(AdmissionControlMockClient::new(ac, proxy, executor)),
@@ -383,7 +385,50 @@ pub fn genesis_blob(config: &mut NodeConfig) {
     );
     let genesis_txn = genesis_checked_txn.into_inner();
 
-    config.execution.save_genesis(Transaction::UserTransaction(genesis_txn));
+    config
+        .execution
+        .save_genesis(Transaction::UserTransaction(genesis_txn));
 
     config.execution.reload_genesis();
+}
+
+pub fn gen_node_config_with_genesis(
+    times: usize,
+    network_random: bool,
+    pow_mode: bool,
+    address: Option<&str>,
+) -> NodeConfig {
+    let mut conf = generator::validator_swarm_for_testing_times(times, network_random)
+        .unwrap()
+        .pop()
+        .unwrap();
+
+    if pow_mode {
+        //        for conf in &mut (&mut config).networks {
+        conf.validator_network.as_mut().unwrap().is_permissioned = false;
+        conf.validator_network.as_mut().unwrap().is_public_network = true;
+        conf.validator_network
+            .as_mut()
+            .unwrap()
+            .enable_encryption_and_authentication = true;
+    //            conf.listen_address = listen_address.parse().unwrap();
+    //            conf.base.role = RoleType::Validator;
+    //        }
+    } else {
+        conf.consensus.consensus_type = ConsensusType::PBFT;
+    }
+
+    match address {
+        Some(addr) => {
+            conf.validator_network
+                .as_mut()
+                .unwrap()
+                .listen_address(addr);
+        }
+        _ => {}
+    }
+
+    crate::star_chain_client::genesis_blob(&mut conf);
+
+    conf
 }

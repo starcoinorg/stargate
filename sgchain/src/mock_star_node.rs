@@ -8,7 +8,6 @@ use anyhow::Result;
 use std::collections::{BTreeMap, HashSet};
 use std::{
     sync::{Arc, Mutex},
-    thread,
     time::{Duration, Instant},
 };
 
@@ -38,6 +37,7 @@ use network::validator_network::AdmissionControlNetworkSender;
 use network::TEST_NETWORK_REQUESTS;
 use storage_client::{StorageRead, StorageWrite};
 use storage_service::start_storage_service_and_return_service;
+use tokio::runtime::Handle;
 use vm_runtime::MoveVM;
 use vm_validator::vm_validator::VMValidator;
 
@@ -94,6 +94,7 @@ where
 
 pub fn setup_environment(
     node_config: &mut NodeConfig,
+    handle: Handle,
 ) -> (
     StarHandle,
     Sender<()>,
@@ -137,7 +138,7 @@ pub fn setup_environment(
         info.committed_tree_state.version + 1,
     ));
 
-    let shutdown_sender = commit_block(executed_tree, mempool_client, executor);
+    let shutdown_sender = commit_block(executed_tree, mempool_client, executor, handle);
     let star_handle = StarHandle { _storage: storage };
 
     (star_handle, shutdown_sender, ac, upstream_proxy_data)
@@ -147,78 +148,82 @@ fn commit_block(
     executed_tree: Mutex<ExecutedTrees>,
     mempool_client: CoreMemPoolClient,
     executor: Arc<Executor<MoveVM>>,
+    handle: Handle,
 ) -> Sender<()> {
     let (shutdown_sender, mut shutdown_receiver) = oneshot::channel::<()>();
-    let mut height = 1;
-    let task = interval(Duration::from_secs(3))
-        .take_while(move |_| match shutdown_receiver.try_recv() {
-            Err(_) | Ok(Some(_)) => {
-                info!("Build block task exit.");
-                future::ready(false)
-            }
-            _ => future::ready(true),
-        })
-        .for_each(move |_| {
-            let txns = mempool_client.get_block(1, HashSet::new());
-            //debug!("for_each");
-            debug!("txn size: {:?} of current block.", txns.len());
+    println!("-----------00000000--------->");
+    let task = async {
+        let mut height = 1;
+        println!("-----------222222--------->");
+        interval(Duration::from_secs(3))
+            .take_while(move |_| match shutdown_receiver.try_recv() {
+                Err(_) | Ok(Some(_)) => {
+                    info!("Build block task exit.");
+                    future::ready(false)
+                }
+                _ => future::ready(true),
+            })
+            .for_each(move |_| {
+                let txns = mempool_client.get_block(1, HashSet::new());
+                println!("-----------11111111--------->{}", txns.len());
+                //debug!("for_each");
+                debug!("txn size: {:?} of current block.", txns.len());
 
-            if txns.len() > 0 {
-                let block_id = HashValue::random();
+                if txns.len() > 0 {
+                    let block_id = HashValue::random();
 
-                //let len = executed_tree.lock().unwrap().len();
-                let parent_hash = executed_tree.lock().unwrap().state_root();
-                debug!(
-                    "new block hash: {:?}, parent_hash: {:?}",
-                    block_id, parent_hash
-                );
-                let exclude_transactions = txns
-                    .iter()
-                    .map(|txn| (txn.sender(), txn.sequence_number()))
-                    .collect();
-                let transactions: Vec<Transaction> = txns
-                    .iter()
-                    .map(|txn| Transaction::UserTransaction(txn.clone()))
-                    .collect();
-                let output = block_on(executor.execute_block(
-                    transactions.clone(),
-                    executed_tree.lock().unwrap().clone(),
-                    parent_hash,
-                    block_id,
-                ))
-                .unwrap()
-                .unwrap();
-
-                let mut tree = executed_tree.lock().unwrap();
-                std::mem::replace(&mut *tree, output.executed_trees().clone());
-                // commit
-                let commit_info = BlockInfo::new(
-                    0,
-                    height,
-                    block_id,
-                    output.executed_trees().state_id(),
-                    output.version().unwrap(),
-                    0,
-                    None,
-                );
-                let info = LedgerInfo::new(commit_info, output.executed_trees().state_root());
-                let info_sign = LedgerInfoWithSignatures::new(info, BTreeMap::new());
-                let committable_block = CommittableBlock::new(transactions, Arc::new(output));
-                block_on(executor.commit_blocks(vec![committable_block], info_sign))
+                    //let len = executed_tree.lock().unwrap().len();
+                    let parent_hash = executed_tree.lock().unwrap().state_root();
+                    debug!(
+                        "new block hash: {:?}, parent_hash: {:?}",
+                        block_id, parent_hash
+                    );
+                    let exclude_transactions = txns
+                        .iter()
+                        .map(|txn| (txn.sender(), txn.sequence_number()))
+                        .collect();
+                    let transactions: Vec<Transaction> = txns
+                        .iter()
+                        .map(|txn| Transaction::UserTransaction(txn.clone()))
+                        .collect();
+                    let output = block_on(executor.execute_block(
+                        transactions.clone(),
+                        executed_tree.lock().unwrap().clone(),
+                        parent_hash,
+                        block_id,
+                    ))
                     .unwrap()
                     .unwrap();
 
-                // remove from mem pool
-                mempool_client.remove_txn(exclude_transactions);
-                height = height + 1;
-            }
-            future::ready(())
-        });
+                    let mut tree = executed_tree.lock().unwrap();
+                    std::mem::replace(&mut *tree, output.executed_trees().clone());
+                    // commit
+                    let commit_info = BlockInfo::new(
+                        0,
+                        height,
+                        block_id,
+                        output.executed_trees().state_id(),
+                        output.version().unwrap(),
+                        0,
+                        None,
+                    );
+                    let info = LedgerInfo::new(commit_info, output.executed_trees().state_root());
+                    let info_sign = LedgerInfoWithSignatures::new(info, BTreeMap::new());
+                    let committable_block = CommittableBlock::new(transactions, Arc::new(output));
+                    block_on(executor.commit_blocks(vec![committable_block], info_sign))
+                        .unwrap()
+                        .unwrap();
 
-    thread::spawn(move || {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.spawn(task);
-    });
+                    // remove from mem pool
+                    mempool_client.remove_txn(exclude_transactions);
+                    height = height + 1;
+                }
+                future::ready(())
+            })
+            .await;
+    };
+
+    handle.spawn(task);
 
     shutdown_sender
 }
