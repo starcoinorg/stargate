@@ -22,7 +22,7 @@ pub fn is_htlc_transfer(op: &ChannelOp) -> bool {
         _ => false,
     }
 }
-
+/// get hash lock value from `args` which should be the args of `ChannelScript.send_payment`
 pub fn parse_htlc_hash_lock(args: &[TransactionArgument]) -> Result<HashValue> {
     ensure!(args.len() == 4, "send_payment should have 4 args");
     match &args[2] {
