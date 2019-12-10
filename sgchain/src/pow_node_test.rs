@@ -61,6 +61,9 @@ pub fn setup_network(
     role: RoleType,
 ) -> (Runtime, Box<dyn LibraNetworkProvider>) {
     let runtime = Builder::new()
+        .thread_name("network-")
+        .threaded_scheduler()
+        .enable_all()
         .build()
         .expect("Failed to start runtime. Won't be able to start networking.");
     let mut network_builder = NetworkBuilder::new(
@@ -442,7 +445,11 @@ fn test_pow_single_node() {
     debug!("conf1:{:?}", conf_1);
     let _handle_1 = setup_environment(&mut conf_1, false);
 
-    let runtime_1 = tokio::runtime::Runtime::new().unwrap();
+    let runtime_1 = Builder::new()
+        .thread_name("pow_single-")
+        .threaded_scheduler()
+        .enable_all()
+        .build().unwrap();
     let s = commit_tx(
         conf_1.admission_control.admission_control_service_port as u32,
         runtime_1.handle().clone(),
