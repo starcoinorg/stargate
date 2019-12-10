@@ -77,7 +77,7 @@ impl Router {
         result
     }
 
-    async fn find_path_by_addr(
+    pub async fn find_path_by_addr(
         &self,
         start: AccountAddress,
         end: AccountAddress,
@@ -87,7 +87,7 @@ impl Router {
         self.find_path(start_node, end_node).await
     }
 
-    async fn shutdown(&self) {
+    pub async fn shutdown(&self) {
         self.control_sender.unbounded_send(Event::SHUTDOWN).unwrap()
     }
 
@@ -158,7 +158,7 @@ impl RouterInner {
                 channel_address,
                 balances,
             } => {
-                assert_eq!(balances.len(), 2);
+                ensure!(balances.len() == 2, "balances len should be 2");
                 let edge = generate_edge(channel_address, balances)?;
                 let _index = self.graph_store.put_edge(&edge, 0, true)?;
             }
@@ -166,7 +166,7 @@ impl RouterInner {
                 channel_address,
                 balances,
             } => {
-                assert_eq!(balances.len(), 2);
+                ensure!(balances.len() == 2, "balances len should be 2");
                 let edge = generate_edge(channel_address, balances)?;
                 self.graph_store.remove_edge(&edge)?;
             }
@@ -174,7 +174,7 @@ impl RouterInner {
                 channel_address,
                 balances,
             } => {
-                assert_eq!(balances.len(), 2);
+                ensure!(balances.len() == 2, "balances len should be 2");
                 let edge = generate_edge(channel_address, balances)?;
                 self.graph_store.remove_edge(&edge)?;
             }
@@ -195,7 +195,7 @@ fn generate_edge(
         );
         vertexes.push(Vertex::new_with_bi_type(addr.clone()));
     }
-    Ok(Edge::from_vertexes(vertexes))
+    Edge::from_vertexes(vertexes)
 }
 
 fn respond_with<T>(responder: futures::channel::oneshot::Sender<T>, msg: T) {

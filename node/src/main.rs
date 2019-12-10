@@ -17,6 +17,7 @@ use network::{build_network_service, NetworkMessage, NetworkService};
 use node::client;
 use node_internal::node::Node;
 use node_service::setup_node_service;
+use router::Router;
 use sg_config::config::{load_from, NodeConfig, WalletConfig};
 use sgchain::star_chain_client::StarChainClient;
 use sgwallet::wallet::*;
@@ -78,11 +79,15 @@ fn gen_node(
         wallet_config.chain_port as u32,
     );
 
+    let client = Arc::new(client);
+    let mut router = Router::new(client.clone(), executor.clone());
+    router.start().unwrap();
+
     info!("account addr is {:?}", hex::encode(account_address));
     let wallet = Wallet::new_with_client(
         account_address,
         keypair.clone(),
-        Arc::new(client),
+        client,
         &wallet_config.store_dir,
     )
     .unwrap();
@@ -96,6 +101,7 @@ fn gen_node(
         receiver,
         close_tx,
         true,
+        router,
     )
 }
 

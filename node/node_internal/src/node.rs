@@ -24,15 +24,17 @@ use sgtypes::{
     message::*,
     system_event::Event,
 };
-use sgwallet::wallet::Wallet;
+use sgwallet::{utils::*, wallet::Wallet};
 
 use crate::message_processor::{MessageFuture, MessageProcessor};
 
+use crate::invoice::{Invoice, InvoiceManager};
 use crate::node_command::NodeMessage;
 use futures_01::sync::{
     mpsc::{UnboundedReceiver, UnboundedSender},
     oneshot,
 };
+use router::Router;
 use sgtypes::sg_error::{SgError, SgErrorCode};
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 
@@ -48,6 +50,7 @@ pub struct Node {
     command_receiver: Option<UnboundedReceiver<NodeMessage>>,
     network_service_close_tx: Option<oneshot::Sender<()>>,
     wallet: Arc<Wallet>,
+    invoice_mgr: InvoiceManager,
 }
 
 struct NodeInner {
@@ -59,6 +62,8 @@ struct NodeInner {
     default_future_timeout: u64,
     network_service: NetworkService,
     auto_approve: bool,
+    invoice_mgr: InvoiceManager,
+    router: Router,
 }
 
 impl Node {
@@ -70,12 +75,16 @@ impl Node {
         receiver: UnboundedReceiver<NetworkMessage>,
         net_close_tx: oneshot::Sender<()>,
         auto_approve: bool,
+        router: Router,
     ) -> Self {
         let executor_clone = executor.clone();
         let (event_sender, event_receiver) = futures_01::sync::mpsc::unbounded();
         let (command_sender, command_receiver) = futures_01::sync::mpsc::unbounded();
 
         let wallet_arc = Arc::new(wallet);
+
+        let invoice_mgr = InvoiceManager::new();
+
         let node_inner = NodeInner {
             executor: executor_clone,
             wallet: wallet_arc.clone(),
@@ -85,6 +94,8 @@ impl Node {
             default_future_timeout: 20000,
             network_service: network_service.clone(),
             auto_approve,
+            invoice_mgr: invoice_mgr.clone(),
+            router,
         };
         Self {
             network_service,
@@ -98,6 +109,7 @@ impl Node {
             command_receiver: Some(command_receiver),
             network_service_close_tx: Some(net_close_tx),
             wallet: wallet_arc,
+            invoice_mgr,
         }
     }
 
@@ -296,6 +308,31 @@ impl Node {
             .unbounded_send(NodeMessage::ChannelPay {
                 receiver_address,
                 amount,
+                responder,
+            })?;
+
+        resp_receiver.await?
+    }
+
+    pub async fn off_chain_pay_htlc_async(
+        &self,
+        receiver_address: AccountAddress,
+        amount: u64,
+        hash_lock: Vec<u8>,
+        timeout: u64,
+    ) -> Result<MessageFuture<u64>> {
+        let is_receiver_connected = self.network_service.is_connected(receiver_address);
+        if !is_receiver_connected {
+            bail!("could not connect to receiver")
+        }
+
+        let (responder, resp_receiver) = futures::channel::oneshot::channel();
+        self.command_sender
+            .unbounded_send(NodeMessage::ChannelPayHTLC {
+                receiver_address,
+                amount,
+                hash_lock,
+                timeout,
                 responder,
             })?;
 
@@ -513,6 +550,10 @@ impl Node {
         }
     }
 
+    pub async fn add_invoice(&self) -> Result<Invoice> {
+        Ok(self.invoice_mgr.new_invoice(self.wallet.account()).await)
+    }
+
     async fn start(
         mut node_inner: NodeInner,
         receiver: UnboundedReceiver<NetworkMessage>,
@@ -550,6 +591,7 @@ impl Node {
                 _ = event_receiver.select_next_some() => {
                     debug!("To shutdown network");
                     let _ = network_service_close_tx.send(());
+                    node_inner.shutdown().await;
                     break;
                 }
             }
@@ -565,6 +607,10 @@ impl Node {
 }
 
 impl NodeInner {
+    async fn shutdown(&self) {
+        self.router.shutdown().await;
+    }
+
     async fn handle_network_msg(&mut self, msg: NetworkMessage) {
         info!("receive message ");
         let peer_id = msg.peer_id;
@@ -648,6 +694,16 @@ impl NodeInner {
                 self.off_chain_pay(receiver_address, amount, responder)
                     .await;
             }
+            NodeMessage::ChannelPayHTLC {
+                receiver_address,
+                amount,
+                hash_lock,
+                timeout,
+                responder,
+            } => {
+                self.off_chain_pay_htlc(receiver_address, amount, hash_lock, timeout, responder)
+                    .await;
+            }
             NodeMessage::ChannelBalance {
                 participant,
                 responder,
@@ -709,6 +765,7 @@ impl NodeInner {
 
         // sign message ,verify messsage,no send back
         let request_id = open_channel_message.request_id();
+        let operator = open_channel_message.channel_txn().operator();
 
         let receiver_open_txn: ChannelTransactionResponse;
         match self.wallet.verify_txn(peer_id, &open_channel_message).await {
@@ -739,6 +796,41 @@ impl NodeInner {
         }
 
         self.apply_txn(peer_id, request_id, receiver_open_txn).await;
+
+        if is_htlc_transfer(operator) {
+            match parse_htlc_hash_lock(open_channel_message.channel_txn().args()) {
+                Ok(r_hash) => match self.invoice_mgr.get_preimage(r_hash).await {
+                    Some(preimage) => {
+                        let request = self
+                            .wallet
+                            .receive_payment(peer_id, preimage)
+                            .await
+                            .unwrap();
+                        self.send_channel_request(
+                            peer_id,
+                            request,
+                            MessageType::ChannelTransactionRequest,
+                        )
+                        .unwrap();
+                    }
+                    None => {
+                        warn!(
+                            "could not find preimage by rhash {},wait for timeout",
+                            r_hash
+                        );
+                    }
+                },
+                Err(e) => {
+                    warn!("get r_hash error {},wait for timeout", e);
+                    self.sender
+                        .unbounded_send(NetworkMessage {
+                            peer_id,
+                            data: error_message(e, request_id).to_vec(),
+                        })
+                        .unwrap();
+                }
+            }
+        }
     }
 
     async fn apply_txn(
@@ -911,6 +1003,53 @@ impl NodeInner {
             ),
             Err(e) => respond_with(responder, Err(e)),
         }
+    }
+
+    async fn off_chain_pay_htlc(
+        &self,
+        receiver_address: AccountAddress,
+        amount: u64,
+        hash_lock: Vec<u8>,
+        timeout: u64,
+        responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
+    ) {
+        let path = self
+            .router
+            .find_path_by_addr(self.wallet.account(), receiver_address)
+            .await;
+        match path {
+            Ok(Some(v)) => {
+                info!("path is {:?}", v);
+            }
+            _ => {
+                let err = SgError::new(
+                    SgErrorCode::NOT_PATH,
+                    format!(
+                        "could not find path ,from {} to {}",
+                        self.wallet.account(),
+                        receiver_address
+                    ),
+                );
+                respond_with(responder, Err(err.into()));
+                return;
+            }
+        };
+
+        match self
+            .wallet
+            .send_payment(receiver_address, amount, hash_lock, timeout)
+            .await
+        {
+            Ok(off_chain_pay_tx) => respond_with(
+                responder,
+                self.send_channel_request(
+                    receiver_address,
+                    off_chain_pay_tx,
+                    MessageType::ChannelTransactionRequest,
+                ),
+            ),
+            Err(e) => respond_with(responder, Err(e)),
+        };
     }
 
     async fn execute_script(

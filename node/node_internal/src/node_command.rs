@@ -42,6 +42,13 @@ pub enum NodeMessage {
         amount: u64,
         responder: oneshot::Sender<Result<MessageFuture<u64>>>,
     },
+    ChannelPayHTLC {
+        receiver_address: AccountAddress,
+        amount: u64,
+        hash_lock: Vec<u8>,
+        timeout: u64,
+        responder: oneshot::Sender<Result<MessageFuture<u64>>>,
+    },
     ChannelBalance {
         participant: AccountAddress,
         responder: oneshot::Sender<Result<u64>>,
