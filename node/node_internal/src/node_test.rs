@@ -294,12 +294,12 @@ fn node_test_reject() -> Result<()> {
 
 async fn _delay(duration: Duration) {
     let timeout_time = Instant::now() + duration;
-    tokio::timer::delay(timeout_time).await;
+    tokio_timer::Delay::new(timeout_time).await;
 }
 
 async fn _confirm(node: Arc<Node>, duration: Duration, addr: AccountAddress, approve: bool) {
     let timeout_time = Instant::now() + duration;
-    tokio::timer::delay(timeout_time).await;
+    tokio_timer::Delay::new(timeout_time).await;
 
     let mut transaction_proposal_response = node
         .get_channel_transaction_proposal_async(addr)

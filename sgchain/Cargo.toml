@@ -14,7 +14,7 @@ libra-prost-ext = { path = "../libra/common/prost-ext" }
 protobuf = "2.7"
 grpc-helpers = { path = "../libra/common/grpc-helpers" }
 libra-types = { path = "../libra/types" }
-futures = { version = "0.3.0", features = ["compat"] }
+futures = { version = "0.3.1", features = ["compat"] }
 sgtypes = { path = "../sgtypes" }
 libra-crypto = { path = "../libra/crypto/crypto" }
 anyhow = "1.0"
@@ -25,6 +25,7 @@ executable-helpers = { path = "../libra/common/executable-helpers" }
 executor = { path = "../libra/executor" }
 libra-config = { path = "../libra/config"}
 structopt = "0.3.2"
+lcs = { path = "../libra/common/lcs", version = "0.1.0", package = "libra-canonical-serialization" }
 
 crash-handler = { path = "../libra/common/crash-handler" }
 libra-mempool = { path = "../libra/mempool" }

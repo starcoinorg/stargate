@@ -18,10 +18,10 @@ use std::{
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tokio::runtime::TaskExecutor;
+use tokio::runtime::Handle;
 
 pub fn gen_node(
-    executor: TaskExecutor,
+    executor: Handle,
     config: &NetworkConfig,
     client: Arc<MockChainClient>,
     auto_approve: bool,

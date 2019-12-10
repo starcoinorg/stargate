@@ -6,9 +6,9 @@ use futures::{
 };
 use futures_timer::Delay;
 use std::{sync::Arc, time::Duration};
-use tokio::runtime::TaskExecutor;
+use tokio::runtime::Handle;
 
-use anyhow::{Error, Result};
+use anyhow::{Error, Result, bail};
 use libra_crypto::{hash::CryptoHash, HashValue};
 
 use libra_logger::prelude::*;
@@ -37,7 +37,7 @@ use sgtypes::sg_error::{SgError, SgErrorCode};
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 
 pub struct Node {
-    executor: TaskExecutor,
+    executor: Handle,
     node_inner: Option<NodeInner>,
     event_sender: UnboundedSender<Event>,
     command_sender: UnboundedSender<NodeMessage>,
@@ -52,7 +52,7 @@ pub struct Node {
 
 struct NodeInner {
     wallet: Arc<Wallet>,
-    executor: TaskExecutor,
+    executor: Handle,
     sender: UnboundedSender<NetworkMessage>,
     message_processor: MessageProcessor<u64>,
     network_processor: MessageProcessor<NodeNetworkMessage>,
@@ -63,7 +63,7 @@ struct NodeInner {
 
 impl Node {
     pub fn new(
-        executor: TaskExecutor,
+        executor: Handle,
         wallet: Wallet,
         network_service: NetworkService,
         sender: UnboundedSender<NetworkMessage>,

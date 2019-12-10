@@ -5,7 +5,7 @@ use crate::{
     account_commands::AccountCommand, dev_commands::DevCommand, node_commands::NodeCommand,
     sg_client_proxy::SGClientProxy,
 };
-use anyhow::Result;
+use anyhow::{Result, Error};
 use libra_types::account_address::ADDRESS_LENGTH;
 use std::{collections::HashMap, sync::Arc};
 

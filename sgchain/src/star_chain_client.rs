@@ -8,7 +8,7 @@ use admission_control_proto::proto::admission_control::{
 use admission_control_service::admission_control_mock_client::AdmissionControlMockClient;
 use anyhow::{bail, Result};
 use async_trait::async_trait;
-use core::borrow::Borrow;
+use core::borrow::{Borrow, BorrowMut};
 use futures::channel::oneshot::Sender;
 use futures_timer::Delay;
 use grpcio::{ChannelBuilder, EnvBuilder};
@@ -40,6 +40,7 @@ use std::{
 use tokio::runtime::{Handle, Runtime};
 use transaction_builder::{encode_create_account_script, encode_transfer_script};
 use vm_genesis::{encode_genesis_transaction_with_validator_and_consensus, GENESIS_KEYPAIR};
+use libra_types::transaction::Transaction;
 
 #[async_trait]
 pub trait ChainClient: Send + Sync {
@@ -289,7 +290,7 @@ impl MockChainClient {
         // TODO: test the circleci
         config.storage.address = "127.0.0.1".to_string();
         info!("MockChainClient config: {:?} ", config);
-        genesis_blob(&config);
+        genesis_blob(&mut config);
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         let executor = rt.handle().clone();
@@ -364,7 +365,7 @@ fn parse_response(mut resp: UpdateToLatestLedgerResponse) -> ResponseItem {
     resp.response_items.remove(0).try_into().unwrap()
 }
 
-pub fn genesis_blob(config: &NodeConfig) {
+pub fn genesis_blob(config: &mut NodeConfig) {
     let path = config.execution.genesis_file_location();
     info!("Write genesis_blob to {}", path.as_path().to_string_lossy());
     //    let (_validator_keys, test_consensus_peers, test_network_peers) =
@@ -384,14 +385,8 @@ pub fn genesis_blob(config: &NodeConfig) {
         config.consensus.consensus_type == ConsensusType::POW,
     );
     let genesis_txn = genesis_checked_txn.into_inner();
-    let mut genesis_file = File::create(path).expect("open genesis file err.");
-    genesis_file
-        .write_all(
-            Into::<libra_types::proto::types::SignedTransaction>::into(genesis_txn)
-                .to_vec()
-                .unwrap()
-                .as_slice(),
-        )
-        .expect("write genesis file err.");
-    genesis_file.flush().expect("flush genesis file err.");
+
+    config.execution.save_genesis(Transaction::UserTransaction(genesis_txn));
+
+    config.execution.reload_genesis();
 }
