@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::schema::ensure_slice_len_eq;
-use anyhow::{format_err, Error, Result};
+use anyhow::{format_err, Result};
 use byteorder::{BigEndian, ReadBytesExt};
 use schemadb::{
     define_schema,

@@ -8,13 +8,12 @@ use admission_control_proto::proto::admission_control::{
 use admission_control_service::admission_control_mock_client::AdmissionControlMockClient;
 use anyhow::{bail, Result};
 use async_trait::async_trait;
-use core::borrow::{Borrow, BorrowMut};
+use core::borrow::{Borrow};
 use futures::channel::oneshot::Sender;
 use futures_timer::Delay;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use libra_config::config::{ConsensusType, NodeConfig};
 use libra_logger::prelude::*;
-use libra_prost_ext::MessageExt;
 use libra_types::access_path::AccessPath;
 use libra_types::contract_event::EventWithProof;
 use libra_types::crypto_proxies::LedgerInfoWithSignatures;
@@ -32,8 +31,6 @@ use libra_types::{
 use sgtypes::account_state::AccountState;
 use std::{
     convert::TryInto,
-    fs::File,
-    io::Write,
     sync::Arc,
     time::{Duration, Instant},
 };
