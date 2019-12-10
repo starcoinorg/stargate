@@ -1,4 +1,5 @@
 use crate::vertex::{Type, Vertex};
+use failure::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Represents a uniquely identifiable key to an edge.
@@ -23,14 +24,14 @@ impl Edge {
         }
     }
 
-    pub fn from_vertexes(mut ids: Vec<Vertex>) -> Self {
-        assert_eq!(ids.len(), 2);
+    pub fn from_vertexes(mut ids: Vec<Vertex>) -> Result<Self> {
+        ensure!(ids.len() == 2, "balances len should be 2");
         let t = Type("BI".to_string());
 
-        Self {
+        Ok(Self {
             outbound_id: ids.remove(0),
             t,
             inbound_id: ids.remove(0),
-        }
+        })
     }
 }
