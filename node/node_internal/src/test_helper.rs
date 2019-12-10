@@ -10,6 +10,7 @@ use futures_01::future::Future;
 use libra_crypto::{test_utils::KeyPair, Uniform};
 use libra_tools::tempdir::TempPath;
 use libra_types::account_address::AccountAddress;
+use router::Router;
 use sg_config::config::NetworkConfig;
 use sgchain::star_chain_client::{faucet_sync, MockChainClient};
 use sgwallet::wallet::*;
@@ -32,6 +33,9 @@ pub fn gen_node(
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     faucet_sync(client.as_ref().clone(), account_address, amount).unwrap();
     let store_path = TempPath::new();
+
+    let mut router = Router::new(client.clone(), executor.clone());
+
     let mut wallet =
         Wallet::new_with_client(account_address, keypair.clone(), client, store_path.path())
             .unwrap();
@@ -47,6 +51,9 @@ pub fn gen_node(
 
     let (network, tx, rx, close_tx) = build_network_service(config, keypair.clone());
     let _identify = network.identify();
+
+    router.start().unwrap();
+
     thread::sleep(Duration::from_millis(1000));
     (
         Node::new(
@@ -57,6 +64,7 @@ pub fn gen_node(
             rx,
             close_tx,
             auto_approve,
+            router,
         ),
         account_address,
     )

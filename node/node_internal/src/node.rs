@@ -34,6 +34,7 @@ use futures_01::sync::{
     mpsc::{UnboundedReceiver, UnboundedSender},
     oneshot,
 };
+use router::Router;
 use sgtypes::sg_error::{SgError, SgErrorCode};
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 
@@ -62,6 +63,7 @@ struct NodeInner {
     network_service: NetworkService,
     auto_approve: bool,
     invoice_mgr: InvoiceManager,
+    router: Router,
 }
 
 impl Node {
@@ -73,6 +75,7 @@ impl Node {
         receiver: UnboundedReceiver<NetworkMessage>,
         net_close_tx: oneshot::Sender<()>,
         auto_approve: bool,
+        router: Router,
     ) -> Self {
         let executor_clone = executor.clone();
         let (event_sender, event_receiver) = futures_01::sync::mpsc::unbounded();
@@ -92,6 +95,7 @@ impl Node {
             network_service: network_service.clone(),
             auto_approve,
             invoice_mgr: invoice_mgr.clone(),
+            router,
         };
         Self {
             network_service,
@@ -587,6 +591,7 @@ impl Node {
                 _ = event_receiver.select_next_some() => {
                     debug!("To shutdown network");
                     let _ = network_service_close_tx.send(());
+                    node_inner.shutdown().await;
                     break;
                 }
             }
@@ -602,6 +607,10 @@ impl Node {
 }
 
 impl NodeInner {
+    async fn shutdown(&self) {
+        self.router.shutdown().await;
+    }
+
     async fn handle_network_msg(&mut self, msg: NetworkMessage) {
         info!("receive message ");
         let peer_id = msg.peer_id;
@@ -1004,6 +1013,28 @@ impl NodeInner {
         timeout: u64,
         responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
     ) {
+        let path = self
+            .router
+            .find_path_by_addr(self.wallet.account(), receiver_address)
+            .await;
+        match path {
+            Ok(Some(v)) => {
+                info!("path is {:?}", v);
+            }
+            _ => {
+                let err = SgError::new(
+                    SgErrorCode::NOT_PATH,
+                    format!(
+                        "could not find path ,from {} to {}",
+                        self.wallet.account(),
+                        receiver_address
+                    ),
+                );
+                respond_with(responder, Err(err.into()));
+                return;
+            }
+        };
+
         match self
             .wallet
             .send_payment(receiver_address, amount, hash_lock, timeout)
@@ -1018,7 +1049,7 @@ impl NodeInner {
                 ),
             ),
             Err(e) => respond_with(responder, Err(e)),
-        }
+        };
     }
 
     async fn execute_script(

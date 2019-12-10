@@ -77,7 +77,7 @@ impl Router {
         result
     }
 
-    async fn find_path_by_addr(
+    pub async fn find_path_by_addr(
         &self,
         start: AccountAddress,
         end: AccountAddress,
@@ -87,7 +87,7 @@ impl Router {
         self.find_path(start_node, end_node).await
     }
 
-    async fn shutdown(&self) {
+    pub async fn shutdown(&self) {
         self.control_sender.unbounded_send(Event::SHUTDOWN).unwrap()
     }
 

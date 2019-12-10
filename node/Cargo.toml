@@ -30,6 +30,7 @@ sgtypes = { path = "../sgtypes" }
 sgchain = { path = "../sgchain"}
 libra-crypto = { path = "../libra/crypto/crypto"}
 libra-wallet = { path = "../libra/client/libra_wallet"}
+router = { path = "../router" }
 
 prost = "0.5.0"
 failure = { path = "../libra/common/failure-ext", package = "libra-failure-ext"  }
