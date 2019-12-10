@@ -48,8 +48,8 @@ pub fn parse_htlc_hash_lock(args: &[TransactionArgument]) -> Result<HashValue> {
 
 /// get preimage value from `args` which should be the args of `ChannelScript.receive_payment`
 pub fn parse_htlc_preimage(args: &[TransactionArgument]) -> Result<HashValue> {
-    ensure!(args.len() == 2, "receive_payment should have 2 args");
-    match &args[1] {
+    ensure!(args.len() == 1, "receive_payment should have 1 args");
+    match &args[0] {
         TransactionArgument::ByteArray(d) => HashValue::from_slice(d.as_bytes()),
         _ => bail!("the 2th arg of receive_payment should be byte array"),
     }
