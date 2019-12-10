@@ -28,6 +28,7 @@ use sgwallet::wallet::Wallet;
 
 use crate::message_processor::{MessageFuture, MessageProcessor};
 
+use crate::invoice::{Invoice, InvoiceManager};
 use crate::node_command::NodeMessage;
 use futures_01::sync::{
     mpsc::{UnboundedReceiver, UnboundedSender},
@@ -48,6 +49,7 @@ pub struct Node {
     command_receiver: Option<UnboundedReceiver<NodeMessage>>,
     network_service_close_tx: Option<oneshot::Sender<()>>,
     wallet: Arc<Wallet>,
+    invoice_mgr: InvoiceManager,
 }
 
 struct NodeInner {
@@ -59,6 +61,7 @@ struct NodeInner {
     default_future_timeout: u64,
     network_service: NetworkService,
     auto_approve: bool,
+    invoice_mgr: InvoiceManager,
 }
 
 impl Node {
@@ -76,6 +79,9 @@ impl Node {
         let (command_sender, command_receiver) = futures_01::sync::mpsc::unbounded();
 
         let wallet_arc = Arc::new(wallet);
+
+        let invoice_mgr = InvoiceManager::new();
+
         let node_inner = NodeInner {
             executor: executor_clone,
             wallet: wallet_arc.clone(),
@@ -85,6 +91,7 @@ impl Node {
             default_future_timeout: 20000,
             network_service: network_service.clone(),
             auto_approve,
+            invoice_mgr: invoice_mgr.clone(),
         };
         Self {
             network_service,
@@ -98,6 +105,7 @@ impl Node {
             command_receiver: Some(command_receiver),
             network_service_close_tx: Some(net_close_tx),
             wallet: wallet_arc,
+            invoice_mgr,
         }
     }
 
@@ -296,6 +304,31 @@ impl Node {
             .unbounded_send(NodeMessage::ChannelPay {
                 receiver_address,
                 amount,
+                responder,
+            })?;
+
+        resp_receiver.await?
+    }
+
+    pub async fn off_chain_pay_htlc_async(
+        &self,
+        receiver_address: AccountAddress,
+        amount: u64,
+        hash_lock: Vec<u8>,
+        timeout: u64,
+    ) -> Result<MessageFuture<u64>> {
+        let is_receiver_connected = self.network_service.is_connected(receiver_address);
+        if !is_receiver_connected {
+            bail!("could not connect to receiver")
+        }
+
+        let (responder, resp_receiver) = futures::channel::oneshot::channel();
+        self.command_sender
+            .unbounded_send(NodeMessage::ChannelPayHTLC {
+                receiver_address,
+                amount,
+                hash_lock,
+                timeout,
                 responder,
             })?;
 
@@ -513,6 +546,10 @@ impl Node {
         }
     }
 
+    pub async fn add_invoice(&self) -> Result<Invoice> {
+        Ok(self.invoice_mgr.new_invoice(self.wallet.account()).await)
+    }
+
     async fn start(
         mut node_inner: NodeInner,
         receiver: UnboundedReceiver<NetworkMessage>,
@@ -646,6 +683,16 @@ impl NodeInner {
                 responder,
             } => {
                 self.off_chain_pay(receiver_address, amount, responder)
+                    .await;
+            }
+            NodeMessage::ChannelPayHTLC {
+                receiver_address,
+                amount,
+                hash_lock,
+                timeout,
+                responder,
+            } => {
+                self.off_chain_pay_htlc(receiver_address, amount, hash_lock, timeout, responder)
                     .await;
             }
             NodeMessage::ChannelBalance {
@@ -901,6 +948,31 @@ impl NodeInner {
         responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
     ) {
         match self.wallet.transfer(receiver_address, amount).await {
+            Ok(off_chain_pay_tx) => respond_with(
+                responder,
+                self.send_channel_request(
+                    receiver_address,
+                    off_chain_pay_tx,
+                    MessageType::ChannelTransactionRequest,
+                ),
+            ),
+            Err(e) => respond_with(responder, Err(e)),
+        }
+    }
+
+    async fn off_chain_pay_htlc(
+        &self,
+        receiver_address: AccountAddress,
+        amount: u64,
+        hash_lock: Vec<u8>,
+        timeout: u64,
+        responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
+    ) {
+        match self
+            .wallet
+            .send_payment(receiver_address, amount, hash_lock, timeout)
+            .await
+        {
             Ok(off_chain_pay_tx) => respond_with(
                 responder,
                 self.send_channel_request(

@@ -3,6 +3,7 @@
 
 #![recursion_limit = "1024"]
 
+mod invoice;
 mod message_processor;
 pub mod node;
 mod node_command;
