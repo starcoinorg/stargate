@@ -5,6 +5,7 @@ use failure::prelude::*;
 use futures::lock::Mutex;
 use hex;
 use libra_crypto::HashValue;
+use libra_logger::prelude::*;
 use libra_types::account_address::{AccountAddress, ADDRESS_LENGTH};
 use std::collections::HashMap;
 use std::convert::{From, TryFrom};
@@ -15,9 +16,10 @@ pub struct InvoiceManager {
     r_hash_map: Arc<Mutex<HashMap<Vec<u8>, (Vec<u8>)>>>,
 }
 
+#[derive(Clone, Debug)]
 pub struct Invoice {
-    r_hash: Vec<u8>,
-    receiver: AccountAddress,
+    pub r_hash: Vec<u8>,
+    pub receiver: AccountAddress,
 }
 
 impl Invoice {
@@ -71,10 +73,28 @@ impl InvoiceManager {
         let preimage = HashValue::random().to_vec();
         let r_hash = HashValue::from_sha3_256(preimage.as_slice()).to_vec();
 
+        info!(
+            "preimage is {},r_hash is {}",
+            hex::encode(preimage.clone()),
+            hex::encode(r_hash.clone())
+        );
         self.r_hash_map
             .lock()
             .await
             .insert(r_hash.clone(), preimage.clone());
         Invoice { r_hash, receiver }
+    }
+
+    pub async fn get_preimage(&self, r_hash: HashValue) -> Option<Vec<u8>> {
+        match self.r_hash_map.lock().await.get(&r_hash.to_vec()) {
+            Some(v) => {
+                let mut result = Vec::new();
+                result.extend_from_slice(v);
+                return Some(result);
+            }
+            None => {
+                return None;
+            }
+        };
     }
 }

@@ -304,7 +304,6 @@ pub enum MessageType {
     ErrorMessage,
     BalanceQueryResponse,
     BalanceQueryRequest,
-    PreimageMessage,
 }
 
 impl MessageType {
@@ -316,7 +315,6 @@ impl MessageType {
             MessageType::ErrorMessage => 4,
             MessageType::BalanceQueryResponse => 5,
             MessageType::BalanceQueryRequest => 6,
-            MessageType::PreimageMessage => 7,
         }
     }
 
@@ -328,7 +326,6 @@ impl MessageType {
             4 => Ok(MessageType::ErrorMessage),
             5 => Ok(MessageType::BalanceQueryResponse),
             6 => Ok(MessageType::BalanceQueryRequest),
-            7 => Ok(MessageType::PreimageMessage),
             _ => bail!("no such type"),
         }
     }
@@ -528,46 +525,6 @@ impl From<AntMessage> for crate::proto::sgtypes::AntMessage {
                 .cloned()
                 .map(|v| v.into())
                 .collect(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PreimageMessage {
-    pub preimage: Vec<u8>,
-}
-
-impl PreimageMessage {
-    pub fn new(preimage: Vec<u8>) -> Self {
-        Self { preimage }
-    }
-
-    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
-    where
-        B: IntoBuf,
-    {
-        crate::proto::sgtypes::PreimageMessage::decode(buf)?.try_into()
-    }
-
-    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
-        Ok(TryInto::<crate::proto::sgtypes::PreimageMessage>::try_into(self)?.to_vec()?)
-    }
-}
-
-impl TryFrom<crate::proto::sgtypes::PreimageMessage> for PreimageMessage {
-    type Error = Error;
-
-    fn try_from(value: crate::proto::sgtypes::PreimageMessage) -> Result<Self> {
-        Ok(Self {
-            preimage: value.preimage.try_into()?,
-        })
-    }
-}
-
-impl From<PreimageMessage> for crate::proto::sgtypes::PreimageMessage {
-    fn from(value: PreimageMessage) -> Self {
-        Self {
-            preimage: value.preimage,
         }
     }
 }

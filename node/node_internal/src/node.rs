@@ -24,7 +24,7 @@ use sgtypes::{
     message::*,
     system_event::Event,
 };
-use sgwallet::wallet::Wallet;
+use sgwallet::{utils::*, wallet::Wallet};
 
 use crate::message_processor::{MessageFuture, MessageProcessor};
 
@@ -756,6 +756,7 @@ impl NodeInner {
 
         // sign message ,verify messsage,no send back
         let request_id = open_channel_message.request_id();
+        let operator = open_channel_message.channel_txn().operator();
 
         let receiver_open_txn: ChannelTransactionResponse;
         match self.wallet.verify_txn(peer_id, &open_channel_message).await {
@@ -786,6 +787,41 @@ impl NodeInner {
         }
 
         self.apply_txn(peer_id, request_id, receiver_open_txn).await;
+
+        if is_htlc_transfer(operator) {
+            match parse_htlc_hash_lock(open_channel_message.channel_txn().args()) {
+                Ok(r_hash) => match self.invoice_mgr.get_preimage(r_hash).await {
+                    Some(preimage) => {
+                        let request = self
+                            .wallet
+                            .receive_payment(peer_id, preimage)
+                            .await
+                            .unwrap();
+                        self.send_channel_request(
+                            peer_id,
+                            request,
+                            MessageType::ChannelTransactionRequest,
+                        )
+                        .unwrap();
+                    }
+                    None => {
+                        warn!(
+                            "could not find preimage by rhash {},wait for timeout",
+                            r_hash
+                        );
+                    }
+                },
+                Err(e) => {
+                    warn!("get r_hash error {},wait for timeout", e);
+                    self.sender
+                        .unbounded_send(NetworkMessage {
+                            peer_id,
+                            data: error_message(e, request_id).to_vec(),
+                        })
+                        .unwrap();
+                }
+            }
+        }
     }
 
     async fn apply_txn(

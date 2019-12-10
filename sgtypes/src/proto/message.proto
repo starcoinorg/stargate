@@ -62,7 +62,3 @@ message AntMessage {
     bytes s_value = 1;
     repeated VertexInfo vertex_list= 2;
 }
-
-message PreimageMessage{
-    bytes preimage = 1;
-}
