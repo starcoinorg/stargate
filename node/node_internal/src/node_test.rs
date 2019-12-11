@@ -1,9 +1,8 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::{Error, Result};
-
 use crate::node::Node;
+use anyhow::{Error, Result};
 use libra_crypto::{
     ed25519::Ed25519PrivateKey,
     hash::{CryptoHash, CryptoHasher, TestOnlyHasher},
@@ -17,9 +16,10 @@ use std::time::Duration;
 use tokio::time::delay_for;
 
 #[test]
-fn node_test() -> Result<()> {
+fn node_test_all() -> Result<()> {
     use crate::test_helper::*;
     use futures::compat::Future01CompatExt;
+    use libra_config::utils::get_available_port;
     use libra_logger::prelude::*;
     use sgchain::star_chain_client::MockChainClient;
     use std::sync::Arc;
@@ -31,21 +31,28 @@ fn node_test() -> Result<()> {
 
     let (mock_chain_service, _handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
-    let network_config1 = create_node_network_config("/ip4/127.0.0.1/tcp/5000".to_string(), vec![]);
+    let network_config1 = create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![],
+    );
+
     let (mut node1, addr1) = gen_node(executor.clone(), &network_config1, client.clone(), true);
     node1.start_server();
 
     let addr1_hex = hex::encode(addr1);
 
-    let seed = format!(
-        "{}/p2p/{}",
-        "/ip4/127.0.0.1/tcp/5000".to_string(),
-        addr1_hex
+    let seed = format!("{}/p2p/{}", &network_config1.listen, addr1_hex);
+    let network_config2 = create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![seed],
     );
-    let network_config2 =
-        create_node_network_config("/ip4/127.0.0.1/tcp/5001".to_string(), vec![seed]);
     let (mut node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone(), true);
     node2.start_server();
+
+    let node1 = Arc::new(node1);
+    let node2 = Arc::new(node2);
+    let _node1_clone = node1.clone();
+    let _node2_clone = node2.clone();
 
     let f = async move {
         _delay(Duration::from_millis(1000)).await;
@@ -135,7 +142,7 @@ fn node_test() -> Result<()> {
         Ok::<_, Error>(())
     };
     rt.block_on(f)?;
-
+    drop(rt);
     debug!("here");
     Ok(())
 }
@@ -144,6 +151,7 @@ fn node_test() -> Result<()> {
 fn node_test_approve() -> Result<()> {
     use crate::test_helper::*;
     use futures::compat::Future01CompatExt;
+    use libra_config::utils::get_available_port;
     use libra_logger::prelude::*;
     use sgchain::star_chain_client::MockChainClient;
     use std::sync::Arc;
@@ -155,23 +163,29 @@ fn node_test_approve() -> Result<()> {
 
     let (mock_chain_service, _handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
-    let network_config1 = create_node_network_config("/ip4/127.0.0.1/tcp/5000".to_string(), vec![]);
+    let network_config1 = create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![],
+    );
+
     let (mut node1, addr1) = gen_node(executor.clone(), &network_config1, client.clone(), false);
     node1.start_server();
 
     let addr1_hex = hex::encode(addr1);
 
-    let seed = format!(
-        "{}/p2p/{}",
-        "/ip4/127.0.0.1/tcp/5000".to_string(),
-        addr1_hex
+    let seed = format!("{}/p2p/{}", &network_config1.listen, addr1_hex);
+
+    let network_config2 = create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![seed],
     );
-    let network_config2 =
-        create_node_network_config("/ip4/127.0.0.1/tcp/5001".to_string(), vec![seed]);
     let (mut node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone(), true);
     node2.start_server();
 
     let node1 = Arc::new(node1);
+    let node2 = Arc::new(node2);
+    let _node1_clone = node1.clone();
+    let _node2_clone = node2.clone();
 
     let f = async move {
         _delay(Duration::from_millis(1000)).await;
@@ -210,7 +224,7 @@ fn node_test_approve() -> Result<()> {
         Ok::<_, Error>(())
     };
     rt.block_on(f)?;
-
+    drop(rt);
     debug!("here");
     Ok(())
 }
@@ -219,34 +233,40 @@ fn node_test_approve() -> Result<()> {
 fn node_test_reject() -> Result<()> {
     use crate::test_helper::*;
     use futures::compat::Future01CompatExt;
+    use libra_config::utils::get_available_port;
     use libra_logger::prelude::*;
     use sgchain::star_chain_client::MockChainClient;
     use std::sync::Arc;
     use tokio::runtime::Runtime;
-
     libra_logger::init_for_e2e_testing();
     let mut rt = Runtime::new().unwrap();
     let executor = rt.handle().clone();
 
     let (mock_chain_service, _handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
-    let network_config1 = create_node_network_config("/ip4/127.0.0.1/tcp/5000".to_string(), vec![]);
+    let network_config1 = create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![],
+    );
+
     let (mut node1, addr1) = gen_node(executor.clone(), &network_config1, client.clone(), false);
     node1.start_server();
 
     let addr1_hex = hex::encode(addr1);
 
-    let seed = format!(
-        "{}/p2p/{}",
-        "/ip4/127.0.0.1/tcp/5000".to_string(),
-        addr1_hex
+    let seed = format!("{}/p2p/{}", &network_config1.listen, addr1_hex);
+
+    let network_config2 = create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![seed],
     );
-    let network_config2 =
-        create_node_network_config("/ip4/127.0.0.1/tcp/5001".to_string(), vec![seed]);
     let (mut node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone(), true);
     node2.start_server();
 
     let node1 = Arc::new(node1);
+    let node2 = Arc::new(node2);
+    let _node1_clone = node1.clone();
+    let _node2_clone = node2.clone();
 
     let f = async move {
         _delay(Duration::from_millis(1000)).await;
@@ -285,7 +305,7 @@ fn node_test_reject() -> Result<()> {
         Ok::<_, Error>(())
     };
     rt.block_on(f)?;
-
+    drop(rt);
     debug!("here");
     Ok(())
 }

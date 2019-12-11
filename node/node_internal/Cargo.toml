@@ -38,3 +38,4 @@ libra-tools = {path ="../../libra/common/tools", package = "libra-tools"}
 
 [dev-dependencies]
 env_logger = { version = "0.6" }
+libra-config = { path = "../../libra/config"}
