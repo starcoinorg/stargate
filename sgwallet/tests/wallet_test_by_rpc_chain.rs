@@ -35,7 +35,6 @@ rusty_fork_test! {
 }
 
 #[test]
-#[ignore]
 fn run_test_wallet_transfer_htlc() {
     let result = run_with_rpc_client(|chain_client| {
         with_wallet(chain_client, |rt, sender, receiver| {
@@ -49,7 +48,6 @@ fn run_test_wallet_transfer_htlc() {
 }
 
 #[test]
-#[ignore]
 fn run_test_wallet_with_rpc_client() {
     if let Err(e) = run_with_rpc_client(|chain_client| {
         with_wallet(chain_client, |rt, sender, receiver| {
@@ -62,7 +60,6 @@ fn run_test_wallet_with_rpc_client() {
 }
 
 #[test]
-#[ignore]
 fn run_deploy_custom_module_by_rpc_client() {
     if let Err(e) = run_with_rpc_client(|chain_client| test_deploy_custom_module(chain_client)) {
         error!("err: {:#?}", e);
@@ -71,7 +68,6 @@ fn run_deploy_custom_module_by_rpc_client() {
 }
 
 #[test]
-#[ignore]
 fn run_test_channel_event_watcher() {
     if let Err(e) = run_with_rpc_client(|chain_client| {
         common::with_wallet(chain_client, |rt, sender, receiver| {

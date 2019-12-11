@@ -17,7 +17,6 @@ use std::time::Duration;
 use tokio::time::delay_for;
 
 #[test]
-#[ignore]
 fn node_test() -> Result<()> {
     use crate::test_helper::*;
     use futures::compat::Future01CompatExt;
@@ -142,7 +141,6 @@ fn node_test() -> Result<()> {
 }
 
 #[test]
-#[ignore]
 fn node_test_approve() -> Result<()> {
     use crate::test_helper::*;
     use futures::compat::Future01CompatExt;
@@ -218,7 +216,6 @@ fn node_test_approve() -> Result<()> {
 }
 
 #[test]
-#[ignore]
 fn node_test_reject() -> Result<()> {
     use crate::test_helper::*;
     use futures::compat::Future01CompatExt;
