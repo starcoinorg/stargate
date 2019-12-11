@@ -6,7 +6,7 @@ use anyhow::bail;
 use anyhow::Result;
 use futures::channel::mpsc;
 use futures::channel::oneshot;
-use futures::{SinkExt, StreamExt};
+use futures::{FutureExt, SinkExt, StreamExt};
 use libra_logger::prelude::*;
 use libra_types::transaction::Transaction;
 use sgchain::star_chain_client::ChainClient;
@@ -44,7 +44,7 @@ impl ChainWatcher {
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
         let handle = ChainWatcherHandle {
             mail_sender: self.mailbox_sender.clone(),
-            shutdown_tx,
+            shutdown_tx: Some(shutdown_tx),
         };
         let txn_stream = txn_stream::TxnStream::new_from_chain_client(
             self.chain_client.clone(),
@@ -59,7 +59,7 @@ impl ChainWatcher {
 
 pub struct ChainWatcherHandle {
     mail_sender: mpsc::Sender<InnerMsg>,
-    shutdown_tx: oneshot::Sender<()>,
+    shutdown_tx: Option<oneshot::Sender<()>>,
 }
 
 impl ChainWatcherHandle {
@@ -85,8 +85,18 @@ impl ChainWatcherHandle {
         call(self.mail_sender.clone(), Request::RemoveInterest { tag }).await?;
         Ok(())
     }
+
+    pub fn stop(&mut self) {
+        // if send return err, it means receiver already dropped.
+        if let Some(tx) = self.shutdown_tx.take() {
+            if let Err(_) = tx.send(()) {
+                warn!("receiver end of shutdown is already dropped");
+            }
+        }
+    }
 }
 
+#[derive(Debug)]
 enum Msg<ReqT, RespT> {
     Call {
         msg: ReqT,
@@ -107,6 +117,7 @@ enum Request {
         tag: Vec<u8>,
     },
 }
+#[derive(Debug)]
 enum Response {
     AddInterestResp,
     RemoveInterestResp,
@@ -115,8 +126,9 @@ enum Response {
 type InnerMsg = Msg<Request, Response>;
 
 impl ChainWatcher {
-    async fn inner_start(mut self, txn_stream: TxnStream, _shutdown_rx: oneshot::Receiver<()>) {
+    async fn inner_start(mut self, txn_stream: TxnStream, shutdown_rx: oneshot::Receiver<()>) {
         let mut fused_txn_stream = txn_stream.fuse();
+        let mut fused_shutdown_tx = shutdown_rx.fuse();
         loop {
             futures::select! {
                 maybe_msg = self.mailbox.next() => {
@@ -129,8 +141,13 @@ impl ChainWatcher {
                         self.handle_txn(txn).await;
                     }
                 }
+                _ = fused_shutdown_tx => {
+                    break;
+                }
             }
         }
+
+        info!("chain watcher terminated");
     }
 
     async fn handle_txn(&mut self, txn: Result<Transaction>) {
