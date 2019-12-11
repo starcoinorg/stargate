@@ -97,6 +97,27 @@ fn node_test_all() -> Result<()> {
         );
 
         let transfer_amount = 1_000;
+
+        let invoice = node1.add_invoice().await.unwrap();
+        node2
+            .off_chain_pay_htlc_async(addr1, transfer_amount, invoice.r_hash, 1000)
+            .await
+            .unwrap()
+            .compat()
+            .await
+            .unwrap();
+
+        info!("sender is {}", addr2);
+        _delay(Duration::from_millis(500)).await;
+        assert_eq!(
+            node2.channel_balance_async(addr1).await.unwrap(),
+            fund_amount - transfer_amount + deposit_amount
+        );
+        assert_eq!(
+            node1.channel_balance_async(addr2).await.unwrap(),
+            fund_amount + transfer_amount
+        );
+
         let offchain_txn = node2
             .off_chain_pay_async(addr1, transfer_amount)
             .await
@@ -109,11 +130,11 @@ fn node_test_all() -> Result<()> {
         _delay(Duration::from_millis(500)).await;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
-            fund_amount - transfer_amount + deposit_amount
+            fund_amount - transfer_amount * 2 + deposit_amount
         );
         assert_eq!(
             node1.channel_balance_async(addr2).await.unwrap(),
-            fund_amount + transfer_amount
+            fund_amount + transfer_amount * 2
         );
 
         let wd_amount = 10000;
@@ -128,11 +149,11 @@ fn node_test_all() -> Result<()> {
         _delay(Duration::from_millis(500)).await;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
-            fund_amount - transfer_amount - wd_amount + deposit_amount
+            fund_amount - transfer_amount * 2 - wd_amount + deposit_amount
         );
         assert_eq!(
             node1.channel_balance_async(addr2).await.unwrap(),
-            fund_amount + transfer_amount
+            fund_amount + transfer_amount * 2
         );
 
         node1.wallet().stop().await?;

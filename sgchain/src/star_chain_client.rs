@@ -347,6 +347,13 @@ where
     ()
 }
 
+pub async fn faucet_async_2<C>(client: C, receiver: AccountAddress, amount: u64) -> Result<()>
+where
+    C: 'static + ChainClient,
+{
+    client.faucet(receiver, amount).await
+}
+
 pub fn submit_txn_async<C>(client: C, executor: Handle, txn: SignedTransaction)
 where
     C: 'static + ChainClient,
@@ -425,10 +432,10 @@ pub fn gen_node_config_with_genesis(
                 .unwrap()
                 .listen_address(addr);
             let (peer, peer_info) = conf.validator_network.as_ref().unwrap().get_peer_info();
-            conf
-                .validator_network
+            conf.validator_network
                 .as_mut()
-                .unwrap().add_seed(peer, addr);
+                .unwrap()
+                .add_seed(peer, addr);
         }
         _ => {}
     }
