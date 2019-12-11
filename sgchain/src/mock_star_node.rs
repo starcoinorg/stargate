@@ -151,10 +151,8 @@ fn commit_block(
     handle: Handle,
 ) -> Sender<()> {
     let (shutdown_sender, mut shutdown_receiver) = oneshot::channel::<()>();
-    println!("-----------00000000--------->");
     let task = async {
         let mut height = 1;
-        println!("-----------222222--------->");
         interval(Duration::from_secs(3))
             .take_while(move |_| match shutdown_receiver.try_recv() {
                 Err(_) | Ok(Some(_)) => {
@@ -165,7 +163,6 @@ fn commit_block(
             })
             .for_each(move |_| {
                 let txns = mempool_client.get_block(1, HashSet::new());
-                println!("-----------11111111--------->{}", txns.len());
                 //debug!("for_each");
                 debug!("txn size: {:?} of current block.", txns.len());
 

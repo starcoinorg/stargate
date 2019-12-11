@@ -252,7 +252,6 @@ fn print_ports(config: &NodeConfig) {
 //}
 
 #[test]
-#[ignore]
 fn test_pow_node() -> Result<()> {
     ::libra_logger::init_for_e2e_testing();
     let mut conf_1 = gen_node_config_with_genesis(1, true, true, Some("/memory/0"));
@@ -348,7 +347,6 @@ fn create_keypair() -> KeyPair<Ed25519PrivateKey, Ed25519PublicKey> {
 }
 
 #[test]
-#[ignore]
 fn test_pow_single_node() {
     ::libra_logger::init_for_e2e_testing();
     let mut conf_1 = gen_node_config_with_genesis(1, true, true, Some("/memory/0"));
@@ -372,7 +370,6 @@ fn test_pow_single_node() {
 }
 
 #[test]
-#[ignore]
 fn test_pbft_single_node() {
     ::libra_logger::init_for_e2e_testing();
     let mut config = gen_node_config_with_genesis(1, true, false, None);
@@ -397,7 +394,6 @@ fn test_pbft_single_node() {
 }
 
 #[test]
-#[ignore]
 fn test_validator_nodes() {
     let node_conf_1 = NodeConfig::random();
     let node_conf_2 = NodeConfig::random();
@@ -406,7 +402,6 @@ fn test_validator_nodes() {
 }
 
 #[test]
-#[ignore]
 fn test_rollback_block() {
     ::libra_logger::init_for_e2e_testing();
     let mut conf_1 = gen_node_config_with_genesis(1, true, true, Some("/memory/0"));
@@ -431,7 +426,6 @@ fn test_rollback_block() {
 }
 
 #[test]
-#[ignore]
 fn test_coin_base() {
     ::libra_logger::init_for_e2e_testing();
     let mut conf_1 = gen_node_config_with_genesis(1, true, true, Some("/memory/0"));
