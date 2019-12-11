@@ -939,9 +939,9 @@ impl Inner {
                         error!("fail to stop channel {}, err: {}", &channel_address, e);
                     }
                 }
-                if let Some(_rt) = self.runtime.take() {
-                    let handle = thread::spawn(|| {
-                        //TODO:shutdown
+                if let Some(rt) = self.runtime.take() {
+                    let handle = thread::spawn(move || {
+                        drop(rt);
                     });
                     if let Err(e) = handle.join() {
                         error!("fail to shutdown wallet runtime, e: {:#?}", e)

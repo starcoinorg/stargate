@@ -11,7 +11,7 @@ pub fn run_node(
 ) -> (NodeConfig, Option<GlobalLoggerGuard>, LibraHandle) {
     let (mut config, logger) = setup_executable(config, no_logging);
     if random_ports {
-        config.randomize_ports();
+        config.randomize_ports_with_network(true);
     }
     debug!("config : {:?}", config);
     crate::star_chain_client::genesis_blob(&mut config);
