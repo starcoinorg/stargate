@@ -62,3 +62,13 @@ message AntMessage {
     bytes s_value = 1;
     repeated VertexInfo vertex_list= 2;
 }
+
+message NextHop {
+    bytes remote_addr = 1;
+    uint64 amount = 2;
+}
+
+message MultiHopChannelRequest{
+    ChannelTransactionRequest request = 1;
+    repeated NextHop hops = 2;
+}
