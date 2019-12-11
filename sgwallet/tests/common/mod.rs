@@ -14,7 +14,6 @@ use sgchain::star_chain_client::ChainClient;
 use sgwallet::wallet::Wallet;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
-
 pub fn setup_wallet(client: Arc<dyn ChainClient>, init_balance: u64) -> Result<Wallet> {
     let mut seed_rng = rand::rngs::OsRng::new().expect("can't access OsRng");
     let seed_buf: [u8; 32] = seed_rng.gen();
@@ -70,7 +69,7 @@ where
     let res = f(&mut rt, sender_wallet.clone(), receiver_wallet.clone());
     rt.block_on(sender_wallet.stop())?;
     rt.block_on(receiver_wallet.stop())?;
-    //rt.shutdown_on_idle();
+    drop(rt);
     res
 }
 
