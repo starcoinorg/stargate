@@ -1,7 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-//use failure::prelude::*;
+//use anyhow::Result;
 use anyhow::Result;
 use libra_types::account_address::AccountAddress;
 use network_libp2p::PeerId;

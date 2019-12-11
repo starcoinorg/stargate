@@ -1,8 +1,7 @@
-use failure::prelude::*;
+use anyhow::{ensure, Error, Result};
 
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::channel::oneshot;
-use futures::prelude::*;
 use graphdb::{edge::Edge, graph_store::GraphStore, vertex::Vertex};
 use libra_crypto::{test_utils::KeyPair, Uniform};
 use libra_logger::prelude::*;
@@ -15,16 +14,15 @@ use sgtypes::system_event::Event;
 use sgwallet::wallet::Wallet;
 use sgwallet::{get_channel_events, ChannelChangeEvent};
 use std::collections::HashMap;
-use std::time::Instant;
 use std::{
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tokio::runtime::TaskExecutor;
+use tokio::runtime::Handle;
 
 pub struct Router {
     inner: Option<RouterInner>,
-    executor: TaskExecutor,
+    executor: Handle,
     sender: UnboundedSender<RouterMessage>,
     control_sender: UnboundedSender<Event>,
 }
@@ -45,7 +43,7 @@ enum RouterMessage {
 }
 
 impl Router {
-    pub fn new(chain_client: Arc<dyn ChainClient>, executor: TaskExecutor) -> Self {
+    pub fn new(chain_client: Arc<dyn ChainClient>, executor: Handle) -> Self {
         let (sender, receiver) = futures::channel::mpsc::unbounded();
         let (control_sender, control_receiver) = futures::channel::mpsc::unbounded();
         let inner = RouterInner {
@@ -212,8 +210,8 @@ fn router_test() {
     use tokio::runtime::Runtime;
 
     libra_logger::init_for_e2e_testing();
-    let rt = Runtime::new().unwrap();
-    let executor = rt.executor();
+    let mut rt = Runtime::new().unwrap();
+    let executor = rt.handle();
 
     let (mock_chain_service, _handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
@@ -248,13 +246,12 @@ fn router_test() {
     };
 
     rt.block_on(f).unwrap();
-    rt.shutdown_on_idle();
 
     debug!("here");
 }
 
 async fn _gen_wallet(
-    executor: TaskExecutor,
+    executor: Handle,
     client: Arc<MockChainClient>,
 ) -> Result<(Arc<Wallet>, AccountAddress)> {
     let amount: u64 = 10_000_000;
@@ -267,13 +264,12 @@ async fn _gen_wallet(
         Wallet::new_with_client(account_address, keypair.clone(), client, store_path.path())
             .unwrap();
     wallet.enable_channel().await.unwrap();
-    wallet.start(executor).unwrap();
+    wallet.start(&executor).unwrap();
     Ok((Arc::new(wallet), account_address))
 }
 
 async fn _delay(duration: Duration) {
-    let timeout_time = Instant::now() + duration;
-    tokio::timer::delay(timeout_time).await;
+    tokio::time::delay_for(duration).await;
 }
 
 async fn _open_channel(

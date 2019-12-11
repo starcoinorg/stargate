@@ -1,5 +1,5 @@
 use crate::vertex::{Type, Vertex};
-use failure::prelude::*;
+use anyhow::{ensure, Result};
 use serde::{Deserialize, Serialize};
 
 /// Represents a uniquely identifiable key to an edge.

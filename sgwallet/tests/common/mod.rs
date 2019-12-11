@@ -73,6 +73,7 @@ where
     res
 }
 
+#[allow(dead_code)]
 pub async fn send_payment(
     sender_wallet: Arc<Wallet>,
     receiver_wallet: Arc<Wallet>,
@@ -99,6 +100,7 @@ pub async fn send_payment(
     Ok(sender_gas)
 }
 
+#[allow(dead_code)]
 pub async fn receive_payment(
     sender_wallet: Arc<Wallet>,
     receiver_wallet: Arc<Wallet>,
