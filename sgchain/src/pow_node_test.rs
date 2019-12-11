@@ -244,14 +244,13 @@ fn print_ports(config: &NodeConfig) {
     debug!("{}", config.storage.port);
 }
 
-//rusty_fork_test! {
-//    #[test]
-//    fn test_pow_with_fork() {
-//        test_pow_node().unwrap();
-//    }
-//}
+rusty_fork_test! {
+    #[test]
+    fn test_pow_with_fork() {
+        test_pow_node().unwrap();
+    }
+}
 
-#[test]
 fn test_pow_node() -> Result<()> {
     ::libra_logger::init_for_e2e_testing();
     let memory_address = "/memory/0";
@@ -264,10 +263,6 @@ fn test_pow_node() -> Result<()> {
         .as_mut()
         .unwrap()
         .add_peer(peer_2, peer_info_2);
-    conf_1
-        .validator_network
-        .as_mut()
-        .unwrap().add_seed(peer_2, memory_address);
     conf_2
         .validator_network
         .as_mut()
@@ -276,7 +271,8 @@ fn test_pow_node() -> Result<()> {
     conf_2
         .validator_network
         .as_mut()
-        .unwrap().add_seed(peer_1, memory_address);
+        .unwrap()
+        .add_seed(peer_1, "/memory/1");
     print_ports(&conf_1);
     debug!("conf1:{:?}", conf_1);
     debug!("conf2:{:?}", conf_2);
