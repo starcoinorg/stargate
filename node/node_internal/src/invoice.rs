@@ -87,7 +87,7 @@ impl InvoiceManager {
         Invoice { r_hash, receiver }
     }
 
-    pub async fn get_preimage(&self, r_hash: HashValue) -> Option<Vec<u8>> {
+    pub async fn get_preimage(&self, r_hash: &HashValue) -> Option<Vec<u8>> {
         match self.r_hash_map.lock().await.get(&r_hash.to_vec()) {
             Some(v) => {
                 let mut result = Vec::new();

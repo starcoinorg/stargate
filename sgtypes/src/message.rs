@@ -305,6 +305,7 @@ pub enum MessageType {
     ErrorMessage,
     BalanceQueryResponse,
     BalanceQueryRequest,
+    MultiHopChannelTransactionRequest,
 }
 
 impl MessageType {
@@ -316,6 +317,7 @@ impl MessageType {
             MessageType::ErrorMessage => 4,
             MessageType::BalanceQueryResponse => 5,
             MessageType::BalanceQueryRequest => 6,
+            MessageType::MultiHopChannelTransactionRequest => 7,
         }
     }
 
@@ -327,6 +329,7 @@ impl MessageType {
             4 => Ok(MessageType::ErrorMessage),
             5 => Ok(MessageType::BalanceQueryResponse),
             6 => Ok(MessageType::BalanceQueryRequest),
+            7 => Ok(MessageType::MultiHopChannelTransactionRequest),
             _ => bail!("no such type"),
         }
     }
