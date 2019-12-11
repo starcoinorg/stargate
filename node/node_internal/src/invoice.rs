@@ -14,6 +14,7 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct InvoiceManager {
     r_hash_map: Arc<Mutex<HashMap<Vec<u8>, (Vec<u8>)>>>,
+    r_hash_previous_hop_map: Arc<Mutex<HashMap<Vec<u8>, AccountAddress>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -66,6 +67,7 @@ impl InvoiceManager {
     pub fn new() -> Self {
         Self {
             r_hash_map: Arc::new(Mutex::new(HashMap::new())),
+            r_hash_previous_hop_map: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -91,6 +93,31 @@ impl InvoiceManager {
                 let mut result = Vec::new();
                 result.extend_from_slice(v);
                 return Some(result);
+            }
+            None => {
+                return None;
+            }
+        };
+    }
+
+    pub async fn add_previous_hop(&self, r_hash: HashValue, previous_addr: AccountAddress) {
+        self.r_hash_previous_hop_map
+            .lock()
+            .await
+            .insert(r_hash.to_vec(), previous_addr);
+    }
+
+    pub async fn get_previous_hop(&self, preimage: Vec<u8>) -> Option<AccountAddress> {
+        let r_hash = HashValue::from_sha3_256(preimage.as_slice()).to_vec();
+
+        match self
+            .r_hash_previous_hop_map
+            .lock()
+            .await
+            .get(&r_hash.to_vec())
+        {
+            Some(v) => {
+                return Some(v.clone());
             }
             None => {
                 return None;
