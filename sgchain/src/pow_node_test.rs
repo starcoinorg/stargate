@@ -277,7 +277,6 @@ fn test_pow_node() -> Result<()> {
         .validator_network
         .as_mut()
         .unwrap().add_seed(peer_1, memory_address);
-
     print_ports(&conf_1);
     debug!("conf1:{:?}", conf_1);
     debug!("conf2:{:?}", conf_2);
