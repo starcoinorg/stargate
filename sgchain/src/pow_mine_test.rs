@@ -20,7 +20,7 @@ mod test {
         }
         let (tx, rx) = oneshot::channel();
         task::spawn(async move {
-            for i in 0..2 {
+            for i in 0..12 {
                 let (rx, _tx) = mine_state.mine_block(vec![i; 32]);
                 let proof = rx.recv().await.unwrap();
                 let target = proof.target;
