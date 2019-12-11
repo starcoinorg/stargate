@@ -254,20 +254,29 @@ fn print_ports(config: &NodeConfig) {
 #[test]
 fn test_pow_node() -> Result<()> {
     ::libra_logger::init_for_e2e_testing();
-    let mut conf_1 = gen_node_config_with_genesis(1, true, true, Some("/memory/0"));
+    let memory_address = "/memory/0";
+    let mut conf_1 = gen_node_config_with_genesis(1, true, true, Some(memory_address));
     let (peer_1, peer_info_1) = conf_1.validator_network.as_ref().unwrap().get_peer_info();
-    let mut conf_2 = gen_node_config_with_genesis(2, true, true, Some("/memory/0"));
+    let mut conf_2 = gen_node_config_with_genesis(2, true, true, Some(memory_address));
     let (peer_2, peer_info_2) = conf_2.validator_network.as_ref().unwrap().get_peer_info();
     conf_1
         .validator_network
         .as_mut()
         .unwrap()
         .add_peer(peer_2, peer_info_2);
+    conf_1
+        .validator_network
+        .as_mut()
+        .unwrap().add_seed(peer_2, memory_address);
     conf_2
         .validator_network
         .as_mut()
         .unwrap()
         .add_peer(peer_1, peer_info_1);
+    conf_2
+        .validator_network
+        .as_mut()
+        .unwrap().add_seed(peer_1, memory_address);
 
     print_ports(&conf_1);
     debug!("conf1:{:?}", conf_1);
