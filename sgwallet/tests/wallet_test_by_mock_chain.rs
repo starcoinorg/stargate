@@ -88,85 +88,139 @@ fn run_test_gobang() -> Result<()> {
     run_with_mock_client(|chain_client| {
         common::with_wallet(chain_client, |rt, alice, bob| {
             rt.block_on(async move {
-                deploy_custom_module_and_script(alice.clone(), bob.clone(), "test_gobang").await
+                deploy_custom_module_and_script(alice.clone(), bob.clone(), "test_gobang").await?;
+                common::open_channel(alice.clone(), bob.clone(), 100, 100).await?;
+
+                common::execute_script(
+                    alice.clone(),
+                    bob.clone(),
+                    "scripts",
+                    "new",
+                    vec![TransactionArgument::Address(bob.account())],
+                )
+                .await?;
+                common::execute_script(bob.clone(), alice.clone(), "scripts", "join", vec![])
+                    .await?;
+                common::execute_script(
+                    alice.clone(),
+                    bob.clone(),
+                    "scripts",
+                    "play",
+                    vec![
+                        TransactionArgument::Address(bob.account()),
+                        TransactionArgument::U64(2),
+                        TransactionArgument::U64(2),
+                    ],
+                )
+                .await?;
+                common::execute_script(
+                    bob.clone(),
+                    alice.clone(),
+                    "scripts",
+                    "play",
+                    vec![
+                        TransactionArgument::Address(alice.account()),
+                        TransactionArgument::U64(3),
+                        TransactionArgument::U64(2),
+                    ],
+                )
+                .await?;
+                common::execute_script(
+                    alice.clone(),
+                    bob.clone(),
+                    "scripts",
+                    "play",
+                    vec![
+                        TransactionArgument::Address(bob.account()),
+                        TransactionArgument::U64(2),
+                        TransactionArgument::U64(3),
+                    ],
+                )
+                .await?;
+                common::execute_script(
+                    bob.clone(),
+                    alice.clone(),
+                    "scripts",
+                    "play",
+                    vec![
+                        TransactionArgument::Address(alice.account()),
+                        TransactionArgument::U64(3),
+                        TransactionArgument::U64(3),
+                    ],
+                )
+                .await?;
+                common::execute_script(
+                    alice.clone(),
+                    bob.clone(),
+                    "scripts",
+                    "play",
+                    vec![
+                        TransactionArgument::Address(bob.account()),
+                        TransactionArgument::U64(2),
+                        TransactionArgument::U64(4),
+                    ],
+                )
+                .await?;
+                common::execute_script(
+                    bob.clone(),
+                    alice.clone(),
+                    "scripts",
+                    "play",
+                    vec![
+                        TransactionArgument::Address(alice.account()),
+                        TransactionArgument::U64(3),
+                        TransactionArgument::U64(4),
+                    ],
+                )
+                .await?;
+                common::execute_script(
+                    alice.clone(),
+                    bob.clone(),
+                    "scripts",
+                    "play",
+                    vec![
+                        TransactionArgument::Address(bob.account()),
+                        TransactionArgument::U64(2),
+                        TransactionArgument::U64(5),
+                    ],
+                )
+                .await?;
+                common::execute_script(
+                    bob.clone(),
+                    alice.clone(),
+                    "scripts",
+                    "play",
+                    vec![
+                        TransactionArgument::Address(alice.account()),
+                        TransactionArgument::U64(3),
+                        TransactionArgument::U64(5),
+                    ],
+                )
+                .await?;
+                common::execute_script(
+                    alice.clone(),
+                    bob.clone(),
+                    "scripts",
+                    "play",
+                    vec![
+                        TransactionArgument::Address(bob.account()),
+                        TransactionArgument::U64(2),
+                        TransactionArgument::U64(6),
+                    ],
+                )
+                .await?;
+                common::execute_script(
+                    alice.clone(),
+                    bob.clone(),
+                    "scripts",
+                    "check_score",
+                    vec![TransactionArgument::U64(1)],
+                )
+                .await?;
+                Ok(())
             })
         })
     })
-
-    //    open_channel(alice.clone(), bob.clone(), 100, 100)?;
-
-    //    execute_script(alice.clone(), bob.clone(), "scripts", "new", vec![TransactionArgument::Address(bob.account())])?;
-    //    execute_script(bob.clone(), alice.clone(), "scripts", "join", vec![])?;
-    //    execute_script(
-    //        alice.clone(),
-    //        bob.clone(),
-    //        "scripts",
-    //        "play",
-    //        vec![TransactionArgument::U64(2), TransactionArgument::U64(2), TransactionArgument::Address(bob.account())],
-    //    )?;
-    //    execute_script(
-    //        bob.clone(),
-    //        alice.clone(),
-    //        "scripts",
-    //        "play",
-    //        vec![TransactionArgument::U64(3), TransactionArgument::U64(2), TransactionArgument::Address(alice.account())],
-    //    )?;
-    //    execute_script(
-    //        alice.clone(),
-    //        bob.clone(),
-    //        "scripts",
-    //        "play",
-    //        vec![TransactionArgument::U64(2), TransactionArgument::U64(3), TransactionArgument::Address(bob.account())],
-    //    )?;
-    //    execute_script(
-    //        bob.clone(),
-    //        alice.clone(),
-    //        "scripts",
-    //        "play",
-    //        vec![TransactionArgument::U64(3), TransactionArgument::U64(3), TransactionArgument::Address(alice.account())],
-    //    )?;
-    //    execute_script(
-    //        alice.clone(),
-    //        bob.clone(),
-    //        "scripts",
-    //        "play",
-    //        vec![TransactionArgument::U64(2), TransactionArgument::U64(4), TransactionArgument::Address(bob.account())],
-    //    )?;
-    //    execute_script(
-    //        bob.clone(),
-    //        alice.clone(),
-    //        "scripts",
-    //        "play",
-    //        vec![TransactionArgument::U64(3), TransactionArgument::U64(4), TransactionArgument::Address(alice.account())],
-    //    )?;
-    //    execute_script(
-    //        alice.clone(),
-    //        bob.clone(),
-    //        "scripts",
-    //        "play",
-    //        vec![TransactionArgument::U64(2), TransactionArgument::U64(5), TransactionArgument::Address(bob.account())],
-    //    )?;
-    //    execute_script(
-    //        bob.clone(),
-    //        alice.clone(),
-    //        "scripts",
-    //        "play",
-    //        vec![TransactionArgument::U64(3), TransactionArgument::U64(5), TransactionArgument::Address(alice.account())],
-    //    )?;
-    //    execute_script(
-    //        alice.clone(),
-    //        bob.clone(),
-    //        "scripts",
-    //        "play",
-    //        vec![TransactionArgument::U64(2), TransactionArgument::U64(6), TransactionArgument::Address(bob.account())],
-    //    )?;
-    //    execute_script(
-    //        alice.clone(),
-    //        bob.clone(),
-    //        "scripts",
-    //        "check_score",
-    //        vec![TransactionArgument::U64(1)],
-    //    )?;
 }
 
 fn run_with_mock_client<F, T>(mut f: F) -> T
