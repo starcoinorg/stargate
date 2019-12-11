@@ -14,25 +14,21 @@ pub mod wallet_test_helper;
 rusty_fork_test! {
 
     #[test]
-    #[ignore]
     fn test_wallet_with_rpc_client() {
         run_test_wallet_with_rpc_client();
     }
 
     #[test]
-    #[ignore]
     fn test_deploy_custom_module_by_rpc_client() {
         run_deploy_custom_module_by_rpc_client();
     }
 
     #[test]
-    #[ignore]
     fn test_wallet_transfer_htlc() {
         run_test_wallet_transfer_htlc();
     }
 
     #[test]
-    #[ignore]
     fn test_channel_event_watcher() {
         run_test_channel_event_watcher();
     }
