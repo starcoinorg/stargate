@@ -443,7 +443,7 @@ fn test_coin_base() {
         .expect("balance is none.")
         .balance();
     println!("address {:?} , balance :{}", consensus_address, balance);
-    assert!(balance >= 50_000_000);
+    assert!(balance >= 50);
 }
 
 fn gen_account() -> AccountAddress {
