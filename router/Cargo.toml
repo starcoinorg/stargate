@@ -18,6 +18,6 @@ libra-crypto = { path = "../libra/crypto/crypto"}
 libra-tools = {path ="../libra/common/tools", package = "libra-tools"}
 sgtypes = { path = "../sgtypes" }
 
-futures = { version = "=0.3.0-alpha.19", package = "futures-preview", features = ["async-await", "io-compat", "compat"] }
+futures = { version = "0.3.0", features = ["io-compat", "compat"] }
 tokio = { version = "0.2", features = ["full"] }
 rand = "0.6.5"

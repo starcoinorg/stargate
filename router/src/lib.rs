@@ -2,6 +2,7 @@ use anyhow::{ensure, Error, Result};
 
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::channel::oneshot;
+use futures::stream::StreamExt;
 use graphdb::{edge::Edge, graph_store::GraphStore, vertex::Vertex};
 use libra_crypto::{test_utils::KeyPair, Uniform};
 use libra_logger::prelude::*;
@@ -79,10 +80,14 @@ impl Router {
         &self,
         start: AccountAddress,
         end: AccountAddress,
-    ) -> Result<Option<Vec<Vertex>>> {
+    ) -> Result<Option<Vec<AccountAddress>>> {
         let start_node = Vertex::new_with_bi_type(start);
         let end_node = Vertex::new_with_bi_type(end);
-        self.find_path(start_node, end_node).await
+        let vertexes = self.find_path(start_node, end_node).await?;
+        Ok(match vertexes {
+            Some(vertex_list) => Some(vertex_list.iter().clone().map(|v| v.id).collect()),
+            None => None,
+        })
     }
 
     pub async fn shutdown(&self) {

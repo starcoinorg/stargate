@@ -1,6 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::channel_transaction::ChannelTransactionRequest;
 use crate::s_value::SValue;
 use crate::sg_error::SgError;
 use anyhow::{bail, format_err, Error, Result};
@@ -304,6 +305,7 @@ pub enum MessageType {
     ErrorMessage,
     BalanceQueryResponse,
     BalanceQueryRequest,
+    MultiHopChannelTransactionRequest,
 }
 
 impl MessageType {
@@ -315,6 +317,7 @@ impl MessageType {
             MessageType::ErrorMessage => 4,
             MessageType::BalanceQueryResponse => 5,
             MessageType::BalanceQueryRequest => 6,
+            MessageType::MultiHopChannelTransactionRequest => 7,
         }
     }
 
@@ -326,6 +329,7 @@ impl MessageType {
             4 => Ok(MessageType::ErrorMessage),
             5 => Ok(MessageType::BalanceQueryResponse),
             6 => Ok(MessageType::BalanceQueryRequest),
+            7 => Ok(MessageType::MultiHopChannelTransactionRequest),
             _ => bail!("no such type"),
         }
     }
@@ -525,6 +529,102 @@ impl From<AntMessage> for crate::proto::sgtypes::AntMessage {
                 .cloned()
                 .map(|v| v.into())
                 .collect(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NextHop {
+    pub remote_addr: AccountAddress,
+    pub amount: u64,
+}
+
+impl NextHop {
+    pub fn new(remote_addr: AccountAddress, amount: u64) -> Self {
+        Self {
+            remote_addr,
+            amount,
+        }
+    }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+    where
+        B: IntoBuf,
+    {
+        crate::proto::sgtypes::NextHop::decode(buf)?.try_into()
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(TryInto::<crate::proto::sgtypes::NextHop>::try_into(self)?.to_vec()?)
+    }
+}
+
+impl TryFrom<crate::proto::sgtypes::NextHop> for NextHop {
+    type Error = Error;
+
+    fn try_from(value: crate::proto::sgtypes::NextHop) -> Result<Self> {
+        Ok(Self::new(value.remote_addr.try_into()?, value.amount))
+    }
+}
+
+impl From<NextHop> for crate::proto::sgtypes::NextHop {
+    fn from(value: NextHop) -> Self {
+        Self {
+            remote_addr: value.remote_addr.to_vec(),
+            amount: value.amount,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MultiHopChannelRequest {
+    pub request: ChannelTransactionRequest,
+    pub hops: Vec<NextHop>,
+}
+
+impl MultiHopChannelRequest {
+    pub fn new(request: ChannelTransactionRequest, hops: Vec<NextHop>) -> Self {
+        Self { request, hops }
+    }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+    where
+        B: IntoBuf,
+    {
+        crate::proto::sgtypes::MultiHopChannelRequest::decode(buf)?.try_into()
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(TryInto::<crate::proto::sgtypes::MultiHopChannelRequest>::try_into(self)?.to_vec()?)
+    }
+}
+
+impl TryFrom<crate::proto::sgtypes::MultiHopChannelRequest> for MultiHopChannelRequest {
+    type Error = Error;
+
+    fn try_from(value: crate::proto::sgtypes::MultiHopChannelRequest) -> Result<Self> {
+        let hops: Result<Vec<NextHop>> = value
+            .hops
+            .iter()
+            .clone()
+            .map(|v| NextHop::try_from(v.clone()))
+            .collect();
+
+        Ok(Self::new(
+            value
+                .request
+                .ok_or_else(|| format_err!("Missing request"))?
+                .try_into()?,
+            hops?,
+        ))
+    }
+}
+
+impl From<MultiHopChannelRequest> for crate::proto::sgtypes::MultiHopChannelRequest {
+    fn from(value: MultiHopChannelRequest) -> Self {
+        Self {
+            request: Some(value.request.into()),
+            hops: value.hops.iter().cloned().map(|v| v.into()).collect(),
         }
     }
 }

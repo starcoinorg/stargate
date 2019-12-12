@@ -5,6 +5,7 @@ use libra_crypto::HashValue;
 use libra_types::account_address::AccountAddress;
 use libra_types::transaction::TransactionArgument;
 use sgtypes::channel_transaction::ChannelOp;
+use sgtypes::htlc::HtlcPayment;
 
 /// check if the `op` is a htlc transfer
 pub fn is_htlc_transfer(op: &ChannelOp) -> bool {
@@ -37,12 +38,21 @@ pub fn is_htlc_receive(op: &ChannelOp) -> bool {
     }
 }
 /// get hash lock value from `args` which should be the args of `ChannelScript.send_payment`
-pub fn parse_htlc_hash_lock(args: &[TransactionArgument]) -> Result<HashValue> {
+pub fn parse_htlc_payment(args: &[TransactionArgument]) -> Result<HtlcPayment> {
     ensure!(args.len() == 4, "send_payment should have 4 args");
-    match &args[2] {
-        TransactionArgument::ByteArray(d) => HashValue::from_slice(d.as_bytes()),
-        _ => bail!("the third arg of send_payment should be byte array"),
-    }
+    let amount = match &args[1] {
+        TransactionArgument::U64(a) => *a,
+        _ => bail!("1st arg of send_payment should be u64"),
+    };
+    let hash_lock = match &args[2] {
+        TransactionArgument::ByteArray(d) => HashValue::from_slice(d.as_bytes())?,
+        _ => bail!("3rd arg of send_payment should be byte array"),
+    };
+    let timeout = match &args[3] {
+        TransactionArgument::U64(a) => *a,
+        _ => bail!("4th arg of send_payment should be u64"),
+    };
+    Ok(HtlcPayment::new(hash_lock, amount, timeout))
 }
 
 /// get preimage value from `args` which should be the args of `ChannelScript.receive_payment`

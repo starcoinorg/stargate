@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::node::Node;
-use anyhow::{Error, Result};
+use anyhow::Result;
 use libra_crypto::{
     ed25519::Ed25519PrivateKey,
     hash::{CryptoHash, CryptoHasher, TestOnlyHasher},
@@ -18,6 +18,7 @@ use tokio::time::delay_for;
 #[test]
 fn node_test_all() -> Result<()> {
     use crate::test_helper::*;
+    use anyhow::Error;
     use futures::compat::Future01CompatExt;
     use libra_config::utils::get_available_port;
     use libra_logger::prelude::*;
@@ -44,15 +45,25 @@ fn node_test_all() -> Result<()> {
     let seed = format!("{}/p2p/{}", &network_config1.listen, addr1_hex);
     let network_config2 = create_node_network_config(
         format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
-        vec![seed],
+        vec![seed.clone()],
     );
+
     let (mut node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone(), true);
     node2.start_server();
 
+    let network_config3 = create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![seed.clone()],
+    );
+    let (mut node3, addr3) = gen_node(executor.clone(), &network_config3, client.clone(), true);
+    node3.start_server();
+
     let node1 = Arc::new(node1);
     let node2 = Arc::new(node2);
+    let node3 = Arc::new(node3);
     let _node1_clone = node1.clone();
     let _node2_clone = node2.clone();
+    let _node3_clone = node3.clone();
 
     let f = async move {
         _delay(Duration::from_millis(1000)).await;
@@ -73,6 +84,24 @@ fn node_test_all() -> Result<()> {
         );
         assert_eq!(
             node1.channel_balance_async(addr2).await.unwrap(),
+            fund_amount
+        );
+
+        let _result = node2
+            .open_channel_async(addr3, fund_amount, fund_amount)
+            .await
+            .unwrap()
+            .compat()
+            .await
+            .unwrap();
+
+        _delay(Duration::from_millis(500)).await;
+        assert_eq!(
+            node2.channel_balance_async(addr3).await.unwrap(),
+            fund_amount
+        );
+        assert_eq!(
+            node3.channel_balance_async(addr2).await.unwrap(),
             fund_amount
         );
 
@@ -137,6 +166,34 @@ fn node_test_all() -> Result<()> {
             fund_amount + transfer_amount * 2
         );
 
+        let invoice = node1.add_invoice().await.unwrap();
+        node3
+            .off_chain_pay_htlc_async(addr1, transfer_amount, invoice.r_hash, 1000)
+            .await
+            .unwrap()
+            .compat()
+            .await
+            .unwrap();
+
+        _delay(Duration::from_millis(1000)).await;
+        assert_eq!(
+            node3.channel_balance_async(addr2).await.unwrap(),
+            fund_amount - transfer_amount
+        );
+        assert_eq!(
+            node2.channel_balance_async(addr1).await.unwrap(),
+            fund_amount - transfer_amount * 3 + deposit_amount
+        );
+        assert_eq!(
+            node1.channel_balance_async(addr2).await.unwrap(),
+            fund_amount + transfer_amount * 3
+        );
+        _delay(Duration::from_millis(1000)).await;
+        assert_eq!(
+            node2.channel_balance_async(addr3).await.unwrap(),
+            fund_amount + transfer_amount
+        );
+
         let wd_amount = 10000;
         node2
             .withdraw_async(addr1, wd_amount)
@@ -149,17 +206,194 @@ fn node_test_all() -> Result<()> {
         _delay(Duration::from_millis(500)).await;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
-            fund_amount - transfer_amount * 2 - wd_amount + deposit_amount
+            fund_amount - transfer_amount * 3 - wd_amount + deposit_amount
         );
         assert_eq!(
             node1.channel_balance_async(addr2).await.unwrap(),
-            fund_amount + transfer_amount * 2
+            fund_amount + transfer_amount * 3
         );
 
         node1.wallet().stop().await?;
         node2.wallet().stop().await?;
+        node3.wallet().stop().await?;
         node1.shutdown().unwrap();
         node2.shutdown().unwrap();
+        node3.shutdown().unwrap();
+        Ok::<_, Error>(())
+    };
+    rt.block_on(f)?;
+    drop(rt);
+
+    debug!("here");
+    Ok(())
+}
+
+#[test]
+fn node_test_four_hop() -> Result<()> {
+    use crate::test_helper::*;
+    use anyhow::Error;
+    use futures::compat::Future01CompatExt;
+    use libra_config::utils::get_available_port;
+    use libra_logger::prelude::*;
+    use sgchain::star_chain_client::MockChainClient;
+    use std::sync::Arc;
+    use tokio::runtime::Runtime;
+
+    libra_logger::init_for_e2e_testing();
+    let mut rt = Runtime::new().unwrap();
+    let executor = rt.handle().clone();
+
+    let (mock_chain_service, _handle) = MockChainClient::new();
+    let client = Arc::new(mock_chain_service);
+    let network_config1 = create_node_network_config("/ip4/127.0.0.1/tcp/5000".to_string(), vec![]);
+    let (mut node1, addr1) = gen_node(executor.clone(), &network_config1, client.clone(), true);
+    node1.start_server();
+
+    let addr1_hex = hex::encode(addr1);
+
+    let seed = format!("{}/p2p/{}", &network_config1.listen, addr1_hex);
+    let network_config2 = create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![seed.clone()],
+    );
+
+    let (mut node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone(), true);
+    node2.start_server();
+
+    let network_config3 = create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![seed.clone()],
+    );
+    let (mut node3, addr3) = gen_node(executor.clone(), &network_config3, client.clone(), true);
+    node3.start_server();
+
+    let network_config4 = create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![seed.clone()],
+    );
+    let (mut node4, addr4) = gen_node(executor.clone(), &network_config4, client.clone(), true);
+    node4.start_server();
+
+    let node1 = Arc::new(node1);
+    let node2 = Arc::new(node2);
+    let node3 = Arc::new(node3);
+    let node4 = Arc::new(node4);
+    let _node1_clone = node1.clone();
+    let _node2_clone = node2.clone();
+    let _node3_clone = node3.clone();
+    let _node4_clone = node4.clone();
+
+    let f = async move {
+        _delay(Duration::from_millis(1000)).await;
+
+        let fund_amount = 1000000;
+
+        let _result = node2
+            .open_channel_async(addr1, fund_amount, fund_amount)
+            .await
+            .unwrap()
+            .compat()
+            .await
+            .unwrap();
+
+        _delay(Duration::from_millis(500)).await;
+        assert_eq!(
+            node2.channel_balance_async(addr1).await.unwrap(),
+            fund_amount
+        );
+        assert_eq!(
+            node1.channel_balance_async(addr2).await.unwrap(),
+            fund_amount
+        );
+
+        let _result = node3
+            .open_channel_async(addr2, fund_amount, fund_amount)
+            .await
+            .unwrap()
+            .compat()
+            .await
+            .unwrap();
+
+        _delay(Duration::from_millis(500)).await;
+        assert_eq!(
+            node3.channel_balance_async(addr2).await.unwrap(),
+            fund_amount
+        );
+        assert_eq!(
+            node2.channel_balance_async(addr3).await.unwrap(),
+            fund_amount
+        );
+
+        let _result = node4
+            .open_channel_async(addr3, fund_amount, fund_amount)
+            .await
+            .unwrap()
+            .compat()
+            .await
+            .unwrap();
+
+        _delay(Duration::from_millis(500)).await;
+        assert_eq!(
+            node4.channel_balance_async(addr3).await.unwrap(),
+            fund_amount
+        );
+        assert_eq!(
+            node3.channel_balance_async(addr4).await.unwrap(),
+            fund_amount
+        );
+
+        let transfer_amount = 1_000;
+
+        let invoice = node1.add_invoice().await.unwrap();
+        node4
+            .off_chain_pay_htlc_async(addr1, transfer_amount, invoice.r_hash, 1000)
+            .await
+            .unwrap()
+            .compat()
+            .await
+            .unwrap();
+
+        _delay(Duration::from_millis(1000)).await;
+        assert_eq!(
+            node4.channel_balance_async(addr3).await.unwrap(),
+            fund_amount - transfer_amount
+        );
+        _delay(Duration::from_millis(1000)).await;
+        assert_eq!(
+            node3.channel_balance_async(addr2).await.unwrap(),
+            fund_amount - transfer_amount
+        );
+        _delay(Duration::from_millis(1000)).await;
+        assert_eq!(
+            node2.channel_balance_async(addr1).await.unwrap(),
+            fund_amount - transfer_amount
+        );
+        _delay(Duration::from_millis(1000)).await;
+        assert_eq!(
+            node1.channel_balance_async(addr2).await.unwrap(),
+            fund_amount + transfer_amount
+        );
+        _delay(Duration::from_millis(1000)).await;
+        assert_eq!(
+            node2.channel_balance_async(addr3).await.unwrap(),
+            fund_amount + transfer_amount
+        );
+        _delay(Duration::from_millis(1000)).await;
+        assert_eq!(
+            node3.channel_balance_async(addr4).await.unwrap(),
+            fund_amount + transfer_amount
+        );
+
+        node1.wallet().stop().await?;
+        node2.wallet().stop().await?;
+        node3.wallet().stop().await?;
+        node4.wallet().stop().await?;
+
+        node1.shutdown().unwrap();
+        node2.shutdown().unwrap();
+        node3.shutdown().unwrap();
+        node4.shutdown().unwrap();
+
         Ok::<_, Error>(())
     };
     rt.block_on(f)?;
@@ -171,6 +405,7 @@ fn node_test_all() -> Result<()> {
 #[test]
 fn node_test_approve() -> Result<()> {
     use crate::test_helper::*;
+    use anyhow::Error;
     use futures::compat::Future01CompatExt;
     use libra_config::utils::get_available_port;
     use libra_logger::prelude::*;
@@ -253,12 +488,14 @@ fn node_test_approve() -> Result<()> {
 #[test]
 fn node_test_reject() -> Result<()> {
     use crate::test_helper::*;
+    use anyhow::Error;
     use futures::compat::Future01CompatExt;
     use libra_config::utils::get_available_port;
     use libra_logger::prelude::*;
     use sgchain::star_chain_client::MockChainClient;
     use std::sync::Arc;
     use tokio::runtime::Runtime;
+
     libra_logger::init_for_e2e_testing();
     let mut rt = Runtime::new().unwrap();
     let executor = rt.handle().clone();
