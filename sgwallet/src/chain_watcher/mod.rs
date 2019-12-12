@@ -81,9 +81,8 @@ impl ChainWatcherHandle {
 
         Ok(rx)
     }
-    pub async fn remove_interest(&self, tag: Vec<u8>) -> Result<()> {
-        call(self.mail_sender.clone(), Request::RemoveInterest { tag }).await?;
-        Ok(())
+    pub fn remove_interest(&self, tag: Vec<u8>) -> Result<()> {
+        cast(self.mail_sender.clone(), Request::RemoveInterest { tag })
     }
 
     pub fn stop(&mut self) {
@@ -93,6 +92,12 @@ impl ChainWatcherHandle {
                 warn!("receiver end of shutdown is already dropped");
             }
         }
+    }
+}
+
+impl Drop for ChainWatcherHandle {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 
@@ -120,7 +125,6 @@ enum Request {
 #[derive(Debug)]
 enum Response {
     AddInterestResp,
-    RemoveInterestResp,
 }
 
 type InnerMsg = Msg<Request, Response>;
@@ -195,16 +199,18 @@ impl ChainWatcher {
                 self.add_interest(tag, interest, down_stream);
                 Response::AddInterestResp
             }
-            Request::RemoveInterest { tag } => {
-                self.remove_interest(&tag);
-                Response::RemoveInterestResp
-            }
+            _ => unreachable!(),
         };
         respond_with(responder, resp);
     }
 
-    async fn handle_cast(&mut self, _msg: Request) {
-        unimplemented!()
+    async fn handle_cast(&mut self, msg: Request) {
+        match msg {
+            Request::RemoveInterest { tag } => {
+                self.remove_interest(&tag);
+            }
+            _ => unreachable!(),
+        }
     }
 
     fn add_interest(&mut self, tag: Vec<u8>, interest: Interest, tx: mpsc::Sender<Transaction>) {
@@ -230,6 +236,20 @@ async fn call<ReqT, RespT>(
         Ok(result) => Ok(result),
         Err(_) => bail!("sender dropped"),
     }
+}
+
+fn cast<ReqT, RespT>(
+    mut mailbox_sender: mpsc::Sender<Msg<ReqT, RespT>>,
+    request: ReqT,
+) -> Result<()> {
+    if let Err(e) = mailbox_sender.try_send(Msg::Cast { msg: request }) {
+        if e.is_full() {
+            bail!("mailbox is full");
+        } else {
+            error!("mailbox is closed");
+        }
+    }
+    Ok(())
 }
 
 fn respond_with<T>(responder: oneshot::Sender<T>, msg: T) {
