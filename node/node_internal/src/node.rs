@@ -619,14 +619,14 @@ impl NodeInner {
         debug!("message type is {:?}", msg_type);
         match msg_type {
             MessageType::OpenChannelNodeNegotiateMessage => {}
-            MessageType::ChannelTransactionRequest => {
-                self.handle_receiver_channel(data[2..].to_vec(), peer_id)
-                    .await
-            }
-            MessageType::ChannelTransactionResponse => {
-                self.handle_sender_channel(data[2..].to_vec(), peer_id)
-                    .await
-            }
+            MessageType::ChannelTransactionRequest => self
+                .handle_receiver_channel(data[2..].to_vec(), peer_id)
+                .await
+                .unwrap(),
+            MessageType::ChannelTransactionResponse => self
+                .handle_sender_channel(data[2..].to_vec(), peer_id)
+                .await
+                .unwrap(),
             MessageType::ErrorMessage => self.handle_error_message(data[2..].to_vec()),
             MessageType::BalanceQueryResponse => {
                 self.handle_balance_query_response(data[2..].to_vec())
@@ -634,6 +634,10 @@ impl NodeInner {
             MessageType::BalanceQueryRequest => {
                 self.handle_balance_query_request(data[2..].to_vec(), peer_id)
             }
+            MessageType::MultiHopChannelTransactionRequest => self
+                .handle_multi_hop_receiver_channel(data[2..].to_vec(), peer_id)
+                .await
+                .unwrap(),
         };
     }
 
@@ -749,24 +753,67 @@ impl NodeInner {
         }
     }
 
-    async fn handle_receiver_channel(&self, data: Vec<u8>, peer_id: AccountAddress) {
-        debug!("receive channel");
-        let open_channel_message: ChannelTransactionRequest;
-        //TODO refactor error handle.
-        match ChannelTransactionRequest::from_proto_bytes(data) {
-            Ok(msg) => {
-                open_channel_message = msg;
-            }
-            Err(e) => {
-                warn!("get wrong message: {}", e);
-                return;
+    async fn handle_multi_hop_receiver_channel(
+        &self,
+        data: Vec<u8>,
+        peer_id: AccountAddress,
+    ) -> Result<()> {
+        info!("handle_multi_hop_receiver_channel");
+        let mut open_channel_message = MultiHopChannelRequest::from_proto_bytes(data)?;
+
+        self.handle_channel_transaction_request(peer_id, &open_channel_message.request)
+            .await?;
+
+        info!("hops is {:?}", open_channel_message.hops);
+        if open_channel_message.hops.len() > 0 {
+            let operator = open_channel_message.request.channel_txn().operator();
+            let hop = open_channel_message.hops.remove(0);
+            if is_htlc_transfer(operator) {
+                let payment =
+                    parse_htlc_payment(open_channel_message.request.channel_txn().args())?;
+                let request = self
+                    .wallet
+                    .send_payment(
+                        hop.remote_addr.clone(),
+                        hop.amount,
+                        payment.hash_lock().to_vec(),
+                        payment.timeout(),
+                    )
+                    .await?;
+                let multi_request = MultiHopChannelRequest::new(request, open_channel_message.hops);
+                self.send_multi_hop_channel_request(
+                    hop.remote_addr,
+                    multi_request,
+                    MessageType::MultiHopChannelTransactionRequest,
+                )?;
+                self.invoice_mgr
+                    .add_previous_hop(payment.hash_lock().clone(), peer_id)
+                    .await;
+            } else {
+                warn!("should be a htlc transfer");
             }
         }
+        Ok(())
+    }
 
+    async fn handle_receiver_channel(&self, data: Vec<u8>, peer_id: AccountAddress) -> Result<()> {
+        info!("receive channel");
+        let open_channel_message = ChannelTransactionRequest::from_proto_bytes(data)?;
+
+        self.handle_channel_transaction_request(peer_id, &open_channel_message)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn handle_channel_transaction_request(
+        &self,
+        peer_id: AccountAddress,
+        open_channel_message: &ChannelTransactionRequest,
+    ) -> Result<()> {
         // sign message ,verify messsage,no send back
         let request_id = open_channel_message.request_id();
         let operator = open_channel_message.channel_txn().operator();
-
         let receiver_open_txn: ChannelTransactionResponse;
         match self.wallet.verify_txn(peer_id, &open_channel_message).await {
             Ok(tx) => {
@@ -778,7 +825,7 @@ impl NodeInner {
                                 self.wallet.approve_txn(peer_id, request_id).await.unwrap()
                         } else {
                             info!("need approved by user");
-                            return; // it means user approval is needed.
+                            return Ok(()); // it means user approval is needed.
                         }
                     }
                 }
@@ -791,46 +838,61 @@ impl NodeInner {
                         data: error_message(e, request_id).to_vec(),
                     })
                     .unwrap();
-                return;
+                return Ok(());
             }
         }
-
         self.apply_txn(peer_id, request_id, receiver_open_txn).await;
-
         if is_htlc_transfer(operator) {
-            match parse_htlc_hash_lock(open_channel_message.channel_txn().args()) {
-                Ok(r_hash) => match self.invoice_mgr.get_preimage(r_hash).await {
-                    Some(preimage) => {
-                        let request = self
-                            .wallet
-                            .receive_payment(peer_id, preimage)
-                            .await
-                            .unwrap();
-                        self.send_channel_request(
-                            peer_id,
-                            request,
-                            MessageType::ChannelTransactionRequest,
-                        )
-                        .unwrap();
-                    }
-                    None => {
-                        warn!(
-                            "could not find preimage by rhash {},wait for timeout",
-                            r_hash
-                        );
-                    }
-                },
-                Err(e) => {
-                    warn!("get r_hash error {},wait for timeout", e);
-                    self.sender
-                        .unbounded_send(NetworkMessage {
-                            peer_id,
-                            data: error_message(e, request_id).to_vec(),
-                        })
-                        .unwrap();
+            let payment = parse_htlc_payment(open_channel_message.channel_txn().args())?;
+            match self.invoice_mgr.get_preimage(payment.hash_lock()).await {
+                Some(preimage) => {
+                    let request = self.wallet.receive_payment(peer_id, preimage).await?;
+                    info!("last hop generate request");
+                    self.send_channel_request(
+                        peer_id,
+                        request,
+                        MessageType::ChannelTransactionRequest,
+                    )?;
+                }
+                None => {
+                    info!(
+                        "could not find preimage by rhash {},wait for timeout",
+                        payment.hash_lock()
+                    );
                 }
             }
         }
+        if is_htlc_receive(operator) {
+            let preimage = parse_htlc_preimage(open_channel_message.channel_txn().args())?;
+            match self
+                .invoice_mgr
+                .get_previous_hop(preimage.clone().to_vec())
+                .await
+            {
+                Some(previous_addr) => {
+                    info!(
+                        "get router receive payment message from {} to {}",
+                        peer_id, previous_addr
+                    );
+                    let request = self
+                        .wallet
+                        .receive_payment(previous_addr.clone(), preimage.to_vec())
+                        .await?;
+                    self.send_channel_request(
+                        previous_addr,
+                        request,
+                        MessageType::ChannelTransactionRequest,
+                    )?;
+                }
+                None => {
+                    info!(
+                        "could not find privous addr by preimage {},wait for timeout",
+                        preimage
+                    );
+                }
+            }
+        }
+        Ok(())
     }
 
     async fn apply_txn(
@@ -865,51 +927,26 @@ impl NodeInner {
         };
     }
 
-    async fn handle_sender_channel(&mut self, data: Vec<u8>, peer_id: AccountAddress) {
+    async fn handle_sender_channel(
+        &mut self,
+        data: Vec<u8>,
+        peer_id: AccountAddress,
+    ) -> Result<()> {
         debug!("sender channel");
-        let open_channel_message: ChannelTransactionResponse;
+        let open_channel_message = ChannelTransactionResponse::from_proto_bytes(&data)?;
 
-        match ChannelTransactionResponse::from_proto_bytes(&data) {
-            Ok(msg) => {
-                open_channel_message = msg;
-            }
-            Err(_e) => {
-                warn!("get wrong message");
-                return;
-            }
-        }
-
-        match self
-            .wallet
+        self.wallet
             .verify_txn_response(peer_id, &open_channel_message)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => {
-                error!(
-                    "verify txn response failure, peer {:?}, error: {:?}",
-                    peer_id, e
-                );
-                return;
-            }
-        };
-        match self.wallet.apply_txn(peer_id, &open_channel_message).await {
-            Ok(_) => {}
-            Err(e) => {
-                warn!("apply tx fail, err: {:?}", e);
-                return;
-            }
-        };
-        let channel_seq_number = match self.wallet.channel_sequence_number(peer_id).await {
-            Ok(n) => n,
-            Err(e) => {
-                error!("fail to get channel sequence number, err: {:?}", e);
-                return;
-            }
-        };
+            .await?;
+
+        self.wallet
+            .apply_txn(peer_id, &open_channel_message)
+            .await?;
+
+        let channel_seq_number = self.wallet.channel_sequence_number(peer_id).await?;
+
         self.message_processor
             .send_response(open_channel_message.request_id(), channel_seq_number)
-            .unwrap();
     }
 
     fn handle_error_message(&self, data: Vec<u8>) {
@@ -986,6 +1023,26 @@ impl NodeInner {
         Ok(message_future)
     }
 
+    fn send_multi_hop_channel_request(
+        &self,
+        peer_id: AccountAddress,
+        open_channel_message: MultiHopChannelRequest,
+        msg_type: MessageType,
+    ) -> Result<MessageFuture<u64>> {
+        let hash_value = open_channel_message.request.request_id();
+        let msg = add_message_type(open_channel_message.into_proto_bytes().unwrap(), msg_type);
+        self.sender.unbounded_send(NetworkMessage {
+            peer_id,
+            data: msg.to_vec(),
+        })?;
+        let (tx, rx) = futures_01::sync::mpsc::channel(1);
+        let message_future = MessageFuture::new(rx);
+        self.message_processor.add_future(hash_value.clone(), tx);
+        self.future_timeout(hash_value, self.default_future_timeout);
+
+        Ok(message_future)
+    }
+
     async fn off_chain_pay(
         &self,
         receiver_address: AccountAddress,
@@ -1020,6 +1077,20 @@ impl NodeInner {
         match path {
             Ok(Some(v)) => {
                 info!("path is {:?}", v);
+                match self
+                    .get_multi_hop_request(v, amount, hash_lock, timeout)
+                    .await
+                {
+                    Ok((off_chain_pay_tx, next_addr)) => respond_with(
+                        responder,
+                        self.send_multi_hop_channel_request(
+                            next_addr,
+                            off_chain_pay_tx,
+                            MessageType::MultiHopChannelTransactionRequest,
+                        ),
+                    ),
+                    Err(e) => respond_with(responder, Err(e)),
+                };
             }
             _ => {
                 let err = SgError::new(
@@ -1034,22 +1105,42 @@ impl NodeInner {
                 return;
             }
         };
+    }
 
-        match self
-            .wallet
-            .send_payment(receiver_address, amount, hash_lock, timeout)
-            .await
-        {
-            Ok(off_chain_pay_tx) => respond_with(
-                responder,
-                self.send_channel_request(
-                    receiver_address,
-                    off_chain_pay_tx,
-                    MessageType::ChannelTransactionRequest,
-                ),
-            ),
-            Err(e) => respond_with(responder, Err(e)),
-        };
+    // vertexes contains node self. need pop self out
+    async fn get_multi_hop_request(
+        &self,
+        mut vertexes: Vec<AccountAddress>,
+        amount: u64,
+        hash_lock: Vec<u8>,
+        timeout: u64,
+    ) -> Result<(MultiHopChannelRequest, AccountAddress)> {
+        let len = vertexes.len();
+        ensure!(len >= 2, "should have at least 2 hops");
+        let mut hops = Vec::new();
+        let first_addr = vertexes.remove(0);
+        info!(
+            "first hop is {:?},my account addr is {}",
+            first_addr,
+            self.wallet.account()
+        );
+        if self.wallet.account() == first_addr {
+            let receiver_address = vertexes.remove(0);
+            for (index, _vertex) in vertexes.iter().enumerate() {
+                let next_hop = NextHop::new(
+                    vertexes.get(index).take().expect("should have").clone(),
+                    amount,
+                );
+                hops.push(next_hop);
+            }
+            let request = self
+                .wallet
+                .send_payment(receiver_address.clone(), amount, hash_lock, timeout)
+                .await?;
+            return Ok((MultiHopChannelRequest::new(request, hops), receiver_address));
+        } else {
+            bail!("can't gen multi hop request")
+        }
     }
 
     async fn execute_script(

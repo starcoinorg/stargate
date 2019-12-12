@@ -11,6 +11,7 @@ mod channel_transaction_test;
 pub mod channel_transaction_to_commit;
 #[macro_use]
 pub mod hash;
+pub mod htlc;
 pub mod ledger_info;
 pub mod message;
 pub mod pending_txn;

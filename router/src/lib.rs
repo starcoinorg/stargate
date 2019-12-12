@@ -81,10 +81,14 @@ impl Router {
         &self,
         start: AccountAddress,
         end: AccountAddress,
-    ) -> Result<Option<Vec<Vertex>>> {
+    ) -> Result<Option<Vec<AccountAddress>>> {
         let start_node = Vertex::new_with_bi_type(start);
         let end_node = Vertex::new_with_bi_type(end);
-        self.find_path(start_node, end_node).await
+        let vertexes = self.find_path(start_node, end_node).await?;
+        Ok(match vertexes {
+            Some(vertex_list) => Some(vertex_list.iter().clone().map(|v| v.id).collect()),
+            None => None,
+        })
     }
 
     pub async fn shutdown(&self) {
