@@ -8,11 +8,9 @@ use consensus::MineClient;
 use futures::channel::oneshot::{channel, Sender};
 use futures::{future, StreamExt};
 use grpc_helpers::ServerHandle;
-use libra_config::config::{ConsensusType, NetworkConfig, NodeConfig, RoleType, TestConfig};
-use libra_config::generator;
+use libra_config::config::{NetworkConfig, NodeConfig, RoleType, TestConfig};
 use libra_crypto::traits::Uniform;
 use libra_crypto::x25519::X25519StaticPrivateKey;
-use libra_crypto::ValidKey;
 use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
@@ -20,7 +18,7 @@ use libra_crypto::{
 use libra_logger::prelude::*;
 use libra_mempool::MempoolRuntime;
 use libra_node::main_node::{setup_debug_interface, setup_executor, LibraHandle};
-use libra_types::account_address::{AccountAddress as PeerId, AccountAddress};
+use libra_types::account_address::AccountAddress;
 use libra_types::account_config::association_address;
 use libra_types::transaction::{RawTransaction, SignedTransaction};
 use network::{
@@ -35,22 +33,16 @@ use network::{
         MEMPOOL_DIRECT_SEND_PROTOCOL,
         STATE_SYNCHRONIZER_DIRECT_SEND_PROTOCOL,
     },
-    NetworkPublicKeys, ProtocolId,
+    ProtocolId,
 };
-use parity_multiaddr::Multiaddr;
 use rand::prelude::*;
 use rand::{rngs::StdRng, SeedableRng};
 use rusty_fork::{rusty_fork_id, rusty_fork_test, rusty_fork_test_name};
 use state_synchronizer::StateSynchronizer;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
-use std::{
-    convert::{TryFrom, TryInto},
-    str::FromStr,
-    sync::Arc,
-    thread,
-};
 use storage_service::start_storage_service;
 use tokio::runtime::{Builder, Handle, Runtime};
 use tokio::time::{interval, interval_at, Instant};

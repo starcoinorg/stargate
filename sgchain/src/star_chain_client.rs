@@ -374,22 +374,6 @@ fn parse_response(mut resp: UpdateToLatestLedgerResponse) -> ResponseItem {
 pub fn genesis_blob(config: &mut NodeConfig) {
     let path = config.execution.genesis_file_location();
     info!("Write genesis_blob to {}", path.as_path().to_string_lossy());
-    //    let (_validator_keys, test_consensus_peers, test_network_peers) =
-    //        ConfigHelpers::gen_validator_nodes(1, None);
-    let validator_network = if let Some(n) = &config.validator_network {
-        Some(n.clone_for_template())
-    } else {
-        None
-    };
-    //    let genesis_checked_txn = encode_genesis_transaction_with_validator_and_consensus(
-    //        &GENESIS_KEYPAIR.0,
-    //        GENESIS_KEYPAIR.1.clone(),
-    //        config
-    //            .consensus
-    //            .consensus_peers
-    //            .get_validator_set(&validator_network.unwrap().network_peers),
-    //        config.consensus.consensus_type == ConsensusType::POW,
-    //    );
 
     let genesis_txn =
         generate_genesis_blob_with_consensus(config.consensus.consensus_type == ConsensusType::POW);
