@@ -174,6 +174,7 @@ fn node_test() -> Result<()> {
             node1.channel_balance_async(addr2).await.unwrap(),
             fund_amount + transfer_amount * 3
         );
+        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node2.channel_balance_async(addr3).await.unwrap(),
             fund_amount + transfer_amount
