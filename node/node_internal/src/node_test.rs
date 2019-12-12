@@ -330,10 +330,12 @@ fn node_test_four_hop() -> Result<()> {
             node4.channel_balance_async(addr3).await.unwrap(),
             fund_amount - transfer_amount
         );
+        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node3.channel_balance_async(addr2).await.unwrap(),
             fund_amount - transfer_amount
         );
+        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount - transfer_amount
@@ -343,10 +345,12 @@ fn node_test_four_hop() -> Result<()> {
             node1.channel_balance_async(addr2).await.unwrap(),
             fund_amount + transfer_amount
         );
+        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node2.channel_balance_async(addr3).await.unwrap(),
             fund_amount + transfer_amount
         );
+        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node3.channel_balance_async(addr4).await.unwrap(),
             fund_amount + transfer_amount
