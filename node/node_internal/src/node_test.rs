@@ -180,10 +180,12 @@ fn node_test_all() -> Result<()> {
             node3.channel_balance_async(addr2).await.unwrap(),
             fund_amount - transfer_amount
         );
+        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount - transfer_amount * 3 + deposit_amount
         );
+        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node1.channel_balance_async(addr2).await.unwrap(),
             fund_amount + transfer_amount * 3
