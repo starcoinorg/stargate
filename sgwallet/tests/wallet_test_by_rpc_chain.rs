@@ -69,15 +69,13 @@ fn run_deploy_custom_module_by_rpc_client() {
 
 #[test]
 fn run_test_channel_event_watcher() {
-    for _i in 0..8 {
-        if let Err(e) = run_with_rpc_client(|chain_client| {
-            common::with_wallet(chain_client, |rt, sender, receiver| {
-                rt.block_on(test_channel_event_watcher_async(sender, receiver))
-            })
-        }) {
-            error!("err: {:#?}", e);
-            assert!(false);
-        }
+    if let Err(e) = run_with_rpc_client(|chain_client| {
+        common::with_wallet(chain_client, |rt, sender, receiver| {
+            rt.block_on(test_channel_event_watcher_async(sender, receiver))
+        })
+    }) {
+        error!("err: {:#?}", e);
+        assert!(false);
     }
 }
 
