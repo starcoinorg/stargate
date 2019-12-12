@@ -1,8 +1,14 @@
 name: Build and Test
 on:
+  push:
+    # only build master
+    branches:
+      - master
+    paths-ignore:
+      - '**.md'
   pull_request:
-  schedule:
-    - cron: '0 0 * * *'
+    paths-ignore:
+      - '**.md'
 jobs:
   check-fmt:
     name: check fmt
