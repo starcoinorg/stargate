@@ -608,7 +608,14 @@ impl Node {
 
 impl NodeInner {
     async fn shutdown(&self) {
-        self.router.shutdown().await;
+        match self.router.shutdown().await {
+            Ok(_) => {
+                info!("shutdown router succ");
+            }
+            Err(e) => {
+                warn!("check shutdown router error,{}", e);
+            }
+        }
     }
 
     async fn handle_network_msg(&mut self, msg: NetworkMessage) {
