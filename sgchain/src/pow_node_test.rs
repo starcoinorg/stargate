@@ -359,22 +359,18 @@ fn test_pow_single_node() {
     let _handle_1 = setup_environment(&mut conf_1, false);
 
     let mut runtime_1 = tokio::runtime::Runtime::new().unwrap();
-    //    let s = commit_tx(
-    //        conf_1.admission_control.admission_control_service_port as u32,
-    //        runtime_1.handle().clone(),
-    //    );
-    //
-    //    runtime_1.block_on(async {
-    //        check_single_latest_ledger(
-    //            conf_1.admission_control.admission_control_service_port as u32,
-    //            s,
-    //            true,
-    //        );
-    //    });
+    let s = commit_tx(
+        conf_1.admission_control.admission_control_service_port as u32,
+        runtime_1.handle().clone(),
+    );
 
-    loop {
-        thread::park();
-    }
+    runtime_1.block_on(async {
+        check_single_latest_ledger(
+            conf_1.admission_control.admission_control_service_port as u32,
+            s,
+            true,
+        );
+    });
 }
 
 #[test]
