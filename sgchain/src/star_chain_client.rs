@@ -417,7 +417,7 @@ pub fn gen_node_config_with_genesis(
                 .as_mut()
                 .unwrap()
                 .listen_address(addr);
-            let (peer, peer_info) = conf.validator_network.as_ref().unwrap().get_peer_info();
+            let (peer, _peer_info) = conf.validator_network.as_ref().unwrap().get_peer_info();
             conf.validator_network
                 .as_mut()
                 .unwrap()
