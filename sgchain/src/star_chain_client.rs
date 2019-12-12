@@ -38,7 +38,10 @@ use std::{
 };
 use tokio::runtime::{Handle, Runtime};
 use transaction_builder::{encode_create_account_script, encode_transfer_script};
-use vm_genesis::{generate_genesis_blob_with_consensus, GENESIS_KEYPAIR};
+use vm_genesis::{
+    encode_genesis_transaction_with_validator_and_consensus, generate_genesis_blob_with_consensus,
+    GENESIS_KEYPAIR,
+};
 
 #[async_trait]
 pub trait ChainClient: Send + Sync {
@@ -284,11 +287,11 @@ pub struct MockChainClient {
 
 impl MockChainClient {
     pub fn new() -> (Self, StarHandle) {
-        let mut config = gen_node_config_with_genesis(1, false, false, Some("/memory/0"));
+        let mut config = gen_node_config_with_genesis(1, false, false, Some("/memory/0"), false);
         // TODO: test the circleci
         config.storage.address = "127.0.0.1".to_string();
         info!("MockChainClient config: {:?} ", config);
-        genesis_blob(&mut config);
+        genesis_blob(&mut config, false);
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         let executor = rt.handle().clone();
@@ -371,12 +374,29 @@ fn parse_response(mut resp: UpdateToLatestLedgerResponse) -> ResponseItem {
     resp.response_items.remove(0).try_into().unwrap()
 }
 
-pub fn genesis_blob(config: &mut NodeConfig) {
+pub fn genesis_blob(config: &mut NodeConfig, genesis_flag: bool) {
     let path = config.execution.genesis_file_location();
     info!("Write genesis_blob to {}", path.as_path().to_string_lossy());
 
-    let genesis_txn =
-        generate_genesis_blob_with_consensus(config.consensus.consensus_type == ConsensusType::POW);
+    let genesis_txn = if genesis_flag {
+        let validator_network = if let Some(n) = &config.validator_network {
+            Some(n.clone_for_template())
+        } else {
+            None
+        };
+        let genesis_checked_txn = encode_genesis_transaction_with_validator_and_consensus(
+            &GENESIS_KEYPAIR.0,
+            GENESIS_KEYPAIR.1.clone(),
+            config
+                .consensus
+                .consensus_peers
+                .get_validator_set(&validator_network.unwrap().network_peers),
+            config.consensus.consensus_type == ConsensusType::POW,
+        );
+        genesis_checked_txn.into_inner()
+    } else {
+        generate_genesis_blob_with_consensus(config.consensus.consensus_type == ConsensusType::POW)
+    };
 
     config
         .execution
@@ -390,6 +410,7 @@ pub fn gen_node_config_with_genesis(
     network_random: bool,
     pow_mode: bool,
     address: Option<&str>,
+    genesis_flag: bool,
 ) -> NodeConfig {
     let mut conf = generator::validator_swarm_for_testing_times(times, network_random)
         .unwrap()
@@ -426,7 +447,7 @@ pub fn gen_node_config_with_genesis(
         _ => {}
     }
 
-    genesis_blob(&mut conf);
+    genesis_blob(&mut conf, genesis_flag);
 
     conf
 }

@@ -246,9 +246,9 @@ rusty_fork_test! {
 fn test_pow_node() -> Result<()> {
     ::libra_logger::init_for_e2e_testing();
     let memory_address = "/memory/0";
-    let mut conf_1 = gen_node_config_with_genesis(1, true, true, Some(memory_address));
+    let mut conf_1 = gen_node_config_with_genesis(1, true, true, Some(memory_address), false);
     let (peer_1, peer_info_1) = conf_1.validator_network.as_ref().unwrap().get_peer_info();
-    let mut conf_2 = gen_node_config_with_genesis(2, true, true, Some(memory_address));
+    let mut conf_2 = gen_node_config_with_genesis(2, true, true, Some(memory_address), false);
     let (peer_2, peer_info_2) = conf_2.validator_network.as_ref().unwrap().get_peer_info();
     conf_1
         .validator_network
@@ -345,7 +345,7 @@ fn create_keypair() -> KeyPair<Ed25519PrivateKey, Ed25519PublicKey> {
 #[test]
 fn test_pow_single_node() {
     ::libra_logger::init_for_e2e_testing();
-    let mut conf_1 = gen_node_config_with_genesis(1, true, true, Some("/memory/0"));
+    let mut conf_1 = gen_node_config_with_genesis(1, true, true, Some("/memory/0"), false);
     print_ports(&conf_1);
     debug!("conf1:{:?}", conf_1);
     let _handle_1 = setup_environment(&mut conf_1, false);
@@ -368,7 +368,7 @@ fn test_pow_single_node() {
 #[test]
 fn test_pbft_single_node() {
     ::libra_logger::init_for_e2e_testing();
-    let mut config = gen_node_config_with_genesis(1, true, false, None);
+    let mut config = gen_node_config_with_genesis(1, true, false, None, true);
     print_ports(&config);
     debug!("conf1:{:?}", config);
 
@@ -400,7 +400,7 @@ fn test_validator_nodes() {
 #[test]
 fn test_rollback_block() {
     ::libra_logger::init_for_e2e_testing();
-    let mut conf_1 = gen_node_config_with_genesis(1, true, true, Some("/memory/0"));
+    let mut conf_1 = gen_node_config_with_genesis(1, true, true, Some("/memory/0"), false);
     print_ports(&conf_1);
     debug!("conf1:{:?}", conf_1);
 
@@ -424,7 +424,7 @@ fn test_rollback_block() {
 #[test]
 fn test_coin_base() {
     ::libra_logger::init_for_e2e_testing();
-    let mut conf_1 = gen_node_config_with_genesis(1, true, true, Some("/memory/0"));
+    let mut conf_1 = gen_node_config_with_genesis(1, true, true, Some("/memory/0"), false);
 
     let consensus_address = conf_1.consensus.consensus_keypair.consensus_address();
     let _handle_1 = setup_environment(&mut conf_1, false);
@@ -642,8 +642,8 @@ fn test_network_conf() {
 
 #[test]
 fn test_validator_conf() {
-    let conf_1 = gen_node_config_with_genesis(1, true, true, Some("/memory/0"));
-    let conf_2 = gen_node_config_with_genesis(2, true, true, Some("/memory/0"));
+    let conf_1 = gen_node_config_with_genesis(1, true, true, Some("/memory/0"), false);
+    let conf_2 = gen_node_config_with_genesis(2, true, true, Some("/memory/0"), false);
     println!("conf_1 : {:?}", conf_1);
     println!("conf_2 : {:?}", conf_2);
 }
@@ -707,7 +707,7 @@ fn test_keys_3() -> Result<()> {
 
 #[test]
 fn test_genesis() {
-    let conf = gen_node_config_with_genesis(1, false, true, Some("/memory/0"));
+    let conf = gen_node_config_with_genesis(1, false, true, Some("/memory/0"), false);
     println!("{:?}", conf);
 }
 

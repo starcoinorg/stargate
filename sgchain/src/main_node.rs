@@ -14,7 +14,7 @@ pub fn run_node(
         config.randomize_ports_with_network(true);
     }
     debug!("config : {:?}", config);
-    crate::star_chain_client::genesis_blob(&mut config);
+    crate::star_chain_client::genesis_blob(&mut config, false);
     let handler = libra_node::main_node::setup_environment(&mut config);
     (config, logger, handler)
 }
