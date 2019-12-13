@@ -13,11 +13,11 @@ use libra_wallet::key_factory::ChildNumber;
 use libra_wallet::wallet_library::WalletLibrary;
 use node_client::NodeClient;
 use node_proto::{
-    ChannelBalanceRequest, ChannelBalanceResponse, ChannelTransactionProposalRequest,
-    DeployModuleRequest, DeployModuleResponse, DepositRequest, DepositResponse, EmptyResponse,
-    ExecuteScriptRequest, GetChannelTransactionProposalResponse,
+    AddInvoiceRequest, AddInvoiceResponse, ChannelBalanceRequest, ChannelBalanceResponse,
+    ChannelTransactionProposalRequest, DeployModuleRequest, DeployModuleResponse, DepositRequest,
+    DepositResponse, EmptyResponse, ExecuteScriptRequest, GetChannelTransactionProposalResponse,
     InstallChannelScriptPackageRequest, OpenChannelRequest, OpenChannelResponse, PayRequest,
-    PayResponse, WithdrawRequest, WithdrawResponse,
+    PayResponse, PaymentRequest, WithdrawRequest, WithdrawResponse,
 };
 use sgchain::{
     client_state_view::ClientStateView,
@@ -245,6 +245,28 @@ impl SGClientProxy {
                 transaction_hash,
                 approve,
             ))
+    }
+
+    pub fn add_invoice(&mut self, space_delim_strings: &[&str]) -> Result<AddInvoiceResponse> {
+        ensure!(
+            space_delim_strings.len() == 2,
+            "Invalid number of arguments for add invoice"
+        );
+        let response = self.node_client.add_invoice(AddInvoiceRequest {
+            amount: space_delim_strings[1].parse::<u64>()?,
+        })?;
+        Ok(response)
+    }
+
+    pub fn send_payment(&mut self, space_delim_strings: &[&str]) -> Result<EmptyResponse> {
+        ensure!(
+            space_delim_strings.len() == 2,
+            "Invalid number of arguments for send payment"
+        );
+        let response = self.node_client.send_payment(PaymentRequest {
+            encoded_invoice: space_delim_strings[1].to_string(),
+        })?;
+        Ok(response)
     }
 
     pub fn get_account_address_from_parameter(&self, para: &str) -> Result<AccountAddress> {
