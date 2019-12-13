@@ -1,11 +1,7 @@
+use crate::data_stream::{DataQuery, DataStream};
 use anyhow::{bail, Result};
 use async_trait::async_trait;
-use backoff::backoff::Backoff;
-use backoff::ExponentialBackoff;
-use futures::task::Context;
-use futures::{FutureExt, Stream, TryStreamExt};
-use futures_timer::Delay;
-use libra_logger::prelude::*;
+use futures::{Stream, TryStreamExt};
 use libra_types::access_path::{AccessPath, DataPath};
 use libra_types::account_address::AccountAddress;
 use libra_types::channel::{
@@ -19,10 +15,7 @@ use libra_types::{
 use sgchain::star_chain_client::ChainClient;
 use std::collections::{BTreeMap, HashMap};
 use std::convert::{TryFrom, TryInto};
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::Poll;
 
 #[derive(Clone, Debug)]
 pub enum ChannelChangeEvent {
@@ -46,15 +39,9 @@ pub fn get_channel_events(
     limit: u64,
 ) -> impl Stream<Item = Result<(u64, ChannelChangeEvent)>> {
     let chain_client_clone = chain_client.clone();
-    EventStream::new(
-        Box::new(ChainClientEventQuerier(chain_client.clone())),
-        AccessPath::new_for_channel_global_event(),
-        start_number,
-        limit,
+    EventStream::new_from_chain_client(chain_client.clone(), start_number, limit).and_then(
+        move |event_with_proof| get_channel_change(chain_client_clone.clone(), event_with_proof),
     )
-    .and_then(move |event_with_proof| {
-        get_channel_change(chain_client_clone.clone(), event_with_proof)
-    })
 }
 
 async fn get_channel_change(
@@ -109,115 +96,18 @@ fn parse_channel_event(event: &ContractEvent) -> Result<ChannelEvent> {
     Ok(channel_event)
 }
 
-#[async_trait]
-pub trait EventQuerier: Send + Sync {
-    async fn query_events(
-        &self,
-        access_path: AccessPath,
-        start_number: u64,
-        limit: u64,
-    ) -> Result<BTreeMap<u64, EventWithProof>>;
-}
-
-pub struct EventStream {
-    evt_access_path: AccessPath,
-    start_number: u64,
-    limit: u64,
-
-    event_querier: Box<dyn EventQuerier>,
-    cache: BTreeMap<u64, EventWithProof>,
-    delay: Option<Delay>,
-    backoff: ExponentialBackoff,
-}
-
+type EventStream = DataStream<EventWithProof>;
 impl EventStream {
-    pub fn new(
-        event_querier: Box<dyn EventQuerier>,
-        evt_access_path: AccessPath,
+    pub fn new_from_chain_client(
+        chain_client: Arc<dyn ChainClient>,
         start_number: u64,
         limit: u64,
     ) -> Self {
-        Self {
-            evt_access_path,
+        DataStream::new(
+            Box::new(ChainClientEventQuerier(chain_client)),
             start_number,
             limit,
-            event_querier,
-            cache: BTreeMap::new(),
-            delay: None,
-            backoff: ExponentialBackoff::default(),
-        }
-    }
-
-    fn try_backoff(&mut self, cx: &mut Context<'_>) -> Result<()> {
-        match self.backoff.next_backoff() {
-            Some(next_backoff) => {
-                drop(self.delay.take());
-                debug!("next_backoff: {:?}", &next_backoff);
-                let mut delay = Delay::new(next_backoff);
-                match Pin::new(&mut delay).poll(cx) {
-                    Poll::Ready(_) => unreachable!(),
-                    Poll::Pending => {}
-                }
-                self.delay = Some(delay);
-                Ok(())
-            }
-            // FIXME: should err
-            None => bail!("backoff timout"),
-        }
-    }
-}
-
-impl Stream for EventStream {
-    type Item = Result<EventWithProof>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let s = self.get_mut();
-        match s.cache.remove(&s.start_number) {
-            Some(v) => {
-                s.start_number = s.start_number + 1;
-                Poll::Ready(Some(Ok(v)))
-            }
-            None => {
-                if let Some(delay) = s.delay.as_mut() {
-                    match Pin::new(delay).poll(cx) {
-                        Poll::Ready(_) => {}
-                        Poll::Pending => return Poll::Pending,
-                    }
-                }
-                debug_assert!(s.cache.is_empty());
-
-                let event_query = s
-                    .event_querier
-                    .query_events(s.evt_access_path.clone(), s.start_number, s.limit)
-                    .poll_unpin(cx);
-
-                match event_query {
-                    Poll::Pending => Poll::Pending,
-                    Poll::Ready(Ok(data)) => {
-                        s.backoff.reset();
-                        if !data.is_empty() {
-                            s.cache = data;
-                            match s.cache.remove(&s.start_number) {
-                                Some(v) => {
-                                    s.start_number = s.start_number + 1;
-                                    Poll::Ready(Some(Ok(v)))
-                                }
-                                None => unreachable!(),
-                            }
-                        } else {
-                            match s.try_backoff(cx) {
-                                Err(e) => Poll::Ready(Some(Err(e))),
-                                Ok(_) => Poll::Pending,
-                            }
-                        }
-                    }
-                    Poll::Ready(Err(_e)) => match s.try_backoff(cx) {
-                        Err(e) => Poll::Ready(Some(Err(e))),
-                        Ok(_) => Poll::Pending,
-                    },
-                }
-            }
-        }
+        )
     }
 }
 
@@ -245,16 +135,13 @@ impl ChainClientEventQuerier {
 }
 
 #[async_trait]
-impl EventQuerier for ChainClientEventQuerier {
-    async fn query_events(
-        &self,
-        access_path: AccessPath,
-        start_number: u64,
-        limit: u64,
-    ) -> Result<BTreeMap<u64, EventWithProof>> {
+impl DataQuery for ChainClientEventQuerier {
+    type Item = EventWithProof;
+
+    async fn query(&self, version: u64, limit: u64) -> Result<BTreeMap<u64, Self::Item>> {
         let ri = RequestItem::GetEventsByEventAccessPath {
-            access_path,
-            start_event_seq_num: start_number,
+            access_path: AccessPath::new_for_channel_global_event(),
+            start_event_seq_num: version,
             ascending: true,
             limit,
         };
@@ -285,7 +172,7 @@ mod test {
     use futures_timer::Delay;
     use libra_crypto::HashValue;
     use libra_logger::prelude::*;
-    use libra_types::access_path::AccessPath;
+
     use libra_types::contract_event::{ContractEvent, EventWithProof};
     use libra_types::event::{EventKey, EVENT_KEY_LENGTH};
     use libra_types::language_storage::TypeTag;
@@ -322,10 +209,11 @@ mod test {
         EventWithProof::new(100, i, e, proof)
     }
     #[async_trait]
-    impl super::EventQuerier for TestEventQuerier {
-        async fn query_events(
+    impl super::DataQuery for TestEventQuerier {
+        type Item = EventWithProof;
+
+        async fn query(
             &self,
-            _access_path: AccessPath,
             start_number: u64,
             _limit: u64,
         ) -> Result<BTreeMap<u64, EventWithProof>> {
@@ -396,12 +284,7 @@ mod test {
             ];
             for q in qs.into_iter() {
                 info!("test on {:#?}", &q);
-                let mut s = EventStream::new(
-                    Box::new(q),
-                    AccessPath::new_for_channel_global_event(),
-                    0,
-                    1000,
-                );
+                let mut s = EventStream::new(Box::new(q), 0, 1000);
                 for i in 0u64..5 {
                     match s.try_next().await {
                         Ok(Some(v)) => assert_eq!(i, v.event.sequence_number()),
