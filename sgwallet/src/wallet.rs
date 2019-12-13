@@ -6,7 +6,7 @@ use anyhow::{bail, ensure, format_err, Error, Result};
 use chrono::Utc;
 use futures::{
     channel::{mpsc, oneshot},
-    StreamExt,
+    SinkExt, StreamExt,
 };
 use lazy_static::lazy_static;
 use libra_config::config::VMConfig;
@@ -678,8 +678,21 @@ impl Wallet {
 
     pub async fn stop(&self) -> Result<()> {
         let (tx, rx) = oneshot::channel();
-        let resp = self.call(WalletCmd::Stop { responder: tx }, rx).await?;
-        resp
+        // make stop idempotent
+        if let Err(_e) = self
+            .mailbox_sender
+            .clone()
+            .send(WalletCmd::Stop { responder: tx })
+            .await
+        {
+            warn!("wallet mailbox is already closed");
+            Ok(())
+        } else {
+            match rx.await {
+                Ok(result) => Ok(result?),
+                Err(_) => bail!("sender dropped"),
+            }
+        }
     }
 
     async fn call<T>(&self, cmd: WalletCmd, rx: oneshot::Receiver<T>) -> Result<T> {

@@ -66,8 +66,6 @@ fn node_test_all() -> Result<()> {
     let _node3_clone = node3.clone();
 
     let f = async move {
-        _delay(Duration::from_millis(1000)).await;
-
         let fund_amount = 1000000;
         let _result = node2
             .open_channel_async(addr1, fund_amount, fund_amount)
@@ -77,11 +75,12 @@ fn node_test_all() -> Result<()> {
             .await
             .unwrap();
 
-        _delay(Duration::from_millis(500)).await;
+        wait_channel_idle(node1.clone(), node2.clone()).await?;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount
         );
+
         assert_eq!(
             node1.channel_balance_async(addr2).await.unwrap(),
             fund_amount
@@ -95,7 +94,7 @@ fn node_test_all() -> Result<()> {
             .await
             .unwrap();
 
-        _delay(Duration::from_millis(500)).await;
+        wait_channel_idle(node2.clone(), node3.clone()).await?;
         assert_eq!(
             node2.channel_balance_async(addr3).await.unwrap(),
             fund_amount
@@ -114,8 +113,8 @@ fn node_test_all() -> Result<()> {
             .await
             .unwrap();
 
-        // NOTICE: delay longer, give dual some time to save into local store.
-        _delay(Duration::from_millis(500)).await;
+        wait_channel_idle(node1.clone(), node2.clone()).await?;
+
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount + deposit_amount
@@ -137,7 +136,8 @@ fn node_test_all() -> Result<()> {
             .unwrap();
 
         info!("sender is {}", addr2);
-        _delay(Duration::from_millis(500)).await;
+        wait_channel_idle(node1.clone(), node2.clone()).await?;
+
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount - transfer_amount + deposit_amount
@@ -156,7 +156,7 @@ fn node_test_all() -> Result<()> {
             .unwrap();
         debug!("txn:{:#?}", offchain_txn);
 
-        _delay(Duration::from_millis(500)).await;
+        wait_channel_idle(node1.clone(), node2.clone()).await?;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount - transfer_amount * 2 + deposit_amount
@@ -174,23 +174,24 @@ fn node_test_all() -> Result<()> {
             .compat()
             .await
             .unwrap();
-
+        wait_channel_idle(node3.clone(), node2.clone()).await?;
+        wait_channel_idle(node2.clone(), node1.clone()).await?;
         _delay(Duration::from_millis(1000)).await;
+        wait_channel_idle(node2.clone(), node1.clone()).await?;
+        wait_channel_idle(node3.clone(), node2.clone()).await?;
+
         assert_eq!(
             node3.channel_balance_async(addr2).await.unwrap(),
             fund_amount - transfer_amount
         );
-        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount - transfer_amount * 3 + deposit_amount
         );
-        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node1.channel_balance_async(addr2).await.unwrap(),
             fund_amount + transfer_amount * 3
         );
-        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node2.channel_balance_async(addr3).await.unwrap(),
             fund_amount + transfer_amount
@@ -204,8 +205,7 @@ fn node_test_all() -> Result<()> {
             .compat()
             .await
             .unwrap();
-
-        _delay(Duration::from_millis(500)).await;
+        wait_channel_idle(node2.clone(), node1.clone()).await?;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount - transfer_amount * 3 - wd_amount + deposit_amount
@@ -286,8 +286,6 @@ fn node_test_four_hop() -> Result<()> {
     let _node4_clone = node4.clone();
 
     let f = async move {
-        _delay(Duration::from_millis(1000)).await;
-
         let fund_amount = 1000000;
 
         let _result = node2
@@ -298,7 +296,7 @@ fn node_test_four_hop() -> Result<()> {
             .await
             .unwrap();
 
-        _delay(Duration::from_millis(500)).await;
+        wait_channel_idle(node1.clone(), node2.clone()).await?;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount
@@ -315,8 +313,8 @@ fn node_test_four_hop() -> Result<()> {
             .compat()
             .await
             .unwrap();
+        wait_channel_idle(node2.clone(), node3.clone()).await?;
 
-        _delay(Duration::from_millis(500)).await;
         assert_eq!(
             node3.channel_balance_async(addr2).await.unwrap(),
             fund_amount
@@ -333,8 +331,8 @@ fn node_test_four_hop() -> Result<()> {
             .compat()
             .await
             .unwrap();
+        wait_channel_idle(node3.clone(), node4.clone()).await?;
 
-        _delay(Duration::from_millis(500)).await;
         assert_eq!(
             node4.channel_balance_async(addr3).await.unwrap(),
             fund_amount
@@ -355,32 +353,40 @@ fn node_test_four_hop() -> Result<()> {
             .await
             .unwrap();
 
+        wait_channel_idle(node4.clone(), node3.clone()).await?;
         _delay(Duration::from_millis(1000)).await;
+        wait_channel_idle(node3.clone(), node2.clone()).await?;
+        _delay(Duration::from_millis(1000)).await;
+        wait_channel_idle(node2.clone(), node1.clone()).await?;
+        _delay(Duration::from_millis(1000)).await;
+
+        wait_channel_idle(node2.clone(), node1.clone()).await?;
+        _delay(Duration::from_millis(1000)).await;
+        wait_channel_idle(node3.clone(), node2.clone()).await?;
+        _delay(Duration::from_millis(1000)).await;
+        wait_channel_idle(node4.clone(), node3.clone()).await?;
+        _delay(Duration::from_millis(1000)).await;
+
         assert_eq!(
             node4.channel_balance_async(addr3).await.unwrap(),
             fund_amount - transfer_amount
         );
-        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node3.channel_balance_async(addr2).await.unwrap(),
             fund_amount - transfer_amount
         );
-        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount - transfer_amount
         );
-        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node1.channel_balance_async(addr2).await.unwrap(),
             fund_amount + transfer_amount
         );
-        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node2.channel_balance_async(addr3).await.unwrap(),
             fund_amount + transfer_amount
         );
-        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node3.channel_balance_async(addr4).await.unwrap(),
             fund_amount + transfer_amount
@@ -446,8 +452,6 @@ fn node_test_approve() -> Result<()> {
     let _node2_clone = node2.clone();
 
     let f = async move {
-        _delay(Duration::from_millis(1000)).await;
-
         let fund_amount = 1000000;
 
         executor.spawn(_confirm(
@@ -464,8 +468,7 @@ fn node_test_approve() -> Result<()> {
             .compat()
             .await
             .unwrap();
-
-        _delay(Duration::from_millis(500)).await;
+        wait_channel_idle(node1.clone(), node2.clone()).await?;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount
@@ -572,6 +575,21 @@ fn node_test_reject() -> Result<()> {
 
 async fn _delay(duration: Duration) {
     delay_for(duration).await;
+}
+
+/// wait until the channel between node1 and node2 is idle
+async fn wait_channel_idle(node1: Arc<Node>, node2: Arc<Node>) -> Result<()> {
+    let wallet1 = node1.wallet();
+    let wallet2 = node2.wallet();
+    let address1 = wallet1.account();
+    let address2 = wallet2.account();
+    while wallet1.get_pending_txn_request(address2).await?.is_some() {
+        _delay(Duration::from_millis(500)).await
+    }
+    while wallet2.get_pending_txn_request(address1).await?.is_some() {
+        _delay(Duration::from_millis(500)).await
+    }
+    Ok(())
 }
 
 async fn _confirm(node: Arc<Node>, duration: Duration, addr: AccountAddress, approve: bool) {
