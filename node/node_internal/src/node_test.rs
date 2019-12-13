@@ -75,7 +75,7 @@ fn node_test_all() -> Result<()> {
             .await
             .unwrap();
 
-        wait_channel_idle(node1.clone(), node2.clone()).await?;
+        _wait_channel_idle(node1.clone(), node2.clone()).await?;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount
@@ -94,7 +94,7 @@ fn node_test_all() -> Result<()> {
             .await
             .unwrap();
 
-        wait_channel_idle(node2.clone(), node3.clone()).await?;
+        _wait_channel_idle(node2.clone(), node3.clone()).await?;
         assert_eq!(
             node2.channel_balance_async(addr3).await.unwrap(),
             fund_amount
@@ -113,7 +113,7 @@ fn node_test_all() -> Result<()> {
             .await
             .unwrap();
 
-        wait_channel_idle(node1.clone(), node2.clone()).await?;
+        _wait_channel_idle(node1.clone(), node2.clone()).await?;
 
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
@@ -126,7 +126,7 @@ fn node_test_all() -> Result<()> {
 
         let transfer_amount = 1_000;
 
-        let invoice = node1.add_invoice().await.unwrap();
+        let invoice = node1.add_invoice(transfer_amount).await.unwrap();
         node2
             .off_chain_pay_htlc_async(addr1, transfer_amount, invoice.r_hash, 1000)
             .await
@@ -136,7 +136,7 @@ fn node_test_all() -> Result<()> {
             .unwrap();
 
         info!("sender is {}", addr2);
-        wait_channel_idle(node1.clone(), node2.clone()).await?;
+        _wait_channel_idle(node1.clone(), node2.clone()).await?;
 
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
@@ -156,7 +156,7 @@ fn node_test_all() -> Result<()> {
             .unwrap();
         debug!("txn:{:#?}", offchain_txn);
 
-        wait_channel_idle(node1.clone(), node2.clone()).await?;
+        _wait_channel_idle(node1.clone(), node2.clone()).await?;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount - transfer_amount * 2 + deposit_amount
@@ -166,7 +166,7 @@ fn node_test_all() -> Result<()> {
             fund_amount + transfer_amount * 2
         );
 
-        let invoice = node1.add_invoice().await.unwrap();
+        let invoice = node1.add_invoice(transfer_amount).await.unwrap();
         node3
             .off_chain_pay_htlc_async(addr1, transfer_amount, invoice.r_hash, 1000)
             .await
@@ -174,11 +174,11 @@ fn node_test_all() -> Result<()> {
             .compat()
             .await
             .unwrap();
-        wait_channel_idle(node3.clone(), node2.clone()).await?;
-        wait_channel_idle(node2.clone(), node1.clone()).await?;
+        _wait_channel_idle(node3.clone(), node2.clone()).await?;
+        _wait_channel_idle(node2.clone(), node1.clone()).await?;
         _delay(Duration::from_millis(1000)).await;
-        wait_channel_idle(node2.clone(), node1.clone()).await?;
-        wait_channel_idle(node3.clone(), node2.clone()).await?;
+        _wait_channel_idle(node2.clone(), node1.clone()).await?;
+        _wait_channel_idle(node3.clone(), node2.clone()).await?;
 
         assert_eq!(
             node3.channel_balance_async(addr2).await.unwrap(),
@@ -205,7 +205,7 @@ fn node_test_all() -> Result<()> {
             .compat()
             .await
             .unwrap();
-        wait_channel_idle(node2.clone(), node1.clone()).await?;
+        _wait_channel_idle(node2.clone(), node1.clone()).await?;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount - transfer_amount * 3 - wd_amount + deposit_amount
@@ -296,7 +296,7 @@ fn node_test_four_hop() -> Result<()> {
             .await
             .unwrap();
 
-        wait_channel_idle(node1.clone(), node2.clone()).await?;
+        _wait_channel_idle(node1.clone(), node2.clone()).await?;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount
@@ -313,7 +313,7 @@ fn node_test_four_hop() -> Result<()> {
             .compat()
             .await
             .unwrap();
-        wait_channel_idle(node2.clone(), node3.clone()).await?;
+        _wait_channel_idle(node2.clone(), node3.clone()).await?;
 
         assert_eq!(
             node3.channel_balance_async(addr2).await.unwrap(),
@@ -331,7 +331,7 @@ fn node_test_four_hop() -> Result<()> {
             .compat()
             .await
             .unwrap();
-        wait_channel_idle(node3.clone(), node4.clone()).await?;
+        _wait_channel_idle(node3.clone(), node4.clone()).await?;
 
         assert_eq!(
             node4.channel_balance_async(addr3).await.unwrap(),
@@ -344,7 +344,7 @@ fn node_test_four_hop() -> Result<()> {
 
         let transfer_amount = 1_000;
 
-        let invoice = node1.add_invoice().await.unwrap();
+        let invoice = node1.add_invoice(transfer_amount).await.unwrap();
         node4
             .off_chain_pay_htlc_async(addr1, transfer_amount, invoice.r_hash, 1000)
             .await
@@ -353,18 +353,18 @@ fn node_test_four_hop() -> Result<()> {
             .await
             .unwrap();
 
-        wait_channel_idle(node4.clone(), node3.clone()).await?;
+        _wait_channel_idle(node4.clone(), node3.clone()).await?;
         _delay(Duration::from_millis(1000)).await;
-        wait_channel_idle(node3.clone(), node2.clone()).await?;
+        _wait_channel_idle(node3.clone(), node2.clone()).await?;
         _delay(Duration::from_millis(1000)).await;
-        wait_channel_idle(node2.clone(), node1.clone()).await?;
+        _wait_channel_idle(node2.clone(), node1.clone()).await?;
         _delay(Duration::from_millis(1000)).await;
 
-        wait_channel_idle(node2.clone(), node1.clone()).await?;
+        _wait_channel_idle(node2.clone(), node1.clone()).await?;
         _delay(Duration::from_millis(1000)).await;
-        wait_channel_idle(node3.clone(), node2.clone()).await?;
+        _wait_channel_idle(node3.clone(), node2.clone()).await?;
         _delay(Duration::from_millis(1000)).await;
-        wait_channel_idle(node4.clone(), node3.clone()).await?;
+        _wait_channel_idle(node4.clone(), node3.clone()).await?;
         _delay(Duration::from_millis(1000)).await;
 
         assert_eq!(
@@ -468,7 +468,7 @@ fn node_test_approve() -> Result<()> {
             .compat()
             .await
             .unwrap();
-        wait_channel_idle(node1.clone(), node2.clone()).await?;
+        _wait_channel_idle(node1.clone(), node2.clone()).await?;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount
@@ -578,7 +578,7 @@ async fn _delay(duration: Duration) {
 }
 
 /// wait until the channel between node1 and node2 is idle
-async fn wait_channel_idle(node1: Arc<Node>, node2: Arc<Node>) -> Result<()> {
+async fn _wait_channel_idle(node1: Arc<Node>, node2: Arc<Node>) -> Result<()> {
     let wallet1 = node1.wallet();
     let wallet2 = node2.wallet();
     let address1 = wallet1.account();

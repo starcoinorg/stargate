@@ -37,6 +37,7 @@ use futures_01::sync::{
 use router::Router;
 use sgtypes::sg_error::{SgError, SgErrorCode};
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
+use std::convert::TryInto;
 
 pub struct Node {
     executor: Handle,
@@ -314,6 +315,25 @@ impl Node {
         resp_receiver.await?
     }
 
+    pub async fn off_chain_pay_htlc_async_string(
+        &self,
+        encoded_invoice: String,
+    ) -> Result<MessageFuture<u64>> {
+        let invoice: Result<Invoice> = encoded_invoice.try_into();
+        match invoice {
+            Ok(invoice) => {
+                self.off_chain_pay_htlc_async(
+                    invoice.receiver,
+                    invoice.amount,
+                    invoice.r_hash,
+                    20000,
+                )
+                .await
+            }
+            Err(e) => Err(e),
+        }
+    }
+
     pub async fn off_chain_pay_htlc_async(
         &self,
         receiver_address: AccountAddress,
@@ -550,8 +570,11 @@ impl Node {
         }
     }
 
-    pub async fn add_invoice(&self) -> Result<Invoice> {
-        Ok(self.invoice_mgr.new_invoice(self.wallet.account()).await)
+    pub async fn add_invoice(&self, amount: u64) -> Result<Invoice> {
+        Ok(self
+            .invoice_mgr
+            .new_invoice(amount, self.wallet.account())
+            .await)
     }
 
     async fn start(

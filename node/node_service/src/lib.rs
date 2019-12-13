@@ -8,10 +8,10 @@ use grpcio::{EnvBuilder, RpcStatus, RpcStatusCode};
 use node_internal::node::Node as Node_Internal;
 use node_proto::proto::node::create_node;
 use node_proto::{
-    ChannelBalanceRequest, ChannelBalanceResponse, ChannelTransactionProposalRequest,
-    DeployModuleRequest, DepositRequest, ExecuteScriptRequest, InstallChannelScriptPackageRequest,
-    InstallChannelScriptPackageResponse, OpenChannelRequest, PayRequest, QueryTransactionQuest,
-    WithdrawRequest,
+    AddInvoiceRequest, AddInvoiceResponse, ChannelBalanceRequest, ChannelBalanceResponse,
+    ChannelTransactionProposalRequest, DeployModuleRequest, DepositRequest, EmptyResponse,
+    ExecuteScriptRequest, InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse,
+    OpenChannelRequest, PayRequest, PaymentRequest, QueryTransactionQuest, WithdrawRequest,
 };
 use sg_config::config::NodeConfig;
 use std::convert::TryFrom;
@@ -260,6 +260,60 @@ impl node_proto::proto::node::Node for NodeService {
             match result {
                 Ok(rx) => {
                     sink.success(rx.into());
+                }
+                Err(e) => {
+                    set_failure_message(
+                        RpcStatusCode::UNKNOWN,
+                        format!("Failed to process request: {}", e),
+                        sink,
+                    );
+                }
+            }
+        };
+        ctx.spawn(f.boxed().unit_error().compat());
+    }
+
+    fn add_invoice(
+        &mut self,
+        ctx: ::grpcio::RpcContext,
+        req: node_proto::proto::node::AddInvoiceRequest,
+        sink: ::grpcio::UnarySink<node_proto::proto::node::AddInvoiceResponse>,
+    ) {
+        let node = self.node.clone();
+        let f = async move {
+            let request = AddInvoiceRequest::try_from(req).unwrap();
+            match node.add_invoice(request.amount).await {
+                Ok(invoice) => {
+                    let response = AddInvoiceResponse::new(invoice.into());
+                    sink.success(response.into());
+                }
+                Err(e) => {
+                    set_failure_message(
+                        RpcStatusCode::UNKNOWN,
+                        format!("Failed to process request: {}", e),
+                        sink,
+                    );
+                }
+            }
+        };
+        ctx.spawn(f.boxed().unit_error().compat());
+    }
+
+    fn send_payment(
+        &mut self,
+        ctx: ::grpcio::RpcContext,
+        req: node_proto::proto::node::PaymentRequest,
+        sink: ::grpcio::UnarySink<node_proto::proto::node::EmptyResponse>,
+    ) {
+        let node = self.node.clone();
+        let f = async move {
+            let request = PaymentRequest::try_from(req).unwrap();
+            match node
+                .off_chain_pay_htlc_async_string(request.encoded_invoice)
+                .await
+            {
+                Ok(_) => {
+                    sink.success(EmptyResponse::new().into());
                 }
                 Err(e) => {
                     set_failure_message(

@@ -20,6 +20,7 @@ pub struct InvoiceManager {
 #[derive(Clone, Debug)]
 pub struct Invoice {
     pub r_hash: Vec<u8>,
+    pub amount: u64,
     pub receiver: AccountAddress,
 }
 
@@ -27,6 +28,7 @@ impl Invoice {
     fn as_vec(&self) -> Vec<u8> {
         let mut result = Vec::new();
         result.extend_from_slice(&self.receiver.to_vec());
+        result.extend_from_slice(&self.amount.to_be_bytes());
         result.extend_from_slice(&self.r_hash);
         result
     }
@@ -37,8 +39,15 @@ impl TryFrom<Vec<u8>> for Invoice {
 
     fn try_from(value: Vec<u8>) -> Result<Self> {
         let receiver = AccountAddress::try_from(&value[0..ADDRESS_LENGTH])?;
-        let r_hash = Vec::from(&value[ADDRESS_LENGTH..]);
-        Ok(Self { receiver, r_hash })
+        let mut amount_bytes: [u8; 8] = [0; 8];
+        amount_bytes.copy_from_slice(&value[ADDRESS_LENGTH..ADDRESS_LENGTH + 8]);
+        let amount = u64::from_be_bytes(amount_bytes);
+        let r_hash = Vec::from(&value[ADDRESS_LENGTH + 8..]);
+        Ok(Self {
+            receiver,
+            amount,
+            r_hash,
+        })
     }
 }
 
@@ -71,7 +80,7 @@ impl InvoiceManager {
         }
     }
 
-    pub async fn new_invoice(&self, receiver: AccountAddress) -> Invoice {
+    pub async fn new_invoice(&self, amount: u64, receiver: AccountAddress) -> Invoice {
         let preimage = HashValue::random().to_vec();
         let r_hash = HashValue::from_sha3_256(preimage.as_slice()).to_vec();
 
@@ -84,7 +93,11 @@ impl InvoiceManager {
             .lock()
             .await
             .insert(r_hash.clone(), preimage.clone());
-        Invoice { r_hash, receiver }
+        Invoice {
+            r_hash,
+            amount,
+            receiver,
+        }
     }
 
     pub async fn get_preimage(&self, r_hash: &HashValue) -> Option<Vec<u8>> {
