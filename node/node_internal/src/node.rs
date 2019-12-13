@@ -608,6 +608,9 @@ impl Node {
 
 impl NodeInner {
     async fn shutdown(&self) {
+        if let Err(e) = self.wallet.stop().await {
+            error!("fail to stop wallet, {}", e);
+        }
         match self.router.shutdown().await {
             Ok(_) => {
                 info!("shutdown router succ");
