@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::chain_watcher::txn_stream::TxnStream;
-use anyhow::bail;
 use anyhow::Result;
 use futures::channel::mpsc;
 use futures::channel::oneshot;
@@ -13,6 +12,7 @@ use sgchain::star_chain_client::ChainClient;
 use std::collections::HashMap;
 use std::sync::Arc;
 mod txn_stream;
+use super::utils::{call, cast, respond_with, Msg};
 pub type Interest = Box<dyn Fn(&Transaction) -> bool + Send>;
 
 pub struct ChainWatcher {
@@ -99,17 +99,6 @@ impl Drop for ChainWatcherHandle {
     fn drop(&mut self) {
         self.stop();
     }
-}
-
-#[derive(Debug)]
-enum Msg<ReqT, RespT> {
-    Call {
-        msg: ReqT,
-        tx: oneshot::Sender<RespT>,
-    },
-    Cast {
-        msg: ReqT,
-    },
 }
 
 enum Request {
@@ -222,38 +211,4 @@ impl ChainWatcher {
         self.interests.remove(tag);
         self.down_streams.remove(tag);
     }
-}
-
-async fn call<ReqT, RespT>(
-    mut mailbox_sender: mpsc::Sender<Msg<ReqT, RespT>>,
-    request: ReqT,
-) -> Result<RespT> {
-    let (tx, rx) = oneshot::channel();
-    if let Err(_e) = mailbox_sender.try_send(Msg::Call { msg: request, tx }) {
-        bail!("mailbox is full or close");
-    }
-    match rx.await {
-        Ok(result) => Ok(result),
-        Err(_) => bail!("sender dropped"),
-    }
-}
-
-fn cast<ReqT, RespT>(
-    mut mailbox_sender: mpsc::Sender<Msg<ReqT, RespT>>,
-    request: ReqT,
-) -> Result<()> {
-    if let Err(e) = mailbox_sender.try_send(Msg::Cast { msg: request }) {
-        if e.is_full() {
-            bail!("mailbox is full");
-        } else {
-            error!("mailbox is closed");
-        }
-    }
-    Ok(())
-}
-
-fn respond_with<T>(responder: oneshot::Sender<T>, msg: T) {
-    if let Err(_t) = responder.send(msg) {
-        error!("fail to send back response, receiver is dropped",);
-    };
 }
