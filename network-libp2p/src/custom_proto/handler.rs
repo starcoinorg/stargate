@@ -21,7 +21,7 @@ use std::{
     mem,
     time::{Duration, Instant},
 };
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_timer::Delay;
 
 /// Implements the `IntoProtocolsHandler` trait of libp2p.

@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 sgchain = { path = "../sgchain" }
 sgwallet = { path="../sgwallet"}
-failure = { path = "../libra/common/failure-ext", package = "libra-failure-ext"  }
+anyhow = "1.0"
 libra-logger = { path = "../libra/common/logger"}
 graphdb = { path = "./graphdb"}
 libra-types = { path = "../libra/types" }
@@ -18,6 +18,6 @@ libra-crypto = { path = "../libra/crypto/crypto"}
 libra-tools = {path ="../libra/common/tools", package = "libra-tools"}
 sgtypes = { path = "../sgtypes" }
 
-futures = { version = "=0.3.0-alpha.19", package = "futures-preview", features = ["async-await", "io-compat", "compat"] }
-tokio = {package = "tokio", version="=0.2.0-alpha.6", default-features=true}
+futures = { version = "0.3.0", features = ["io-compat", "compat"] }
+tokio = { version = "0.2", features = ["full"] }
 rand = "0.6.5"

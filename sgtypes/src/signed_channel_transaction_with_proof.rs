@@ -1,6 +1,6 @@
 use crate::proof::signed_channel_transaction_proof::SignedChannelTransactionProof;
 use crate::signed_channel_transaction::SignedChannelTransaction;
-use failure::prelude::*;
+use anyhow::{ensure, Result};
 use libra_types::account_address::AccountAddress;
 use libra_types::contract_event::ContractEvent;
 use libra_types::ledger_info::LedgerInfo;

@@ -1,7 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use failure::prelude::*;
+use anyhow::Result;
 use libra_state_view::StateView;
 use libra_types::write_set::WriteSet;
 use libra_types::{access_path::AccessPath, transaction::Version};

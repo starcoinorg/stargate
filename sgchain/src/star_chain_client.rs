@@ -6,22 +6,21 @@ use admission_control_proto::proto::admission_control::{
     AdmissionControlClient, SubmitTransactionRequest, SubmitTransactionResponse,
 };
 use admission_control_service::admission_control_mock_client::AdmissionControlMockClient;
+use anyhow::{bail, Result};
 use async_trait::async_trait;
 use core::borrow::Borrow;
-use failure::prelude::*;
 use futures::channel::oneshot::Sender;
 use futures_timer::Delay;
 use grpcio::{ChannelBuilder, EnvBuilder};
-use libra_config::config::NodeConfigHelpers;
 use libra_config::config::{ConsensusType, NodeConfig};
-use libra_config::trusted_peers::ConfigHelpers;
+use libra_config::generator;
 use libra_logger::prelude::*;
-use libra_prost_ext::MessageExt;
 use libra_types::access_path::AccessPath;
 use libra_types::contract_event::EventWithProof;
 use libra_types::crypto_proxies::LedgerInfoWithSignatures;
 use libra_types::get_with_proof::ResponseItem;
 use libra_types::ledger_info::LedgerInfo;
+use libra_types::transaction::Transaction;
 use libra_types::{
     account_address::AccountAddress,
     account_config::{association_address, AccountResource},
@@ -34,15 +33,15 @@ use libra_types::{
 use sgtypes::account_state::AccountState;
 use std::{
     convert::TryInto,
-    fs::File,
-    io::Write,
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::runtime::Runtime;
-use tokio::runtime::TaskExecutor;
+use tokio::runtime::{Handle, Runtime};
 use transaction_builder::{encode_create_account_script, encode_transfer_script};
-use vm_genesis::{encode_genesis_transaction_with_validator_and_consensus, GENESIS_KEYPAIR};
+use vm_genesis::{
+    encode_genesis_transaction_with_validator_and_consensus, generate_genesis_blob_with_consensus,
+    GENESIS_KEYPAIR,
+};
 
 #[async_trait]
 pub trait ChainClient: Send + Sync {
@@ -130,7 +129,7 @@ pub trait ChainClient: Send + Sync {
         address: &AccountAddress,
         seq: u64,
     ) -> Result<(Option<TransactionWithProof>, Option<AccountStateWithProof>)> {
-        let end_time = Instant::now() + Duration::from_millis(50_000);
+        let end_time = Instant::now() + Duration::from_millis(50_000 * 2);
         loop {
             let timeout_time = Instant::now() + Duration::from_millis(1000);
             Delay::new(Duration::from_millis(1000)).await;
@@ -288,17 +287,17 @@ pub struct MockChainClient {
 
 impl MockChainClient {
     pub fn new() -> (Self, StarHandle) {
-        let mut config =
-            NodeConfigHelpers::get_single_node_test_config(false /* random ports */);
+        let mut config = gen_node_config_with_genesis(1, false, false, Some("/memory/0"), false);
         // TODO: test the circleci
         config.storage.address = "127.0.0.1".to_string();
         info!("MockChainClient config: {:?} ", config);
-        genesis_blob(&config);
+        genesis_blob(&mut config, false);
 
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let executor = rt.executor();
+        let executor = rt.handle().clone();
 
-        let (_handle, shutdown_sender, ac, proxy) = setup_environment(&mut config);
+        let (_handle, shutdown_sender, ac, proxy) =
+            setup_environment(&mut config, executor.clone());
         (
             MockChainClient {
                 ac_client: Arc::new(AdmissionControlMockClient::new(ac, proxy, executor)),
@@ -335,12 +334,12 @@ pub fn faucet_sync<C>(client: C, receiver: AccountAddress, amount: u64) -> Resul
 where
     C: 'static + ChainClient,
 {
-    let rt = Runtime::new().expect("faucet runtime err.");
+    let mut rt = Runtime::new().expect("faucet runtime err.");
     let f = async move { client.faucet(receiver, amount).await };
     rt.block_on(f)
 }
 
-pub fn faucet_async<C>(client: C, executor: TaskExecutor, receiver: AccountAddress, amount: u64)
+pub fn faucet_async<C>(client: C, executor: Handle, receiver: AccountAddress, amount: u64)
 where
     C: 'static + ChainClient,
 {
@@ -358,7 +357,7 @@ where
     client.faucet(receiver, amount).await
 }
 
-pub fn submit_txn_async<C>(client: C, executor: TaskExecutor, txn: SignedTransaction)
+pub fn submit_txn_async<C>(client: C, executor: Handle, txn: SignedTransaction)
 where
     C: 'static + ChainClient,
 {
@@ -375,26 +374,80 @@ fn parse_response(mut resp: UpdateToLatestLedgerResponse) -> ResponseItem {
     resp.response_items.remove(0).try_into().unwrap()
 }
 
-pub fn genesis_blob(config: &NodeConfig) {
-    let path = config.get_genesis_transaction_file();
+pub fn genesis_blob(config: &mut NodeConfig, genesis_flag: bool) {
+    let path = config.execution.genesis_file_location();
     info!("Write genesis_blob to {}", path.as_path().to_string_lossy());
-    let (_validator_keys, test_consensus_peers, test_network_peers) =
-        ConfigHelpers::gen_validator_nodes(1, None);
-    let genesis_checked_txn = encode_genesis_transaction_with_validator_and_consensus(
-        &GENESIS_KEYPAIR.0,
-        GENESIS_KEYPAIR.1.clone(),
-        test_consensus_peers.get_validator_set(&test_network_peers),
-        config.consensus.consensus_type == ConsensusType::POW,
-    );
-    let genesis_txn = genesis_checked_txn.into_inner();
-    let mut genesis_file = File::create(path).expect("open genesis file err.");
-    genesis_file
-        .write_all(
-            Into::<libra_types::proto::types::SignedTransaction>::into(genesis_txn)
-                .to_vec()
+
+    let genesis_txn = if genesis_flag {
+        let validator_network = if let Some(n) = &config.validator_network {
+            Some(n.clone_for_template())
+        } else {
+            None
+        };
+        let genesis_checked_txn = encode_genesis_transaction_with_validator_and_consensus(
+            &GENESIS_KEYPAIR.0,
+            GENESIS_KEYPAIR.1.clone(),
+            config
+                .consensus
+                .consensus_peers
+                .get_validator_set(&validator_network.unwrap().network_peers),
+            config.consensus.consensus_type == ConsensusType::POW,
+        );
+        genesis_checked_txn.into_inner()
+    } else {
+        generate_genesis_blob_with_consensus(config.consensus.consensus_type == ConsensusType::POW)
+    };
+
+    config
+        .execution
+        .save_genesis(Transaction::UserTransaction(genesis_txn));
+
+    config.execution.reload_genesis();
+}
+
+pub fn gen_node_config_with_genesis(
+    times: usize,
+    network_random: bool,
+    pow_mode: bool,
+    address: Option<&str>,
+    genesis_flag: bool,
+) -> NodeConfig {
+    let mut conf = generator::validator_swarm_for_testing_times(times, network_random)
+        .unwrap()
+        .pop()
+        .unwrap();
+
+    if pow_mode {
+        //        for conf in &mut (&mut config).networks {
+        conf.validator_network.as_mut().unwrap().is_permissioned = false;
+        conf.validator_network.as_mut().unwrap().is_public_network = true;
+        conf.validator_network
+            .as_mut()
+            .unwrap()
+            .enable_encryption_and_authentication = true;
+    //            conf.listen_address = listen_address.parse().unwrap();
+    //            conf.base.role = RoleType::Validator;
+    //        }
+    } else {
+        conf.consensus.consensus_type = ConsensusType::PBFT;
+    }
+
+    match address {
+        Some(addr) => {
+            conf.validator_network
+                .as_mut()
                 .unwrap()
-                .as_slice(),
-        )
-        .expect("write genesis file err.");
-    genesis_file.flush().expect("flush genesis file err.");
+                .listen_address(addr);
+            let (peer, _peer_info) = conf.validator_network.as_ref().unwrap().get_peer_info();
+            conf.validator_network
+                .as_mut()
+                .unwrap()
+                .add_seed(peer, addr);
+        }
+        _ => {}
+    }
+
+    genesis_blob(&mut conf, genesis_flag);
+
+    conf
 }

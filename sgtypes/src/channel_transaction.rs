@@ -3,8 +3,8 @@
 
 use crate::channel_transaction_sigs::ChannelTransactionSigs;
 use crate::impl_hash;
+use anyhow::{Error, Result};
 use bytes::IntoBuf;
-use failure::prelude::*;
 use libra_crypto::{
     ed25519::{Ed25519PublicKey, Ed25519Signature},
     hash::CryptoHash,

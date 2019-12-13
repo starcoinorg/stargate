@@ -1,9 +1,9 @@
+use anyhow::{bail, Result};
 use async_trait::async_trait;
 use backoff::backoff::Backoff;
 use backoff::ExponentialBackoff;
-use failure::prelude::*;
 use futures::task::Context;
-use futures::{FutureExt, Poll, Stream, TryStreamExt};
+use futures::{FutureExt, Stream, TryStreamExt};
 use futures_timer::Delay;
 use libra_logger::prelude::*;
 use libra_types::access_path::{AccessPath, DataPath};
@@ -22,6 +22,7 @@ use std::convert::{TryFrom, TryInto};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::task::Poll;
 
 #[derive(Clone, Debug)]
 pub enum ChannelChangeEvent {
@@ -278,8 +279,8 @@ fn build_request(req: RequestItem, ver: Option<Version>) -> UpdateToLatestLedger
 #[cfg(test)]
 mod test {
     use crate::channel_event_watcher::EventStream;
+    use anyhow::{bail, Result};
     use async_trait::async_trait;
-    use failure::prelude::*;
     use futures::TryStreamExt;
     use futures_timer::Delay;
     use libra_crypto::HashValue;

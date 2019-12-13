@@ -3,15 +3,15 @@
 
 //! This module defines error types used by sgstorage.
 
-use failure::Fail;
+use thiserror::Error;
 
 /// This enum defines errors commonly used among SgStorage APIs.
-#[derive(Debug, Fail)]
+#[derive(Debug, Error)]
 pub enum SgStorageError {
     /// A requested item is not found.
-    #[fail(display = "{} not found.", _0)]
+    #[error("{0} not found.")]
     NotFound(String),
     /// Requested too many items.
-    #[fail(display = "Too many items requested: {}, max is {}", _0, _1)]
+    #[error("Too many items requested: {0}, max is {1}")]
     TooManyRequested(u64, u64),
 }

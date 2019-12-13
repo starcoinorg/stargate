@@ -9,7 +9,7 @@ edition = "2018"
 
 [dependencies]
 walkdir = "2"
-failure = { path = "../libra/common/failure-ext", package = "libra-failure-ext"  }
+anyhow = "1.0"
 libra-types = { path = "../libra/types" }
 sgtypes = { path = "../sgtypes" }
 stdlib = { path = "../libra/language/stdlib" }

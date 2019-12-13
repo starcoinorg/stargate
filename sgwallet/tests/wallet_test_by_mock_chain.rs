@@ -4,7 +4,7 @@
 use crate::wallet_test_helper::{
     deploy_custom_module_and_script, test_deploy_custom_module, test_wallet_async,
 };
-use failure::prelude::*;
+use anyhow::Result;
 use libra_types::transaction::TransactionArgument;
 use sgchain::star_chain_client::{ChainClient, MockChainClient};
 use sgtypes::script_package::ChannelScriptPackage;
@@ -81,9 +81,6 @@ fn run_test_wallet_install_package() -> Result<()> {
 }
 
 fn run_test_deploy_custom_module_by_mock_client() -> Result<()> {
-    ::libra_logger::try_init_for_testing();
-    let (mock_chain_service, _handle) = MockChainClient::new();
-    let _chain_client = Arc::new(mock_chain_service);
     run_with_mock_client(|chain_client| test_deploy_custom_module(chain_client))
 }
 

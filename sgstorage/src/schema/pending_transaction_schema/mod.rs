@@ -12,7 +12,7 @@
 //! `Version` is serialized in big endian so that records in RocksDB will be in order of it's
 //! numeric value.
 use crate::schema::PENDING_CHANNEL_TRANSACTION_CF_NAME;
-use failure::prelude::*;
+use anyhow::Result;
 use schemadb::{
     define_schema,
     schema::{KeyCodec, ValueCodec},

@@ -19,10 +19,10 @@ use std::{
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tokio::runtime::TaskExecutor;
+use tokio::runtime::Handle;
 
 pub fn gen_node(
-    executor: TaskExecutor,
+    executor: Handle,
     config: &NetworkConfig,
     client: Arc<MockChainClient>,
     auto_approve: bool,
@@ -47,7 +47,7 @@ pub fn gen_node(
         .wait()
         .unwrap()
         .unwrap();
-    wallet.start(executor.clone()).unwrap();
+    wallet.start(&executor).unwrap();
 
     let (network, tx, rx, close_tx) = build_network_service(config, keypair.clone());
     let _identify = network.identify();

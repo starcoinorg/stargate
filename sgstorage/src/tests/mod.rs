@@ -6,7 +6,7 @@ use crate::channel_state_store::ChannelState;
 use crate::channel_store::ChannelStore;
 use crate::schema_db::SchemaDB;
 use crate::storage::SgStorage;
-use failure::Result;
+use anyhow::Result;
 use libra_crypto::hash::CryptoHash;
 use libra_crypto::HashValue;
 use libra_tools::tempdir::TempPath;

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::schema::{ensure_slice_len_eq, CHANNEL_WRITE_SET_CF_NAME};
+use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use failure::prelude::*;
 use libra_types::transaction::Version;
 use schemadb::{
     define_schema,

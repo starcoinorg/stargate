@@ -6,9 +6,9 @@ use futures::{
 };
 use futures_timer::Delay;
 use std::{sync::Arc, time::Duration};
-use tokio::runtime::TaskExecutor;
+use tokio::runtime::Handle;
 
-use failure::prelude::*;
+use anyhow::{bail, ensure, Error, Result};
 use libra_crypto::{hash::CryptoHash, HashValue};
 
 use libra_logger::prelude::*;
@@ -39,7 +39,7 @@ use sgtypes::sg_error::{SgError, SgErrorCode};
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 
 pub struct Node {
-    executor: TaskExecutor,
+    executor: Handle,
     node_inner: Option<NodeInner>,
     event_sender: UnboundedSender<Event>,
     command_sender: UnboundedSender<NodeMessage>,
@@ -55,7 +55,7 @@ pub struct Node {
 
 struct NodeInner {
     wallet: Arc<Wallet>,
-    executor: TaskExecutor,
+    executor: Handle,
     sender: UnboundedSender<NetworkMessage>,
     message_processor: MessageProcessor<u64>,
     network_processor: MessageProcessor<NodeNetworkMessage>,
@@ -68,7 +68,7 @@ struct NodeInner {
 
 impl Node {
     pub fn new(
-        executor: TaskExecutor,
+        executor: Handle,
         wallet: Wallet,
         network_service: NetworkService,
         sender: UnboundedSender<NetworkMessage>,
@@ -127,7 +127,7 @@ impl Node {
             Ok(msg_future) => msg_future,
             Err(e) => {
                 resp_sender
-                    .send(Err(failure::Error::from(e)))
+                    .send(Err(Error::from(e)))
                     .expect("Failed to send error message.");
                 return resp_receiver;
             }
@@ -137,7 +137,7 @@ impl Node {
                 .send(Ok(OpenChannelResponse {}))
                 .expect("Did open channel processor thread panic?"),
             Err(e) => resp_sender
-                .send(Err(failure::Error::from(e)))
+                .send(Err(Error::from(e)))
                 .expect("Failed to send error message."),
         };
         resp_receiver
@@ -182,7 +182,7 @@ impl Node {
             Ok(msg_future) => msg_future,
             Err(e) => {
                 resp_sender
-                    .send(Err(failure::Error::from(e)))
+                    .send(Err(Error::from(e)))
                     .expect("Failed to send error message.");
                 return resp_receiver;
             }
@@ -192,7 +192,7 @@ impl Node {
                 .send(Ok(DepositResponse {}))
                 .expect("Did open channel processor thread panic?"),
             Err(e) => resp_sender
-                .send(Err(failure::Error::from(e)))
+                .send(Err(Error::from(e)))
                 .expect("Failed to send error message."),
         };
         resp_receiver
@@ -227,7 +227,7 @@ impl Node {
             Ok(msg_future) => msg_future,
             Err(e) => {
                 resp_sender
-                    .send(Err(failure::Error::from(e)))
+                    .send(Err(Error::from(e)))
                     .expect("Failed to send error message.");
                 return resp_receiver;
             }
@@ -238,7 +238,7 @@ impl Node {
                 .send(Ok(WithdrawResponse {}))
                 .expect("Did open channel processor thread panic?"),
             Err(e) => resp_sender
-                .send(Err(failure::Error::from(e)))
+                .send(Err(Error::from(e)))
                 .expect("Failed to send error message."),
         };
         resp_receiver
@@ -276,7 +276,7 @@ impl Node {
             Ok(msg_future) => msg_future,
             Err(e) => {
                 resp_sender
-                    .send(Err(failure::Error::from(e)))
+                    .send(Err(Error::from(e)))
                     .expect("Failed to send error message.");
                 return resp_receiver;
             }
@@ -287,7 +287,7 @@ impl Node {
                 .send(Ok(PayResponse {}))
                 .expect("Did open channel processor thread panic?"),
             Err(e) => resp_sender
-                .send(Err(failure::Error::from(e)))
+                .send(Err(Error::from(e)))
                 .expect("Failed to send error message."),
         };
         resp_receiver
@@ -457,7 +457,7 @@ impl Node {
                 .send(Ok(ExecuteScriptResponse::new(id)))
                 .expect("Did open channel processor thread panic?"),
             Err(e) => resp_sender
-                .send(Err(failure::Error::from(e)))
+                .send(Err(Error::from(e)))
                 .expect("Failed to send error message."),
         };
         Ok(resp_receiver)
@@ -511,7 +511,7 @@ impl Node {
                 .expect("Did open channel processor thread panic?"),
             Err(e) => {
                 resp_sender
-                    .send(Err(failure::Error::from(e)))
+                    .send(Err(Error::from(e)))
                     .expect("Failed to send error message.");
                 return resp_receiver;
             }
@@ -608,7 +608,14 @@ impl Node {
 
 impl NodeInner {
     async fn shutdown(&self) {
-        self.router.shutdown().await;
+        match self.router.shutdown().await {
+            Ok(_) => {
+                info!("shutdown router succ");
+            }
+            Err(e) => {
+                warn!("check shutdown router error,{}", e);
+            }
+        }
     }
 
     async fn handle_network_msg(&mut self, msg: NetworkMessage) {
@@ -1495,7 +1502,7 @@ mod tests {
 
     #[test]
     fn test_delay() {
-        let rt = Runtime::new().unwrap();
+        let mut rt = Runtime::new().unwrap();
 
         let task = async {
             Delay::new(Duration::from_millis(1000)).await;

@@ -3,7 +3,7 @@ pub use libra_crypto::{
     hash::CryptoHash,
 };
 
-use failure::prelude::*;
+use anyhow::{ensure, Result};
 use libra_crypto::ed25519::Ed25519PrivateKey;
 use libra_crypto::test_utils::KeyPair;
 use libra_crypto::PrivateKey;

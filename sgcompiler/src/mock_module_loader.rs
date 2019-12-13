@@ -3,8 +3,8 @@
 
 use std::collections::HashMap;
 
-use failure::_core::cell::RefCell;
 use ir_to_bytecode::{compiler::compile_module, parser::parse_module};
+use std::cell::RefCell;
 
 use super::*;
 

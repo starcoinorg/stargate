@@ -1,7 +1,7 @@
 use libra_crypto::HashValue;
 use std::{convert::TryFrom, fmt};
 
-use failure::prelude::*;
+use anyhow::{ensure, Error, Result};
 
 #[derive(Clone, Copy)]
 pub struct SValue([u8; S_VALUE_LENGTH]);
@@ -61,7 +61,7 @@ impl fmt::LowerHex for SValue {
 }
 
 impl TryFrom<&[u8]> for SValue {
-    type Error = failure::Error;
+    type Error = Error;
 
     /// Tries to convert the provided byte array into Address.
     fn try_from(bytes: &[u8]) -> Result<Self> {
@@ -77,7 +77,7 @@ impl TryFrom<&[u8]> for SValue {
 }
 
 impl TryFrom<&[u8; 33]> for SValue {
-    type Error = failure::Error;
+    type Error = Error;
 
     /// Tries to convert the provided byte array into Address.
     fn try_from(bytes: &[u8; 33]) -> Result<Self> {
@@ -86,7 +86,7 @@ impl TryFrom<&[u8; 33]> for SValue {
 }
 
 impl TryFrom<Vec<u8>> for SValue {
-    type Error = failure::Error;
+    type Error = Error;
 
     /// Tries to convert the provided byte buffer into Address.
     fn try_from(bytes: Vec<u8>) -> Result<Self> {

@@ -20,7 +20,7 @@ use libp2p::{
 };
 use log::{debug, info, trace, warn};
 use std::{borrow::Cow, cmp, fmt, time::Duration};
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_timer::{clock::Clock, Delay};
 use void;
 

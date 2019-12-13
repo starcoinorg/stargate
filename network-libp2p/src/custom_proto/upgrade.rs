@@ -12,7 +12,7 @@ use libp2p::{
 };
 use log::warn;
 use std::{collections::VecDeque, io, marker::PhantomData, vec::IntoIter as VecIntoIter};
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 use unsigned_varint::codec::UviBytes;
 
 /// Connection upgrade for a single protocol.

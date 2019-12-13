@@ -15,8 +15,8 @@
 //! `Version` is serialized in big endian so that records in RocksDB will be in order of it's
 //! numeric value.
 use crate::schema::CHANNEL_TRANSACTION_INFO_CF_NAME;
+use anyhow::{ensure, Result};
 use byteorder::{BigEndian, ReadBytesExt};
-use failure::prelude::*;
 use libra_types::transaction::Version;
 use schemadb::{
     define_schema,

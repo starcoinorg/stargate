@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::account_resource_ext;
-use failure::prelude::*;
+use anyhow::Result;
 
 use libra_types::{
     access_path::DataPath,

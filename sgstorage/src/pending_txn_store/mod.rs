@@ -3,7 +3,7 @@
 
 use crate::schema::pending_transaction_schema::PendingTransactionSchema;
 use crate::schema_db::SchemaDB;
-use failure::prelude::*;
+use anyhow::Result;
 use schemadb::SchemaBatch;
 use sgtypes::pending_txn::PendingTransaction;
 #[derive(Debug, Clone)]

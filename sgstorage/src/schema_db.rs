@@ -1,7 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use failure::prelude::*;
+use anyhow::Result;
 use schemadb::schema::{Schema, SeekKeyCodec};
 use schemadb::{ReadOptions, SchemaBatch};
 

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::schema::ensure_slice_len_eq;
+use anyhow::{format_err, Result};
 use byteorder::{BigEndian, ReadBytesExt};
-use failure::prelude::*;
 use schemadb::{
     define_schema,
     schema::{KeyCodec, ValueCodec},
@@ -32,10 +32,10 @@ impl KeyCodec<LedgerInfoSchema> for u64 {
 
 impl ValueCodec<LedgerInfoSchema> for LedgerInfo {
     fn encode_value(&self) -> Result<Vec<u8>> {
-        lcs::to_bytes(self).map_err(|e| Error::from_boxed_compat(Box::new(e)))
+        lcs::to_bytes(self).map_err(|e| format_err!("{:?}", e))
     }
 
     fn decode_value(data: &[u8]) -> Result<Self> {
-        lcs::from_bytes(data).map_err(|e| Error::from_boxed_compat(Box::new(e)))
+        lcs::from_bytes(data).map_err(|e| format_err!("{:?}", e))
     }
 }

@@ -1,7 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use failure::prelude::*;
+use anyhow::Result;
 use libra_types::{access_path::DataPath, account_address::AccountAddress};
 use std::collections::{BTreeMap, HashSet};
 use std::ops::{Deref, DerefMut};

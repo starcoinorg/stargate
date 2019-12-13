@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 use crate::channel::{ChannelEvent, ChannelMsg};
 use crate::{channel::Channel, scripts::*};
+use anyhow::{bail, ensure, format_err, Error, Result};
 use chrono::Utc;
-use failure::prelude::*;
 use futures::{
     channel::{mpsc, oneshot},
     StreamExt,
@@ -56,7 +56,7 @@ use sgtypes::{
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::path::Path;
-use std::{sync::Arc, thread, time::Duration};
+use std::{sync::Arc, time::Duration};
 use tokio::runtime;
 use vm_runtime::{MoveVM, VMExecutor};
 
@@ -76,6 +76,7 @@ pub struct Wallet {
     shared: Shared,
     sgdb: Arc<SgStorage>,
     inner: Option<Inner>,
+    _rt: runtime::Runtime,
 }
 
 impl Wallet {
@@ -102,7 +103,11 @@ impl Wallet {
         let script_registry = Arc::new(PackageRegistry::build()?);
 
         let mut builder = runtime::Builder::new();
-        let runtime = builder.name_prefix("wallet").core_threads(4).build()?;
+        let runtime = builder
+            .thread_name("wallet-")
+            .threaded_scheduler()
+            .enable_all()
+            .build()?;
 
         let shared = Shared {
             account,
@@ -115,7 +120,7 @@ impl Wallet {
             inner: shared.clone(),
             channels: HashMap::new(),
             sgdb: sgdb.clone(),
-            runtime: Some(runtime),
+            rt_handle: runtime.handle().clone(),
             mailbox,
             channel_event_sender,
             channel_event_receiver,
@@ -126,10 +131,11 @@ impl Wallet {
             shared,
             sgdb: sgdb.clone(),
             inner: Some(inner),
+            _rt: runtime,
         };
         Ok(wallet)
     }
-    pub fn start(&mut self, executor: runtime::TaskExecutor) -> Result<()> {
+    pub fn start(&mut self, executor: &runtime::Handle) -> Result<()> {
         let inner = self.inner.take().expect("wallet already started");
         executor.spawn(inner.start());
         Ok(())
@@ -760,7 +766,7 @@ pub struct Inner {
     inner: Shared,
     channels: HashMap<AccountAddress, Channel>,
     sgdb: Arc<SgStorage>,
-    runtime: Option<tokio::runtime::Runtime>,
+    rt_handle: runtime::Handle,
     mailbox: mpsc::Receiver<WalletCmd>,
     channel_event_receiver: mpsc::Receiver<ChannelEvent>,
     channel_event_sender: mpsc::Sender<ChannelEvent>,
@@ -933,14 +939,6 @@ impl Inner {
                 for channel_address in channels.into_iter() {
                     if let Err(e) = self.stop_channel(channel_address).await {
                         error!("fail to stop channel {}, err: {}", &channel_address, e);
-                    }
-                }
-                if let Some(rt) = self.runtime.take() {
-                    let handle = thread::spawn(|| {
-                        rt.shutdown_on_idle();
-                    });
-                    if let Err(e) = handle.join() {
-                        error!("fail to shutdown wallet runtime, e: {:#?}", e)
                     }
                 }
                 self.should_stop = true;
@@ -1303,7 +1301,7 @@ impl Inner {
             self.inner.script_registry.clone(),
             self.inner.client.clone(),
         );
-        channel.start(self.runtime.as_ref().unwrap().executor());
+        channel.start(self.rt_handle.clone());
 
         // TODO: should wait signal of channel saying it's started
         self.channels.insert(channel_address, channel);

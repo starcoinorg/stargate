@@ -9,7 +9,7 @@ use super::schema::{
 };
 use crate::rocksdb_utils::FixedPrefixSliceTransform;
 use crate::schema::PARTICIPANT_PUBLIC_KEY_CF_NAME;
-use failure::prelude::*;
+use anyhow::{format_err, Error, Result};
 use libra_logger::prelude::*;
 use libra_types::account_address::{AccountAddress, ADDRESS_LENGTH};
 use rocksdb::{rocksdb_options::ColumnFamilyDescriptor, CFHandle, DBOptions, DB};
@@ -217,8 +217,8 @@ fn db_exists(path: &Path) -> bool {
 }
 
 /// All the RocksDB methods return `std::result::Result<T, String>`. Since our methods return
-/// `failure::Result<T>`, manual conversion is needed.
-fn convert_rocksdb_err(msg: String) -> failure::Error {
+/// `Result<T>`, manual conversion is needed.
+fn convert_rocksdb_err(msg: String) -> Error {
     format_err!("RocksDB internal error: {}.", msg)
 }
 

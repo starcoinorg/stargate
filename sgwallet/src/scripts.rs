@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use atomic_refcell::AtomicRefCell;
 use include_dir::Dir;
 
-use failure::prelude::*;
+use anyhow::{bail, format_err, Result};
 
 use ir_to_bytecode::compiler::compile_script;
 use ir_to_bytecode::parser::ast;

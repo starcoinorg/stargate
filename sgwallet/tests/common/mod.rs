@@ -1,7 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use failure::prelude::*;
+use anyhow::Result;
 use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
@@ -14,7 +14,6 @@ use sgchain::star_chain_client::ChainClient;
 use sgwallet::wallet::Wallet;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
-
 pub fn setup_wallet(client: Arc<dyn ChainClient>, init_balance: u64) -> Result<Wallet> {
     let mut seed_rng = rand::rngs::OsRng::new().expect("can't access OsRng");
     let seed_buf: [u8; 32] = seed_rng.gen();
@@ -23,7 +22,7 @@ pub fn setup_wallet(client: Arc<dyn ChainClient>, init_balance: u64) -> Result<W
         Arc::new(KeyPair::generate_for_testing(&mut rng0));
 
     let account = AccountAddress::from_public_key(&account_keypair.public_key);
-    let rt = Runtime::new().expect("faucet runtime err.");
+    let mut rt = Runtime::new().expect("faucet runtime err.");
     let f = {
         let c = client.clone();
         async move { c.faucet(account, init_balance).await }
@@ -56,24 +55,25 @@ pub fn setup_wallet(client: Arc<dyn ChainClient>, init_balance: u64) -> Result<W
 
 pub fn with_wallet<T, F>(chain_client: Arc<dyn ChainClient>, f: F) -> Result<T>
 where
-    F: Fn(&Runtime, Arc<Wallet>, Arc<Wallet>) -> Result<T>,
+    F: Fn(&mut Runtime, Arc<Wallet>, Arc<Wallet>) -> Result<T>,
 {
     let init_amount = 10_000_000;
-    let rt = Runtime::new()?;
+    let mut rt = Runtime::new()?;
     let mut sender_wallet = setup_wallet(chain_client.clone(), init_amount)?;
     let mut receiver_wallet = setup_wallet(chain_client.clone(), init_amount)?;
-    sender_wallet.start(rt.executor().clone())?;
-    receiver_wallet.start(rt.executor().clone())?;
+    sender_wallet.start(rt.handle())?;
+    receiver_wallet.start(rt.handle())?;
     let sender_wallet = Arc::new(sender_wallet);
     let receiver_wallet = Arc::new(receiver_wallet);
 
-    let res = f(&rt, sender_wallet.clone(), receiver_wallet.clone());
+    let res = f(&mut rt, sender_wallet.clone(), receiver_wallet.clone());
     rt.block_on(sender_wallet.stop())?;
     rt.block_on(receiver_wallet.stop())?;
-    rt.shutdown_on_idle();
+    drop(rt);
     res
 }
 
+#[allow(dead_code)]
 pub async fn send_payment(
     sender_wallet: Arc<Wallet>,
     receiver_wallet: Arc<Wallet>,
@@ -100,6 +100,7 @@ pub async fn send_payment(
     Ok(sender_gas)
 }
 
+#[allow(dead_code)]
 pub async fn receive_payment(
     sender_wallet: Arc<Wallet>,
     receiver_wallet: Arc<Wallet>,

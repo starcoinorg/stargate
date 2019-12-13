@@ -22,7 +22,7 @@ use std::{
     mem,
     time::{Duration, Instant},
 };
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Network behaviour that handles opening substreams for custom protocols with other nodes.
 ///

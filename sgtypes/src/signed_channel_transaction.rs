@@ -5,7 +5,7 @@ use crate::impl_hash;
 use crate::{
     channel_transaction::ChannelTransaction, channel_transaction_sigs::ChannelTransactionSigs,
 };
-use failure::prelude::*;
+use anyhow::{ensure, Error, Result};
 
 use libra_crypto::HashValue;
 use libra_crypto_derive::CryptoHasher;
@@ -48,7 +48,7 @@ impl TryFrom<crate::proto::sgtypes::SignedChannelTransaction> for SignedChannelT
             .into_iter()
             .map(ChannelTransactionSigs::try_from)
             .collect::<Result<Vec<_>>>()?;
-        ensure!(signers.len() == signatures.len());
+        ensure!(signers.len() == signatures.len(), "len mismatch.");
         let signatures = signers
             .into_iter()
             .zip(signatures.into_iter())

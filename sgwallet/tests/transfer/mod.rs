@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::common::{open_channel, receive_payment, send_payment};
-use failure::prelude::*;
+use anyhow::Result;
 use libra_crypto::HashValue;
 use sgwallet::wallet::Wallet;
 use std::sync::Arc;

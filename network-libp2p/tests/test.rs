@@ -369,7 +369,7 @@ fn reconnect_after_disconnect() {
         .unwrap();
 
     // Do a second 3-seconds run to make sure we don't get disconnected immediately again.
-    let mut delay = tokio::timer::Delay::new(Instant::now() + Duration::from_secs(3));
+    let mut delay = tokio_timer::Delay::new(Instant::now() + Duration::from_secs(3));
     runtime
         .block_on(future::poll_fn(|| -> Result<_, io::Error> {
             match service1.poll().unwrap() {

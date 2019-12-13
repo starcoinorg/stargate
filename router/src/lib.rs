@@ -1,8 +1,8 @@
-use failure::prelude::*;
+use anyhow::{ensure, Result};
 
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::channel::oneshot;
-use futures::prelude::*;
+use futures::stream::StreamExt;
 use graphdb::{edge::Edge, graph_store::GraphStore, vertex::Vertex};
 use libra_crypto::{test_utils::KeyPair, Uniform};
 use libra_logger::prelude::*;
@@ -15,16 +15,16 @@ use sgtypes::system_event::Event;
 use sgwallet::wallet::Wallet;
 use sgwallet::{get_channel_events, ChannelChangeEvent};
 use std::collections::HashMap;
-use std::time::Instant;
 use std::{
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tokio::runtime::TaskExecutor;
+use tokio::runtime::Handle;
+use tokio::runtime::Runtime;
 
 pub struct Router {
     inner: Option<RouterInner>,
-    executor: TaskExecutor,
+    executor: Handle,
     sender: UnboundedSender<RouterMessage>,
     control_sender: UnboundedSender<Event>,
 }
@@ -45,7 +45,7 @@ enum RouterMessage {
 }
 
 impl Router {
-    pub fn new(chain_client: Arc<dyn ChainClient>, executor: TaskExecutor) -> Self {
+    pub fn new(chain_client: Arc<dyn ChainClient>, executor: Handle) -> Self {
         let (sender, receiver) = futures::channel::mpsc::unbounded();
         let (control_sender, control_receiver) = futures::channel::mpsc::unbounded();
         let inner = RouterInner {
@@ -91,8 +91,9 @@ impl Router {
         })
     }
 
-    pub async fn shutdown(&self) {
-        self.control_sender.unbounded_send(Event::SHUTDOWN).unwrap()
+    pub async fn shutdown(&self) -> Result<()> {
+        self.control_sender.unbounded_send(Event::SHUTDOWN)?;
+        Ok(())
     }
 
     pub fn start(&mut self) -> Result<()> {
@@ -210,14 +211,14 @@ fn respond_with<T>(responder: futures::channel::oneshot::Sender<T>, msg: T) {
 
 #[test]
 fn router_test() {
+    use anyhow::Error;
     use libra_logger::prelude::*;
     use sgchain::star_chain_client::MockChainClient;
     use std::sync::Arc;
-    use tokio::runtime::Runtime;
 
     libra_logger::init_for_e2e_testing();
-    let rt = Runtime::new().unwrap();
-    let executor = rt.executor();
+    let mut rt = Runtime::new().unwrap();
+    let executor = rt.handle().clone();
 
     let (mock_chain_service, _handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
@@ -225,11 +226,15 @@ fn router_test() {
     let mut router = Router::new(client.clone(), executor.clone());
     router.start().unwrap();
 
-    let f = async move {
-        let (wallet1, addr1) = _gen_wallet(executor.clone(), client.clone()).await?;
-        let (wallet2, _addr2) = _gen_wallet(executor.clone(), client.clone()).await?;
-        let (wallet3, addr3) = _gen_wallet(executor.clone(), client.clone()).await?;
+    let (wallet1, addr1) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+    let (wallet2, _addr2) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+    let (wallet3, addr3) = _gen_wallet(executor.clone(), client.clone()).unwrap();
 
+    let _wallet1 = wallet1.clone();
+    let _wallet2 = wallet2.clone();
+    let _wallet3 = wallet3.clone();
+
+    let f = async move {
         _open_channel(wallet1.clone(), wallet2.clone(), 100000, 100000).await?;
         _open_channel(wallet2.clone(), wallet3.clone(), 100000, 100000).await?;
 
@@ -247,37 +252,45 @@ fn router_test() {
         wallet1.stop().await?;
         wallet2.stop().await?;
         wallet3.stop().await?;
-        router.shutdown().await;
+        router.shutdown().await?;
         Ok::<_, Error>(())
     };
 
     rt.block_on(f).unwrap();
-    rt.shutdown_on_idle();
 
     debug!("here");
 }
 
-async fn _gen_wallet(
-    executor: TaskExecutor,
+fn _gen_wallet(
+    executor: Handle,
     client: Arc<MockChainClient>,
 ) -> Result<(Arc<Wallet>, AccountAddress)> {
     let amount: u64 = 10_000_000;
     let mut rng: StdRng = SeedableRng::seed_from_u64(_get_unix_ts()); //SeedableRng::from_seed([0; 32]);
     let keypair = Arc::new(KeyPair::generate_for_testing(&mut rng));
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
-    faucet_async_2(client.as_ref().clone(), account_address, amount).await?;
+    let mut rt = Runtime::new().expect("faucet runtime err.");
+    let f = async {
+        faucet_async_2(client.as_ref().clone(), account_address, amount)
+            .await
+            .unwrap();
+    };
+    rt.block_on(f);
     let store_path = TempPath::new();
     let mut wallet =
         Wallet::new_with_client(account_address, keypair.clone(), client, store_path.path())
             .unwrap();
-    wallet.enable_channel().await.unwrap();
-    wallet.start(executor).unwrap();
+    let f = async {
+        wallet.enable_channel().await.unwrap();
+    };
+    rt.block_on(f);
+
+    wallet.start(&executor).unwrap();
     Ok((Arc::new(wallet), account_address))
 }
 
 async fn _delay(duration: Duration) {
-    let timeout_time = Instant::now() + duration;
-    tokio::timer::delay(timeout_time).await;
+    tokio::time::delay_for(duration).await;
 }
 
 async fn _open_channel(
