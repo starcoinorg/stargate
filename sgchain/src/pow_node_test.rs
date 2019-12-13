@@ -236,12 +236,12 @@ fn print_ports(config: &NodeConfig) {
     debug!("{}", config.storage.port);
 }
 
-rusty_fork_test! {
-    #[test]
-    fn test_pow_with_fork() {
-        test_pow_node().unwrap();
-    }
-}
+//rusty_fork_test! {
+//    #[test]
+//    fn test_pow_with_fork() {
+//        test_pow_node().unwrap();
+//    }
+//}
 
 fn test_pow_node() -> Result<()> {
     ::libra_logger::init_for_e2e_testing();
