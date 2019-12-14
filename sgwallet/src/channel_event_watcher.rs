@@ -121,9 +121,11 @@ impl ChainClientEventQuerier {
         version: Option<u64>,
     ) -> Result<Option<BTreeMap<Vec<u8>, Vec<u8>>>> {
         let ri = RequestItem::GetAccountState { address: addr };
-        let mut resp = self
-            .0
-            .update_to_latest_ledger(&build_request(ri, version))?;
+        let client = self.0.clone();
+        let mut resp = tokio::task::spawn_blocking(move || {
+            client.update_to_latest_ledger(&build_request(ri, version))
+        })
+        .await??;
         let resp: libra_types::get_with_proof::ResponseItem =
             resp.response_items.remove(0).try_into()?;
         let s = resp.into_get_account_state_response()?;
