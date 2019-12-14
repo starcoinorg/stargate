@@ -6,11 +6,11 @@ ENV RUST_BACKTRACE "1"
 
 WORKDIR /starcoin
 COPY . /starcoin
-RUN cargo build  -p sgchain && cd target/debug && rm -r build deps incremental
+RUN cargo build --release -p sgchain && cd target/release && rm -r build deps incremental
 
 RUN mkdir -p /opt/starcoin/bin /opt/starcoin/etc
 COPY libra/docker/install-tools.sh /root
-COPY /starcoin/target/debug/sgchain /opt/starcoin/bin
+COPY /starcoin/target/release/sgchain /opt/starcoin/bin
 
 # Admission control
 EXPOSE 8000
