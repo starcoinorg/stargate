@@ -8,7 +8,7 @@ use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_types::account_address::{AccountAddress, ADDRESS_LENGTH};
 use std::collections::HashMap;
-use std::convert::{From, TryFrom};
+use std::convert::{From, TryFrom, TryInto};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -17,7 +17,7 @@ pub struct InvoiceManager {
     r_hash_previous_hop_map: Arc<Mutex<HashMap<Vec<u8>, AccountAddress>>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Invoice {
     pub r_hash: Vec<u8>,
     pub amount: u64,
@@ -137,4 +137,25 @@ impl InvoiceManager {
             }
         };
     }
+}
+
+#[test]
+fn test_invoice() {
+    let preimage = HashValue::random().to_vec();
+    let r_hash = HashValue::from_sha3_256(preimage.as_slice()).to_vec();
+    let account_address = AccountAddress::random();
+    let amount = 1000;
+
+    let invoice = Invoice {
+        r_hash,
+        amount,
+        receiver: account_address,
+    };
+
+    let invoice_string: String = invoice.clone().into();
+    let invoice_decode: Invoice = invoice_string.try_into().unwrap();
+
+    assert_eq!(invoice_decode.receiver, invoice.receiver);
+    assert_eq!(invoice_decode.r_hash, invoice.r_hash);
+    assert_eq!(invoice_decode.amount, invoice.amount);
 }
