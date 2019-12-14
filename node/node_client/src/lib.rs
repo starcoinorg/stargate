@@ -5,11 +5,12 @@ use anyhow::{bail, Result};
 use grpcio::{ChannelBuilder, Environment};
 use node_proto::proto::node::NodeClient as GrpcNodeClient;
 use node_proto::{
-    ChannelBalanceRequest, ChannelBalanceResponse, ChannelTransactionProposalRequest,
-    DeployModuleRequest, DeployModuleResponse, DepositRequest, DepositResponse, EmptyResponse,
-    ExecuteScriptRequest, ExecuteScriptResponse, GetChannelTransactionProposalResponse,
-    InstallChannelScriptPackageRequest, InstallChannelScriptPackageResponse, OpenChannelRequest,
-    OpenChannelResponse, PayRequest, PayResponse, WithdrawRequest, WithdrawResponse,
+    AddInvoiceRequest, AddInvoiceResponse, ChannelBalanceRequest, ChannelBalanceResponse,
+    ChannelTransactionProposalRequest, DeployModuleRequest, DeployModuleResponse, DepositRequest,
+    DepositResponse, EmptyResponse, ExecuteScriptRequest, ExecuteScriptResponse,
+    GetChannelTransactionProposalResponse, InstallChannelScriptPackageRequest,
+    InstallChannelScriptPackageResponse, OpenChannelRequest, OpenChannelResponse, PayRequest,
+    PayResponse, PaymentRequest, WithdrawRequest, WithdrawResponse,
 };
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -116,6 +117,22 @@ impl NodeClient {
     ) -> Result<EmptyResponse> {
         let proto_request = request.into();
         match self.client.channel_transaction_proposal(&proto_request) {
+            Ok(proto_response) => Ok(EmptyResponse::try_from(proto_response)?),
+            Err(err) => bail!("GRPC error: {}", err),
+        }
+    }
+
+    pub fn add_invoice(&self, request: AddInvoiceRequest) -> Result<AddInvoiceResponse> {
+        let proto_request = request.into();
+        match self.client.add_invoice(&proto_request) {
+            Ok(proto_response) => Ok(AddInvoiceResponse::try_from(proto_response)?),
+            Err(err) => bail!("GRPC error: {}", err),
+        }
+    }
+
+    pub fn send_payment(&self, request: PaymentRequest) -> Result<EmptyResponse> {
+        let proto_request = request.into();
+        match self.client.send_payment(&proto_request) {
             Ok(proto_response) => Ok(EmptyResponse::try_from(proto_response)?),
             Err(err) => bail!("GRPC error: {}", err),
         }
