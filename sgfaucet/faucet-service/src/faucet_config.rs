@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
+#[cfg(test)]
+use std::path::PathBuf;
 
 #[derive(Debug, Deserialize, PartialEq, Serialize, Clone)]
 struct KeyConf {
