@@ -1,5 +1,5 @@
 [key_conf]
-key_file = '/tmp/xxx'
+pri_file = '/tmp/faucet'
 
 [ser_conf]
 host = '127.0.0.1'
@@ -7,4 +7,4 @@ port = 8090
 
 [chain_conf]
 rpc_host = '127.0.0.1'
-rpc_port = 7070
+rpc_port = 8001
