@@ -14,6 +14,7 @@ use futures_timer::Delay;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use libra_config::config::{ConsensusType, NodeConfig};
 use libra_config::generator;
+use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
 use libra_logger::prelude::*;
 use libra_types::access_path::AccessPath;
 use libra_types::contract_event::EventWithProof;
@@ -88,6 +89,27 @@ pub trait ChainClient: Send + Sync {
     }
 
     async fn faucet(&self, receiver: AccountAddress, amount: u64) -> Result<()> {
+        self.faucet_with_sender(
+            Some(association_address()),
+            &GENESIS_KEYPAIR.0,
+            receiver,
+            amount,
+        )
+        .await
+    }
+
+    async fn faucet_with_sender(
+        &self,
+        address: Option<AccountAddress>,
+        pri_key: &Ed25519PrivateKey,
+        receiver: AccountAddress,
+        amount: u64,
+    ) -> Result<()> {
+        let pub_key: Ed25519PublicKey = (pri_key).into();
+        let sender = match address {
+            Some(addr) => addr,
+            None => AccountAddress::from_public_key(&pub_key),
+        };
         let exist_flag = self.account_exist(&receiver, None);
         let script = if !exist_flag {
             encode_create_account_script(&receiver, amount)
@@ -95,7 +117,6 @@ pub trait ChainClient: Send + Sync {
             encode_transfer_script(&receiver, amount)
         };
 
-        let sender = association_address();
         let s_n = self
             .account_sequence_number(&sender)
             .expect("seq num is none.");
@@ -103,11 +124,11 @@ pub trait ChainClient: Send + Sync {
             sender.clone(),
             s_n,
             script,
-            1000_000 as u64,
+            1_000_000 as u64,
             1 as u64,
             Duration::from_secs(u64::max_value()),
         )
-        .sign(&GENESIS_KEYPAIR.0, GENESIS_KEYPAIR.1.clone())
+        .sign(pri_key, pub_key.clone())
         .unwrap()
         .into_inner();
 
