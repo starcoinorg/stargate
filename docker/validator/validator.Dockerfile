@@ -10,7 +10,7 @@ RUN cargo build --release -p sgchain && cd target/release && rm -r build deps in
 
 RUN mkdir -p /opt/starcoin/bin /opt/starcoin/etc
 COPY libra/docker/install-tools.sh /root
-COPY /starcoin/target/release/sgchain /opt/starcoin/bin
+COPY --from=builder /starcoin/target/release/sgchain /opt/starcoin/bin
 
 # Admission control
 EXPOSE 8000
