@@ -118,6 +118,7 @@ impl Wallet {
         let (channel_event_sender, channel_event_receiver) = mpsc::channel(128);
         let inner = Inner {
             inner: shared.clone(),
+            channel_enabled: false,
             channels: HashMap::new(),
             sgdb: sgdb.clone(),
             rt_handle: runtime.handle().clone(),
@@ -186,26 +187,23 @@ impl Wallet {
 }
 
 impl Wallet {
+    /// enable channel for this wallet, return gas_used
     pub async fn enable_channel(&self) -> Result<u64> {
-        let seq_number = self.sequence_number()?;
-        let raw_txn = RawTransaction::new_script(
-            self.shared.account,
-            seq_number,
-            encode_enable_channel_script(),
-            1000_000 as u64,
-            1,
-            Duration::from_secs(u64::max_value()),
-        );
-        let signed_txn = raw_txn
-            .sign(
-                &self.shared.keypair.private_key,
-                self.shared.keypair.public_key.clone(),
-            )?
-            .into_inner();
-        let _ = submit_transaction(self.shared.client.as_ref(), signed_txn).await?;
-        let _proof =
-            watch_transaction(self.shared.client.as_ref(), self.shared.account, seq_number).await?;
-        Ok(_proof.proof.transaction_info().gas_used())
+        let (tx, rx) = oneshot::channel();
+
+        let resp = self
+            .call(WalletCmd::EnableChannel { responder: tx }, rx)
+            .await??;
+        Ok(resp)
+    }
+
+    pub async fn is_channel_feature_enabled(&self) -> Result<bool> {
+        let (tx, rx) = oneshot::channel();
+
+        let resp = self
+            .call(WalletCmd::IsChannelFeatureEnabled { responder: tx }, rx)
+            .await??;
+        Ok(resp)
     }
 
     pub async fn channel_sequence_number(&self, participant: AccountAddress) -> Result<u64> {
@@ -708,6 +706,12 @@ impl Wallet {
 
 #[derive(Debug)]
 pub enum WalletCmd {
+    IsChannelFeatureEnabled {
+        responder: oneshot::Sender<Result<bool>>,
+    },
+    EnableChannel {
+        responder: oneshot::Sender<Result<u64>>,
+    },
     Execute {
         participant: AccountAddress,
         channel_op: ChannelOp,
@@ -777,6 +781,7 @@ pub enum WalletCmd {
 
 pub struct Inner {
     inner: Shared,
+    channel_enabled: bool,
     channels: HashMap<AccountAddress, Channel>,
     sgdb: Arc<SgStorage>,
     rt_handle: runtime::Handle,
@@ -788,10 +793,30 @@ pub struct Inner {
 
 impl Inner {
     async fn start(mut self) {
-        if let Err(e) = self.refresh_channels() {
-            error!("fail to start all channels, err: {:?}", e);
+        let account_state = self
+            .inner
+            .client
+            .get_account_state(self.inner.account, None);
+        if let Err(e) = account_state {
+            error!("fail to get account state from chain, e: {}", e);
             return ();
         }
+        let account_state = account_state.unwrap();
+        if let Some(blob) =
+            account_state.get_state(&DataPath::onchain_resource_path(user_channels_struct_tag()))
+        {
+            self.channel_enabled = true;
+            let user_channels: UserChannelsResource =
+                TryFrom::try_from(blob.as_slice()).expect("parse user channels should work");
+            if let Err(e) = self.refresh_channels(user_channels, account_state.version()) {
+                error!("fail to start all channels, err: {:?}", e);
+                return ();
+            }
+        } else {
+            self.channel_enabled = false;
+            warn!("channel feature is not enabled for this wallet account");
+        }
+
         loop {
             ::futures::select! {
                maybe_external_cmd = self.mailbox.next() => {
@@ -825,6 +850,12 @@ impl Inner {
 
     async fn handle_external_cmd(&mut self, cmd: WalletCmd) {
         match cmd {
+            WalletCmd::IsChannelFeatureEnabled { responder } => {
+                respond_with(responder, Ok(self.channel_enabled));
+            }
+            WalletCmd::EnableChannel { responder } => {
+                respond_with(responder, self.enable_channel().await);
+            }
             WalletCmd::Execute {
                 participant,
                 channel_op,
@@ -960,24 +991,17 @@ impl Inner {
         }
     }
 
-    /// FIXME: load from correct path
-    fn refresh_channels(&mut self) -> Result<()> {
-        let account_state = self
-            .inner
-            .client
-            .get_account_state(self.inner.account, None)?;
-
-        let user_channels: UserChannelsResource = account_state
-            .get_state(&DataPath::onchain_resource_path(user_channels_struct_tag()))
-            .ok_or_else(|| format_err!("user channel list not exists"))
-            .and_then(|blob| TryFrom::try_from(blob.as_slice()))?;
-
+    fn refresh_channels(
+        &mut self,
+        user_channels: UserChannelsResource,
+        version: u64,
+    ) -> Result<()> {
         let mut channel_states = HashMap::new();
         for channel_address in user_channels.channels().iter() {
             let channel_account_state = self
                 .inner
                 .client
-                .get_account_state(channel_address.clone(), Some(account_state.version()))?;
+                .get_account_state(channel_address.clone(), Some(version))?;
 
             let channel_resource_blob = channel_account_state
                 .get_state(&DataPath::onchain_resource_path(channel_struct_tag()))
@@ -1030,6 +1054,30 @@ impl Inner {
             }
         };
         channel
+    }
+
+    async fn enable_channel(&mut self) -> Result<u64> {
+        ensure!(!self.channel_enabled, "channel feature is already enabled");
+        let seq_number = self.sequence_number()?;
+        let raw_txn = RawTransaction::new_script(
+            self.inner.account,
+            seq_number,
+            encode_enable_channel_script(),
+            1000_000 as u64,
+            1,
+            Duration::from_secs(u64::max_value()),
+        );
+        let signed_txn = raw_txn
+            .sign(
+                &self.inner.keypair.private_key,
+                self.inner.keypair.public_key.clone(),
+            )?
+            .into_inner();
+        let _ = submit_transaction(self.inner.client.as_ref(), signed_txn).await?;
+        let proof =
+            watch_transaction(self.inner.client.as_ref(), self.inner.account, seq_number).await?;
+        self.channel_enabled = true;
+        Ok(proof.proof.transaction_info().gas_used())
     }
 
     async fn execute(
