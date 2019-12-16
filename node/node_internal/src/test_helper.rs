@@ -39,6 +39,8 @@ pub fn gen_node(
     let mut wallet =
         Wallet::new_with_client(account_address, keypair.clone(), client, store_path.path())
             .unwrap();
+    wallet.start(&executor).unwrap();
+
     wallet
         .enable_channel()
         .boxed()
@@ -47,7 +49,6 @@ pub fn gen_node(
         .wait()
         .unwrap()
         .unwrap();
-    wallet.start(&executor).unwrap();
 
     let (network, tx, rx, close_tx) = build_network_service(config, keypair.clone());
     let _identify = network.identify();
@@ -64,6 +65,7 @@ pub fn gen_node(
             rx,
             close_tx,
             auto_approve,
+            20000,
             router,
         ),
         account_address,
