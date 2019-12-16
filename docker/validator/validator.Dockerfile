@@ -8,6 +8,10 @@ WORKDIR /starcoin
 COPY . /starcoin
 RUN cargo build --release -p sgchain && cd target/release && rm -r build deps incremental
 
+### Production Image ###
+
+FROM debian:buster As prod
+
 RUN mkdir -p /opt/starcoin/bin /opt/starcoin/etc
 COPY libra/docker/install-tools.sh /root
 COPY --from=builder /starcoin/target/release/sgchain /opt/starcoin/bin
@@ -23,11 +27,10 @@ EXPOSE 9101
 COPY docker/validator/docker-run.sh /
 CMD /docker-run.sh
 
-ARG BUILD_DATE
+ENV BUILD_DATE "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 ARG GIT_REV
-ARG GIT_UPSTREAM
 
 LABEL org.label-schema.schema-version="1.0"
 LABEL org.label-schema.build-date=$BUILD_DATE
 LABEL org.label-schema.vcs-ref=$GIT_REV
-LABEL vcs-upstream=$GIT_UPSTREAM
+# LABEL vcs-upstream=$GIT_UPSTREAM
