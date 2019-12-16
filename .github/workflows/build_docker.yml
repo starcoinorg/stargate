@@ -1,24 +1,25 @@
 name: Build Docker
 on:
-  pull_request:
+  push:
     # only build master
     branches:
-      - cluster_deploy**
+      - 'cluster_deploy**'
     paths-ignore:
       - '**.md'
 jobs:
   build-docker:
     name: build docker
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
         with:
           submodules: recursive
       - uses: elgohr/Publish-Docker-Github-Action@master
         env:
-          GIT_REV: ${{ GITHUB_SHA }}
+          GIT_REV: $GITHUB_SHA
         with:
-          name: stargateorg/stargate/sgchain
-          username: ${{ GITHUB_ACTOR }}
+          name: starcoinorg/stargate/sgchain
+          username: $GITHUB_ACTOR
           password: ${{ secrets.GITHUB_TOKEN }}
           registry: docker.pkg.github.com
           dockerfile: docker/validator/validator.Dockerfile

@@ -1,5 +1,10 @@
-FROM starcoin/base:latest AS builder
+FROM starcoin/base:latest AS toolchain
+WORKDIR /starcoin
+COPY rust-toolchain /starcoin/rust-toolchain
+# reinstall toolchain in case of toolchain changed
+RUN rustup install $(cat rust-toolchain)
 
+FROM toolchain as builder
 # To use http/https proxy while building, use:
 # docker build --build-arg https_proxy=http://fwdproxy:8080 --build-arg http_proxy=http://fwdproxy:8080
 ENV RUST_BACKTRACE "1"
