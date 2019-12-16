@@ -5,8 +5,7 @@ use network::build_network_service;
 use rand::prelude::*;
 
 use crate::node::Node;
-use futures::{FutureExt, TryFutureExt};
-use futures_01::future::Future;
+use anyhow::Error;
 use libra_crypto::{test_utils::KeyPair, Uniform};
 use libra_tools::tempdir::TempPath;
 use libra_types::account_address::AccountAddress;
@@ -19,9 +18,10 @@ use std::{
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tokio::runtime::Handle;
+use tokio::runtime::{Handle, Runtime};
 
 pub fn gen_node(
+    rt: &mut Runtime,
     executor: Handle,
     config: &NetworkConfig,
     client: Arc<MockChainClient>,
@@ -35,25 +35,24 @@ pub fn gen_node(
     let store_path = TempPath::new();
 
     let mut router = Router::new(client.clone(), executor.clone());
+    router.start().unwrap();
 
     let mut wallet =
         Wallet::new_with_client(account_address, keypair.clone(), client, store_path.path())
             .unwrap();
     wallet.start(&executor).unwrap();
 
-    wallet
-        .enable_channel()
-        .boxed()
-        .unit_error()
-        .compat()
-        .wait()
-        .unwrap()
-        .unwrap();
+    let f = async {
+        let enabled: bool = wallet.is_channel_feature_enabled().await?;
+        if !enabled {
+            wallet.enable_channel().await?;
+        }
+        Ok::<_, Error>(())
+    };
+    rt.block_on(f).unwrap();
 
     let (network, tx, rx, close_tx) = build_network_service(config, keypair.clone());
     let _identify = network.identify();
-
-    router.start().unwrap();
 
     thread::sleep(Duration::from_millis(1000));
     (

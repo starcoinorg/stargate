@@ -37,7 +37,13 @@ fn node_test_all() -> Result<()> {
         vec![],
     );
 
-    let (mut node1, addr1) = gen_node(executor.clone(), &network_config1, client.clone(), true);
+    let (mut node1, addr1) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config1,
+        client.clone(),
+        true,
+    );
     node1.start_server();
 
     let addr1_hex = hex::encode(addr1);
@@ -48,14 +54,26 @@ fn node_test_all() -> Result<()> {
         vec![seed.clone()],
     );
 
-    let (mut node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone(), true);
+    let (mut node2, addr2) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config2,
+        client.clone(),
+        true,
+    );
     node2.start_server();
 
     let network_config3 = create_node_network_config(
         format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
         vec![seed.clone()],
     );
-    let (mut node3, addr3) = gen_node(executor.clone(), &network_config3, client.clone(), true);
+    let (mut node3, addr3) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config3,
+        client.clone(),
+        true,
+    );
     node3.start_server();
 
     let node1 = Arc::new(node1);
@@ -248,7 +266,13 @@ fn node_test_four_hop() -> Result<()> {
     let (mock_chain_service, _handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
     let network_config1 = create_node_network_config("/ip4/127.0.0.1/tcp/5000".to_string(), vec![]);
-    let (mut node1, addr1) = gen_node(executor.clone(), &network_config1, client.clone(), true);
+    let (mut node1, addr1) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config1,
+        client.clone(),
+        true,
+    );
     node1.start_server();
 
     let addr1_hex = hex::encode(addr1);
@@ -259,21 +283,39 @@ fn node_test_four_hop() -> Result<()> {
         vec![seed.clone()],
     );
 
-    let (mut node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone(), true);
+    let (mut node2, addr2) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config2,
+        client.clone(),
+        true,
+    );
     node2.start_server();
 
     let network_config3 = create_node_network_config(
         format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
         vec![seed.clone()],
     );
-    let (mut node3, addr3) = gen_node(executor.clone(), &network_config3, client.clone(), true);
+    let (mut node3, addr3) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config3,
+        client.clone(),
+        true,
+    );
     node3.start_server();
 
     let network_config4 = create_node_network_config(
         format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
         vec![seed.clone()],
     );
-    let (mut node4, addr4) = gen_node(executor.clone(), &network_config4, client.clone(), true);
+    let (mut node4, addr4) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config4,
+        client.clone(),
+        true,
+    );
     node4.start_server();
 
     let node1 = Arc::new(node1);
@@ -432,7 +474,13 @@ fn node_test_approve() -> Result<()> {
         vec![],
     );
 
-    let (mut node1, addr1) = gen_node(executor.clone(), &network_config1, client.clone(), false);
+    let (mut node1, addr1) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config1,
+        client.clone(),
+        false,
+    );
     node1.start_server();
 
     let addr1_hex = hex::encode(addr1);
@@ -443,7 +491,13 @@ fn node_test_approve() -> Result<()> {
         format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
         vec![seed],
     );
-    let (mut node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone(), true);
+    let (mut node2, addr2) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config2,
+        client.clone(),
+        true,
+    );
     node2.start_server();
 
     let node1 = Arc::new(node1);
@@ -512,7 +566,13 @@ fn node_test_reject() -> Result<()> {
         vec![],
     );
 
-    let (mut node1, addr1) = gen_node(executor.clone(), &network_config1, client.clone(), false);
+    let (mut node1, addr1) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config1,
+        client.clone(),
+        false,
+    );
     node1.start_server();
 
     let addr1_hex = hex::encode(addr1);
@@ -523,7 +583,13 @@ fn node_test_reject() -> Result<()> {
         format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
         vec![seed],
     );
-    let (mut node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone(), true);
+    let (mut node2, addr2) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config2,
+        client.clone(),
+        true,
+    );
     node2.start_server();
 
     let node1 = Arc::new(node1);
