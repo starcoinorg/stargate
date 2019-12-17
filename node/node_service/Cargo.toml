@@ -20,11 +20,9 @@ sgtypes = { path = "../../sgtypes" }
 prost = "0.5.0"
 grpc-helpers = { path = "../../libra/common/grpc-helpers" }
 node_proto = { path = "../node_proto"}
-node_client = { path = "../node_client" }
 libra-crypto = { path = "../../libra/crypto/crypto" }
 libra-types = { path = "../../libra/types"}
 sg_config = {path="../../sgconfig"}
 libra-logger = { path = "../../libra/common/logger" }
 
-env_logger = { version = "0.6" }
 sgchain = { path = "../../sgchain"}

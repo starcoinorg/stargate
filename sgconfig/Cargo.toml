@@ -7,23 +7,13 @@ publish = false
 edition = "2018"
 
 [dependencies]
-clap = "2.32"
-get_if_addrs = "0.5.3"
-hex = "0.3.2"
-parity-multiaddr = "0.4.0"
-rand = "0.6.5"
 serde = { version = "1.0.96", features = ["derive"] }
-tempfile = "3.1.0"
 toml = "0.4"
 
-libra-crypto = { path = "../libra/crypto/crypto" }
-prost = "0.5.0"
-libra-logger = { path = "../libra/common/logger" }
 anyhow = "1.0"
-libra-types = { path = "../libra/types" }
 
 [dev-dependencies]
 
 [features]
-default = []
-fuzzing = ["libra-crypto/fuzzing", "libra-types/fuzzing"]
+#default = []
+#fuzzing = ["libra-crypto/fuzzing", "libra-types/fuzzing"]
