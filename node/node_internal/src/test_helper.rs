@@ -64,7 +64,7 @@ pub fn gen_node(
             rx,
             close_tx,
             auto_approve,
-            20000,
+            5000,
             router,
         ),
         account_address,
