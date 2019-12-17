@@ -8,7 +8,7 @@ use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_types::account_address::{AccountAddress, ADDRESS_LENGTH};
 use std::collections::HashMap;
-use std::convert::{From, TryFrom, TryInto};
+use std::convert::{From, TryFrom};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -141,6 +141,8 @@ impl InvoiceManager {
 
 #[test]
 fn test_invoice() {
+    use std::convert::TryInto;
+
     let preimage = HashValue::random().to_vec();
     let r_hash = HashValue::from_sha3_256(preimage.as_slice()).to_vec();
     let account_address = AccountAddress::random();

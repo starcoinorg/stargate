@@ -23,5 +23,6 @@ language/move_ir/
 .LSOverride
 wallet
 wallet2
+wallet3
 script
 */libradb

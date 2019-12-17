@@ -5,7 +5,7 @@ mod wallet_utils;
 use std::sync::Arc;
 
 use crate::wallet_utils::WalletLibrary;
-use anyhow::Result;
+use anyhow::{Error, Result};
 use futures_01::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
@@ -65,6 +65,7 @@ fn load_from_keyfile(
 }
 
 fn gen_node(
+    rt: &mut Runtime,
     executor: Handle,
     keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
     wallet_config: &WalletConfig,
@@ -72,7 +73,9 @@ fn gen_node(
     sender: UnboundedSender<NetworkMessage>,
     receiver: UnboundedReceiver<NetworkMessage>,
     close_tx: futures_01::sync::oneshot::Sender<()>,
-) -> (Node) {
+    timeout: u64,
+    auto_approve: bool,
+) -> Result<Node> {
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     let client = StarChainClient::new(
         &wallet_config.chain_address,
@@ -84,7 +87,7 @@ fn gen_node(
     router.start().unwrap();
 
     info!("account addr is {:?}", hex::encode(account_address));
-    let wallet = Wallet::new_with_client(
+    let mut wallet = Wallet::new_with_client(
         account_address,
         keypair.clone(),
         client,
@@ -92,17 +95,29 @@ fn gen_node(
     )
     .unwrap();
 
+    wallet.start(&executor).unwrap();
+
+    let f = async {
+        let enabled: bool = wallet.is_channel_feature_enabled().await?;
+        if !enabled {
+            wallet.enable_channel().await?;
+        }
+        Ok::<_, Error>(())
+    };
+    rt.block_on(f)?;
+
     info!("account resource is {:?}", wallet.account_resource());
-    Node::new(
+    Ok(Node::new(
         executor.clone(),
         wallet,
         network_service,
         sender,
         receiver,
         close_tx,
-        true,
+        auto_approve,
+        timeout,
         router,
-    )
+    ))
 }
 
 fn main() {
@@ -113,14 +128,15 @@ fn main() {
     let swarm = launch_swarm(&args).unwrap();
 
     info!("swarm is {:?}", swarm.config);
-    let rt = Runtime::new().unwrap();
-    let executor = rt.handle();
+    let mut rt = Runtime::new().unwrap();
+    let executor = rt.handle().clone();
 
     let keypair = Arc::new(load_from_keyfile(&args.faucet_key_path, args.child_num));
     let (network_service, tx, rx, close_tx) =
         build_network_service(&swarm.config.net_config, keypair.clone());
 
     let mut node = gen_node(
+        &mut rt,
         executor.clone(),
         keypair,
         &swarm.config.wallet,
@@ -128,7 +144,11 @@ fn main() {
         tx,
         rx,
         close_tx,
-    );
+        swarm.config.rpc_config.timeout,
+        swarm.config.rpc_config.auto_approve,
+    )
+    .unwrap();
+
     node.start_server();
     let api_node = Arc::new(node);
     let mut node_server = setup_node_service(&swarm.config, api_node.clone());

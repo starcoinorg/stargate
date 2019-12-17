@@ -76,6 +76,7 @@ impl Node {
         receiver: UnboundedReceiver<NetworkMessage>,
         net_close_tx: oneshot::Sender<()>,
         auto_approve: bool,
+        default_future_timeout: u64,
         router: Router,
     ) -> Self {
         let executor_clone = executor.clone();
@@ -92,7 +93,7 @@ impl Node {
             sender,
             message_processor: MessageProcessor::new(),
             network_processor: MessageProcessor::new(),
-            default_future_timeout: 20000,
+            default_future_timeout,
             network_service: network_service.clone(),
             auto_approve,
             invoice_mgr: invoice_mgr.clone(),
