@@ -51,6 +51,6 @@ rand = "0.6.5"
 async-std = { version = "1.0.1", features = ["unstable"]}
 channel = { path = "../libra/common/channel", version = "0.1.0" }
 futures-timer = "1.0.2"
-rusty-fork = "0.2.1"
 
 [dev-dependencies]
+rusty-fork = "0.2.1"
