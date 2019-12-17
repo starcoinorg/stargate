@@ -44,7 +44,7 @@ fn node_test_all() -> Result<()> {
         client.clone(),
         true,
     );
-    node1.start_server();
+    node1.start_server(&mut rt);
 
     let addr1_hex = hex::encode(addr1);
 
@@ -61,7 +61,7 @@ fn node_test_all() -> Result<()> {
         client.clone(),
         true,
     );
-    node2.start_server();
+    node2.start_server(&mut rt);
 
     let network_config3 = create_node_network_config(
         format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
@@ -74,7 +74,7 @@ fn node_test_all() -> Result<()> {
         client.clone(),
         true,
     );
-    node3.start_server();
+    node3.start_server(&mut rt);
 
     let node1 = Arc::new(node1);
     let node2 = Arc::new(node2);
@@ -273,7 +273,7 @@ fn node_test_four_hop() -> Result<()> {
         client.clone(),
         true,
     );
-    node1.start_server();
+    node1.start_server(&mut rt);
 
     let addr1_hex = hex::encode(addr1);
 
@@ -290,7 +290,7 @@ fn node_test_four_hop() -> Result<()> {
         client.clone(),
         true,
     );
-    node2.start_server();
+    node2.start_server(&mut rt);
 
     let network_config3 = create_node_network_config(
         format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
@@ -303,7 +303,7 @@ fn node_test_four_hop() -> Result<()> {
         client.clone(),
         true,
     );
-    node3.start_server();
+    node3.start_server(&mut rt);
 
     let network_config4 = create_node_network_config(
         format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
@@ -316,7 +316,7 @@ fn node_test_four_hop() -> Result<()> {
         client.clone(),
         true,
     );
-    node4.start_server();
+    node4.start_server(&mut rt);
 
     let node1 = Arc::new(node1);
     let node2 = Arc::new(node2);
@@ -386,9 +386,11 @@ fn node_test_four_hop() -> Result<()> {
 
         let transfer_amount = 1_000;
 
+        _delay(Duration::from_millis(5000)).await;
+
         let invoice = node1.add_invoice(transfer_amount).await.unwrap();
         node4
-            .off_chain_pay_htlc_async(addr1, transfer_amount, invoice.r_hash, 1000)
+            .off_chain_pay_htlc_async(addr1, transfer_amount, invoice.r_hash.clone(), 1000)
             .await
             .unwrap()
             .compat()
@@ -433,6 +435,39 @@ fn node_test_four_hop() -> Result<()> {
             node3.channel_balance_async(addr4).await.unwrap(),
             fund_amount + transfer_amount
         );
+
+        let offchain_txn = node3
+            .off_chain_pay_async(addr2, transfer_amount * 4)
+            .await
+            .unwrap()
+            .compat()
+            .await
+            .unwrap();
+        debug!("txn:{:#?}", offchain_txn);
+
+        _wait_channel_idle(node1.clone(), node2.clone()).await?;
+        assert_eq!(
+            node2.channel_balance_async(addr3).await.unwrap(),
+            fund_amount + transfer_amount * 5
+        );
+        assert_eq!(
+            node3.channel_balance_async(addr2).await.unwrap(),
+            fund_amount - transfer_amount * 5
+        );
+
+        let invoice = node1.add_invoice(fund_amount).await.unwrap();
+        match node4
+            .off_chain_pay_htlc_async(
+                addr1,
+                fund_amount - transfer_amount * 4,
+                invoice.r_hash,
+                1000,
+            )
+            .await
+        {
+            Ok(_) => assert_eq!(1, 2),
+            Err(_) => assert_eq!(1, 1),
+        }
 
         node1.wallet().stop().await?;
         node2.wallet().stop().await?;
@@ -481,7 +516,7 @@ fn node_test_approve() -> Result<()> {
         client.clone(),
         false,
     );
-    node1.start_server();
+    node1.start_server(&mut rt);
 
     let addr1_hex = hex::encode(addr1);
 
@@ -498,7 +533,7 @@ fn node_test_approve() -> Result<()> {
         client.clone(),
         true,
     );
-    node2.start_server();
+    node2.start_server(&mut rt);
 
     let node1 = Arc::new(node1);
     let node2 = Arc::new(node2);
@@ -573,7 +608,7 @@ fn node_test_reject() -> Result<()> {
         client.clone(),
         false,
     );
-    node1.start_server();
+    node1.start_server(&mut rt);
 
     let addr1_hex = hex::encode(addr1);
 
@@ -590,7 +625,7 @@ fn node_test_reject() -> Result<()> {
         client.clone(),
         true,
     );
-    node2.start_server();
+    node2.start_server(&mut rt);
 
     let node1 = Arc::new(node1);
     let node2 = Arc::new(node2);

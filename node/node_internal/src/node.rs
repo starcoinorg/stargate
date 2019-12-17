@@ -6,7 +6,7 @@ use futures::{
 };
 use futures_timer::Delay;
 use std::{sync::Arc, time::Duration};
-use tokio::runtime::Handle;
+use tokio::runtime::{Handle, Runtime};
 
 use anyhow::{bail, ensure, Error, Result};
 use libra_crypto::{hash::CryptoHash, HashValue};
@@ -38,16 +38,19 @@ use router::Router;
 use sgtypes::sg_error::{SgError, SgErrorCode};
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use std::convert::TryInto;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub struct Node {
     executor: Handle,
     node_inner: Option<NodeInner>,
     event_sender: UnboundedSender<Event>,
+    network_event_sender: UnboundedSender<Event>,
     command_sender: UnboundedSender<NodeMessage>,
     default_max_deposit: u64,
     network_service: NetworkService,
     receiver: Option<UnboundedReceiver<NetworkMessage>>,
     event_receiver: Option<UnboundedReceiver<Event>>,
+    network_event_receiver: Option<UnboundedReceiver<Event>>,
     command_receiver: Option<UnboundedReceiver<NodeMessage>>,
     network_service_close_tx: Option<oneshot::Sender<()>>,
     wallet: Arc<Wallet>,
@@ -60,7 +63,7 @@ struct NodeInner {
     sender: UnboundedSender<NetworkMessage>,
     message_processor: MessageProcessor<u64>,
     network_processor: MessageProcessor<NodeNetworkMessage>,
-    default_future_timeout: u64,
+    default_future_timeout: AtomicU64,
     network_service: NetworkService,
     auto_approve: bool,
     invoice_mgr: InvoiceManager,
@@ -81,6 +84,8 @@ impl Node {
     ) -> Self {
         let executor_clone = executor.clone();
         let (event_sender, event_receiver) = futures_01::sync::mpsc::unbounded();
+        let (network_event_sender, network_event_receiver) = futures_01::sync::mpsc::unbounded();
+
         let (command_sender, command_receiver) = futures_01::sync::mpsc::unbounded();
 
         let wallet_arc = Arc::new(wallet);
@@ -93,7 +98,7 @@ impl Node {
             sender,
             message_processor: MessageProcessor::new(),
             network_processor: MessageProcessor::new(),
-            default_future_timeout,
+            default_future_timeout: AtomicU64::new(default_future_timeout),
             network_service: network_service.clone(),
             auto_approve,
             invoice_mgr: invoice_mgr.clone(),
@@ -104,10 +109,12 @@ impl Node {
             executor,
             node_inner: Some(node_inner),
             event_sender,
+            network_event_sender,
             default_max_deposit: 10000000,
             command_sender,
             receiver: Some(receiver),
             event_receiver: Some(event_receiver),
+            network_event_receiver: Some(network_event_receiver),
             command_receiver: Some(command_receiver),
             network_service_close_tx: Some(net_close_tx),
             wallet: wallet_arc,
@@ -360,9 +367,13 @@ impl Node {
         resp_receiver.await?
     }
 
-    pub fn start_server(&mut self) {
+    pub fn start_server(&mut self, rt: &mut Runtime) {
         let receiver = self.receiver.take().expect("receiver already taken");
         let event_receiver = self.event_receiver.take().expect("receiver already taken");
+        let network_event_receiver = self
+            .network_event_receiver
+            .take()
+            .expect("receiver already taken");
 
         let command_receiver = self
             .command_receiver
@@ -376,13 +387,42 @@ impl Node {
 
         let node_inner = self.node_inner.take().expect("node inner already taken");
 
-        self.executor.spawn(Self::start(
-            node_inner,
+        let f = async {
+            match node_inner.init().await {
+                Ok(_) => {
+                    info!("node init success");
+                }
+                Err(e) => {
+                    panic!("init node error ,{}", e);
+                }
+            };
+        };
+        rt.block_on(f);
+
+        //let executor = self.executor.clone();
+
+        let node_inner = Arc::new(node_inner);
+        self.executor.spawn(Self::start_network(
+            node_inner.clone(),
+            network_event_receiver,
             receiver,
+        ));
+
+        self.executor.spawn(Self::start_command(
+            node_inner,
             event_receiver,
             command_receiver,
             network_service_close_tx,
         ));
+
+        //        self.executor.spawn(Self::start(
+        //            node_inner,
+        //            receiver,
+        //            event_receiver,
+        //            command_receiver,
+        //            network_service_close_tx,
+        //            executor,
+        //        ));
     }
 
     pub async fn local_balance(&self) -> Result<AccountResource> {
@@ -417,6 +457,7 @@ impl Node {
     pub fn shutdown(&self) -> Result<()> {
         debug!("node send shutdown event");
         self.event_sender.unbounded_send(Event::SHUTDOWN)?;
+        self.network_event_sender.unbounded_send(Event::SHUTDOWN)?;
         Ok(())
     }
 
@@ -578,34 +619,45 @@ impl Node {
             .await)
     }
 
-    async fn start(
-        mut node_inner: NodeInner,
-        receiver: UnboundedReceiver<NetworkMessage>,
+    async fn start_network(
+        node_inner: Arc<NodeInner>,
         event_receiver: UnboundedReceiver<Event>,
-        command_receiver: UnboundedReceiver<NodeMessage>,
-        network_service_close_tx: oneshot::Sender<()>,
+        receiver: UnboundedReceiver<NetworkMessage>,
     ) {
         info!("start receive message");
         let mut receiver = receiver.compat().fuse();
         let mut event_receiver = event_receiver.compat().fuse();
-        let mut command_receiver = command_receiver.compat().fuse();
-        match node_inner.init().await {
-            Ok(_) => {
-                info!("node init success");
-            }
-            Err(e) => {
-                panic!("init node error ,{}", e);
-            }
-        };
 
         loop {
             futures::select! {
                 message = receiver.select_next_some() => {
                     match message {
                         Ok(msg) => node_inner.handle_network_msg(msg).await,
-                        Err(_) => {}
+                        Err(_) => {
+                        }
                     }
                 },
+                _ = event_receiver.select_next_some() => {
+                    debug!("To shutdown network");
+                    break;
+                }
+            }
+        }
+        info!("shutdown network listener");
+    }
+
+    async fn start_command(
+        node_inner: Arc<NodeInner>,
+        event_receiver: UnboundedReceiver<Event>,
+        command_receiver: UnboundedReceiver<NodeMessage>,
+        network_service_close_tx: oneshot::Sender<()>,
+    ) {
+        info!("start receive command");
+        let mut event_receiver = event_receiver.compat().fuse();
+        let mut command_receiver = command_receiver.compat().fuse();
+
+        loop {
+            futures::select! {
                 node_message = command_receiver.select_next_some()=>{
                     match node_message {
                         Ok(msg) => node_inner.handle_node_msg(msg).await,
@@ -613,14 +665,14 @@ impl Node {
                     }
                 },
                 _ = event_receiver.select_next_some() => {
-                    debug!("To shutdown network");
+                    debug!("To shutdown command ");
                     let _ = network_service_close_tx.send(());
                     node_inner.shutdown().await;
                     break;
                 }
             }
         }
-        info!("shutdown server listener");
+        info!("shutdown command listener");
     }
 }
 
@@ -645,12 +697,12 @@ impl NodeInner {
         }
     }
 
-    async fn handle_network_msg(&mut self, msg: NetworkMessage) {
-        info!("receive message ");
+    async fn handle_network_msg(&self, msg: NetworkMessage) {
         let peer_id = msg.peer_id;
+        info!("receive message from {}", peer_id);
         let data = bytes::Bytes::from(msg.data);
         let msg_type = parse_message_type(&data);
-        debug!("message type is {:?}", msg_type);
+        info!("message type is {:?}", msg_type);
         match msg_type {
             MessageType::OpenChannelNodeNegotiateMessage => {}
             MessageType::ChannelTransactionRequest => self
@@ -665,9 +717,10 @@ impl NodeInner {
             MessageType::BalanceQueryResponse => {
                 self.handle_balance_query_response(data[2..].to_vec())
             }
-            MessageType::BalanceQueryRequest => {
-                self.handle_balance_query_request(data[2..].to_vec(), peer_id)
-            }
+            MessageType::BalanceQueryRequest => self
+                .handle_balance_query_request(data[2..].to_vec(), peer_id)
+                .await
+                .unwrap(),
             MessageType::MultiHopChannelTransactionRequest => self
                 .handle_multi_hop_receiver_channel(data[2..].to_vec(), peer_id)
                 .await
@@ -675,7 +728,7 @@ impl NodeInner {
         };
     }
 
-    async fn handle_node_msg(&mut self, msg: NodeMessage) {
+    async fn handle_node_msg(&self, msg: NodeMessage) {
         match msg {
             NodeMessage::Install {
                 channel_script_package,
@@ -740,7 +793,8 @@ impl NodeInner {
                 responder,
             } => {
                 self.off_chain_pay_htlc(receiver_address, amount, hash_lock, timeout, responder)
-                    .await;
+                    .await
+                    .unwrap();
             }
             NodeMessage::ChannelBalance {
                 participant,
@@ -961,11 +1015,7 @@ impl NodeInner {
         };
     }
 
-    async fn handle_sender_channel(
-        &mut self,
-        data: Vec<u8>,
-        peer_id: AccountAddress,
-    ) -> Result<()> {
+    async fn handle_sender_channel(&self, data: Vec<u8>, peer_id: AccountAddress) -> Result<()> {
         debug!("sender channel");
         let open_channel_message = ChannelTransactionResponse::from_proto_bytes(&data)?;
 
@@ -996,15 +1046,26 @@ impl NodeInner {
         }
     }
 
-    fn handle_balance_query_request(&self, data: Vec<u8>, sender_addr: AccountAddress) {
-        debug!("off balance query request message");
+    async fn handle_balance_query_request(
+        &self,
+        data: Vec<u8>,
+        sender_addr: AccountAddress,
+    ) -> Result<()> {
+        info!("off balance query request message");
         match BalanceQueryRequest::from_proto_bytes(&data) {
             Ok(msg) => {
-                let response = BalanceQueryResponse::new(msg.local_addr, msg.remote_addr, 0, 0);
+                if msg.local_addr != self.wallet.account() {
+                    warn!("balance query local addr is not right");
+                    return Ok(());
+                }
+                let balance = self.wallet.channel_balance(msg.remote_addr).await?;
+                let response =
+                    BalanceQueryResponse::new(msg.local_addr, msg.remote_addr, balance, 0);
                 let msg = add_message_type(
                     response.into_proto_bytes().unwrap(),
                     MessageType::BalanceQueryResponse,
                 );
+                info!("send message to {}", sender_addr);
                 self.sender
                     .unbounded_send(NetworkMessage {
                         peer_id: sender_addr.clone(),
@@ -1014,13 +1075,14 @@ impl NodeInner {
             }
             Err(_e) => {
                 warn!("get wrong message");
-                return;
+                return Ok(());
             }
         }
+        Ok(())
     }
 
-    fn handle_balance_query_response(&mut self, data: Vec<u8>) {
-        debug!("off balance query request message");
+    fn handle_balance_query_response(&self, data: Vec<u8>) {
+        info!("off balance query response message");
         match BalanceQueryResponse::from_proto_bytes(&data) {
             Ok(msg) => {
                 self.network_processor
@@ -1052,7 +1114,10 @@ impl NodeInner {
         let (tx, rx) = futures_01::sync::mpsc::channel(1);
         let message_future = MessageFuture::new(rx);
         self.message_processor.add_future(hash_value.clone(), tx);
-        self.future_timeout(hash_value, self.default_future_timeout);
+        self.future_timeout(
+            hash_value,
+            self.default_future_timeout.load(Ordering::Relaxed),
+        );
 
         Ok(message_future)
     }
@@ -1072,7 +1137,10 @@ impl NodeInner {
         let (tx, rx) = futures_01::sync::mpsc::channel(1);
         let message_future = MessageFuture::new(rx);
         self.message_processor.add_future(hash_value.clone(), tx);
-        self.future_timeout(hash_value, self.default_future_timeout);
+        self.future_timeout(
+            hash_value,
+            self.default_future_timeout.load(Ordering::Relaxed),
+        );
 
         Ok(message_future)
     }
@@ -1103,7 +1171,7 @@ impl NodeInner {
         hash_lock: Vec<u8>,
         timeout: u64,
         responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
-    ) {
+    ) -> Result<()> {
         let path = self
             .router
             .find_path_by_addr(self.wallet.account(), receiver_address)
@@ -1111,6 +1179,20 @@ impl NodeInner {
         match path {
             Ok(Some(v)) => {
                 info!("path is {:?}", v);
+                let is_balance_enough = self.check_balance(&v, amount).await?;
+                info!("is balance enough is {}", is_balance_enough);
+                if is_balance_enough == false {
+                    let err = SgError::new(
+                        SgErrorCode::BALANCE_NOT_ENOUGH,
+                        format!(
+                            "path balance is not enough ,from {} to {}",
+                            self.wallet.account(),
+                            receiver_address
+                        ),
+                    );
+                    respond_with(responder, Err(err.into()));
+                    return Ok(());
+                }
                 match self
                     .get_multi_hop_request(v, amount, hash_lock, timeout)
                     .await
@@ -1136,9 +1218,42 @@ impl NodeInner {
                     ),
                 );
                 respond_with(responder, Err(err.into()));
-                return;
+                return Ok(());
             }
         };
+        Ok(())
+    }
+
+    async fn check_balance(&self, path: &Vec<AccountAddress>, amount: u64) -> Result<bool> {
+        let length = path.len();
+        if length == 0 {
+            return Ok(false);
+        }
+        for (index, _vertex) in path.iter().enumerate() {
+            if index == 0 {
+                let remote_addr = path.get(index + 1).unwrap().clone();
+                let balance = self.wallet.channel_balance(remote_addr).await?;
+                info!("first hop balance is {},amount is {}", balance, amount);
+                if balance < amount {
+                    return Ok(false);
+                }
+                continue;
+            }
+            if index <= length - 2 {
+                let local_addr = path.get(index).unwrap().clone();
+                let remote_addr = path.get(index + 1).unwrap().clone();
+                let response = self.query_balance(local_addr, remote_addr).await?;
+                info!(
+                    "check hop balance from {} to {},balance is {},amount is {}",
+                    local_addr, remote_addr, response.local_balance, amount
+                );
+                if response.local_balance < amount {
+                    return Ok(false);
+                }
+            }
+        }
+
+        Ok(true)
     }
 
     // vertexes contains node self. need pop self out
@@ -1375,38 +1490,34 @@ impl NodeInner {
             .unwrap();
     }
 
-    async fn _query_balance(
+    async fn query_balance(
         &self,
-        channel_vec: Vec<(AccountAddress, AccountAddress)>,
-    ) -> Result<Vec<BalanceQueryResponse>> {
-        let mut result = Vec::new();
-        for (local_addr, remote_addr) in channel_vec.iter() {
-            let request = BalanceQueryRequest::new(local_addr.clone(), remote_addr.clone());
-            let msg = add_message_type(
-                request.into_proto_bytes().unwrap(),
-                MessageType::BalanceQueryRequest,
-            );
-            self.sender.unbounded_send(NetworkMessage {
-                peer_id: local_addr.clone(),
-                data: msg.to_vec(),
-            })?;
-            let (tx, rx) = futures_01::sync::mpsc::channel(1);
-            let message_future = MessageFuture::new(rx);
-            self.network_processor
-                .add_future(local_addr.hash(), tx.clone());
-            let response = message_future.compat().await?;
-            match response {
-                NodeNetworkMessage::BalanceQueryResponseEnum(data) => {
-                    result.push(data);
-                }
+        local_addr: AccountAddress,
+        remote_addr: AccountAddress,
+    ) -> Result<BalanceQueryResponse> {
+        let request = BalanceQueryRequest::new(local_addr.clone(), remote_addr.clone());
+        let msg = add_message_type(
+            request.into_proto_bytes().unwrap(),
+            MessageType::BalanceQueryRequest,
+        );
+        self.sender.unbounded_send(NetworkMessage {
+            peer_id: local_addr.clone(),
+            data: msg.to_vec(),
+        })?;
+        let (tx, rx) = futures_01::sync::mpsc::channel(1);
+        let message_future = MessageFuture::new(rx);
+        self.network_processor
+            .add_future(local_addr.hash(), tx.clone());
+        let response = message_future.compat().await?;
+        match response {
+            NodeNetworkMessage::BalanceQueryResponseEnum(data) => {
+                return Ok(data);
             }
         }
-
-        Ok(result)
     }
 
-    pub fn set_timeout(&mut self, timeout: u64) {
-        self.default_future_timeout = timeout;
+    pub fn set_timeout(&self, timeout: u64) {
+        self.default_future_timeout.swap(timeout, Ordering::Relaxed);
     }
 
     async fn channel_transaction_proposal(
@@ -1475,7 +1586,10 @@ impl NodeInner {
         let message_future = MessageFuture::new(rx);
         self.message_processor
             .add_future(transaction_hash.clone(), tx);
-        self.future_timeout(transaction_hash, self.default_future_timeout);
+        self.future_timeout(
+            transaction_hash,
+            self.default_future_timeout.load(Ordering::Relaxed),
+        );
 
         respond_with(responder, Ok(message_future));
     }
