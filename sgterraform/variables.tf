@@ -12,24 +12,31 @@ variable "node_number" {
 variable "access_key" {
   type = string
   description = "deploy access_key"
-  default = "LTAI4FecNkcNFZrFAzMMTAoF"
 }
 variable "secret_key" {
   type = string
   description = "deploy secret_key"
-  default = "KBfHeXy14GbSVmGXMtxt5PqTDHdJ0t"
 }
 
-variable "docker_hub_user_name" {
+variable "peer_ids" {
+  type        = list(string)
+  description = "List of validator PeerIds"
+}
+
+variable "docker_github_user_name" {
   type = string
   description = "docker_hub_user"
-  default = "ssyuan"
 }
 
-variable "docker_hub_user_password" {
+variable "docker_github_user_password" {
   type = string
   description = "docker_hub_password"
-  default = ""
+}
+
+variable "docker_address" {
+  type = string
+  description = "git hub docker address"
+  default = "registry.cn-zhangjiakou.aliyuncs.com"
 }
 
 variable "ssh_key_pair_file" {
@@ -55,7 +62,8 @@ variable "exec_file_path" {
 }
 
 variable "docker_image" {
-  default = "starcoin/sgchain:cluster_deploy"
+  #default = "docker.pkg.github.com/starcoinorg/stargate/sgchain:cluster_deploy_new"
+  default = "registry.cn-zhangjiakou.aliyuncs.com/starcoin/starcoin:v1218"
 }
 variable "validator_node_sources_ipv4" {
   type        = list(string)
