@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package sgfaucet;
+
+// --------------------------------------------------------------
+// ----------- Service definition for faucet
+// --------------------------------------------------------------
+service SgFaucet {
+    rpc Faucet(FaucetRequest) returns (EmptyResponse);
+}
+
+message FaucetRequest {
+    bytes address = 1;
+    uint64 amount = 2;
+}
+
+message EmptyResponse {}

@@ -37,8 +37,14 @@ fn node_test_all() -> Result<()> {
         vec![],
     );
 
-    let (mut node1, addr1) = gen_node(executor.clone(), &network_config1, client.clone(), true);
-    node1.start_server();
+    let (mut node1, addr1) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config1,
+        client.clone(),
+        true,
+    );
+    node1.start_server(&mut rt);
 
     let addr1_hex = hex::encode(addr1);
 
@@ -48,15 +54,27 @@ fn node_test_all() -> Result<()> {
         vec![seed.clone()],
     );
 
-    let (mut node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone(), true);
-    node2.start_server();
+    let (mut node2, addr2) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config2,
+        client.clone(),
+        true,
+    );
+    node2.start_server(&mut rt);
 
     let network_config3 = create_node_network_config(
         format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
         vec![seed.clone()],
     );
-    let (mut node3, addr3) = gen_node(executor.clone(), &network_config3, client.clone(), true);
-    node3.start_server();
+    let (mut node3, addr3) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config3,
+        client.clone(),
+        true,
+    );
+    node3.start_server(&mut rt);
 
     let node1 = Arc::new(node1);
     let node2 = Arc::new(node2);
@@ -66,8 +84,6 @@ fn node_test_all() -> Result<()> {
     let _node3_clone = node3.clone();
 
     let f = async move {
-        _delay(Duration::from_millis(1000)).await;
-
         let fund_amount = 1000000;
         let _result = node2
             .open_channel_async(addr1, fund_amount, fund_amount)
@@ -77,11 +93,12 @@ fn node_test_all() -> Result<()> {
             .await
             .unwrap();
 
-        _delay(Duration::from_millis(500)).await;
+        _wait_channel_idle(node1.clone(), node2.clone()).await?;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount
         );
+
         assert_eq!(
             node1.channel_balance_async(addr2).await.unwrap(),
             fund_amount
@@ -95,7 +112,7 @@ fn node_test_all() -> Result<()> {
             .await
             .unwrap();
 
-        _delay(Duration::from_millis(500)).await;
+        _wait_channel_idle(node2.clone(), node3.clone()).await?;
         assert_eq!(
             node2.channel_balance_async(addr3).await.unwrap(),
             fund_amount
@@ -114,8 +131,8 @@ fn node_test_all() -> Result<()> {
             .await
             .unwrap();
 
-        // NOTICE: delay longer, give dual some time to save into local store.
-        _delay(Duration::from_millis(500)).await;
+        _wait_channel_idle(node1.clone(), node2.clone()).await?;
+
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount + deposit_amount
@@ -127,7 +144,7 @@ fn node_test_all() -> Result<()> {
 
         let transfer_amount = 1_000;
 
-        let invoice = node1.add_invoice().await.unwrap();
+        let invoice = node1.add_invoice(transfer_amount).await.unwrap();
         node2
             .off_chain_pay_htlc_async(addr1, transfer_amount, invoice.r_hash, 1000)
             .await
@@ -137,7 +154,8 @@ fn node_test_all() -> Result<()> {
             .unwrap();
 
         info!("sender is {}", addr2);
-        _delay(Duration::from_millis(500)).await;
+        _wait_channel_idle(node1.clone(), node2.clone()).await?;
+
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount - transfer_amount + deposit_amount
@@ -156,7 +174,7 @@ fn node_test_all() -> Result<()> {
             .unwrap();
         debug!("txn:{:#?}", offchain_txn);
 
-        _delay(Duration::from_millis(500)).await;
+        _wait_channel_idle(node1.clone(), node2.clone()).await?;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount - transfer_amount * 2 + deposit_amount
@@ -166,7 +184,7 @@ fn node_test_all() -> Result<()> {
             fund_amount + transfer_amount * 2
         );
 
-        let invoice = node1.add_invoice().await.unwrap();
+        let invoice = node1.add_invoice(transfer_amount).await.unwrap();
         node3
             .off_chain_pay_htlc_async(addr1, transfer_amount, invoice.r_hash, 1000)
             .await
@@ -174,23 +192,24 @@ fn node_test_all() -> Result<()> {
             .compat()
             .await
             .unwrap();
-
+        _wait_channel_idle(node3.clone(), node2.clone()).await?;
+        _wait_channel_idle(node2.clone(), node1.clone()).await?;
         _delay(Duration::from_millis(1000)).await;
+        _wait_channel_idle(node2.clone(), node1.clone()).await?;
+        _wait_channel_idle(node3.clone(), node2.clone()).await?;
+
         assert_eq!(
             node3.channel_balance_async(addr2).await.unwrap(),
             fund_amount - transfer_amount
         );
-        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount - transfer_amount * 3 + deposit_amount
         );
-        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node1.channel_balance_async(addr2).await.unwrap(),
             fund_amount + transfer_amount * 3
         );
-        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node2.channel_balance_async(addr3).await.unwrap(),
             fund_amount + transfer_amount
@@ -204,8 +223,7 @@ fn node_test_all() -> Result<()> {
             .compat()
             .await
             .unwrap();
-
-        _delay(Duration::from_millis(500)).await;
+        _wait_channel_idle(node2.clone(), node1.clone()).await?;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount - transfer_amount * 3 - wd_amount + deposit_amount
@@ -248,8 +266,14 @@ fn node_test_four_hop() -> Result<()> {
     let (mock_chain_service, _handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
     let network_config1 = create_node_network_config("/ip4/127.0.0.1/tcp/5000".to_string(), vec![]);
-    let (mut node1, addr1) = gen_node(executor.clone(), &network_config1, client.clone(), true);
-    node1.start_server();
+    let (mut node1, addr1) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config1,
+        client.clone(),
+        true,
+    );
+    node1.start_server(&mut rt);
 
     let addr1_hex = hex::encode(addr1);
 
@@ -259,22 +283,40 @@ fn node_test_four_hop() -> Result<()> {
         vec![seed.clone()],
     );
 
-    let (mut node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone(), true);
-    node2.start_server();
+    let (mut node2, addr2) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config2,
+        client.clone(),
+        true,
+    );
+    node2.start_server(&mut rt);
 
     let network_config3 = create_node_network_config(
         format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
         vec![seed.clone()],
     );
-    let (mut node3, addr3) = gen_node(executor.clone(), &network_config3, client.clone(), true);
-    node3.start_server();
+    let (mut node3, addr3) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config3,
+        client.clone(),
+        true,
+    );
+    node3.start_server(&mut rt);
 
     let network_config4 = create_node_network_config(
         format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
         vec![seed.clone()],
     );
-    let (mut node4, addr4) = gen_node(executor.clone(), &network_config4, client.clone(), true);
-    node4.start_server();
+    let (mut node4, addr4) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config4,
+        client.clone(),
+        true,
+    );
+    node4.start_server(&mut rt);
 
     let node1 = Arc::new(node1);
     let node2 = Arc::new(node2);
@@ -286,8 +328,6 @@ fn node_test_four_hop() -> Result<()> {
     let _node4_clone = node4.clone();
 
     let f = async move {
-        _delay(Duration::from_millis(1000)).await;
-
         let fund_amount = 1000000;
 
         let _result = node2
@@ -298,7 +338,7 @@ fn node_test_four_hop() -> Result<()> {
             .await
             .unwrap();
 
-        _delay(Duration::from_millis(500)).await;
+        _wait_channel_idle(node1.clone(), node2.clone()).await?;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount
@@ -315,8 +355,8 @@ fn node_test_four_hop() -> Result<()> {
             .compat()
             .await
             .unwrap();
+        _wait_channel_idle(node2.clone(), node3.clone()).await?;
 
-        _delay(Duration::from_millis(500)).await;
         assert_eq!(
             node3.channel_balance_async(addr2).await.unwrap(),
             fund_amount
@@ -333,8 +373,8 @@ fn node_test_four_hop() -> Result<()> {
             .compat()
             .await
             .unwrap();
+        _wait_channel_idle(node3.clone(), node4.clone()).await?;
 
-        _delay(Duration::from_millis(500)).await;
         assert_eq!(
             node4.channel_balance_async(addr3).await.unwrap(),
             fund_amount
@@ -346,45 +386,88 @@ fn node_test_four_hop() -> Result<()> {
 
         let transfer_amount = 1_000;
 
-        let invoice = node1.add_invoice().await.unwrap();
+        _delay(Duration::from_millis(5000)).await;
+
+        let invoice = node1.add_invoice(transfer_amount).await.unwrap();
         node4
-            .off_chain_pay_htlc_async(addr1, transfer_amount, invoice.r_hash, 1000)
+            .off_chain_pay_htlc_async(addr1, transfer_amount, invoice.r_hash.clone(), 1000)
             .await
             .unwrap()
             .compat()
             .await
             .unwrap();
 
+        _wait_channel_idle(node4.clone(), node3.clone()).await?;
         _delay(Duration::from_millis(1000)).await;
+        _wait_channel_idle(node3.clone(), node2.clone()).await?;
+        _delay(Duration::from_millis(1000)).await;
+        _wait_channel_idle(node2.clone(), node1.clone()).await?;
+        _delay(Duration::from_millis(1000)).await;
+
+        _wait_channel_idle(node2.clone(), node1.clone()).await?;
+        _delay(Duration::from_millis(1000)).await;
+        _wait_channel_idle(node3.clone(), node2.clone()).await?;
+        _delay(Duration::from_millis(1000)).await;
+        _wait_channel_idle(node4.clone(), node3.clone()).await?;
+        _delay(Duration::from_millis(1000)).await;
+
         assert_eq!(
             node4.channel_balance_async(addr3).await.unwrap(),
             fund_amount - transfer_amount
         );
-        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node3.channel_balance_async(addr2).await.unwrap(),
             fund_amount - transfer_amount
         );
-        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount - transfer_amount
         );
-        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node1.channel_balance_async(addr2).await.unwrap(),
             fund_amount + transfer_amount
         );
-        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node2.channel_balance_async(addr3).await.unwrap(),
             fund_amount + transfer_amount
         );
-        _delay(Duration::from_millis(1000)).await;
         assert_eq!(
             node3.channel_balance_async(addr4).await.unwrap(),
             fund_amount + transfer_amount
         );
+
+        let offchain_txn = node3
+            .off_chain_pay_async(addr2, transfer_amount * 4)
+            .await
+            .unwrap()
+            .compat()
+            .await
+            .unwrap();
+        debug!("txn:{:#?}", offchain_txn);
+
+        _wait_channel_idle(node1.clone(), node2.clone()).await?;
+        assert_eq!(
+            node2.channel_balance_async(addr3).await.unwrap(),
+            fund_amount + transfer_amount * 5
+        );
+        assert_eq!(
+            node3.channel_balance_async(addr2).await.unwrap(),
+            fund_amount - transfer_amount * 5
+        );
+
+        let invoice = node1.add_invoice(fund_amount).await.unwrap();
+        match node4
+            .off_chain_pay_htlc_async(
+                addr1,
+                fund_amount - transfer_amount * 4,
+                invoice.r_hash,
+                1000,
+            )
+            .await
+        {
+            Ok(_) => assert_eq!(1, 2),
+            Err(_) => assert_eq!(1, 1),
+        }
 
         node1.wallet().stop().await?;
         node2.wallet().stop().await?;
@@ -426,8 +509,14 @@ fn node_test_approve() -> Result<()> {
         vec![],
     );
 
-    let (mut node1, addr1) = gen_node(executor.clone(), &network_config1, client.clone(), false);
-    node1.start_server();
+    let (mut node1, addr1) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config1,
+        client.clone(),
+        false,
+    );
+    node1.start_server(&mut rt);
 
     let addr1_hex = hex::encode(addr1);
 
@@ -437,8 +526,14 @@ fn node_test_approve() -> Result<()> {
         format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
         vec![seed],
     );
-    let (mut node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone(), true);
-    node2.start_server();
+    let (mut node2, addr2) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config2,
+        client.clone(),
+        true,
+    );
+    node2.start_server(&mut rt);
 
     let node1 = Arc::new(node1);
     let node2 = Arc::new(node2);
@@ -446,8 +541,6 @@ fn node_test_approve() -> Result<()> {
     let _node2_clone = node2.clone();
 
     let f = async move {
-        _delay(Duration::from_millis(1000)).await;
-
         let fund_amount = 1000000;
 
         executor.spawn(_confirm(
@@ -464,8 +557,7 @@ fn node_test_approve() -> Result<()> {
             .compat()
             .await
             .unwrap();
-
-        _delay(Duration::from_millis(500)).await;
+        _wait_channel_idle(node1.clone(), node2.clone()).await?;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount
@@ -509,8 +601,14 @@ fn node_test_reject() -> Result<()> {
         vec![],
     );
 
-    let (mut node1, addr1) = gen_node(executor.clone(), &network_config1, client.clone(), false);
-    node1.start_server();
+    let (mut node1, addr1) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config1,
+        client.clone(),
+        false,
+    );
+    node1.start_server(&mut rt);
 
     let addr1_hex = hex::encode(addr1);
 
@@ -520,8 +618,14 @@ fn node_test_reject() -> Result<()> {
         format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
         vec![seed],
     );
-    let (mut node2, addr2) = gen_node(executor.clone(), &network_config2, client.clone(), true);
-    node2.start_server();
+    let (mut node2, addr2) = gen_node(
+        &mut rt,
+        executor.clone(),
+        &network_config2,
+        client.clone(),
+        true,
+    );
+    node2.start_server(&mut rt);
 
     let node1 = Arc::new(node1);
     let node2 = Arc::new(node2);
@@ -572,6 +676,21 @@ fn node_test_reject() -> Result<()> {
 
 async fn _delay(duration: Duration) {
     delay_for(duration).await;
+}
+
+/// wait until the channel between node1 and node2 is idle
+async fn _wait_channel_idle(node1: Arc<Node>, node2: Arc<Node>) -> Result<()> {
+    let wallet1 = node1.wallet();
+    let wallet2 = node2.wallet();
+    let address1 = wallet1.account();
+    let address2 = wallet2.account();
+    while wallet1.get_pending_txn_request(address2).await?.is_some() {
+        _delay(Duration::from_millis(500)).await
+    }
+    while wallet2.get_pending_txn_request(address1).await?.is_some() {
+        _delay(Duration::from_millis(500)).await
+    }
+    Ok(())
 }
 
 async fn _confirm(node: Arc<Node>, duration: Duration, addr: AccountAddress, approve: bool) {

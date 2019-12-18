@@ -662,6 +662,87 @@ impl From<EmptyResponse> for crate::proto::node::EmptyResponse {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AddInvoiceRequest {
+    pub amount: u64,
+}
+
+impl AddInvoiceRequest {
+    pub fn new(amount: u64) -> Self {
+        Self { amount }
+    }
+}
+
+impl TryFrom<crate::proto::node::AddInvoiceRequest> for AddInvoiceRequest {
+    type Error = Error;
+
+    fn try_from(request: crate::proto::node::AddInvoiceRequest) -> Result<Self> {
+        Ok(Self::new(request.amount))
+    }
+}
+
+impl From<AddInvoiceRequest> for crate::proto::node::AddInvoiceRequest {
+    fn from(request: AddInvoiceRequest) -> Self {
+        Self {
+            amount: request.amount,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AddInvoiceResponse {
+    pub encoded_invoice: String,
+}
+
+impl AddInvoiceResponse {
+    pub fn new(encoded_invoice: String) -> Self {
+        Self { encoded_invoice }
+    }
+}
+
+impl TryFrom<crate::proto::node::AddInvoiceResponse> for AddInvoiceResponse {
+    type Error = Error;
+
+    fn try_from(request: crate::proto::node::AddInvoiceResponse) -> Result<Self> {
+        Ok(Self::new(request.encoded_invoice))
+    }
+}
+
+impl From<AddInvoiceResponse> for crate::proto::node::AddInvoiceResponse {
+    fn from(request: AddInvoiceResponse) -> Self {
+        Self {
+            encoded_invoice: request.encoded_invoice,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PaymentRequest {
+    pub encoded_invoice: String,
+}
+
+impl PaymentRequest {
+    pub fn new(encoded_invoice: String) -> Self {
+        Self { encoded_invoice }
+    }
+}
+
+impl TryFrom<crate::proto::node::PaymentRequest> for PaymentRequest {
+    type Error = Error;
+
+    fn try_from(request: crate::proto::node::PaymentRequest) -> Result<Self> {
+        Ok(Self::new(request.encoded_invoice))
+    }
+}
+
+impl From<PaymentRequest> for crate::proto::node::PaymentRequest {
+    fn from(request: PaymentRequest) -> Self {
+        Self {
+            encoded_invoice: request.encoded_invoice,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 

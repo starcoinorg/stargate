@@ -14,7 +14,11 @@ use sgchain::star_chain_client::ChainClient;
 use sgwallet::wallet::Wallet;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
-pub fn setup_wallet(client: Arc<dyn ChainClient>, init_balance: u64) -> Result<Wallet> {
+pub fn setup_wallet(
+    executor: tokio::runtime::Handle,
+    client: Arc<dyn ChainClient>,
+    init_balance: u64,
+) -> Result<Wallet> {
     let mut seed_rng = rand::rngs::OsRng::new().expect("can't access OsRng");
     let seed_buf: [u8; 32] = seed_rng.gen();
     let mut rng0: StdRng = SeedableRng::from_seed(seed_buf);
@@ -30,8 +34,9 @@ pub fn setup_wallet(client: Arc<dyn ChainClient>, init_balance: u64) -> Result<W
     rt.block_on(f)?;
 
     // enable channel for wallet
-    let wallet =
+    let mut wallet =
         Wallet::new_with_client(account, account_keypair, client.clone(), TempPath::new())?;
+    wallet.start(&executor)?;
     //    let wallet = Arc::new(wallet);
     let f = {
         let wallet = &wallet;
@@ -59,10 +64,8 @@ where
 {
     let init_amount = 10_000_000;
     let mut rt = Runtime::new()?;
-    let mut sender_wallet = setup_wallet(chain_client.clone(), init_amount)?;
-    let mut receiver_wallet = setup_wallet(chain_client.clone(), init_amount)?;
-    sender_wallet.start(rt.handle())?;
-    receiver_wallet.start(rt.handle())?;
+    let sender_wallet = setup_wallet(rt.handle().clone(), chain_client.clone(), init_amount)?;
+    let receiver_wallet = setup_wallet(rt.handle().clone(), chain_client.clone(), init_amount)?;
     let sender_wallet = Arc::new(sender_wallet);
     let receiver_wallet = Arc::new(receiver_wallet);
 

@@ -75,7 +75,14 @@ fn run_deploy_custom_module_by_rpc_client() {
 fn run_test_channel_event_watcher() {
     if let Err(e) = run_with_rpc_client(|chain_client| {
         common::with_wallet(chain_client, |rt, sender, receiver| {
-            rt.block_on(test_channel_event_watcher_async(sender, receiver))
+            // the double async block is need, because channel event stream use `block_in_place`.
+            // see https://github.com/tokio-rs/tokio/issues/1838
+            rt.block_on(async move {
+                tokio::spawn(
+                    async move { test_channel_event_watcher_async(sender, receiver).await },
+                )
+                .await
+            })?
         })
     }) {
         error!("err: {:#?}", e);

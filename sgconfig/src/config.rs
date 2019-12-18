@@ -41,6 +41,8 @@ pub struct NetworkConfig {
 pub struct RpcConfig {
     pub address: String,
     pub port: u16,
+    pub timeout: u64,
+    pub auto_approve: bool,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -63,10 +65,18 @@ pub fn load_from(config_file: &str) -> Result<NodeConfig> {
     Ok(node_config)
 }
 
-pub fn get_test_config(addr: String, port: u16, rest_port: u16) -> NodeConfig {
+pub fn get_test_config(
+    addr: String,
+    port: u16,
+    rest_port: u16,
+    timeout: u64,
+    auto_approve: bool,
+) -> NodeConfig {
     let network = RpcConfig {
         address: addr.clone(),
         port,
+        timeout,
+        auto_approve,
     };
     let rest = RestConfig {
         address: addr.clone(),

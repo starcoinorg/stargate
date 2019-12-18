@@ -36,6 +36,7 @@ pub enum SgErrorCode {
     INVALID_CHANNEL_STAGE = 4,
     REJECT = 5,
     NOT_PATH = 6,
+    BALANCE_NOT_ENOUGH = 7,
 }
 
 impl std::fmt::Display for SgErrorCode {

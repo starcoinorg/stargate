@@ -3,6 +3,8 @@
 
 mod mock_star_node;
 #[cfg(test)]
+mod pow_mine_test;
+#[cfg(test)]
 mod pow_node_test;
 
 #[cfg(test)]

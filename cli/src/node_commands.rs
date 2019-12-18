@@ -21,6 +21,8 @@ impl Command for NodeCommand {
             Box::new(NodeCommandWithdrawChannel {}),
             Box::new(NodeCommandChannelBalance {}),
             Box::new(NodeCommandDepositChannel {}),
+            Box::new(NodeCommandAddInvoice {}),
+            Box::new(NodeCommandSendPayment {}),
         ];
 
         subcommand_execute(&params[0], commands, client, &params[1..]);
@@ -230,6 +232,66 @@ impl Command for NodeCommandProposal {
                 println!("success!");
             }
             Err(e) => report_error("Error pay account", e),
+        }
+    }
+}
+
+pub struct NodeCommandAddInvoice {}
+
+impl Command for NodeCommandAddInvoice {
+    fn get_aliases(&self) -> Vec<&'static str> {
+        vec!["add invoice", "ai"]
+    }
+
+    fn get_params_help(&self) -> &'static str {
+        "<amount>"
+    }
+
+    fn get_description(&self) -> &'static str {
+        "add invoice"
+    }
+
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
+        if params.len() < 2 {
+            println!("Invalid number of arguments for add invoice");
+            return;
+        }
+
+        match client.add_invoice(params) {
+            Ok(response) => {
+                println!("successfully add invoice {}", response.encoded_invoice);
+            }
+            Err(e) => report_error("Error add invoice", e),
+        }
+    }
+}
+
+pub struct NodeCommandSendPayment {}
+
+impl Command for NodeCommandSendPayment {
+    fn get_aliases(&self) -> Vec<&'static str> {
+        vec!["send payment", "sp"]
+    }
+
+    fn get_params_help(&self) -> &'static str {
+        "<encoded_invoice>"
+    }
+
+    fn get_description(&self) -> &'static str {
+        "send payment"
+    }
+
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
+        if params.len() < 2 {
+            println!("Invalid number of arguments for send payment");
+            return;
+        }
+
+        match client.send_payment(params) {
+            Ok(_) => {
+                println!("successfully pay ");
+            }
+            Err(e) => report_error("Error payment", e),
         }
     }
 }

@@ -280,12 +280,13 @@ fn _gen_wallet(
     let mut wallet =
         Wallet::new_with_client(account_address, keypair.clone(), client, store_path.path())
             .unwrap();
+    wallet.start(&executor).unwrap();
+
     let f = async {
         wallet.enable_channel().await.unwrap();
     };
     rt.block_on(f);
 
-    wallet.start(&executor).unwrap();
     Ok((Arc::new(wallet), account_address))
 }
 

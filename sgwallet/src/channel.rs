@@ -11,7 +11,7 @@ use crate::wallet::{
 use anyhow::{bail, ensure, format_err, Result};
 use futures::{
     channel::{mpsc, oneshot},
-    SinkExt, StreamExt,
+    FutureExt, SinkExt, StreamExt,
 };
 use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
 use libra_crypto::test_utils::KeyPair;
@@ -24,7 +24,7 @@ use libra_types::channel::{
     ChannelParticipantAccountResource, Witness, WitnessData,
 };
 use libra_types::identifier::Identifier;
-use libra_types::language_storage::ModuleId;
+use libra_types::language_storage::{ModuleId, StructTag};
 use libra_types::transaction::helpers::TransactionSigner;
 use libra_types::transaction::{
     ChannelTransactionPayload, ChannelTransactionPayloadBody, RawTransaction, ScriptAction,
@@ -49,6 +49,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use vm::gas_schedule::GasAlgebra;
 
+#[derive(Debug)]
 pub enum ChannelMsg {
     Execute {
         channel_op: ChannelOp,
@@ -97,65 +98,18 @@ enum InternalMsg {
     }, // when channel bootstrap, it will send this msg if it found pending txn.
 }
 
-pub struct Channel {
+#[derive(Debug)]
+pub struct ChannelHandle {
     channel_address: AccountAddress,
     account_address: AccountAddress,
     participant_addresses: BTreeSet<AccountAddress>,
     //    db: ChannelDB,
     //    store: ChannelStore<ChannelDB>,
     mail_sender: mpsc::Sender<ChannelMsg>,
-    inner: Option<Inner>,
+    _shutdown_tx: oneshot::Sender<()>,
 }
 
-impl Channel {
-    /// load channel from storage
-    pub fn load(
-        channel_address: AccountAddress,
-        account_address: AccountAddress,
-        participant_addresses: BTreeSet<AccountAddress>,
-        channel_state: ChannelState,
-        db: ChannelDB,
-        mail_sender: mpsc::Sender<ChannelMsg>,
-        mailbox: mpsc::Receiver<ChannelMsg>,
-        channel_event_sender: mpsc::Sender<ChannelEvent>,
-        keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
-        script_registry: Arc<PackageRegistry>,
-        chain_client: Arc<dyn ChainClient>,
-    ) -> Self {
-        let store = ChannelStore::new(db.clone());
-        let inner = Inner {
-            channel_address,
-            account_address,
-            participant_addresses: participant_addresses.clone(),
-            channel_state,
-            store: store.clone(),
-            keypair: keypair.clone(),
-            script_registry: script_registry.clone(),
-            chain_client: chain_client.clone(),
-            tx_applier: TxApplier::new(store.clone()),
-            mailbox,
-            channel_event_sender,
-            shutdown_signal: None,
-            should_stop: false,
-        };
-        let channel = Self {
-            channel_address,
-            account_address,
-            participant_addresses,
-            mail_sender,
-            inner: Some(inner),
-        };
-        channel
-    }
-
-    pub fn start(&mut self, executor: tokio::runtime::Handle) {
-        let inner = self.inner.take().expect("channel already started");
-        // TODO: wait channel start?
-        executor.spawn(async {
-            inner.start().await;
-        });
-    }
-
+impl ChannelHandle {
     pub fn account_address(&self) -> &AccountAddress {
         &self.account_address
     }
@@ -167,6 +121,7 @@ impl Channel {
         &self.participant_addresses
     }
 
+    #[allow(dead_code)]
     pub async fn stop(&self) -> Result<()> {
         let (tx, rx) = oneshot::channel();
         let msg = ChannelMsg::Stop { responder: tx };
@@ -192,13 +147,34 @@ impl Channel {
             Ok(())
         }
     }
+
+    pub async fn get_pending_txn(&self) -> Result<Option<PendingTransaction>> {
+        let (tx, rx) = oneshot::channel();
+        let msg = ChannelMsg::GetPendingTxn { responder: tx };
+        self.send(msg)?;
+        Ok(rx.await?)
+    }
+    pub async fn get_channel_resource(
+        &self,
+        address: AccountAddress,
+        struct_tag: StructTag,
+    ) -> Result<Option<Vec<u8>>> {
+        let data_path = DataPath::channel_resource_path(address, struct_tag);
+        let (tx, rx) = oneshot::channel();
+        let msg = ChannelMsg::AccessPath {
+            path: AccessPath::new_for_data_path(self.channel_address, data_path),
+            responder: tx,
+        };
+        self.send(msg)?;
+        rx.await?
+    }
 }
 
 pub enum ChannelEvent {
     Stopped { channel_address: AccountAddress },
 }
 
-struct Inner {
+pub struct Channel {
     channel_address: AccountAddress,
     account_address: AccountAddress,
     // participant contains self address, use btree to preserve address order.
@@ -211,6 +187,7 @@ struct Inner {
     chain_client: Arc<dyn ChainClient>,
     tx_applier: TxApplier,
 
+    mail_sender: Option<mpsc::Sender<ChannelMsg>>,
     mailbox: mpsc::Receiver<ChannelMsg>,
     shutdown_signal: Option<oneshot::Sender<()>>,
     should_stop: bool,
@@ -218,16 +195,66 @@ struct Inner {
     channel_event_sender: mpsc::Sender<ChannelEvent>,
 }
 
-impl Inner {
+impl Channel {
     fn channel_address(&self) -> &AccountAddress {
         &self.channel_address
     }
 }
 
-impl Inner {
-    async fn start(mut self) {
+impl Channel {
+    /// load channel from storage
+    pub fn load(
+        channel_address: AccountAddress,
+        account_address: AccountAddress,
+        participant_addresses: BTreeSet<AccountAddress>,
+        channel_state: ChannelState,
+        db: ChannelDB,
+        mail_sender: mpsc::Sender<ChannelMsg>,
+        mailbox: mpsc::Receiver<ChannelMsg>,
+        channel_event_sender: mpsc::Sender<ChannelEvent>,
+        keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
+        script_registry: Arc<PackageRegistry>,
+        chain_client: Arc<dyn ChainClient>,
+    ) -> Self {
+        let store = ChannelStore::new(db.clone());
+        let inner = Self {
+            channel_address,
+            account_address,
+            participant_addresses: participant_addresses.clone(),
+            channel_state,
+            store: store.clone(),
+            keypair: keypair.clone(),
+            script_registry: script_registry.clone(),
+            chain_client: chain_client.clone(),
+            tx_applier: TxApplier::new(store.clone()),
+            mail_sender: Some(mail_sender),
+            mailbox,
+            channel_event_sender,
+            shutdown_signal: None,
+            should_stop: false,
+        };
+        inner
+    }
+
+    pub fn start(mut self, executor: tokio::runtime::Handle) -> ChannelHandle {
+        let mail_sender = self.mail_sender.take().expect("mail sender shold exists");
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
+        let handle = ChannelHandle {
+            channel_address: self.channel_address,
+            account_address: self.account_address,
+            participant_addresses: self.participant_addresses.clone(),
+            mail_sender,
+            _shutdown_tx: shutdown_tx,
+        };
+        // TODO: wait channel start?
+        executor.spawn(self.inner_start(shutdown_rx));
+        handle
+    }
+    async fn inner_start(mut self, shutdown_rx: oneshot::Receiver<()>) {
         let (internal_msg_tx, mut internal_msg_rx) = mpsc::channel(1024);
         self.bootstrap(internal_msg_tx.clone());
+        let mut fused_shutdown_rx = shutdown_rx.fuse();
+
         loop {
             ::futures::select! {
                 maybe_external_msg = self.mailbox.next() => {
@@ -239,6 +266,9 @@ impl Inner {
                     if let(Some(msg)) = maybe_internal_msg {
                         self.handle_internal_msg(msg).await;
                     }
+                }
+                _ = fused_shutdown_rx => {
+                    break;
                 }
                 complete => {
                     break;

@@ -83,6 +83,19 @@ service Node {
         };
     }
 
+    rpc AddInvoice (AddInvoiceRequest) returns (AddInvoiceResponse) {
+        option (google.api.http) = {
+           post: "/node/invoice/add"
+           body: "*"
+        };
+    }
+
+    rpc SendPayment (PaymentRequest) returns (EmptyResponse) {
+        option (google.api.http) = {
+           get: "/node/payment/send"
+        };
+    }
+
 }
 
 message QueryTransactionQuest {
@@ -174,4 +187,16 @@ message ChannelTransactionProposalRequest{
 
 message EmptyResponse{
 
+}
+
+message AddInvoiceRequest{
+    uint64 amount = 1;
+}
+
+message AddInvoiceResponse{
+    string encoded_invoice = 1;
+}
+
+message PaymentRequest{
+    string encoded_invoice = 1;
 }
