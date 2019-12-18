@@ -1,4 +1,5 @@
 use libra_crypto::HashValue;
+use std::hash::{Hash, Hasher};
 use std::{convert::TryFrom, fmt};
 
 use anyhow::{ensure, Error, Result};
@@ -19,6 +20,24 @@ impl SValue {
 
     pub fn to_vec(&self) -> Vec<u8> {
         self.0.to_vec()
+    }
+
+    pub fn is_sender(&self) -> bool {
+        if self.0[0] == 0 {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    pub fn get_peer(&self) -> Self {
+        let mut data = self.0.clone();
+        if self.0[0] == 0 {
+            data[0] = 1;
+        } else {
+            data[0] = 0;
+        }
+        Self::new(data)
     }
 }
 
@@ -103,5 +122,11 @@ impl From<SValue> for Vec<u8> {
 impl From<&SValue> for Vec<u8> {
     fn from(addr: &SValue) -> Vec<u8> {
         addr.0.to_vec()
+    }
+}
+
+impl Hash for SValue {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state)
     }
 }
