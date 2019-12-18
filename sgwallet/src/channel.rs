@@ -97,65 +97,17 @@ enum InternalMsg {
     }, // when channel bootstrap, it will send this msg if it found pending txn.
 }
 
-pub struct Channel {
+#[derive(Clone)]
+pub struct ChannelHandle {
     channel_address: AccountAddress,
     account_address: AccountAddress,
     participant_addresses: BTreeSet<AccountAddress>,
     //    db: ChannelDB,
     //    store: ChannelStore<ChannelDB>,
     mail_sender: mpsc::Sender<ChannelMsg>,
-    inner: Option<Inner>,
 }
 
-impl Channel {
-    /// load channel from storage
-    pub fn load(
-        channel_address: AccountAddress,
-        account_address: AccountAddress,
-        participant_addresses: BTreeSet<AccountAddress>,
-        channel_state: ChannelState,
-        db: ChannelDB,
-        mail_sender: mpsc::Sender<ChannelMsg>,
-        mailbox: mpsc::Receiver<ChannelMsg>,
-        channel_event_sender: mpsc::Sender<ChannelEvent>,
-        keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
-        script_registry: Arc<PackageRegistry>,
-        chain_client: Arc<dyn ChainClient>,
-    ) -> Self {
-        let store = ChannelStore::new(db.clone());
-        let inner = Inner {
-            channel_address,
-            account_address,
-            participant_addresses: participant_addresses.clone(),
-            channel_state,
-            store: store.clone(),
-            keypair: keypair.clone(),
-            script_registry: script_registry.clone(),
-            chain_client: chain_client.clone(),
-            tx_applier: TxApplier::new(store.clone()),
-            mailbox,
-            channel_event_sender,
-            shutdown_signal: None,
-            should_stop: false,
-        };
-        let channel = Self {
-            channel_address,
-            account_address,
-            participant_addresses,
-            mail_sender,
-            inner: Some(inner),
-        };
-        channel
-    }
-
-    pub fn start(&mut self, executor: tokio::runtime::Handle) {
-        let inner = self.inner.take().expect("channel already started");
-        // TODO: wait channel start?
-        executor.spawn(async {
-            inner.start().await;
-        });
-    }
-
+impl ChannelHandle {
     pub fn account_address(&self) -> &AccountAddress {
         &self.account_address
     }
@@ -198,7 +150,7 @@ pub enum ChannelEvent {
     Stopped { channel_address: AccountAddress },
 }
 
-struct Inner {
+pub struct Channel {
     channel_address: AccountAddress,
     account_address: AccountAddress,
     // participant contains self address, use btree to preserve address order.
@@ -211,6 +163,7 @@ struct Inner {
     chain_client: Arc<dyn ChainClient>,
     tx_applier: TxApplier,
 
+    mail_sender: Option<mpsc::Sender<ChannelMsg>>,
     mailbox: mpsc::Receiver<ChannelMsg>,
     shutdown_signal: Option<oneshot::Sender<()>>,
     should_stop: bool,
@@ -218,14 +171,60 @@ struct Inner {
     channel_event_sender: mpsc::Sender<ChannelEvent>,
 }
 
-impl Inner {
+impl Channel {
     fn channel_address(&self) -> &AccountAddress {
         &self.channel_address
     }
 }
 
-impl Inner {
-    async fn start(mut self) {
+impl Channel {
+    /// load channel from storage
+    pub fn load(
+        channel_address: AccountAddress,
+        account_address: AccountAddress,
+        participant_addresses: BTreeSet<AccountAddress>,
+        channel_state: ChannelState,
+        db: ChannelDB,
+        mail_sender: mpsc::Sender<ChannelMsg>,
+        mailbox: mpsc::Receiver<ChannelMsg>,
+        channel_event_sender: mpsc::Sender<ChannelEvent>,
+        keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
+        script_registry: Arc<PackageRegistry>,
+        chain_client: Arc<dyn ChainClient>,
+    ) -> Self {
+        let store = ChannelStore::new(db.clone());
+        let inner = Self {
+            channel_address,
+            account_address,
+            participant_addresses: participant_addresses.clone(),
+            channel_state,
+            store: store.clone(),
+            keypair: keypair.clone(),
+            script_registry: script_registry.clone(),
+            chain_client: chain_client.clone(),
+            tx_applier: TxApplier::new(store.clone()),
+            mail_sender: Some(mail_sender),
+            mailbox,
+            channel_event_sender,
+            shutdown_signal: None,
+            should_stop: false,
+        };
+        inner
+    }
+
+    pub fn start(mut self, executor: tokio::runtime::Handle) -> ChannelHandle {
+        let mail_sender = self.mail_sender.take().expect("mail sender shold exists");
+        let handle = ChannelHandle {
+            channel_address: self.channel_address,
+            account_address: self.account_address,
+            participant_addresses: self.participant_addresses.clone(),
+            mail_sender,
+        };
+        // TODO: wait channel start?
+        executor.spawn(self.inner_start());
+        handle
+    }
+    async fn inner_start(mut self) {
         let (internal_msg_tx, mut internal_msg_rx) = mpsc::channel(1024);
         self.bootstrap(internal_msg_tx.clone());
         loop {
