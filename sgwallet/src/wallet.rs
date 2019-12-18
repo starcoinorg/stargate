@@ -445,14 +445,40 @@ impl Wallet {
         participant: AccountAddress,
         txn_request: &ChannelTransactionRequest,
     ) -> Result<Option<ChannelTransactionResponse>> {
+        let request_id = txn_request.request_id();
+
+        let channel_txn = txn_request.channel_txn();
+
+        debug!("verify_txn id:{}", request_id);
+        ensure!(
+            participant == channel_txn.proposer(),
+            "peer id and txn proposer mismatch"
+        );
+
+        let (generated_channel_address, participants) =
+            generate_channel_address(channel_txn.proposer(), self.shared.account);
+        ensure!(
+            generated_channel_address == channel_txn.channel_address(),
+            "invalid channel address in txn"
+        );
+
+        let channel = if channel_txn.operator().is_open() {
+            self.spawn_new_channel(generated_channel_address, participants)
+                .await?
+        } else {
+            self.get_channel(generated_channel_address).await?
+        };
+
+        let (proposal, sigs, _) = txn_request.clone().into();
         let (tx, rx) = oneshot::channel();
-        let cmd = WalletCmd::VerifyTxnRequest {
-            participant,
-            txn_request: txn_request.clone(),
+        let msg = ChannelMsg::CollectProposalWithSigs {
+            proposal: proposal.clone(),
+            sigs,
             responder: tx,
         };
-        let resp = self.call(cmd, rx).await?;
-        resp
+        channel.send(msg)?;
+        let sig_opt = rx.await??;
+        Ok(sig_opt.map(|s| ChannelTransactionResponse::new(proposal, s)))
     }
 
     pub async fn approve_txn(
@@ -460,14 +486,9 @@ impl Wallet {
         participant: AccountAddress,
         request_id: HashValue,
     ) -> Result<ChannelTransactionResponse> {
-        let (tx, rx) = oneshot::channel();
-        let cmd = WalletCmd::GrantTxnRequest {
-            participant,
-            request_id,
-            grant: true,
-            responder: tx,
-        };
-        let resp = self.call(cmd, rx).await??;
+        let resp = self
+            .grant_txn_request(participant, request_id, true)
+            .await?;
         debug_assert!(
             resp.is_some(),
             "invalid state of channel, should return signatures"
@@ -480,19 +501,42 @@ impl Wallet {
         participant: AccountAddress,
         request_id: HashValue,
     ) -> Result<()> {
-        let (tx, rx) = oneshot::channel();
-        let cmd = WalletCmd::GrantTxnRequest {
-            participant,
-            request_id,
-            grant: false,
-            responder: tx,
-        };
-        let resp = self.call(cmd, rx).await??;
+        let resp = self
+            .grant_txn_request(participant, request_id, false)
+            .await?;
         debug_assert!(
             resp.is_none(),
             "invalid state of channel, should not return signatures"
         );
         Ok(())
+    }
+    async fn grant_txn_request(
+        &self,
+        participant: AccountAddress,
+        request_id: HashValue,
+        grant: bool,
+    ) -> Result<Option<ChannelTransactionResponse>> {
+        let (generated_channel_address, _participants) =
+            generate_channel_address(participant, self.shared.account);
+        let channel = self.get_channel(generated_channel_address).await?;
+        let pending_txn = channel.get_pending_txn().await?;
+        let proposal: ChannelTransactionProposal = match pending_txn {
+            Some(r) => {
+                let (p, _, _) = r.into();
+                p
+            }
+            None => bail!("no pending txn to grant"),
+        };
+
+        let (tx, rx) = oneshot::channel();
+        let msg = ChannelMsg::GrantProposal {
+            channel_txn_id: request_id,
+            grant,
+            responder: tx,
+        };
+        channel.send(msg)?;
+        let resp = rx.await??;
+        Ok(resp.map(|s| ChannelTransactionResponse::new(proposal, s)))
     }
 
     /// After receiver reject the txn, sender should cancel his local pending txn to cleanup state.
@@ -501,13 +545,18 @@ impl Wallet {
         participant: AccountAddress,
         request_id: HashValue,
     ) -> Result<()> {
+        let (generated_channel_address, _participants) =
+            generate_channel_address(participant, self.shared.account);
+
+        let channel = self.get_channel(generated_channel_address).await?;
+
         let (tx, rx) = oneshot::channel();
-        let cmd = WalletCmd::CancelTxnRequest {
-            request_id,
-            participant,
+        let msg = ChannelMsg::CancelPendingTxn {
+            channel_txn_id: request_id,
             responder: tx,
         };
-        let _ = self.call(cmd, rx).await??;
+        channel.send(msg)?;
+        let _resp = rx.await??;
         Ok(())
     }
 
@@ -516,14 +565,21 @@ impl Wallet {
         participant: AccountAddress,
         txn_response: &ChannelTransactionResponse,
     ) -> Result<()> {
+        let (generated_channel_address, _participants) =
+            generate_channel_address(participant, self.shared.account);
+
+        let channel = self.get_channel(generated_channel_address).await?;
+
         let (tx, rx) = oneshot::channel();
-        let cmd = WalletCmd::VerifyTxnResponse {
-            participant,
-            txn_response: txn_response.clone(),
+        let (proposal, sigs) = txn_response.clone().into();
+        let msg = ChannelMsg::CollectProposalWithSigs {
+            proposal,
+            sigs,
             responder: tx,
         };
-        let resp = self.call(cmd, rx).await?;
-        resp
+        channel.send(msg)?;
+        let _ = rx.await??; // the result is not need.
+        Ok(())
     }
 
     pub async fn apply_txn(
@@ -601,14 +657,10 @@ impl Wallet {
         &self,
         participant: AccountAddress,
     ) -> Result<Option<PendingTransaction>> {
-        let (tx, rx) = oneshot::channel();
-        let cmd = WalletCmd::GetPendingTxn {
-            participant,
-            responder: tx,
-        };
-
-        let pending_txn = self.call(cmd, rx).await??;
-        Ok(pending_txn)
+        let (generated_channel_address, _participants) =
+            generate_channel_address(participant, self.shared.account);
+        let channel = self.get_channel(generated_channel_address).await?;
+        channel.get_pending_txn().await
     }
 
     pub async fn install_package(&self, package: ChannelScriptPackage) -> Result<()> {
@@ -655,6 +707,31 @@ impl Wallet {
         resp
     }
 
+    async fn spawn_new_channel(
+        &self,
+        channel_address: AccountAddress,
+        participants: BTreeSet<AccountAddress>,
+    ) -> Result<Arc<ChannelHandle>> {
+        let (tx, rx) = oneshot::channel();
+        let cmd = WalletCmd::SpawnNewChannel {
+            channel_address,
+            participants,
+            responder: tx,
+        };
+
+        let resp = self.call(cmd, rx).await?;
+        resp
+    }
+    async fn get_channel(&self, channel_address: AccountAddress) -> Result<Arc<ChannelHandle>> {
+        let (tx, rx) = oneshot::channel();
+        let cmd = WalletCmd::GetChannel {
+            channel_address,
+            responder: tx,
+        };
+
+        let resp = self.call(cmd, rx).await?;
+        resp
+    }
     async fn channel_participant_account_resource(
         &self,
         participant: AccountAddress,
@@ -712,32 +789,20 @@ pub enum WalletCmd {
     EnableChannel {
         responder: oneshot::Sender<Result<u64>>,
     },
+    SpawnNewChannel {
+        channel_address: AccountAddress,
+        participants: BTreeSet<AccountAddress>,
+        responder: oneshot::Sender<Result<Arc<ChannelHandle>>>,
+    },
+    GetChannel {
+        channel_address: AccountAddress,
+        responder: oneshot::Sender<Result<Arc<ChannelHandle>>>,
+    },
     Execute {
         participant: AccountAddress,
         channel_op: ChannelOp,
         args: Vec<TransactionArgument>,
         responder: oneshot::Sender<Result<ChannelTransactionRequest>>,
-    },
-    VerifyTxnRequest {
-        participant: AccountAddress,
-        txn_request: ChannelTransactionRequest,
-        responder: oneshot::Sender<Result<Option<ChannelTransactionResponse>>>,
-    },
-    GrantTxnRequest {
-        participant: AccountAddress,
-        request_id: HashValue,
-        grant: bool,
-        responder: oneshot::Sender<Result<Option<ChannelTransactionResponse>>>,
-    },
-    CancelTxnRequest {
-        participant: AccountAddress,
-        request_id: HashValue,
-        responder: oneshot::Sender<Result<()>>,
-    },
-    VerifyTxnResponse {
-        participant: AccountAddress,
-        txn_response: ChannelTransactionResponse,
-        responder: oneshot::Sender<Result<()>>,
     },
     ApplyTxnResponse {
         participant: AccountAddress,
@@ -765,10 +830,6 @@ pub enum WalletCmd {
         address: AccountAddress,
         struct_tag: StructTag,
         responder: oneshot::Sender<Result<Option<Vec<u8>>>>,
-    },
-    GetPendingTxn {
-        participant: AccountAddress,
-        responder: oneshot::Sender<Result<Option<PendingTransaction>>>,
     },
     StopChannel {
         participant: AccountAddress,
@@ -856,6 +917,22 @@ impl Inner {
             WalletCmd::EnableChannel { responder } => {
                 respond_with(responder, self.enable_channel().await);
             }
+            WalletCmd::SpawnNewChannel {
+                channel_address,
+                participants,
+                responder,
+            } => {
+                self.spawn_new_channel(channel_address, participants);
+                let channel = self.get_channel(&channel_address);
+                respond_with(responder, channel);
+            }
+            WalletCmd::GetChannel {
+                channel_address,
+                responder,
+            } => {
+                let channel = self.get_channel(&channel_address);
+                respond_with(responder, channel);
+            }
             WalletCmd::Execute {
                 participant,
                 channel_op,
@@ -864,44 +941,6 @@ impl Inner {
             } => {
                 let resp = self.execute(participant, channel_op, args).await;
                 respond_with(responder, resp);
-            }
-            WalletCmd::VerifyTxnRequest {
-                participant,
-                txn_request,
-                responder,
-            } => {
-                respond_with(responder, self.verify_txn(participant, txn_request).await);
-            }
-            WalletCmd::GrantTxnRequest {
-                participant,
-                grant,
-                request_id,
-                responder,
-            } => {
-                respond_with(
-                    responder,
-                    self.grant_txn_request(participant, request_id, grant).await,
-                );
-            }
-            WalletCmd::CancelTxnRequest {
-                participant,
-                request_id,
-                responder,
-            } => {
-                respond_with(
-                    responder,
-                    self.cancel_txn_request(participant, request_id).await,
-                );
-            }
-            WalletCmd::VerifyTxnResponse {
-                participant,
-                txn_response,
-                responder,
-            } => {
-                respond_with(
-                    responder,
-                    self.verify_txn_response(participant, txn_response).await,
-                );
             }
             WalletCmd::ApplyTxnResponse {
                 participant,
@@ -921,12 +960,6 @@ impl Inner {
                     self.get_channel_resource(participant, address, struct_tag)
                         .await,
                 );
-            }
-            WalletCmd::GetPendingTxn {
-                participant,
-                responder,
-            } => {
-                respond_with(responder, self.get_channel_pending_txn(participant).await);
             }
             WalletCmd::InstallPackage { package, responder } => {
                 let result = self.install_package(package);
@@ -1045,7 +1078,7 @@ impl Inner {
             Ok(())
         }
     }
-    fn get_channel(&mut self, participant: &AccountAddress) -> Result<Arc<ChannelHandle>> {
+    fn get_channel(&self, participant: &AccountAddress) -> Result<Arc<ChannelHandle>> {
         let channel = match self.channels.get(&participant) {
             Some(channel) => Ok(channel.clone()),
             None => {
@@ -1107,121 +1140,6 @@ impl Inner {
         Ok(request)
     }
 
-    /// Verify channel participant's txn
-    async fn verify_txn(
-        &mut self,
-        participant: AccountAddress,
-        txn_request: ChannelTransactionRequest,
-    ) -> Result<Option<ChannelTransactionResponse>> {
-        let request_id = txn_request.request_id();
-
-        let channel_txn = txn_request.channel_txn();
-
-        debug!("verify_txn id:{}", request_id);
-        ensure!(
-            participant == channel_txn.proposer(),
-            "peer id and txn proposer mismatch"
-        );
-
-        let (generated_channel_address, participants) =
-            generate_channel_address(channel_txn.proposer(), self.inner.account);
-        ensure!(
-            generated_channel_address == channel_txn.channel_address(),
-            "invalid channel address in txn"
-        );
-
-        if channel_txn.operator().is_open() {
-            self.ensure_channel_not_exists(&generated_channel_address)?;
-            self.spawn_new_channel(generated_channel_address, participants);
-        }
-
-        let channel = self.get_channel(&generated_channel_address)?;
-
-        let (proposal, sigs, _) = txn_request.into();
-        let (tx, rx) = oneshot::channel();
-        let msg = ChannelMsg::CollectProposalWithSigs {
-            proposal: proposal.clone(),
-            sigs,
-            responder: tx,
-        };
-        channel.send(msg)?;
-        let sig_opt = rx.await??;
-        Ok(sig_opt.map(|s| ChannelTransactionResponse::new(proposal, s)))
-    }
-
-    async fn grant_txn_request(
-        &mut self,
-        participant: AccountAddress,
-        request_id: HashValue,
-        grant: bool,
-    ) -> Result<Option<ChannelTransactionResponse>> {
-        let pending_txn = self.get_channel_pending_txn(participant).await?;
-        let proposal: ChannelTransactionProposal = match pending_txn {
-            Some(r) => {
-                let (p, _, _) = r.into();
-                p
-            }
-            None => bail!("no pending txn to grant"),
-        };
-
-        let (generated_channel_address, _participants) =
-            generate_channel_address(participant, self.inner.account);
-
-        let channel = self.get_channel(&generated_channel_address)?;
-
-        let (tx, rx) = oneshot::channel();
-        let msg = ChannelMsg::GrantProposal {
-            channel_txn_id: request_id,
-            grant,
-            responder: tx,
-        };
-        channel.send(msg)?;
-        let resp = rx.await??;
-        Ok(resp.map(|s| ChannelTransactionResponse::new(proposal, s)))
-    }
-
-    async fn cancel_txn_request(
-        &mut self,
-        participant: AccountAddress,
-        request_id: HashValue,
-    ) -> Result<()> {
-        let (generated_channel_address, _participants) =
-            generate_channel_address(participant, self.inner.account);
-
-        let channel = self.get_channel(&generated_channel_address)?;
-
-        let (tx, rx) = oneshot::channel();
-        let msg = ChannelMsg::CancelPendingTxn {
-            channel_txn_id: request_id,
-            responder: tx,
-        };
-        channel.send(msg)?;
-        let _resp = rx.await??;
-        Ok(())
-    }
-
-    async fn verify_txn_response(
-        &mut self,
-        participant: AccountAddress,
-        txn_response: ChannelTransactionResponse,
-    ) -> Result<()> {
-        let (generated_channel_address, _participants) =
-            generate_channel_address(participant, self.inner.account);
-
-        let channel = self.get_channel(&generated_channel_address)?;
-
-        let (tx, rx) = oneshot::channel();
-        let (proposal, sigs) = txn_response.into();
-        let msg = ChannelMsg::CollectProposalWithSigs {
-            proposal,
-            sigs,
-            responder: tx,
-        };
-        channel.send(msg)?;
-        let _ = rx.await??; // the result is not need.
-        Ok(())
-    }
-
     async fn apply_txn(
         &mut self,
         participant: AccountAddress,
@@ -1242,19 +1160,6 @@ impl Inner {
 
         let gas = rx.await??;
         Ok(gas)
-    }
-
-    async fn get_channel_pending_txn(
-        &mut self,
-        participant: AccountAddress,
-    ) -> Result<Option<PendingTransaction>> {
-        let (generated_channel_address, _participants) =
-            generate_channel_address(participant, self.inner.account);
-        let channel = self.get_channel(&generated_channel_address)?;
-        let (tx, rx) = oneshot::channel();
-        let msg = ChannelMsg::GetPendingTxn { responder: tx };
-        channel.send(msg)?;
-        Ok(rx.await?)
     }
 
     /// get channel account resource data from channel task

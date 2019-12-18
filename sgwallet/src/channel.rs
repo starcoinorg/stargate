@@ -49,6 +49,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use vm::gas_schedule::GasAlgebra;
 
+#[derive(Debug)]
 pub enum ChannelMsg {
     Execute {
         channel_op: ChannelOp,
@@ -97,7 +98,7 @@ enum InternalMsg {
     }, // when channel bootstrap, it will send this msg if it found pending txn.
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ChannelHandle {
     channel_address: AccountAddress,
     account_address: AccountAddress,
@@ -143,6 +144,13 @@ impl ChannelHandle {
         } else {
             Ok(())
         }
+    }
+
+    pub async fn get_pending_txn(&self) -> Result<Option<PendingTransaction>> {
+        let (tx, rx) = oneshot::channel();
+        let msg = ChannelMsg::GetPendingTxn { responder: tx };
+        self.send(msg)?;
+        Ok(rx.await?)
     }
 }
 
