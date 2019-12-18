@@ -24,7 +24,7 @@ use libra_types::channel::{
     ChannelParticipantAccountResource, Witness, WitnessData,
 };
 use libra_types::identifier::Identifier;
-use libra_types::language_storage::ModuleId;
+use libra_types::language_storage::{ModuleId, StructTag};
 use libra_types::transaction::helpers::TransactionSigner;
 use libra_types::transaction::{
     ChannelTransactionPayload, ChannelTransactionPayloadBody, RawTransaction, ScriptAction,
@@ -49,6 +49,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use vm::gas_schedule::GasAlgebra;
 
+#[derive(Debug)]
 pub enum ChannelMsg {
     Execute {
         channel_op: ChannelOp,
@@ -97,7 +98,7 @@ enum InternalMsg {
     }, // when channel bootstrap, it will send this msg if it found pending txn.
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ChannelHandle {
     channel_address: AccountAddress,
     account_address: AccountAddress,
@@ -143,6 +144,27 @@ impl ChannelHandle {
         } else {
             Ok(())
         }
+    }
+
+    pub async fn get_pending_txn(&self) -> Result<Option<PendingTransaction>> {
+        let (tx, rx) = oneshot::channel();
+        let msg = ChannelMsg::GetPendingTxn { responder: tx };
+        self.send(msg)?;
+        Ok(rx.await?)
+    }
+    pub async fn get_channel_resource(
+        &self,
+        address: AccountAddress,
+        struct_tag: StructTag,
+    ) -> Result<Option<Vec<u8>>> {
+        let data_path = DataPath::channel_resource_path(address, struct_tag);
+        let (tx, rx) = oneshot::channel();
+        let msg = ChannelMsg::AccessPath {
+            path: AccessPath::new_for_data_path(self.channel_address, data_path),
+            responder: tx,
+        };
+        self.send(msg)?;
+        rx.await?
     }
 }
 
