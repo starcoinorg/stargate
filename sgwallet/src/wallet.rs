@@ -18,7 +18,6 @@ use libra_crypto::{
 };
 use libra_logger::prelude::*;
 use libra_state_view::StateView;
-use libra_types::access_path::AccessPath;
 use libra_types::byte_array::ByteArray;
 use libra_types::channel::{
     channel_mirror_struct_tag, channel_participant_struct_tag, channel_struct_tag,
@@ -207,16 +206,16 @@ impl Wallet {
     }
 
     pub async fn channel_sequence_number(&self, participant: AccountAddress) -> Result<u64> {
-        let (channel_address, _) = generate_channel_address(participant, self.shared.account);
-        let (tx, rx) = oneshot::channel();
-        let cmd = WalletCmd::GetChannelResource {
-            participant,
-            address: channel_address, // channel mirror resource is a shared resource
-            struct_tag: channel_mirror_struct_tag(),
-            responder: tx,
-        };
+        let (generated_channel_address, _participants) =
+            generate_channel_address(participant, self.shared.account);
+        let channel = self.get_channel(generated_channel_address).await?;
 
-        let resp = self.call(cmd, rx).await??;
+        let struct_tag = channel_mirror_struct_tag();
+        // channel mirror resource is a shared resource
+        let resp = channel
+            .get_channel_resource(generated_channel_address, struct_tag)
+            .await?;
+
         let mirror = resp
             .map(|blob| ChannelMirrorResource::make_from(blob))
             .transpose()?;
@@ -424,18 +423,25 @@ impl Wallet {
         channel_op: ChannelOp,
         args: Vec<TransactionArgument>,
     ) -> Result<ChannelTransactionRequest> {
-        let (tx, rx) = oneshot::channel();
-        let (_channel_address, _participants) =
-            generate_channel_address(self.shared.account, participant);
+        let (channel_address, participants) =
+            generate_channel_address(participant, self.shared.account);
+        let channel = if channel_op.is_open() {
+            self.spawn_new_channel(channel_address, participants)
+                .await?
+        } else {
+            self.get_channel(channel_address).await?
+        };
 
-        let cmd = WalletCmd::Execute {
-            participant,
+        let (tx, rx) = oneshot::channel();
+        let msg = ChannelMsg::Execute {
             channel_op,
             args,
             responder: tx,
         };
-        let resp = self.call(cmd, rx).await?;
-        resp
+        channel.send(msg)?;
+        let (proposal, sigs, output) = rx.await??;
+        let request = ChannelTransactionRequest::new(proposal, sigs, output.is_travel_txn());
+        Ok(request)
     }
 
     /// Receiver verify txn.
@@ -587,15 +593,21 @@ impl Wallet {
         participant: AccountAddress,
         txn_response: &ChannelTransactionResponse,
     ) -> Result<u64> {
+        let (generated_channel_address, _participants) =
+            generate_channel_address(participant, self.shared.account);
+
+        let channel = self.get_channel(generated_channel_address).await?;
+
+        let (proposal, _) = txn_response.clone().into();
         let (tx, rx) = oneshot::channel();
-        let cmd = WalletCmd::ApplyTxnResponse {
-            participant,
-            txn_response: txn_response.clone(),
+        let msg = ChannelMsg::ApplyPendingTxn {
+            proposal,
             responder: tx,
         };
+        channel.send(msg)?;
 
-        let resp = self.call(cmd, rx).await?;
-        resp
+        let gas = rx.await??;
+        Ok(gas)
     }
 
     /// Called by receiver to get proposal waiting user approval.
@@ -664,14 +676,8 @@ impl Wallet {
     }
 
     pub async fn install_package(&self, package: ChannelScriptPackage) -> Result<()> {
-        let (tx, rx) = oneshot::channel();
-        let cmd = WalletCmd::InstallPackage {
-            package,
-            responder: tx,
-        };
-
-        let resp = self.call(cmd, rx).await?;
-        resp
+        self.shared.script_registry.install_package(package)?;
+        Ok(())
     }
     pub async fn deploy_module(&self, module_byte_code: Vec<u8>) -> Result<TransactionWithProof> {
         let (tx, rx) = oneshot::channel();
@@ -688,15 +694,11 @@ impl Wallet {
         package_name: String,
         script_name: String,
     ) -> Result<Option<ScriptCode>> {
-        let (tx, rx) = oneshot::channel();
-        let cmd = WalletCmd::GetScriptCode {
-            package_name,
-            script_name,
-            responder: tx,
-        };
-
-        let resp = self.call(cmd, rx).await?;
-        resp
+        let resp = self
+            .shared
+            .script_registry
+            .get_script(&package_name, &script_name);
+        Ok(resp)
     }
 
     pub async fn get_all_channels(&self) -> Result<HashSet<AccountAddress>> {
@@ -737,17 +739,13 @@ impl Wallet {
         participant: AccountAddress,
         address: AccountAddress,
     ) -> Result<Option<ChannelParticipantAccountResource>> {
-        let (tx, rx) = oneshot::channel();
-        let cmd = WalletCmd::GetChannelResource {
-            participant,
-            address,
-            struct_tag: channel_participant_struct_tag(),
-            responder: tx,
-        };
+        let (generated_channel_address, _participants) =
+            generate_channel_address(participant, self.shared.account);
+        let channel = self.get_channel(generated_channel_address).await?;
 
-        let resp = self.call(cmd, rx).await?;
-        resp?
-            .map(|blob| ChannelParticipantAccountResource::make_from(blob))
+        let struct_tag = channel_participant_struct_tag();
+        let resp = channel.get_channel_resource(address, struct_tag).await?;
+        resp.map(|blob| ChannelParticipantAccountResource::make_from(blob))
             .transpose()
     }
 
@@ -798,38 +796,12 @@ pub enum WalletCmd {
         channel_address: AccountAddress,
         responder: oneshot::Sender<Result<Arc<ChannelHandle>>>,
     },
-    Execute {
-        participant: AccountAddress,
-        channel_op: ChannelOp,
-        args: Vec<TransactionArgument>,
-        responder: oneshot::Sender<Result<ChannelTransactionRequest>>,
-    },
-    ApplyTxnResponse {
-        participant: AccountAddress,
-        txn_response: ChannelTransactionResponse,
-        responder: oneshot::Sender<Result<u64>>,
-    },
-    InstallPackage {
-        package: ChannelScriptPackage,
-        responder: oneshot::Sender<Result<()>>,
-    },
     GetAllChannels {
         responder: oneshot::Sender<Result<HashSet<AccountAddress>>>,
     },
     DeployModule {
         module_byte_code: Vec<u8>,
         responder: oneshot::Sender<Result<TransactionWithProof>>,
-    },
-    GetScriptCode {
-        package_name: String,
-        script_name: String,
-        responder: oneshot::Sender<Result<Option<ScriptCode>>>,
-    },
-    GetChannelResource {
-        participant: AccountAddress,
-        address: AccountAddress,
-        struct_tag: StructTag,
-        responder: oneshot::Sender<Result<Option<Vec<u8>>>>,
     },
     StopChannel {
         participant: AccountAddress,
@@ -933,55 +905,12 @@ impl Inner {
                 let channel = self.get_channel(&channel_address);
                 respond_with(responder, channel);
             }
-            WalletCmd::Execute {
-                participant,
-                channel_op,
-                args,
-                responder,
-            } => {
-                let resp = self.execute(participant, channel_op, args).await;
-                respond_with(responder, resp);
-            }
-            WalletCmd::ApplyTxnResponse {
-                participant,
-                txn_response,
-                responder,
-            } => {
-                respond_with(responder, self.apply_txn(participant, txn_response).await);
-            }
-            WalletCmd::GetChannelResource {
-                participant,
-                address,
-                struct_tag,
-                responder,
-            } => {
-                respond_with(
-                    responder,
-                    self.get_channel_resource(participant, address, struct_tag)
-                        .await,
-                );
-            }
-            WalletCmd::InstallPackage { package, responder } => {
-                let result = self.install_package(package);
-                respond_with(responder, result);
-            }
             WalletCmd::DeployModule {
                 module_byte_code,
                 responder,
             } => {
                 let response = self.deploy_module(module_byte_code).await;
                 respond_with(responder, response);
-            }
-            WalletCmd::GetScriptCode {
-                package_name,
-                script_name,
-                responder,
-            } => {
-                let resp = self
-                    .inner
-                    .script_registry
-                    .get_script(&package_name, &script_name);
-                respond_with(responder, Ok(resp));
             }
             WalletCmd::GetAllChannels { responder } => {
                 let all_channels = self
@@ -1070,14 +999,6 @@ impl Inner {
         Ok(())
     }
 
-    fn ensure_channel_not_exists(&self, channel_address: &AccountAddress) -> Result<()> {
-        if self.exist_channel(channel_address) {
-            let err = format_err!("Channel with address {} exist.", &channel_address);
-            Err(err)
-        } else {
-            Ok(())
-        }
-    }
     fn get_channel(&self, participant: &AccountAddress) -> Result<Arc<ChannelHandle>> {
         let channel = match self.channels.get(&participant) {
             Some(channel) => Ok(channel.clone()),
@@ -1113,86 +1034,10 @@ impl Inner {
         Ok(proof.proof.transaction_info().gas_used())
     }
 
-    async fn execute(
-        &mut self,
-        participant: AccountAddress,
-        channel_op: ChannelOp,
-        args: Vec<TransactionArgument>,
-    ) -> Result<ChannelTransactionRequest> {
-        let (channel_address, participants) =
-            generate_channel_address(participant, self.inner.account);
-        if channel_op.is_open() {
-            self.ensure_channel_not_exists(&channel_address)?;
-            self.spawn_new_channel(channel_address, participants);
-        }
-
-        let channel = self.get_channel(&channel_address)?;
-
-        let (tx, rx) = oneshot::channel();
-        let msg = ChannelMsg::Execute {
-            channel_op,
-            args,
-            responder: tx,
-        };
-        channel.send(msg)?;
-        let (proposal, sigs, output) = rx.await??;
-        let request = ChannelTransactionRequest::new(proposal, sigs, output.is_travel_txn());
-        Ok(request)
-    }
-
-    async fn apply_txn(
-        &mut self,
-        participant: AccountAddress,
-        txn_response: ChannelTransactionResponse,
-    ) -> Result<u64> {
-        let (generated_channel_address, _participants) =
-            generate_channel_address(participant, self.inner.account);
-
-        let channel = self.get_channel(&generated_channel_address)?;
-
-        let (proposal, _) = txn_response.into();
-        let (tx, rx) = oneshot::channel();
-        let msg = ChannelMsg::ApplyPendingTxn {
-            proposal,
-            responder: tx,
-        };
-        channel.send(msg)?;
-
-        let gas = rx.await??;
-        Ok(gas)
-    }
-
-    /// get channel account resource data from channel task
-    async fn get_channel_resource(
-        &mut self,
-        participant: AccountAddress,
-        address: AccountAddress,
-        struct_tag: StructTag,
-    ) -> Result<Option<Vec<u8>>> {
-        let (generated_channel_address, _participants) =
-            generate_channel_address(participant, self.inner.account);
-        let (tx, rx) = oneshot::channel();
-
-        let data_path = DataPath::channel_resource_path(address, struct_tag);
-        let msg = ChannelMsg::AccessPath {
-            path: AccessPath::new_for_data_path(generated_channel_address, data_path),
-            responder: tx,
-        };
-        let channel = self.get_channel(&generated_channel_address)?;
-        channel.send(msg)?;
-        rx.await?
-    }
-
     async fn stop_channel(&mut self, generated_channel_address: AccountAddress) -> Result<()> {
         let channel = self.get_channel(&generated_channel_address)?;
         channel.stop().await?;
         self.channels.remove(&generated_channel_address);
-        Ok(())
-    }
-
-    fn install_package(&self, package: ChannelScriptPackage) -> Result<()> {
-        //TODO(jole) package should limit channel?
-        self.inner.script_registry.install_package(package)?;
         Ok(())
     }
 
@@ -1234,6 +1079,7 @@ impl Inner {
         Ok(self.account_resource()?.sequence_number())
     }
 
+    #[allow(dead_code)]
     fn exist_channel(&self, channel_address: &AccountAddress) -> bool {
         self.channels.contains_key(channel_address)
     }
