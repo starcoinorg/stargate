@@ -72,3 +72,7 @@ message MultiHopChannelRequest{
     ChannelTransactionRequest request = 1;
     repeated NextHop hops = 2;
 }
+
+message ExchangeSeedMessage{
+    bytes seed  = 1;
+}
