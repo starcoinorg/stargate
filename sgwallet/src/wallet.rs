@@ -935,18 +935,11 @@ impl Inner {
             } => {
                 let (generated_channel_address, _participants) =
                     generate_channel_address(participant, self.inner.account);
-                respond_with(
-                    responder,
-                    self.stop_channel(generated_channel_address).await,
-                );
+                self.channels.remove(&generated_channel_address);
+                respond_with(responder, Ok(()));
             }
             WalletCmd::Stop { responder } => {
-                let channels = self.channels.keys().map(Clone::clone).collect::<Vec<_>>();
-                for channel_address in channels.into_iter() {
-                    if let Err(e) = self.stop_channel(channel_address).await {
-                        error!("fail to stop channel {}, err: {}", &channel_address, e);
-                    }
-                }
+                self.channels.clear();
                 self.should_stop = true;
                 respond_with(responder, Ok(()));
             }
@@ -1032,13 +1025,6 @@ impl Inner {
             watch_transaction(self.inner.client.as_ref(), self.inner.account, seq_number).await?;
         self.channel_enabled = true;
         Ok(proof.proof.transaction_info().gas_used())
-    }
-
-    async fn stop_channel(&mut self, generated_channel_address: AccountAddress) -> Result<()> {
-        let channel = self.get_channel(&generated_channel_address)?;
-        channel.stop().await?;
-        self.channels.remove(&generated_channel_address);
-        Ok(())
     }
 
     /// Deploy a module to Chain
