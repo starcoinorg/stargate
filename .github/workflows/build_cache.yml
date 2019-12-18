@@ -1,0 +1,46 @@
+name: Build Sccache
+on:
+  push:
+    branches:
+      - master
+      - feature/**
+    paths-ignore:
+      - '**.md'
+jobs:
+  build-all:
+    name: build project
+    runs-on: ubuntu-latest
+    env:
+      RUSTC_WRAPPER: sccache
+    steps:
+      - name: login github docker registry
+        run: docker login docker.pkg.github.com --username $GITHUB_ACTOR -p ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v1
+        with:
+          submodules: recursive
+      - name: setup rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.39.0
+      - name: setup environment
+        run: bash ./scripts/dev_setup.sh
+      - name: setup sccache
+        run: bash ./scripts/ci/setup_sccache.sh
+      - name: print cwd
+        run: pwd
+      - name: print env
+        run: env
+      - name: print rust sysroot
+        run: rustc --print sysroot && rustc -vV
+      - name: build
+        env:
+          RUST_LOG: sccache=trace
+        run: cargo build --all -j 4 -vvv
+      - name: check for changed and untracked files
+        run: bash ./libra/scripts/changed-files.sh
+      - name: regenerate build cache
+        run: docker build -f ./docker/ci/sccache.Dockerfile -t docker.pkg.github.com/starcoinorg/stargate/build_cache:master $HOME/.cache/sccache
+      - name: push build_cache image
+        run:  docker push docker.pkg.github.com/starcoinorg/stargate/build_cache:master
+      - name: display cache hit
+        run: sccache -s
