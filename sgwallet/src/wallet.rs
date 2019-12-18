@@ -1,7 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
-use crate::channel::{ChannelEvent, ChannelMsg};
-use crate::{channel::Channel, scripts::*};
+use crate::channel::{Channel, ChannelEvent, ChannelMsg};
+use crate::{channel::ChannelHandle, scripts::*};
 use anyhow::{bail, ensure, format_err, Error, Result};
 use chrono::Utc;
 use futures::{
@@ -782,7 +782,7 @@ pub enum WalletCmd {
 pub struct Inner {
     inner: Shared,
     channel_enabled: bool,
-    channels: HashMap<AccountAddress, Channel>,
+    channels: HashMap<AccountAddress, Arc<ChannelHandle>>,
     sgdb: Arc<SgStorage>,
     rt_handle: runtime::Handle,
     mailbox: mpsc::Receiver<WalletCmd>,
@@ -1045,9 +1045,9 @@ impl Inner {
             Ok(())
         }
     }
-    fn get_channel_mut(&mut self, participant: &AccountAddress) -> Result<&mut Channel> {
-        let channel = match self.channels.get_mut(&participant) {
-            Some(channel) => Ok(channel),
+    fn get_channel(&mut self, participant: &AccountAddress) -> Result<Arc<ChannelHandle>> {
+        let channel = match self.channels.get(&participant) {
+            Some(channel) => Ok(channel.clone()),
             None => {
                 let e: Error = SgError::new_channel_not_exist_error(&participant).into();
                 Err(e)
@@ -1093,7 +1093,7 @@ impl Inner {
             self.spawn_new_channel(channel_address, participants);
         }
 
-        let channel = self.get_channel_mut(&channel_address)?;
+        let channel = self.get_channel(&channel_address)?;
 
         let (tx, rx) = oneshot::channel();
         let msg = ChannelMsg::Execute {
@@ -1135,7 +1135,7 @@ impl Inner {
             self.spawn_new_channel(generated_channel_address, participants);
         }
 
-        let channel = self.get_channel_mut(&generated_channel_address)?;
+        let channel = self.get_channel(&generated_channel_address)?;
 
         let (proposal, sigs, _) = txn_request.into();
         let (tx, rx) = oneshot::channel();
@@ -1167,7 +1167,7 @@ impl Inner {
         let (generated_channel_address, _participants) =
             generate_channel_address(participant, self.inner.account);
 
-        let channel = self.get_channel_mut(&generated_channel_address)?;
+        let channel = self.get_channel(&generated_channel_address)?;
 
         let (tx, rx) = oneshot::channel();
         let msg = ChannelMsg::GrantProposal {
@@ -1188,7 +1188,7 @@ impl Inner {
         let (generated_channel_address, _participants) =
             generate_channel_address(participant, self.inner.account);
 
-        let channel = self.get_channel_mut(&generated_channel_address)?;
+        let channel = self.get_channel(&generated_channel_address)?;
 
         let (tx, rx) = oneshot::channel();
         let msg = ChannelMsg::CancelPendingTxn {
@@ -1208,7 +1208,7 @@ impl Inner {
         let (generated_channel_address, _participants) =
             generate_channel_address(participant, self.inner.account);
 
-        let channel = self.get_channel_mut(&generated_channel_address)?;
+        let channel = self.get_channel(&generated_channel_address)?;
 
         let (tx, rx) = oneshot::channel();
         let (proposal, sigs) = txn_response.into();
@@ -1230,7 +1230,7 @@ impl Inner {
         let (generated_channel_address, _participants) =
             generate_channel_address(participant, self.inner.account);
 
-        let channel = self.get_channel_mut(&generated_channel_address)?;
+        let channel = self.get_channel(&generated_channel_address)?;
 
         let (proposal, _) = txn_response.into();
         let (tx, rx) = oneshot::channel();
@@ -1250,7 +1250,7 @@ impl Inner {
     ) -> Result<Option<PendingTransaction>> {
         let (generated_channel_address, _participants) =
             generate_channel_address(participant, self.inner.account);
-        let channel = self.get_channel_mut(&generated_channel_address)?;
+        let channel = self.get_channel(&generated_channel_address)?;
         let (tx, rx) = oneshot::channel();
         let msg = ChannelMsg::GetPendingTxn { responder: tx };
         channel.send(msg)?;
@@ -1273,13 +1273,13 @@ impl Inner {
             path: AccessPath::new_for_data_path(generated_channel_address, data_path),
             responder: tx,
         };
-        let channel = self.get_channel_mut(&generated_channel_address)?;
+        let channel = self.get_channel(&generated_channel_address)?;
         channel.send(msg)?;
         rx.await?
     }
 
     async fn stop_channel(&mut self, generated_channel_address: AccountAddress) -> Result<()> {
-        let channel = self.get_channel_mut(&generated_channel_address)?;
+        let channel = self.get_channel(&generated_channel_address)?;
         channel.stop().await?;
         self.channels.remove(&generated_channel_address);
         Ok(())
@@ -1349,7 +1349,7 @@ impl Inner {
     ) {
         let (channel_msg_sender, channel_msg_receiver) = mpsc::channel(1000);
 
-        let mut channel = Channel::load(
+        let channel = Channel::load(
             channel_address,
             self.inner.account,
             participants,
@@ -1362,10 +1362,11 @@ impl Inner {
             self.inner.script_registry.clone(),
             self.inner.client.clone(),
         );
-        channel.start(self.rt_handle.clone());
+        let channel_handle = channel.start(self.rt_handle.clone());
 
         // TODO: should wait signal of channel saying it's started
-        self.channels.insert(channel_address, channel);
+        self.channels
+            .insert(channel_address, Arc::new(channel_handle));
         info!("Init new channel {:?}", channel_address);
     }
 
