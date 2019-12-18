@@ -11,7 +11,7 @@ use crate::wallet::{
 use anyhow::{bail, ensure, format_err, Result};
 use futures::{
     channel::{mpsc, oneshot},
-    SinkExt, StreamExt,
+    FutureExt, SinkExt, StreamExt,
 };
 use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
 use libra_crypto::test_utils::KeyPair;
@@ -98,7 +98,7 @@ enum InternalMsg {
     }, // when channel bootstrap, it will send this msg if it found pending txn.
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ChannelHandle {
     channel_address: AccountAddress,
     account_address: AccountAddress,
@@ -106,6 +106,7 @@ pub struct ChannelHandle {
     //    db: ChannelDB,
     //    store: ChannelStore<ChannelDB>,
     mail_sender: mpsc::Sender<ChannelMsg>,
+    _shutdown_tx: oneshot::Sender<()>,
 }
 
 impl ChannelHandle {
@@ -120,6 +121,7 @@ impl ChannelHandle {
         &self.participant_addresses
     }
 
+    #[allow(dead_code)]
     pub async fn stop(&self) -> Result<()> {
         let (tx, rx) = oneshot::channel();
         let msg = ChannelMsg::Stop { responder: tx };
@@ -236,19 +238,23 @@ impl Channel {
 
     pub fn start(mut self, executor: tokio::runtime::Handle) -> ChannelHandle {
         let mail_sender = self.mail_sender.take().expect("mail sender shold exists");
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
         let handle = ChannelHandle {
             channel_address: self.channel_address,
             account_address: self.account_address,
             participant_addresses: self.participant_addresses.clone(),
             mail_sender,
+            _shutdown_tx: shutdown_tx,
         };
         // TODO: wait channel start?
-        executor.spawn(self.inner_start());
+        executor.spawn(self.inner_start(shutdown_rx));
         handle
     }
-    async fn inner_start(mut self) {
+    async fn inner_start(mut self, shutdown_rx: oneshot::Receiver<()>) {
         let (internal_msg_tx, mut internal_msg_rx) = mpsc::channel(1024);
         self.bootstrap(internal_msg_tx.clone());
+        let mut fused_shutdown_rx = shutdown_rx.fuse();
+
         loop {
             ::futures::select! {
                 maybe_external_msg = self.mailbox.next() => {
@@ -260,6 +266,9 @@ impl Channel {
                     if let(Some(msg)) = maybe_internal_msg {
                         self.handle_internal_msg(msg).await;
                     }
+                }
+                _ = fused_shutdown_rx => {
+                    break;
                 }
                 complete => {
                     break;
