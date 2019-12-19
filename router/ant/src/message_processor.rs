@@ -8,9 +8,9 @@ use std::{
 
 use futures::{
     channel::mpsc::{Receiver, Sender},
-    Future,Stream,
-    task::{Poll,Context},
     sink::SinkExt,
+    task::{Context, Poll},
+    Future, Stream,
 };
 
 use anyhow::{Error, Result};
@@ -33,7 +33,7 @@ impl<T> MessageFuture<T> {
 impl<T> Future for MessageFuture<T> {
     type Output = Result<T>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output>{
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         while let Poll::Ready(v) = Pin::new(&mut self.rx).poll_next(cx) {
             match v {
                 Some(v) => match v {
@@ -48,8 +48,9 @@ impl<T> Future for MessageFuture<T> {
                     warn!("no data,return timeout");
                     return Poll::Ready(Err(SgError::new(
                         sgtypes::sg_error::SgErrorCode::TIMEOUT,
-                        "future time out".to_string()).into(),
-                    ));
+                        "future time out".to_string(),
+                    )
+                    .into()));
                 }
             }
         }
@@ -107,5 +108,4 @@ where
             _ => info!("tx hash {} not in map,timeout is not necessary", hash),
         }
     }
-
 }

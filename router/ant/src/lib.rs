@@ -1,7 +1,7 @@
 mod ant_generator_test;
+mod message_processor;
 mod path_finder;
 mod seed_generator;
-mod message_processor;
 
 use anyhow::*;
 use network::NetworkMessage;
@@ -15,12 +15,12 @@ use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::stream::StreamExt;
 use libra_logger::prelude::*;
 use libra_types::account_address::AccountAddress;
+use message_processor::{MessageFuture, MessageProcessor};
 use path_finder::SeedManager;
-use seed_generator::{generate_random_u128,SValueGenerator};
-use message_processor::{MessageFuture,MessageProcessor};
+use seed_generator::{generate_random_u128, SValueGenerator};
 
-use sgtypes::{
-    message::{ExchangeSeedMessageRequest,ExchangeSeedMessageResponse,RouterNetworkMessage},
+use sgtypes::message::{
+    ExchangeSeedMessageRequest, ExchangeSeedMessageResponse, RouterNetworkMessage,
 };
 
 pub struct AntRouter {
@@ -35,7 +35,7 @@ struct AntRouterInner {
     network_sender: UnboundedSender<RouterNetworkMessage>,
     wallet: Arc<Wallet>,
     seed_manager: SeedManager,
-    message_processor:MessageProcessor<RouterNetworkMessage>,
+    message_processor: MessageProcessor<RouterNetworkMessage>,
 }
 
 impl AntRouter {
@@ -99,11 +99,11 @@ impl AntRouterInner {
 
     async fn handle_network_msg(&self, msg: RouterNetworkMessage) {}
 
-    async fn find_path(&self,start: AccountAddress,
-        end: AccountAddress,)->Result<()>{
-            let sender_seed = generate_random_u128();
-            let message = ExchangeSeedMessageRequest::new(sender_seed);
-            self.network_sender.unbounded_send(RouterNetworkMessage::ExchangeSeedMessageRequest(message))?;
-            Ok(())
+    async fn find_path(&self, start: AccountAddress, end: AccountAddress) -> Result<()> {
+        let sender_seed = generate_random_u128();
+        let message = ExchangeSeedMessageRequest::new(sender_seed);
+        self.network_sender
+            .unbounded_send(RouterNetworkMessage::ExchangeSeedMessageRequest(message))?;
+        Ok(())
     }
 }

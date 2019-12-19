@@ -636,7 +636,7 @@ pub struct ExchangeSeedMessageRequest {
 
 impl ExchangeSeedMessageRequest {
     pub fn new(seed: u128) -> Self {
-        Self { sender_seed:seed }
+        Self { sender_seed: seed }
     }
 
     pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
@@ -647,7 +647,10 @@ impl ExchangeSeedMessageRequest {
     }
 
     pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
-        Ok(TryInto::<crate::proto::sgtypes::ExchangeSeedMessageRequest>::try_into(self)?.to_vec()?)
+        Ok(
+            TryInto::<crate::proto::sgtypes::ExchangeSeedMessageRequest>::try_into(self)?
+                .to_vec()?,
+        )
     }
 }
 
@@ -666,19 +669,22 @@ impl From<ExchangeSeedMessageRequest> for crate::proto::sgtypes::ExchangeSeedMes
     fn from(value: ExchangeSeedMessageRequest) -> Self {
         let mut seed = Vec::new();
         seed.extend_from_slice(&value.sender_seed.to_le_bytes());
-        Self{sender_seed:seed}
+        Self { sender_seed: seed }
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExchangeSeedMessageResponse {
     pub sender_seed: u128,
-    pub receiver_seed :u128,
+    pub receiver_seed: u128,
 }
 
 impl ExchangeSeedMessageResponse {
-    pub fn new(sender_seed: u128,receiver_seed:u128) -> Self {
-        Self { sender_seed,receiver_seed }
+    pub fn new(sender_seed: u128, receiver_seed: u128) -> Self {
+        Self {
+            sender_seed,
+            receiver_seed,
+        }
     }
 
     pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
@@ -689,7 +695,10 @@ impl ExchangeSeedMessageResponse {
     }
 
     pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
-        Ok(TryInto::<crate::proto::sgtypes::ExchangeSeedMessageResponse>::try_into(self)?.to_vec()?)
+        Ok(
+            TryInto::<crate::proto::sgtypes::ExchangeSeedMessageResponse>::try_into(self)?
+                .to_vec()?,
+        )
     }
 }
 
@@ -704,7 +713,7 @@ impl TryFrom<crate::proto::sgtypes::ExchangeSeedMessageResponse> for ExchangeSee
         result.copy_from_slice(value.receiver_seed.as_ref());
         let receiver_seed = u128::from_le_bytes(result);
 
-        Ok(Self::new(sender_seed,receiver_seed))
+        Ok(Self::new(sender_seed, receiver_seed))
     }
 }
 
@@ -715,7 +724,10 @@ impl From<ExchangeSeedMessageResponse> for crate::proto::sgtypes::ExchangeSeedMe
         let mut receiver_seed = Vec::new();
         receiver_seed.extend_from_slice(&value.receiver_seed.to_le_bytes());
 
-        Self{sender_seed,receiver_seed}
+        Self {
+            sender_seed,
+            receiver_seed,
+        }
     }
 }
 
