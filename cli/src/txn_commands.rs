@@ -16,32 +16,74 @@ impl Command for TxnCommand {
     }
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
         let commands: Vec<Box<dyn Command>> = vec![
-            Box::new(AccountCommandCreate {}),
+            Box::new(TxnLatestVersion {}),
         ];
 
         subcommand_execute(&params[0], commands, client, &params[1..]);
     }
 }
 
-/// Sub command to create a random account. The account will not be saved on chain.
-pub struct AccountCommandCreate {}
+/// Sub command to query latest version.
+pub struct TxnLatestVersion {}
 
-impl Command for AccountCommandCreate {
+impl Command for TxnLatestVersion {
     fn get_aliases(&self) -> Vec<&'static str> {
-        vec!["create", "c"]
+        vec!["version", "v"]
     }
     fn get_description(&self) -> &'static str {
-        "Create an account. Returns reference ID to use in other operations"
+        "Query transaction latest version."
     }
     fn execute(&self, client: &mut SGClientProxy, _params: &[&str]) {
-        println!(">> Creating/retrieving next account from wallet");
-        match client.create_account() {
-            Ok((addr, index)) => println!(
-                "Created/retrieved address {},index {:?}",
-                hex::encode(addr),
-                index
+        println!(">> Query latest version.");
+        match client.latest_version() {
+            Ok(version) => println!(
+                "latest version is : {:?}",
+                version
             ),
-            Err(e) => report_error("Error creating account", e),
+            Err(e) => report_error("Error latest version", e),
+        }
+    }
+}
+
+/// Sub command to query txn by version.
+pub struct QueryTxnByVersion{}
+
+impl Command for QueryTxnByVersion {
+    fn get_aliases(&self) -> Vec<&'static str> {
+        vec!["txn", "tx"]
+    }
+    fn get_description(&self) -> &'static str {
+        "<version>"
+    }
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
+        println!(">> Query transaction by version.");
+        match client.txn_by_version(params) {
+            Ok(txn) => println!(
+                "transaction is : {:?}",
+                txn
+            ),
+            Err(e) => report_error("Error latest version", e),
+        }
+    }
+}
+
+pub struct TxnList{}
+
+impl Command for TxnList {
+    fn get_aliases(&self) -> Vec<&'static str> {
+        vec!["txnlist", "tl"]
+    }
+    fn get_description(&self) -> &'static str {
+        "[version]"
+    }
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
+        println!(">> Query transaction list.");
+        match client.txn_list(params) {
+            Ok(txn_list) => println!(
+                "transaction list : {:?}",
+                txn_list
+            ),
+            Err(e) => report_error("Error latest version", e),
         }
     }
 }

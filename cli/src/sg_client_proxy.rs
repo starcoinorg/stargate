@@ -9,8 +9,10 @@ use libra_types::{
     proof::SparseMerkleProof,
     transaction::{parse_as_transaction_argument, Version},
     explorer::{BlockRequestItem, BlockResponseItem, TxnRequestItem, TxnResponseItem,
-               GetBlockSummaryListResponse, GetBlockSummaryListRequest, BlockId}
+               GetBlockSummaryListResponse, GetBlockSummaryListRequest, BlockId,
+               Version as TxnVersion, GetTransactionListRequest, GetTransactionListResponse}
 };
+use network::proto::consensus::Block;
 use libra_wallet::key_factory::ChildNumber;
 use libra_wallet::wallet_library::WalletLibrary;
 use node_client::NodeClient;
@@ -359,13 +361,27 @@ impl SGClientProxy {
         }
     }
 
-    pub fn block_summary_list(&self) {
-        //TODO
+    pub fn block_detail(&self, params: &[&str]) -> Result<Block> {
+//        ensure!(
+//            params.len() == 1,
+//            "Invalid number of arguments for querying block info."
+//        );
+//        let hash = from_hex_literal(params[0])?;
+//        let block_id = BlockId{id:hash};
+//        let req = BlockRequestItem::BlockIdItem {block_id};
+//        let resp = self.chain_client.txn_explorer(req.into())?;
+//
+//        match response {
+//            BlockResponseItem::GetBlockSummaryListResponseItem{resp} => {
+//                return Ok(resp)
+//            },
+//            _ => {return Err(format_err!("err BlockRequestItem type."))},
+//        }
+        unimplemented!()
     }
 
     ///
     pub fn get_block_summary_list_request(&self, block_id: Option<&str>) -> Result<GetBlockSummaryListResponse> {
-        //Option<BlockId>
         let id = match block_id {
             Some(s) => {
                 let hash = from_hex_literal(s)?;
@@ -402,11 +418,29 @@ impl SGClientProxy {
         }
     }
 
-    pub fn txn_list(&self) {
-        //TODO
+    pub fn txn_list(&self, params: &[&str]) -> Result<GetTransactionListResponse> {
+        let version = if params.len() > 0 {
+            Some(TxnVersion{ver: params[0].parse::<u64>()?})
+        }else {None};
+
+        let req = TxnRequestItem::GetTransactionListRequestItem{request: GetTransactionListRequest {version}};
+        let resp = self.chain_client.txn_explorer(req.into())?;
+        let response = TxnResponseItem::try_from(resp)?;
+
+        match response {
+            TxnResponseItem::GetTransactionListResponseItem(resp) => {
+                return Ok(resp)
+            },
+            _ => {return Err(format_err!("err GetTransactionListResponse type."))},
+        }
     }
 
-    pub fn txn_by_version(&self, version:u64) -> Result<Transaction> {
+    pub fn txn_by_version(&self, params: &[&str]) -> Result<Transaction> {
+        ensure!(
+            params.len() == 1,
+            "Invalid number of arguments for querying transaction."
+        );
+        let version = params[0].parse::<u64>()?;
         let req = TxnRequestItem::GetTransactionByVersionRequestItem{version};
         let resp = self.chain_client.txn_explorer(req.into())?;
         let response = TxnResponseItem::try_from(resp)?;

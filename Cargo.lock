@@ -695,6 +695,7 @@ dependencies = [
  "libra-logger 0.1.0",
  "libra-types 0.1.0",
  "libra-wallet 0.1.0",
+ "network 0.1.0",
  "node_client 0.1.0",
  "node_proto 0.1.0",
  "num-traits 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
