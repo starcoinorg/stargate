@@ -1,5 +1,6 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
+use crate::chain_watcher::{ChainWatcher, ChainWatcherHandle};
 use crate::channel::{Channel, ChannelEvent, ChannelMsg};
 use crate::{channel::ChannelHandle, scripts::*};
 use anyhow::{bail, ensure, format_err, Error, Result};
@@ -121,6 +122,7 @@ impl Wallet {
             channels: HashMap::new(),
             sgdb: sgdb.clone(),
             rt_handle: runtime.handle().clone(),
+            chain_txn_handle: None,
             mailbox,
             channel_event_sender,
             channel_event_receiver,
@@ -818,6 +820,7 @@ pub struct Inner {
     channels: HashMap<AccountAddress, Arc<ChannelHandle>>,
     sgdb: Arc<SgStorage>,
     rt_handle: runtime::Handle,
+    chain_txn_handle: Option<ChainWatcherHandle>,
     mailbox: mpsc::Receiver<WalletCmd>,
     channel_event_receiver: mpsc::Receiver<ChannelEvent>,
     channel_event_sender: mpsc::Sender<ChannelEvent>,
@@ -835,6 +838,14 @@ impl Inner {
             return ();
         }
         let account_state = account_state.unwrap();
+
+        // start chain txn watcher
+        let chain_txn_watcher = ChainWatcher::new(self.inner.client.clone());
+        let chain_txn_handle = chain_txn_watcher
+            .start(self.rt_handle.clone(), account_state.version(), 16)
+            .expect("start chain watcher should ok");
+        self.chain_txn_handle = Some(chain_txn_handle);
+
         if let Some(blob) =
             account_state.get_state(&DataPath::onchain_resource_path(user_channels_struct_tag()))
         {

@@ -254,8 +254,15 @@ impl Channel {
         let (internal_msg_tx, mut internal_msg_rx) = mpsc::channel(1024);
         self.bootstrap(internal_msg_tx.clone());
         let mut fused_shutdown_rx = shutdown_rx.fuse();
+        //        let mut chain_txn_receiver = chain_txn_receiver.fuse();
 
         loop {
+            //                maybe_chain_txn = chain_txn_receiver.next() => {
+            //                    if let Some(txn) = maybe_chain_txn {
+            //                        self.handle_chain_txn(txn).await;
+            //                    }
+            //                }
+
             ::futures::select! {
                 maybe_external_msg = self.mailbox.next() => {
                     if let Some(msg) = maybe_external_msg {
@@ -382,6 +389,42 @@ impl Channel {
         }
     }
 
+    //    async fn handle_chain_txn(&mut self, txn_with_info: TransactionWithInfo) {
+    //        let TransactionWithInfo {
+    //            txn,
+    //            txn_info,
+    //            version,
+    //        } = txn_with_info;
+    //        let Transaction::UserTransaction(signed_txn) = txn;
+    //        let txn_sender = signed_txn.sender();
+    //        debug_assert!(self.participant_addresses.contains(&txn_sender));
+    //
+    //        let raw_txn = signed_txn.into_raw_transaction();
+    //        let txn_payload = raw_txn.into_payload();
+    //        debug_assert!(txn_payload.is_channel());
+    //        let TransactionPayload::Channel(channel_txn_payload) = txn_payload;
+    //        debug_assert!(self.channel_address == channel_txn_payload.channel_address());
+    //
+    //        if !channel_txn_payload.is_authorized() {
+    //            let txn_channel_seq_number = channel_txn_payload.witness().channel_sequence_number();
+    //            if txn_channel_seq_number > self.channel_sequence_number() {
+    //                // TODO: better handle
+    //                // this should not happen.
+    //                // If chain include a txn whose witness data is signed by myself,
+    //                // and the channel seq number is bigger than my local's,
+    //                // it means the local implementation contains some bugs.
+    //                panic!("Local state is stale, there must be some bugs");
+    //            }
+    //
+    //            if txn_channel_seq_number == self.channel_sequence_number() {
+    //                // TODO: should resolve
+    //            } else if txn_channel_seq_number + 1 == self.channel_sequence_number() {
+    //            } else if txn_channel_seq_number + 1 < self.channel_sequence_number() {
+    //            }
+    //        }
+    //        channel_txn_payload.is_authorized();
+    //    }
+    //
     fn channel_view(&self, version: Option<Version>) -> Result<ChannelStateView> {
         let latest_writeset = self.witness_data().into_write_set();
         ChannelStateView::new(

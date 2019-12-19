@@ -3,14 +3,22 @@
 use crate::data_stream::{DataQuery, DataStream};
 use anyhow::Result;
 use async_trait::async_trait;
+
 use libra_types::get_with_proof::RequestItem;
-use libra_types::transaction::{Transaction, Version};
+use libra_types::transaction::{Transaction, TransactionInfo, TransactionListWithProof, Version};
 use sgchain::star_chain_client::ChainClient;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::sync::Arc;
 
-pub type TxnStream = DataStream<Transaction>;
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TransactionWithInfo {
+    pub txn: Transaction,
+    pub txn_info: TransactionInfo,
+    pub version: u64,
+}
+
+pub type TxnStream = DataStream<TransactionWithInfo>;
 
 impl TxnStream {
     pub fn new_from_chain_client(
@@ -33,7 +41,7 @@ pub(crate) fn build_request(
 struct TxnQuerier(Arc<dyn ChainClient>);
 #[async_trait]
 impl DataQuery for TxnQuerier {
-    type Item = Transaction;
+    type Item = TransactionWithInfo;
 
     async fn query(&self, version: u64, limit: u64) -> Result<BTreeMap<u64, Self::Item>> {
         let ri = RequestItem::GetTransactions {
@@ -51,13 +59,30 @@ impl DataQuery for TxnQuerier {
             resp.response_items.remove(0).try_into()?;
         let txns = resp.into_get_transactions_response()?;
         // FIXME: check proof
-        match txns.first_transaction_version.as_ref() {
+        let TransactionListWithProof {
+            transactions,
+            events: _,
+            first_transaction_version,
+            proof,
+        } = txns;
+        match first_transaction_version.as_ref() {
             None => Ok(BTreeMap::new()),
             Some(first_version) => {
                 let mut c = BTreeMap::default();
-
-                for (pos, t) in txns.transactions.into_iter().enumerate() {
-                    c.insert(*first_version + (pos as u64), t);
+                for (pos, (t, info)) in transactions
+                    .into_iter()
+                    .zip(proof.transaction_infos().to_vec().into_iter())
+                    .enumerate()
+                {
+                    let version = *first_version + (pos as u64);
+                    c.insert(
+                        version,
+                        TransactionWithInfo {
+                            txn: t,
+                            txn_info: info,
+                            version,
+                        },
+                    );
                 }
                 Ok(c)
             }
