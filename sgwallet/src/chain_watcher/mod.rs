@@ -149,7 +149,7 @@ impl ChainWatcher {
 impl ChainWatcher {
     async fn inner_start(mut self, txn_stream: TxnStream, shutdown_rx: oneshot::Receiver<()>) {
         let mut fused_txn_stream = txn_stream.fuse();
-        let mut fused_shutdown_tx = shutdown_rx.fuse();
+        let mut fused_shutdown_rx = shutdown_rx.fuse();
         let mut cleanup_interval = interval(Duration::from_secs(2)).fuse();
         loop {
             futures::select! {
@@ -168,7 +168,7 @@ impl ChainWatcher {
                         self.handle_cleanup_interval().await;
                     }
                 }
-                _ = fused_shutdown_tx => {
+                _ = fused_shutdown_rx => {
                     break;
                 }
             }
