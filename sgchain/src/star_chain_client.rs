@@ -28,7 +28,8 @@ use libra_types::{
     account_state_blob::{AccountStateBlob, AccountStateWithProof},
     get_with_proof::RequestItem,
     proof::SparseMerkleProof,
-    proto::types::{UpdateToLatestLedgerRequest, UpdateToLatestLedgerResponse},
+    proto::types::{UpdateToLatestLedgerRequest, UpdateToLatestLedgerResponse, BlockRequestItem,
+                   BlockResponseItem, TxnRequestItem, TxnResponseItem},
     transaction::{RawTransaction, SignedTransaction, TransactionWithProof, Version},
 };
 use sgtypes::account_state::AccountState;
@@ -43,6 +44,15 @@ use vm_genesis::{
     encode_genesis_transaction_with_validator_and_consensus, generate_genesis_blob_with_consensus,
     GENESIS_KEYPAIR,
 };
+
+#[async_trait]
+pub trait ChainExplorer: Send + Sync {
+    fn block_explorer(&self, req: BlockRequestItem)
+        -> ::grpcio::Result<BlockResponseItem>;
+
+    fn txn_explorer(&self, req: TxnRequestItem)
+        -> ::grpcio::Result<TxnResponseItem>;
+}
 
 #[async_trait]
 pub trait ChainClient: Send + Sync {
@@ -279,6 +289,18 @@ impl StarChainClient {
         StarChainClient {
             ac_client: Arc::new(ac_client),
         }
+    }
+}
+
+impl ChainExplorer for StarChainClient {
+    fn block_explorer(&self, req: BlockRequestItem)
+                      -> ::grpcio::Result<BlockResponseItem> {
+        self.ac_client.block_explorer(&req)
+    }
+
+    fn txn_explorer(&self, req: TxnRequestItem)
+                    -> ::grpcio::Result<TxnResponseItem> {
+        self.ac_client.txn_explorer(&req)
     }
 }
 

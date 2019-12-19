@@ -38,10 +38,6 @@ impl From<FaucetRequest> for crate::proto::faucet::FaucetRequest {
     }
 }
 
-/// Helper to construct and parse [`proto::faucet::EmptyResponse`]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct EmptyResponse {}
-
 pub mod prelude {
     pub use super::*;
 }

@@ -8,6 +8,8 @@ use libra_types::{
     account_address::{AccountAddress, ADDRESS_LENGTH},
     proof::SparseMerkleProof,
     transaction::{parse_as_transaction_argument, Version},
+    explorer::{BlockRequestItem, BlockResponseItem, TxnRequestItem, TxnResponseItem,
+               GetBlockSummaryListResponse, GetBlockSummaryListRequest, BlockId}
 };
 use libra_wallet::key_factory::ChildNumber;
 use libra_wallet::wallet_library::WalletLibrary;
@@ -26,6 +28,8 @@ use sgchain::{
 use sgcompiler::{Compiler, StateViewModuleLoader};
 use std::str::FromStr;
 use std::{convert::TryFrom, fs, path::Path, sync::Arc};
+use sgchain::star_chain_client::ChainExplorer;
+use libra_types::transaction::Transaction;
 
 /// Enum used for error formatting.
 #[derive(Debug)]
@@ -340,6 +344,82 @@ impl SGClientProxy {
         let address_list = wallet.get_addresses()?;
         self.wallet = wallet;
         Ok(address_list)
+    }
+
+    /// latest height
+    pub fn latest_height(&self) -> Result<u64> {
+        let req = BlockRequestItem::LatestBlockHeightRequestItem;
+        let resp = self.chain_client.block_explorer(req.into())?;
+        let response = BlockResponseItem::try_from(resp)?;
+        match response {
+            BlockResponseItem::LatestBlockHeightResponseItem{height} => {
+                return Ok(height)
+            },
+            _ => {return Err(format_err!("err BlockRequestItem type."))},
+        }
+    }
+
+    pub fn block_summary_list(&self) {
+        //TODO
+    }
+
+    ///
+    pub fn get_block_summary_list_request(&self, block_id: Option<&str>) -> Result<GetBlockSummaryListResponse> {
+        //Option<BlockId>
+        let id = match block_id {
+            Some(s) => {
+                let hash = from_hex_literal(s)?;
+                Some(BlockId{id: hash})
+            },
+            None => None,
+        };
+
+        let req = BlockRequestItem::GetBlockSummaryListRequestItem{request: GetBlockSummaryListRequest {block_id:id}};
+        let resp = self.chain_client.block_explorer(req.into())?;
+        let response = BlockResponseItem::try_from(resp)?;
+
+        match response {
+            BlockResponseItem::GetBlockSummaryListResponseItem{resp} => {
+                return Ok(resp)
+            },
+            _ => {return Err(format_err!("err BlockRequestItem type."))},
+        }
+    }
+
+    /// latest version
+    pub fn latest_version(&self) -> Result<u64> {
+        let req = TxnRequestItem::LatestVersionRequestItem;
+        let resp = self.chain_client.txn_explorer(req.into())?;
+        let response = TxnResponseItem::try_from(resp)?;
+        match response {
+            TxnResponseItem::LatestVersionResponseItem(r) => {
+                match r.version {
+                    Some(ver) => return Ok(ver.ver),
+                    _ => {return Err(format_err!("version is none."))},
+                }
+            },
+            _ => {return Err(format_err!("err TxnResponseItem type."))},
+        }
+    }
+
+    pub fn txn_list(&self) {
+        //TODO
+    }
+
+    pub fn txn_by_version(&self, version:u64) -> Result<Transaction> {
+        let req = TxnRequestItem::GetTransactionByVersionRequestItem{version};
+        let resp = self.chain_client.txn_explorer(req.into())?;
+        let response = TxnResponseItem::try_from(resp)?;
+
+        match response {
+            TxnResponseItem::GetTransactionByVersionResponseItem(resp) => {
+                match resp.txn {
+                    Some(t) => return Ok(t),
+                    _ => {return Err(format_err!("txn is none."))},
+                }
+            },
+            _ => {return Err(format_err!("err TxnResponseItem type."))},
+        }
     }
 }
 

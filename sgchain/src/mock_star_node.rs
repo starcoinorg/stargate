@@ -40,6 +40,7 @@ use storage_service::start_storage_service_and_return_service;
 use tokio::runtime::Handle;
 use vm_runtime::MoveVM;
 use vm_validator::vm_validator::VMValidator;
+use block_storage_client::make_block_storage_client;
 
 pub struct StarHandle {
     _storage: ServerHandle,
@@ -65,7 +66,11 @@ where
     let storage_read_client = Arc::clone(&r);
     let vm_validator = VMValidator::new(&config, storage_read_client.clone());
 
-    let handle = AdmissionControlService::new(upstream_proxy_sender, storage_read_client.clone());
+    let block_storage_client = make_block_storage_client(config.consensus.consensus_rpc_address.as_str(),
+                                                         config.consensus.consensus_rpc_port, Some(100_000_000));
+    let handle = AdmissionControlService::new(upstream_proxy_sender,
+                                              storage_read_client.clone(),
+                                              Arc::new(block_storage_client));
 
     let (rpc_net_notifs_tx, _rpc_net_notifs_rx) = channel::new(100, &TEST_NETWORK_REQUESTS);
     let tmp_network_sender = AdmissionControlNetworkSender::new(rpc_net_notifs_tx);
