@@ -20,22 +20,33 @@ use path_finder::SeedManager;
 use seed_generator::{generate_random_u128, SValueGenerator};
 
 use sgtypes::message::{
-    AntQueryMessage, ExchangeSeedMessageRequest, ExchangeSeedMessageResponse, RouterNetworkMessage,
+    AntFinalMessage, AntQueryMessage, BalanceQueryResponse, ExchangeSeedMessageRequest,
+    ExchangeSeedMessageResponse, RouterNetworkMessage,
 };
 
 pub struct AntRouter {
     executor: Handle,
     control_sender: UnboundedSender<Event>,
+    command_sender: UnboundedSender<RouterCommand>,
     inner: Option<AntRouterInner>,
 }
 
 struct AntRouterInner {
     control_receiver: UnboundedReceiver<Event>,
     network_receiver: UnboundedReceiver<RouterNetworkMessage>,
+    command_receiver: UnboundedReceiver<RouterCommand>,
     network_sender: UnboundedSender<RouterNetworkMessage>,
     wallet: Arc<Wallet>,
     seed_manager: SeedManager,
     message_processor: MessageProcessor<RouterNetworkMessage>,
+}
+
+enum RouterCommand {
+    FindPath {
+        start: AccountAddress,
+        end: AccountAddress,
+        responder: futures::channel::oneshot::Sender<Vec<BalanceQueryResponse>>,
+    },
 }
 
 impl AntRouter {
@@ -46,11 +57,14 @@ impl AntRouter {
         wallet: Arc<Wallet>,
     ) -> Self {
         let (control_sender, control_receiver) = futures::channel::mpsc::unbounded();
+        let (command_sender, command_receiver) = futures::channel::mpsc::unbounded();
+
         let message_processor = MessageProcessor::new();
         let inner = AntRouterInner {
             wallet,
             network_receiver,
             control_receiver,
+            command_receiver,
             network_sender,
             seed_manager: SeedManager::new(),
             message_processor,
@@ -58,6 +72,7 @@ impl AntRouter {
         Self {
             executor,
             control_sender,
+            command_sender,
             inner: Some(inner),
         }
     }
@@ -77,8 +92,17 @@ impl AntRouter {
         &self,
         start: AccountAddress,
         end: AccountAddress,
-    ) -> Result<Option<Vec<AccountAddress>>> {
-        Ok(None)
+    ) -> Result<Vec<BalanceQueryResponse>> {
+        let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
+
+        self.command_sender
+            .unbounded_send(RouterCommand::FindPath {
+                start,
+                end,
+                responder: resp_sender,
+            })?;
+
+        Ok(resp_receiver.await?)
     }
 }
 
@@ -87,7 +111,7 @@ impl AntRouterInner {
         loop {
             futures::select! {
                 network_message = self.network_receiver.select_next_some()=>{
-                    self.handle_network_msg(network_message).await;
+                    self.handle_network_msg(network_message).await.unwrap();
                 },
                 _ = self.control_receiver.select_next_some() =>{
                     info!("shutdown");
@@ -97,9 +121,26 @@ impl AntRouterInner {
         }
     }
 
-    async fn handle_network_msg(&self, msg: RouterNetworkMessage) {}
+    async fn handle_network_msg(&self, msg: RouterNetworkMessage) -> Result<()> {
+        match msg {
+            RouterNetworkMessage::ExchangeSeedMessageResponse(response) => {
+                return self.handle_exchange_seed_message_response(response).await;
+            }
+            RouterNetworkMessage::AntFinalMessage(response) => {
+                return self.handle_ant_final_message(response).await;
+            }
+            _ => {
+                bail!("should not be here");
+            }
+        }
+    }
 
-    async fn find_path(&self, start: AccountAddress, end: AccountAddress) -> Result<()> {
+    async fn find_path(
+        &self,
+        start: AccountAddress,
+        end: AccountAddress,
+        responder: futures::channel::oneshot::Sender<Vec<BalanceQueryResponse>>,
+    ) -> Result<()> {
         let sender_seed = generate_random_u128();
         let message = ExchangeSeedMessageRequest::new(sender_seed);
         let request_hash = message.hash();
@@ -111,7 +152,9 @@ impl AntRouterInner {
 
         let (tx, rx) = futures::channel::mpsc::channel(1);
         let message_future = MessageFuture::new(rx);
-        self.message_processor.add_future(request_hash, tx.clone());
+        self.message_processor
+            .add_future(request_hash, tx.clone())
+            .await;
         let response = message_future.await?;
 
         match response {
@@ -132,12 +175,13 @@ impl AntRouterInner {
                 let (tx, rx) = futures::channel::mpsc::channel(1);
                 let message_future = MessageFuture::new(rx);
                 self.message_processor
-                    .add_future(s_generator.get_r(), tx.clone());
+                    .add_future(s_generator.get_r(), tx.clone())
+                    .await;
                 let response = message_future.await?;
 
                 match response {
                     RouterNetworkMessage::AntFinalMessage(resp) => {
-                        // find path
+                        respond_with(responder, resp.balance_query_response_list);
                     }
                     _ => {
                         warn!("should not be here");
@@ -166,4 +210,20 @@ impl AntRouterInner {
             .await?;
         Ok(())
     }
+
+    async fn handle_ant_final_message(&self, response: AntFinalMessage) -> Result<()> {
+        self.message_processor
+            .send_response(
+                response.r_value,
+                RouterNetworkMessage::AntFinalMessage(response),
+            )
+            .await?;
+        Ok(())
+    }
+}
+
+fn respond_with<T>(responder: futures::channel::oneshot::Sender<T>, msg: T) {
+    if let Err(_t) = responder.send(msg) {
+        error!("fail to send back response, receiver is dropped",);
+    };
 }

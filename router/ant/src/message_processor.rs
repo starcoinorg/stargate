@@ -1,10 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, sync::Arc};
 
 use futures::{
     channel::mpsc::{Receiver, Sender},
@@ -14,6 +11,7 @@ use futures::{
 };
 
 use anyhow::Result;
+use futures::lock::Mutex;
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use sgtypes::sg_error::SgError;
@@ -73,16 +71,16 @@ where
         }
     }
 
-    pub fn add_future(&self, hash: HashValue, sender: Sender<Result<T>>) {
+    pub async fn add_future(&self, hash: HashValue, sender: Sender<Result<T>>) {
         self.tx_map
             .lock()
-            .unwrap()
+            .await
             .entry(hash)
             .or_insert(sender.clone());
     }
 
     pub async fn send_response(&self, hash: HashValue, value: T) -> Result<()> {
-        let mut tx_map = self.tx_map.lock().unwrap();
+        let mut tx_map = self.tx_map.lock().await;
         match tx_map.get(&hash) {
             Some(tx) => {
                 match tx.clone().send(Ok(value)).await {
@@ -98,8 +96,8 @@ where
         Ok(())
     }
 
-    pub fn remove_future(&self, hash: HashValue) {
-        let mut tx_map = self.tx_map.lock().unwrap();
+    pub async fn remove_future(&self, hash: HashValue) {
+        let mut tx_map = self.tx_map.lock().await;
         match tx_map.get(&hash) {
             Some(_tx) => {
                 info!("future time out,hash is {:?}", hash);
