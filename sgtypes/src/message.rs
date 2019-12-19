@@ -630,46 +630,100 @@ impl From<MultiHopChannelRequest> for crate::proto::sgtypes::MultiHopChannelRequ
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ExchangeSeedMessage {
-    pub seed: u128,
+pub struct ExchangeSeedMessageRequest {
+    pub sender_seed: u128,
 }
 
-impl ExchangeSeedMessage {
+impl ExchangeSeedMessageRequest {
     pub fn new(seed: u128) -> Self {
-        Self { seed }
+        Self { sender_seed:seed }
     }
 
     pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
     where
         B: IntoBuf,
     {
-        crate::proto::sgtypes::ExchangeSeedMessage::decode(buf)?.try_into()
+        crate::proto::sgtypes::ExchangeSeedMessageRequest::decode(buf)?.try_into()
     }
 
     pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
-        Ok(TryInto::<crate::proto::sgtypes::ExchangeSeedMessage>::try_into(self)?.to_vec()?)
+        Ok(TryInto::<crate::proto::sgtypes::ExchangeSeedMessageRequest>::try_into(self)?.to_vec()?)
     }
 }
 
-impl TryFrom<crate::proto::sgtypes::ExchangeSeedMessage> for ExchangeSeedMessage {
+impl TryFrom<crate::proto::sgtypes::ExchangeSeedMessageRequest> for ExchangeSeedMessageRequest {
     type Error = Error;
 
-    fn try_from(value: crate::proto::sgtypes::ExchangeSeedMessage) -> Result<Self> {
+    fn try_from(value: crate::proto::sgtypes::ExchangeSeedMessageRequest) -> Result<Self> {
         let mut result: [u8; 16] = [0; 16];
-        result.copy_from_slice(value.seed.as_ref());
+        result.copy_from_slice(value.sender_seed.as_ref());
         let seed = u128::from_le_bytes(result);
         Ok(Self::new(seed))
     }
 }
 
-impl From<ExchangeSeedMessage> for crate::proto::sgtypes::ExchangeSeedMessage {
-    fn from(value: ExchangeSeedMessage) -> Self {
+impl From<ExchangeSeedMessageRequest> for crate::proto::sgtypes::ExchangeSeedMessageRequest {
+    fn from(value: ExchangeSeedMessageRequest) -> Self {
         let mut seed = Vec::new();
-        seed.extend_from_slice(&value.seed.to_le_bytes());
-        Self { seed }
+        seed.extend_from_slice(&value.sender_seed.to_le_bytes());
+        Self{sender_seed:seed}
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExchangeSeedMessageResponse {
+    pub sender_seed: u128,
+    pub receiver_seed :u128,
+}
+
+impl ExchangeSeedMessageResponse {
+    pub fn new(sender_seed: u128,receiver_seed:u128) -> Self {
+        Self { sender_seed,receiver_seed }
+    }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+    where
+        B: IntoBuf,
+    {
+        crate::proto::sgtypes::ExchangeSeedMessageResponse::decode(buf)?.try_into()
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(TryInto::<crate::proto::sgtypes::ExchangeSeedMessageResponse>::try_into(self)?.to_vec()?)
+    }
+}
+
+impl TryFrom<crate::proto::sgtypes::ExchangeSeedMessageResponse> for ExchangeSeedMessageResponse {
+    type Error = Error;
+
+    fn try_from(value: crate::proto::sgtypes::ExchangeSeedMessageResponse) -> Result<Self> {
+        let mut result: [u8; 16] = [0; 16];
+        result.copy_from_slice(value.sender_seed.as_ref());
+        let sender_seed = u128::from_le_bytes(result);
+
+        result.copy_from_slice(value.receiver_seed.as_ref());
+        let receiver_seed = u128::from_le_bytes(result);
+
+        Ok(Self::new(sender_seed,receiver_seed))
+    }
+}
+
+impl From<ExchangeSeedMessageResponse> for crate::proto::sgtypes::ExchangeSeedMessageResponse {
+    fn from(value: ExchangeSeedMessageResponse) -> Self {
+        let mut sender_seed = Vec::new();
+        sender_seed.extend_from_slice(&value.sender_seed.to_le_bytes());
+        let mut receiver_seed = Vec::new();
+        receiver_seed.extend_from_slice(&value.receiver_seed.to_le_bytes());
+
+        Self{sender_seed,receiver_seed}
     }
 }
 
 pub enum NodeNetworkMessage {
     BalanceQueryResponseEnum(BalanceQueryResponse),
+}
+
+pub enum RouterNetworkMessage {
+    ExchangeSeedMessageRequest(ExchangeSeedMessageRequest),
+    ExchangeSeedMessageResponse(ExchangeSeedMessageResponse),
 }

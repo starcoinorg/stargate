@@ -1,4 +1,4 @@
-use rand::Rng;
+use rand::prelude::*;
 
 use libra_crypto::{
     hash::{CryptoHasher, TestOnlyHasher},
@@ -7,8 +7,18 @@ use libra_crypto::{
 
 use sgtypes::s_value::SValue;
 
-pub fn generate() -> u128 {
-    let mut rng = rand::thread_rng();
+use std::time::{SystemTime, UNIX_EPOCH};
+
+fn get_unix_ts() -> u64 {
+    let start = SystemTime::now();
+    let since_the_epoch = start
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards");
+    since_the_epoch.as_millis() as u64
+}
+
+pub fn generate_random_u128() -> u128 {
+    let mut rng: StdRng = SeedableRng::seed_from_u64(get_unix_ts());
 
     rng.gen::<u128>()
 }

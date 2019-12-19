@@ -73,6 +73,11 @@ message MultiHopChannelRequest{
     repeated NextHop hops = 2;
 }
 
-message ExchangeSeedMessage{
-    bytes seed  = 1;
+message ExchangeSeedMessageRequest{
+    bytes sender_seed  = 1;
+}
+
+message ExchangeSeedMessageResponse{
+    bytes sender_seed  = 1;
+    bytes receiver_seed = 2;
 }

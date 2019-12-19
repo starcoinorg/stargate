@@ -1,6 +1,7 @@
 mod ant_generator_test;
 mod path_finder;
 mod seed_generator;
+mod message_processor;
 
 use anyhow::*;
 use network::NetworkMessage;
@@ -15,39 +16,48 @@ use futures::stream::StreamExt;
 use libra_logger::prelude::*;
 use libra_types::account_address::AccountAddress;
 use path_finder::SeedManager;
+use seed_generator::{generate_random_u128,SValueGenerator};
+use message_processor::{MessageFuture,MessageProcessor};
+
+use sgtypes::{
+    message::{ExchangeSeedMessageRequest,ExchangeSeedMessageResponse,RouterNetworkMessage},
+};
 
 pub struct AntRouter {
     executor: Handle,
     control_sender: UnboundedSender<Event>,
-    network_sender: UnboundedSender<NetworkMessage>,
     inner: Option<AntRouterInner>,
 }
 
 struct AntRouterInner {
     control_receiver: UnboundedReceiver<Event>,
-    network_receiver: UnboundedReceiver<NetworkMessage>,
+    network_receiver: UnboundedReceiver<RouterNetworkMessage>,
+    network_sender: UnboundedSender<RouterNetworkMessage>,
     wallet: Arc<Wallet>,
     seed_manager: SeedManager,
+    message_processor:MessageProcessor<RouterNetworkMessage>,
 }
 
 impl AntRouter {
     pub fn new(
         executor: Handle,
-        network_sender: UnboundedSender<NetworkMessage>,
-        network_receiver: UnboundedReceiver<NetworkMessage>,
+        network_sender: UnboundedSender<RouterNetworkMessage>,
+        network_receiver: UnboundedReceiver<RouterNetworkMessage>,
         wallet: Arc<Wallet>,
     ) -> Self {
         let (control_sender, control_receiver) = futures::channel::mpsc::unbounded();
+        let message_processor = MessageProcessor::new();
         let inner = AntRouterInner {
             wallet,
             network_receiver,
             control_receiver,
+            network_sender,
             seed_manager: SeedManager::new(),
+            message_processor,
         };
         Self {
             executor,
             control_sender,
-            network_sender,
             inner: Some(inner),
         }
     }
@@ -87,5 +97,13 @@ impl AntRouterInner {
         }
     }
 
-    async fn handle_network_msg(&self, msg: NetworkMessage) {}
+    async fn handle_network_msg(&self, msg: RouterNetworkMessage) {}
+
+    async fn find_path(&self,start: AccountAddress,
+        end: AccountAddress,)->Result<()>{
+            let sender_seed = generate_random_u128();
+            let message = ExchangeSeedMessageRequest::new(sender_seed);
+            self.network_sender.unbounded_send(RouterNetworkMessage::ExchangeSeedMessageRequest(message))?;
+            Ok(())
+    }
 }
