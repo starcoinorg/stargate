@@ -5,7 +5,6 @@ use anyhow::Error;
 use futures::StreamExt;
 use libra_logger::{debug, error};
 use libra_types::account_address::AccountAddress;
-use libra_types::transaction::Transaction;
 use sgchain::star_chain_client::{ChainClient, MockChainClient};
 use sgwallet::chain_watcher::*;
 use std::sync::Arc;
@@ -39,10 +38,10 @@ fn run_test_chain_watcher(chain_client: Arc<dyn ChainClient>) {
             .add_interest("test".to_string().into_bytes(), Box::new(|_txn| true))
             .await?;
         chain_client.faucet(AccountAddress::random(), 10000).await?;
-        let txn: Option<Transaction> = receiver.next().await;
+        let txn: Option<TransactionWithInfo> = receiver.next().await;
         assert!(txn.is_some());
         let txn = txn.unwrap();
-        let signed_txn = txn.as_signed_user_txn()?;
+        let signed_txn = txn.txn.as_signed_user_txn()?;
         debug!("watched txn: {:#?}", signed_txn);
         Ok::<_, Error>(())
     });
