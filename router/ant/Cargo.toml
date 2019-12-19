@@ -10,7 +10,6 @@ edition = "2018"
 rand = "0.6.5"
 futures = { version = "0.3.0", features = ["io-compat", "compat"] }
 futures_01 = { version = "0.1.25", package = "futures" }
-network = { package = "sgnetwork", path = "../../sgnetwork"}
 tokio = { version = "0.2", features = ["full"] }
 sgwallet = { path="../../sgwallet"}
 

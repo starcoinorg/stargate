@@ -4,7 +4,6 @@ mod path_finder;
 mod seed_generator;
 
 use anyhow::*;
-use network::NetworkMessage;
 use sgtypes::system_event::Event;
 use tokio::runtime::Handle;
 
@@ -13,6 +12,7 @@ use std::sync::Arc;
 
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::stream::StreamExt;
+use libra_crypto::hash::CryptoHash;
 use libra_logger::prelude::*;
 use libra_types::account_address::AccountAddress;
 use message_processor::{MessageFuture, MessageProcessor};
@@ -20,7 +20,7 @@ use path_finder::SeedManager;
 use seed_generator::{generate_random_u128, SValueGenerator};
 
 use sgtypes::message::{
-    ExchangeSeedMessageRequest, ExchangeSeedMessageResponse, RouterNetworkMessage,
+    AntQueryMessage, ExchangeSeedMessageRequest, ExchangeSeedMessageResponse, RouterNetworkMessage,
 };
 
 pub struct AntRouter {
@@ -102,8 +102,68 @@ impl AntRouterInner {
     async fn find_path(&self, start: AccountAddress, end: AccountAddress) -> Result<()> {
         let sender_seed = generate_random_u128();
         let message = ExchangeSeedMessageRequest::new(sender_seed);
+        let request_hash = message.hash();
         self.network_sender
-            .unbounded_send(RouterNetworkMessage::ExchangeSeedMessageRequest(message))?;
+            .unbounded_send(RouterNetworkMessage::ExchangeSeedMessageRequest((
+                end.clone(),
+                message,
+            )))?;
+
+        let (tx, rx) = futures::channel::mpsc::channel(1);
+        let message_future = MessageFuture::new(rx);
+        self.message_processor.add_future(request_hash, tx.clone());
+        let response = message_future.await?;
+
+        match response {
+            RouterNetworkMessage::ExchangeSeedMessageResponse(resp) => {
+                let s_generator = SValueGenerator::new(resp.sender_seed, resp.receiver_seed);
+                let s = s_generator.get_s(true);
+
+                let all_channels = self.wallet.get_all_channels().await?;
+                for participant in all_channels.iter() {
+                    let ant_query_message = AntQueryMessage::new(s, vec![]);
+                    self.network_sender
+                        .unbounded_send(RouterNetworkMessage::AntQueryMessage((
+                            participant.clone(),
+                            ant_query_message,
+                        )))?;
+                }
+
+                let (tx, rx) = futures::channel::mpsc::channel(1);
+                let message_future = MessageFuture::new(rx);
+                self.message_processor
+                    .add_future(s_generator.get_r(), tx.clone());
+                let response = message_future.await?;
+
+                match response {
+                    RouterNetworkMessage::AntFinalMessage(resp) => {
+                        // find path
+                    }
+                    _ => {
+                        warn!("should not be here");
+                        return Ok(());
+                    }
+                }
+            }
+            _ => {
+                warn!("should not be here");
+                return Ok(());
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_exchange_seed_message_response(
+        &self,
+        response: ExchangeSeedMessageResponse,
+    ) -> Result<()> {
+        self.message_processor
+            .send_response(
+                response.request_hash(),
+                RouterNetworkMessage::ExchangeSeedMessageResponse(response),
+            )
+            .await?;
         Ok(())
     }
 }

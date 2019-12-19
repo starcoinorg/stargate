@@ -54,15 +54,6 @@ message BalanceQueryResponse{
     uint64 remote_balance = 4;
 }
 
-message VertexInfo {
-    bytes addr = 1;
-}
-
-message AntMessage {
-    bytes s_value = 1;
-    repeated VertexInfo vertex_list= 2;
-}
-
 message NextHop {
     bytes remote_addr = 1;
     uint64 amount = 2;
@@ -80,4 +71,14 @@ message ExchangeSeedMessageRequest{
 message ExchangeSeedMessageResponse{
     bytes sender_seed  = 1;
     bytes receiver_seed = 2;
+}
+
+message AntQueryMessage {
+    bytes s_value = 1;
+    repeated BalanceQueryResponse balance_query_response_list= 2;
+}
+
+message AntFinalMessage {
+    bytes r_value = 1;
+    repeated BalanceQueryResponse balance_query_response_list= 2;
 }

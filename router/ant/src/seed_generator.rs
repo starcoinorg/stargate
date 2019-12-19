@@ -36,7 +36,7 @@ impl SValueGenerator {
         }
     }
 
-    pub fn get_r(self) -> HashValue {
+    pub fn get_r(&self) -> HashValue {
         let mut bytes_vec = Vec::new();
         bytes_vec.copy_from_slice(&self.sender_r.to_le_bytes());
         bytes_vec.copy_from_slice(&self.receiver_r.to_le_bytes());
@@ -46,7 +46,7 @@ impl SValueGenerator {
         hasher.finish()
     }
 
-    pub fn get_s(self, is_sender: bool) -> SValue {
+    pub fn get_s(&self, is_sender: bool) -> SValue {
         let mut result: [u8; 33] = [0; 33];
         if !is_sender {
             result[0] = 1;

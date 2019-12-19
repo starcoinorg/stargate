@@ -13,10 +13,10 @@ use futures::{
     Future, Stream,
 };
 
-use anyhow::{Error, Result};
+use anyhow::Result;
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
-use sgtypes::{message::ErrorMessage, sg_error::SgError};
+use sgtypes::sg_error::SgError;
 
 use std::pin::Pin;
 

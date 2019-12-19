@@ -6,7 +6,6 @@ use futures::lock::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use libra_crypto::HashValue;
 use sgtypes::message::BalanceQueryResponse;
 use sgtypes::s_value::SValue;
 
