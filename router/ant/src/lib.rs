@@ -6,18 +6,29 @@ mod seed_generator;
 use anyhow::*;
 use sgtypes::system_event::Event;
 use tokio::runtime::Handle;
+use tokio::runtime::Runtime;
 
 use sgwallet::wallet::Wallet;
 use std::sync::Arc;
 
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
-use futures::stream::StreamExt;
+use futures::{stream::StreamExt,sink::SinkExt};
 use libra_crypto::hash::CryptoHash;
+use libra_crypto::{test_utils::KeyPair, Uniform};
 use libra_logger::prelude::*;
 use libra_types::account_address::AccountAddress;
+use libra_tools::tempdir::TempPath;
 use message_processor::{MessageFuture, MessageProcessor};
 use path_finder::SeedManager;
 use seed_generator::{generate_random_u128, SValueGenerator};
+
+use rand::prelude::*;
+use sgchain::star_chain_client::{faucet_async_2, MockChainClient};
+
+use std::{
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+
 
 use sgtypes::message::{
     AntFinalMessage, AntQueryMessage, BalanceQueryResponse, ExchangeSeedMessageRequest,
@@ -77,8 +88,9 @@ impl AntRouter {
         }
     }
 
-    pub async fn shutdown(&self) -> Result<()> {
+    pub async fn shutdown(&mut self) -> Result<()> {
         self.control_sender.unbounded_send(Event::SHUTDOWN)?;
+        self.command_sender.close().await?;
         Ok(())
     }
 
@@ -330,4 +342,109 @@ fn respond_with<T>(responder: futures::channel::oneshot::Sender<T>, msg: T) {
     if let Err(_t) = responder.send(msg) {
         error!("fail to send back response, receiver is dropped",);
     };
+}
+
+fn _gen_wallet(
+    executor: Handle,
+    client: Arc<MockChainClient>,
+) -> Result<(Arc<Wallet>, AccountAddress)> {
+    let amount: u64 = 10_000_000;
+    let mut rng: StdRng = SeedableRng::seed_from_u64(_get_unix_ts()); //SeedableRng::from_seed([0; 32]);
+    let keypair = Arc::new(KeyPair::generate_for_testing(&mut rng));
+    let account_address = AccountAddress::from_public_key(&keypair.public_key);
+    let mut rt = Runtime::new().expect("faucet runtime err.");
+    let f = async {
+        faucet_async_2(client.as_ref().clone(), account_address, amount)
+            .await
+            .unwrap();
+    };
+    rt.block_on(f);
+    let store_path = TempPath::new();
+    let mut wallet =
+        Wallet::new_with_client(account_address, keypair.clone(), client, store_path.path())
+            .unwrap();
+    wallet.start(&executor).unwrap();
+
+    let f = async {
+        wallet.enable_channel().await.unwrap();
+    };
+    rt.block_on(f);
+
+    Ok((Arc::new(wallet), account_address))
+}
+
+async fn _delay(duration: Duration) {
+    tokio::time::delay_for(duration).await;
+}
+
+async fn _open_channel(
+    sender_wallet: Arc<Wallet>,
+    receiver_wallet: Arc<Wallet>,
+    sender_amount: u64,
+    receiver_amount: u64,
+) -> Result<u64> {
+    let sender = sender_wallet.account();
+    let receiver = receiver_wallet.account();
+    let req = sender_wallet
+        .open(receiver_wallet.account(), sender_amount, receiver_amount)
+        .await?;
+    let resp = receiver_wallet.verify_txn(sender, &req).await?;
+    let resp = if let Some(t) = resp {
+        t
+    } else {
+        receiver_wallet
+            .approve_txn(sender, req.request_id())
+            .await?
+    };
+    let _ = sender_wallet.verify_txn_response(receiver, &resp).await?;
+    let sender_gas = sender_wallet.apply_txn(receiver, &resp).await?;
+    let _receiver_gas = receiver_wallet.apply_txn(sender, &resp).await?;
+    Ok(sender_gas)
+}
+
+fn _get_unix_ts() -> u64 {
+    let start = SystemTime::now();
+    let since_the_epoch = start
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards");
+    since_the_epoch.as_millis() as u64
+}
+
+#[test]
+fn ant_router_test() {
+    use anyhow::Error;
+    use libra_logger::prelude::*;
+    use sgchain::star_chain_client::MockChainClient;
+    use std::sync::Arc;
+
+    libra_logger::init_for_e2e_testing();
+    let mut rt = Runtime::new().unwrap();
+    let executor = rt.handle().clone();
+
+    let (mock_chain_service, _handle) = MockChainClient::new();
+    let client = Arc::new(mock_chain_service);
+
+    let (wallet1, _addr1) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+    let (wallet2, _addr2) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+    let (wallet3, _addr3) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+
+    let _wallet1 = wallet1.clone();
+    let _wallet2 = wallet2.clone();
+    let _wallet3 = wallet3.clone();
+
+    let f = async move {
+        _open_channel(wallet1.clone(), wallet2.clone(), 100000, 100000).await?;
+        _open_channel(wallet2.clone(), wallet3.clone(), 100000, 100000).await?;
+
+        _delay(Duration::from_millis(5000)).await;
+
+        wallet1.stop().await?;
+        wallet2.stop().await?;
+        wallet3.stop().await?;
+        Ok::<_, Error>(())
+    };
+
+    rt.block_on(f).unwrap();
+
+    debug!("here");
 }
