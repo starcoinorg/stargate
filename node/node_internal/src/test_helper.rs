@@ -4,6 +4,7 @@
 use network::build_network_service;
 use rand::prelude::*;
 
+use crate::get_unix_ts;
 use crate::node::Node;
 use anyhow::Error;
 use libra_crypto::{test_utils::KeyPair, Uniform};
@@ -13,11 +14,7 @@ use router::Router;
 use sg_config::config::NetworkConfig;
 use sgchain::star_chain_client::{faucet_sync, MockChainClient};
 use sgwallet::wallet::*;
-use std::{
-    sync::Arc,
-    thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{sync::Arc, thread, time::Duration};
 use tokio::runtime::{Handle, Runtime};
 
 pub fn gen_node(
@@ -76,12 +73,4 @@ pub fn create_node_network_config(addr: String, seeds: Vec<String>) -> NetworkCo
         listen: addr,
         seeds,
     };
-}
-
-fn get_unix_ts() -> u64 {
-    let start = SystemTime::now();
-    let since_the_epoch = start
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");
-    since_the_epoch.as_millis() as u64
 }

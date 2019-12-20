@@ -17,6 +17,7 @@ use libra_types::{
 };
 use libra_wallet::key_factory::ChildNumber;
 use libra_wallet::wallet_library::WalletLibrary;
+use network::proto::consensus::Block;
 use node_client::NodeClient;
 use node_proto::{
     AddInvoiceRequest, AddInvoiceResponse, ChannelBalanceRequest, ChannelBalanceResponse,

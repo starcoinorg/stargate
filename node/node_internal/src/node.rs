@@ -414,15 +414,6 @@ impl Node {
             command_receiver,
             network_service_close_tx,
         ));
-
-        //        self.executor.spawn(Self::start(
-        //            node_inner,
-        //            receiver,
-        //            event_receiver,
-        //            command_receiver,
-        //            network_service_close_tx,
-        //            executor,
-        //        ));
     }
 
     pub async fn local_balance(&self) -> Result<AccountResource> {
