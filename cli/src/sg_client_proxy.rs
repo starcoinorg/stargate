@@ -17,7 +17,6 @@ use libra_types::{
 };
 use libra_wallet::key_factory::ChildNumber;
 use libra_wallet::wallet_library::WalletLibrary;
-use network::proto::consensus::Block;
 use node_client::NodeClient;
 use node_proto::{
     AddInvoiceRequest, AddInvoiceResponse, ChannelBalanceRequest, ChannelBalanceResponse,
@@ -357,27 +356,35 @@ impl SGClientProxy {
         let response = BlockResponseItem::try_from(resp)?;
         match response {
             BlockResponseItem::LatestBlockHeightResponseItem { height } => return Ok(height),
-            _ => return Err(format_err!("err BlockRequestItem type.")),
+            _ => return Err(format_err!("err BlockResponseItem type.")),
         }
     }
 
-    pub fn block_detail(&self, _params: &[&str]) -> Result<Block> {
-        //        ensure!(
-        //            params.len() == 1,
-        //            "Invalid number of arguments for querying block info."
-        //        );
-        //        let hash = from_hex_literal(params[0])?;
-        //        let block_id = BlockId{id:hash};
-        //        let req = BlockRequestItem::BlockIdItem {block_id};
-        //        let resp = self.chain_client.txn_explorer(req.into())?;
-        //
-        //        match response {
-        //            BlockResponseItem::GetBlockSummaryListResponseItem{resp} => {
-        //                return Ok(resp)
-        //            },
-        //            _ => {return Err(format_err!("err BlockRequestItem type."))},
-        //        }
-        unimplemented!()
+    /// latest height
+    pub fn block_difficulty(&self, _params: &[&str]) -> Result<u64> {
+        let req = BlockRequestItem::DifficultHashRateRequestItem;
+        let resp = self.chain_client.block_explorer(req.into())?;
+        let response = BlockResponseItem::try_from(resp)?;
+        match response {
+            BlockResponseItem::DifficultHashRateResponseItem(d) => return Ok(d.difficulty),
+            _ => return Err(format_err!("err BlockResponseItem type.")),
+        }
+    }
+
+    pub fn block_detail(&self, params: &[&str]) -> Result<GetBlockSummaryListResponse> {
+        ensure!(
+            params.len() == 1,
+            "Invalid number of arguments for querying block info."
+        );
+        let hash = from_hex_literal(params[0])?;
+        let block_id = BlockId { id: hash };
+        let req = BlockRequestItem::BlockIdItem { block_id };
+        let resp = self.chain_client.block_explorer(req.into())?;
+        let response = BlockResponseItem::try_from(resp)?;
+        match response {
+            BlockResponseItem::GetBlockSummaryListResponseItem { resp } => return Ok(resp),
+            _ => return Err(format_err!("err BlockResponseItem type.")),
+        }
     }
 
     ///
@@ -401,7 +408,7 @@ impl SGClientProxy {
 
         match response {
             BlockResponseItem::GetBlockSummaryListResponseItem { resp } => return Ok(resp),
-            _ => return Err(format_err!("err BlockRequestItem type.")),
+            _ => return Err(format_err!("err BlockResponseItem type.")),
         }
     }
 
