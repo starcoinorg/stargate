@@ -43,11 +43,12 @@ listen_address = "/ip4/0.0.0.0/tcp/65206"
 advertised_address = "/ip4/0.0.0.0/tcp/6180"
 discovery_interval_ms = 1000
 connectivity_check_interval_ms = 5000
-enable_encryption_and_authentication = true
+enable_encryption_and_authentication = false
 is_permissioned = true
 network_keypairs_file = "/opt/starcoin/etc/network_keypairs.config.toml"
 network_peers_file = "/opt/starcoin/etc/network_peers.config.toml"
 seed_peers_file = "/opt/starcoin/etc/seed_peers.config.toml"
+is_public_network = true
 
 [consensus]
 max_block_size = 100

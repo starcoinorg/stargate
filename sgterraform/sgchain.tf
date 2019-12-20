@@ -7,9 +7,9 @@ resource "alicloud_instance" "sgchain" {
   spot_price_limit = 0.45
   instance_type = "ecs.g6.large"
   system_disk_category = "cloud_efficiency"
-  internet_max_bandwidth_out = 10
+  internet_max_bandwidth_out = 2
   password = var.ecs_password
-  key_name = alicloud_key_pair.key_pair.id
+  key_name = alicloud_key_pair.starcoin.id
   #depends_on = [alicloud_instance.compile]
   security_groups = [
     "${alicloud_security_group.default.id}"]
@@ -27,7 +27,7 @@ resource "alicloud_instance" "sgchain" {
 resource "null_resource" "install" {
   count = var.node_number
   depends_on = [
-    alicloud_instance.sgchain, alicloud_key_pair.key_pair ]
+    alicloud_instance.sgchain, alicloud_key_pair.starcoin ]
   ## trigger the instance inited
   triggers = {
     instance = alicloud_instance.sgchain.*.id[count.index]
@@ -63,7 +63,6 @@ resource "null_resource" "install" {
       "cd /opt/starcoin",
       "tar xzvf ../config.tar.gz",
       "docker login --username=${var.docker_github_user_name} -p ${var.docker_github_user_password} ${var.docker_address}",
-      #"docker network create --subnet 172.16.0.0/24 testnet",
       "NODE_CONFIG=$(sed 's,{PEER_ID},${var.peer_ids[count.index]}', ./val/node.config.toml)",
       "SEED_PEERS=$(sed 's,{SEED_IP},${alicloud_instance.sgchain.*.private_ip[0]}', ./val/seed_peers.config.toml)",
       "NETWORK_KEYPAIRS=$(cat ./val/${var.peer_ids[count.index]}.network.keys.toml)",
@@ -72,7 +71,7 @@ resource "null_resource" "install" {
       "CONSENSUS_PEERS=$(cat ./consensus_peers.config.toml)",
       "FULLNODE_KEYPAIRS=$(cat ./fullnode.keys.toml)",
       "export NODE_CONFIG SEED_PEERS NETWORK_KEYPAIRS NETWORK_PEERS CONSENSUS_KEYPAIR CONSENSUS_PEERS FULLNODE_KEYPAIRS",
-      "docker run  -w `pwd` --env NODE_CONFIG --env SEED_PEERS --env NETWORK_KEYPAIRS --env NETWORK_PEERS --env CONSENSUS_KEYPAIR --env CONSENSUS_PEERS --env FULLNODE_KEYPAIRS  --ip ${alicloud_instance.sgchain.*.private_ip[count.index]} --expose 6180  --network testnet --detach ${var.docker_image}"
+      "docker run  -w `pwd` --env NODE_CONFIG --env SEED_PEERS --env NETWORK_KEYPAIRS --env NETWORK_PEERS --env CONSENSUS_KEYPAIR --env CONSENSUS_PEERS --env FULLNODE_KEYPAIRS  --expose 6180  --net=host --detach ${var.docker_image}",
     ]
   }
 }
