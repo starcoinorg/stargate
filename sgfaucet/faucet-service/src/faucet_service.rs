@@ -2,7 +2,7 @@ use crate::faucet_config;
 use base64::decode;
 use faucet_config::{load_faucet_conf, FaucetConf};
 use faucet_proto::proto::faucet::{
-    create_sg_faucet, EmptyResponse, FaucetRequest as FaucetRequestProto, SgFaucet,
+    create_sg_faucet, FaucetRequest as FaucetRequestProto, SgFaucet,
 };
 use faucet_proto::FaucetRequest;
 use grpc_helpers::{provide_grpc_response, spawn_service_thread_with_drop_closure, ServerHandle};
@@ -83,7 +83,7 @@ impl SgFaucet for SgFaucetService {
         &mut self,
         ctx: ::grpcio::RpcContext,
         req: FaucetRequestProto,
-        sink: ::grpcio::UnarySink<EmptyResponse>,
+        sink: ::grpcio::UnarySink<()>,
     ) {
         let faucet_req = FaucetRequest::try_from(req).expect("parse err.");
         let mut rt = Runtime::new().expect("faucet runtime err.");
@@ -125,7 +125,6 @@ impl SgFaucet for SgFaucetService {
             rt.block_on(f).expect("faucet err.");
         }
 
-        let resp = EmptyResponse {};
-        provide_grpc_response(Ok(resp), ctx, sink);
+        provide_grpc_response(Ok(()), ctx, sink);
     }
 }
