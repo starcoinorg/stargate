@@ -55,3 +55,4 @@ rusty-fork = "0.2.1"
 block-storage-client = { path = "../libra/consensus/block-storage-client" }
 
 [dev-dependencies]
+rusty-fork = "0.2.1"

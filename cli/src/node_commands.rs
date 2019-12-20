@@ -21,6 +21,8 @@ impl Command for NodeCommand {
             Box::new(NodeCommandWithdrawChannel {}),
             Box::new(NodeCommandChannelBalance {}),
             Box::new(NodeCommandDepositChannel {}),
+            Box::new(NodeCommandAddInvoice {}),
+            Box::new(NodeCommandSendPayment {}),
         ];
 
         subcommand_execute(&params[0], commands, client, &params[1..]);

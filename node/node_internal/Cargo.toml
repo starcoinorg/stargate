@@ -13,8 +13,6 @@ futures = { version = "0.3.0", features = ["io-compat", "compat"] }
 futures_01 = { version = "0.1.25", package = "futures" }
 futures-timer = "1.0.2"
 lazy_static = "1.2.0"
-ctrlc = "3.1.3"
-structopt = "0.2.15"
 parity-multiaddr = "0.4.0"
 tokio = { version = "0.2", features = ["full"] }
 tokio-timer = "0.2"
@@ -38,5 +36,4 @@ lcs = { path = "../../libra/common/lcs", package = "libra-canonical-serializatio
 libra-tools = {path ="../../libra/common/tools", package = "libra-tools"}
 
 [dev-dependencies]
-env_logger = { version = "0.6" }
 libra-config = { path = "../../libra/config"}

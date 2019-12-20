@@ -9,7 +9,7 @@ use libra_types::language_storage::StructTag;
 #[cfg(feature = "fuzzing")]
 use libra_types::{account_config::AccountResource, event::EventHandle};
 
-use proptest::std_facade::VecDeque;
+use std::collections::VecDeque;
 use vm::gas_schedule::CostTable;
 use vm_runtime_types::loaded_data::types::Type;
 use vm_runtime_types::native_structs::vector::NativeVector;
