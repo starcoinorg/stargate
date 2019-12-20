@@ -75,7 +75,8 @@ message ExchangeSeedMessageResponse{
 
 message AntQueryMessage {
     bytes s_value = 1;
-    repeated BalanceQueryResponse balance_query_response_list= 2;
+    bytes sender_addr = 2;
+    repeated BalanceQueryResponse balance_query_response_list= 3;
 }
 
 message AntFinalMessage {
