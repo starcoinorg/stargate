@@ -78,8 +78,27 @@ impl Command for BlockDetail {
         println!(">> Query block info");
 
         match client.block_detail(params) {
-            Ok(_list) => println!("block summary list : {:?}", "list"),
-            Err(e) => report_error("Error query block list", e),
+            Ok(block_detail) => println!("block detail : {:?}", block_detail),
+            Err(e) => report_error("Error query block detail", e),
+        }
+    }
+}
+
+pub struct BlockDifficulty {}
+
+impl Command for BlockDifficulty {
+    fn get_aliases(&self) -> Vec<&'static str> {
+        vec!["blockdifficulty", "d"]
+    }
+    fn get_description(&self) -> &'static str {
+        "Block Difficulty"
+    }
+    fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
+        println!(">> Query block difficulty");
+
+        match client.block_difficulty(params) {
+            Ok(block_difficulty) => println!("block difficulty : {:?}", block_difficulty),
+            Err(e) => report_error("Error query block difficulty", e),
         }
     }
 }
