@@ -35,11 +35,7 @@ pub struct ChainStateAccessor {
 impl TypedActor<Request, Response> for ChainStateAccessor {
     async fn handle_call(&mut self, req: Request) -> Response {
         match req {
-            Request::Access {
-                version,
-                account,
-                data_path,
-            } => Response::AccessResp { blob: None },
+            Request::Access { .. } => Response::AccessResp { blob: None },
         }
     }
 

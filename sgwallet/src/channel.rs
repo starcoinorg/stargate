@@ -28,7 +28,8 @@ use libra_types::language_storage::{ModuleId, StructTag};
 use libra_types::transaction::helpers::TransactionSigner;
 use libra_types::transaction::{
     ChannelTransactionPayload, ChannelTransactionPayloadBody, RawTransaction, ScriptAction,
-    TransactionArgument, TransactionPayload, Version,
+    SignedTransaction, Transaction, TransactionArgument, TransactionPayload, TransactionWithProof,
+    Version,
 };
 use libra_types::write_set::WriteSet;
 use libra_types::{
@@ -79,6 +80,9 @@ pub enum ChannelMsg {
     },
     ApplyPendingTxn {
         proposal: ChannelTransactionProposal,
+        responder: oneshot::Sender<Result<u64>>,
+    },
+    SoloTravelTxn {
         responder: oneshot::Sender<Result<u64>>,
     },
     GetPendingTxn {
@@ -358,6 +362,10 @@ impl Channel {
                 responder,
             } => {
                 let response = self.apply_pending_txn_async(proposal).await;
+                respond_with(responder, response);
+            }
+            ChannelMsg::SoloTravelTxn { responder } => {
+                let response = self.solo_travel_proposal().await;
                 respond_with(responder, response);
             }
             ChannelMsg::AccessPath { path, responder } => {
@@ -656,6 +664,46 @@ impl Channel {
             self.should_stop = true;
         }
         Ok(())
+    }
+
+    async fn solo_travel_proposal(&mut self) -> Result<u64> {
+        debug!("user {} apply txn", self.account_address);
+        ensure!(self.pending_txn().is_some(), "should have txn to apply");
+        let pending_txn = self.pending_txn().unwrap();
+        ensure!(!pending_txn.fulfilled(), "txn should not be fulfilled");
+        let (proposal, output, signatures) = pending_txn.into();
+        let channel_txn = &proposal.channel_txn;
+        ensure!(
+            self.account_address == channel_txn.proposer(),
+            "solo should only use myself's proposal"
+        );
+
+        let max_gas_amount = std::cmp::min(
+            (output.gas_used() as f64 * 1.1) as u64,
+            MAX_GAS_AMOUNT_ONCHAIN,
+        );
+        let (payload_body, _) =
+            self.build_and_sign_channel_txn_payload_body(self.witness_data(), channel_txn)?;
+
+        let new_raw_txn = self.build_raw_txn_from_channel_txn(
+            payload_body,
+            &channel_txn,
+            Some(&signatures),
+            max_gas_amount,
+        )?;
+        let signed_txn = self.keypair.sign_txn(new_raw_txn)?;
+        submit_transaction(self.chain_client.as_ref(), signed_txn).await?;
+
+        let txn_with_proof = watch_transaction(
+            self.chain_client.as_ref(),
+            channel_txn.proposer(),
+            channel_txn.sequence_number(),
+        )
+        .await?;
+        let gas_used = txn_with_proof.proof.transaction_info().gas_used();
+        let channel_txn = chain_txn_to_local_channel_txn(txn_with_proof)?;
+        self.apply(channel_txn, output, signatures)?;
+        Ok(gas_used)
     }
 
     async fn apply_pending_txn_async(
@@ -1179,4 +1227,31 @@ pub(crate) fn access_local<'a>(
             }
         }
     }
+}
+
+fn chain_txn_to_local_channel_txn(
+    txn_with_proof: TransactionWithProof,
+) -> Result<ChannelTransaction> {
+    //    let TransactionWithProof {
+    //        transaction: txn, ..
+    //    } = txn_with_proof;
+    //    let signed_user_txn = txn.as_signed_user_txn()?;
+    //    let signed_user_txn = match txn {
+    //        Transaction::UserTransaction(signed_user_txn) => signed_user_txn,
+    //        _ => bail!("should be user txn"),
+    //    };
+    //    let raw_txn = signed_user_txn.into_raw_transaction();
+    //    let channel_txn_payload = match raw_txn.payload() {
+    //        TransactionPayload::Channel(p) => p,
+    //        _ => bail!("should be channel txn"),
+    //    };
+
+    // TODO: change channel txn to make it work
+
+    //    ChannelTransaction::new(
+    //        version,
+    //        channel_txn_payload.channel_address(),
+    //        channel_txn_payload.action(),
+    //    );
+    unimplemented!()
 }
