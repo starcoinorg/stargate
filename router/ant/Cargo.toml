@@ -8,9 +8,15 @@ edition = "2018"
 
 [dependencies]
 rand = "0.6.5"
+futures = { version = "0.3.0", features = ["io-compat", "compat"] }
+futures_01 = { version = "0.1.25", package = "futures" }
+tokio = { version = "0.2", features = ["full"] }
+sgwallet = { path="../../sgwallet"}
 
 libra-logger = { path = "../../libra/common/logger" }
 libra-crypto = { path = "../../libra/crypto/crypto"}
+libra-types = { path = "../../libra/types" }
+
 sgtypes = { path = "../../sgtypes" }
 anyhow = "1.0"
 
