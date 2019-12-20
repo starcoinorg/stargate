@@ -33,9 +33,9 @@ pub struct AntRouter {
 
 struct AntRouterInner {
     control_receiver: UnboundedReceiver<Event>,
-    network_receiver: UnboundedReceiver<RouterNetworkMessage>,
+    network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
     command_receiver: UnboundedReceiver<RouterCommand>,
-    network_sender: UnboundedSender<RouterNetworkMessage>,
+    network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
     wallet: Arc<Wallet>,
     seed_manager: SeedManager,
     message_processor: MessageProcessor<RouterNetworkMessage>,
@@ -52,8 +52,8 @@ enum RouterCommand {
 impl AntRouter {
     pub fn new(
         executor: Handle,
-        network_sender: UnboundedSender<RouterNetworkMessage>,
-        network_receiver: UnboundedReceiver<RouterNetworkMessage>,
+        network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
+        network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
         wallet: Arc<Wallet>,
     ) -> Self {
         let (control_sender, control_receiver) = futures::channel::mpsc::unbounded();
@@ -110,8 +110,8 @@ impl AntRouterInner {
     async fn start(mut self) {
         loop {
             futures::select! {
-                network_message = self.network_receiver.select_next_some()=>{
-                    self.handle_network_msg(network_message).await.unwrap();
+                (peer_id,network_message) = self.network_receiver.select_next_some()=>{
+                    self.handle_network_msg(peer_id,network_message).await.unwrap();
                 },
                 _ = self.control_receiver.select_next_some() =>{
                     info!("shutdown");
@@ -121,7 +121,11 @@ impl AntRouterInner {
         }
     }
 
-    async fn handle_network_msg(&self, msg: RouterNetworkMessage) -> Result<()> {
+    async fn handle_network_msg(
+        &self,
+        peer_id: AccountAddress,
+        msg: RouterNetworkMessage,
+    ) -> Result<()> {
         match msg {
             RouterNetworkMessage::ExchangeSeedMessageResponse(response) => {
                 return self.handle_exchange_seed_message_response(response).await;
@@ -129,8 +133,13 @@ impl AntRouterInner {
             RouterNetworkMessage::AntFinalMessage(response) => {
                 return self.handle_ant_final_message(response).await;
             }
-            _ => {
-                bail!("should not be here");
+            RouterNetworkMessage::ExchangeSeedMessageRequest(request) => {
+                return self
+                    .handle_exchange_seed_message_request(request, peer_id)
+                    .await;
+            }
+            RouterNetworkMessage::AntQueryMessage(message) => {
+                return self.handle_ant_query_message(message).await;
             }
         }
     }
@@ -144,11 +153,10 @@ impl AntRouterInner {
         let sender_seed = generate_random_u128();
         let message = ExchangeSeedMessageRequest::new(sender_seed);
         let request_hash = message.hash();
-        self.network_sender
-            .unbounded_send(RouterNetworkMessage::ExchangeSeedMessageRequest((
-                end.clone(),
-                message,
-            )))?;
+        self.network_sender.unbounded_send((
+            end.clone(),
+            RouterNetworkMessage::ExchangeSeedMessageRequest(message),
+        ))?;
 
         let (tx, rx) = futures::channel::mpsc::channel(1);
         let message_future = MessageFuture::new(rx);
@@ -164,12 +172,12 @@ impl AntRouterInner {
 
                 let all_channels = self.wallet.get_all_channels().await?;
                 for participant in all_channels.iter() {
-                    let ant_query_message = AntQueryMessage::new(s, vec![]);
-                    self.network_sender
-                        .unbounded_send(RouterNetworkMessage::AntQueryMessage((
-                            participant.clone(),
-                            ant_query_message,
-                        )))?;
+                    let ant_query_message =
+                        AntQueryMessage::new(s, self.wallet.account().clone(), vec![]);
+                    self.network_sender.unbounded_send((
+                        participant.clone(),
+                        RouterNetworkMessage::AntQueryMessage(ant_query_message),
+                    ))?;
                 }
 
                 let (tx, rx) = futures::channel::mpsc::channel(1);
@@ -218,6 +226,55 @@ impl AntRouterInner {
                 RouterNetworkMessage::AntFinalMessage(response),
             )
             .await?;
+        Ok(())
+    }
+
+    async fn handle_exchange_seed_message_request(
+        &self,
+        request: ExchangeSeedMessageRequest,
+        peer_id: AccountAddress,
+    ) -> Result<()> {
+        let receiver_seed = generate_random_u128();
+
+        let s_generator = SValueGenerator::new(request.sender_seed, receiver_seed);
+        let s = s_generator.get_s(false);
+
+        let all_channels = self.wallet.get_all_channels().await?;
+        for participant in all_channels.iter() {
+            let ant_query_message = AntQueryMessage::new(s, self.wallet.account().clone(), vec![]);
+            self.network_sender.unbounded_send((
+                participant.clone(),
+                RouterNetworkMessage::AntQueryMessage(ant_query_message),
+            ))?;
+        }
+
+        let response = ExchangeSeedMessageResponse::new(request.sender_seed, receiver_seed);
+        self.network_sender.unbounded_send((
+            peer_id,
+            RouterNetworkMessage::ExchangeSeedMessageResponse(response),
+        ))?;
+
+        Ok(())
+    }
+
+    async fn handle_ant_query_message(&self, message: AntQueryMessage) -> Result<()> {
+        match self
+            .seed_manager
+            .match_or_add(message.s_value, message.balance_query_response_list)
+            .await
+        {
+            Some(t) => {
+                let r = message.s_value.get_r();
+                let final_message = AntFinalMessage::new(r, t);
+                self.network_sender.unbounded_send((
+                    message.sender_addr,
+                    RouterNetworkMessage::AntFinalMessage(final_message),
+                ))?;
+            }
+            None => {
+                info!("waiting for match");
+            }
+        }
         Ok(())
     }
 }

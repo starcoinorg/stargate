@@ -447,13 +447,19 @@ impl From<BalanceQueryResponse> for crate::proto::sgtypes::BalanceQueryResponse 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AntQueryMessage {
     pub s_value: SValue,
+    pub sender_addr: AccountAddress,
     pub balance_query_response_list: Vec<BalanceQueryResponse>,
 }
 
 impl AntQueryMessage {
-    pub fn new(s_value: SValue, balance_query_response_list: Vec<BalanceQueryResponse>) -> Self {
+    pub fn new(
+        s_value: SValue,
+        sender_addr: AccountAddress,
+        balance_query_response_list: Vec<BalanceQueryResponse>,
+    ) -> Self {
         Self {
             s_value,
+            sender_addr,
             balance_query_response_list,
         }
     }
@@ -483,6 +489,7 @@ impl TryFrom<crate::proto::sgtypes::AntQueryMessage> for AntQueryMessage {
 
         Ok(Self::new(
             value.s_value.try_into()?,
+            value.sender_addr.try_into()?,
             balance_query_response_list?,
         ))
     }
@@ -492,6 +499,7 @@ impl From<AntQueryMessage> for crate::proto::sgtypes::AntQueryMessage {
     fn from(value: AntQueryMessage) -> Self {
         Self {
             s_value: value.s_value.to_vec(),
+            sender_addr: value.sender_addr.to_vec(),
             balance_query_response_list: value
                 .balance_query_response_list
                 .iter()
@@ -781,8 +789,8 @@ pub enum NodeNetworkMessage {
 }
 
 pub enum RouterNetworkMessage {
-    ExchangeSeedMessageRequest((AccountAddress, ExchangeSeedMessageRequest)),
+    ExchangeSeedMessageRequest(ExchangeSeedMessageRequest),
     ExchangeSeedMessageResponse(ExchangeSeedMessageResponse),
-    AntQueryMessage((AccountAddress, AntQueryMessage)),
+    AntQueryMessage(AntQueryMessage),
     AntFinalMessage(AntFinalMessage),
 }
