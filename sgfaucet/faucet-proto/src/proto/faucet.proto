@@ -2,16 +2,16 @@ syntax = "proto3";
 
 package sgfaucet;
 
+import "google/protobuf/empty.proto";
+
 // --------------------------------------------------------------
 // ----------- Service definition for faucet
 // --------------------------------------------------------------
 service SgFaucet {
-    rpc Faucet(FaucetRequest) returns (EmptyResponse);
+    rpc Faucet(FaucetRequest) returns (google.protobuf.Empty);
 }
 
 message FaucetRequest {
     bytes address = 1;
     uint64 amount = 2;
 }
-
-message EmptyResponse {}
