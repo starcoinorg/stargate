@@ -1,7 +1,6 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::{Error, Result};
 use futures::lock::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;

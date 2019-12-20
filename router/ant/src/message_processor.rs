@@ -96,7 +96,7 @@ where
         Ok(())
     }
 
-    pub async fn remove_future(&self, hash: HashValue) {
+    pub async fn _remove_future(&self, hash: HashValue) {
         let mut tx_map = self.tx_map.lock().await;
         match tx_map.get(&hash) {
             Some(_tx) => {

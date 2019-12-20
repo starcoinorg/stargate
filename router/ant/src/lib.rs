@@ -29,12 +29,12 @@ pub struct AntRouter {
     control_sender: UnboundedSender<Event>,
     command_sender: UnboundedSender<RouterCommand>,
     inner: Option<AntRouterInner>,
+    control_receiver: Option<UnboundedReceiver<Event>>,
+    network_receiver: Option<UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>>,
+    command_receiver: Option<UnboundedReceiver<RouterCommand>>,
 }
 
 struct AntRouterInner {
-    control_receiver: UnboundedReceiver<Event>,
-    network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
-    command_receiver: UnboundedReceiver<RouterCommand>,
     network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
     wallet: Arc<Wallet>,
     seed_manager: SeedManager,
@@ -62,9 +62,6 @@ impl AntRouter {
         let message_processor = MessageProcessor::new();
         let inner = AntRouterInner {
             wallet,
-            network_receiver,
-            control_receiver,
-            command_receiver,
             network_sender,
             seed_manager: SeedManager::new(),
             message_processor,
@@ -73,6 +70,9 @@ impl AntRouter {
             executor,
             control_sender,
             command_sender,
+            network_receiver: Some(network_receiver),
+            control_receiver: Some(control_receiver),
+            command_receiver: Some(command_receiver),
             inner: Some(inner),
         }
     }
@@ -84,7 +84,26 @@ impl AntRouter {
 
     pub fn start(&mut self) -> Result<()> {
         let inner = self.inner.take().expect("should have inner");
-        self.executor.spawn(inner.start());
+        let network_receiver = self
+            .network_receiver
+            .take()
+            .expect("should have network receiver");
+        let control_receiver = self
+            .control_receiver
+            .take()
+            .expect("should have control receiver");
+        let command_receiver = self
+            .command_receiver
+            .take()
+            .expect("should have command receiver");
+        let inner = Arc::new(inner);
+        self.executor.spawn(AntRouterInner::start_network(
+            inner.clone(),
+            network_receiver,
+            control_receiver,
+        ));
+        self.executor
+            .spawn(AntRouterInner::start_command(inner, command_receiver));
         Ok(())
     }
 
@@ -107,16 +126,45 @@ impl AntRouter {
 }
 
 impl AntRouterInner {
-    async fn start(mut self) {
+    async fn start_network(
+        router_inner: Arc<AntRouterInner>,
+        mut network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
+        mut control_receiver: UnboundedReceiver<Event>,
+    ) {
         loop {
             futures::select! {
-                (peer_id,network_message) = self.network_receiver.select_next_some()=>{
-                    self.handle_network_msg(peer_id,network_message).await.unwrap();
+                (peer_id,network_message) = network_receiver.select_next_some()=>{
+                    router_inner.handle_network_msg(peer_id,network_message).await.unwrap();
                 },
-                _ = self.control_receiver.select_next_some() =>{
+                _ = control_receiver.select_next_some() =>{
                     info!("shutdown");
                     break;
                 },
+            }
+        }
+    }
+
+    async fn start_command(
+        router_inner: Arc<AntRouterInner>,
+        mut command_receiver: UnboundedReceiver<RouterCommand>,
+    ) {
+        loop {
+            futures::select! {
+                command = command_receiver.select_next_some()=>{
+                    router_inner.handle_command(command).await.unwrap();
+                },
+            }
+        }
+    }
+
+    async fn handle_command(&self, command: RouterCommand) -> Result<()> {
+        match command {
+            RouterCommand::FindPath {
+                start,
+                end,
+                responder,
+            } => {
+                return self.find_path(start, end, responder).await;
             }
         }
     }
@@ -172,8 +220,7 @@ impl AntRouterInner {
 
                 let all_channels = self.wallet.get_all_channels().await?;
                 for participant in all_channels.iter() {
-                    let ant_query_message =
-                        AntQueryMessage::new(s, self.wallet.account().clone(), vec![]);
+                    let ant_query_message = AntQueryMessage::new(s, start, vec![]);
                     self.network_sender.unbounded_send((
                         participant.clone(),
                         RouterNetworkMessage::AntQueryMessage(ant_query_message),
@@ -241,7 +288,7 @@ impl AntRouterInner {
 
         let all_channels = self.wallet.get_all_channels().await?;
         for participant in all_channels.iter() {
-            let ant_query_message = AntQueryMessage::new(s, self.wallet.account().clone(), vec![]);
+            let ant_query_message = AntQueryMessage::new(s, peer_id.clone(), vec![]);
             self.network_sender.unbounded_send((
                 participant.clone(),
                 RouterNetworkMessage::AntQueryMessage(ant_query_message),
