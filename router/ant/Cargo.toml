@@ -13,6 +13,8 @@ futures_01 = { version = "0.1.25", package = "futures" }
 tokio = { version = "0.2", features = ["full"] }
 sgwallet = { path="../../sgwallet"}
 sgchain = { path = "../../sgchain" }
+network = { package = "sgnetwork", path = "../../sgnetwork"}
+sg_config = { path = "../../sgconfig"}
 
 libra-logger = { path = "../../libra/common/logger" }
 libra-crypto = { path = "../../libra/crypto/crypto"}

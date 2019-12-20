@@ -12,12 +12,16 @@ use sgwallet::wallet::Wallet;
 use std::sync::Arc;
 
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
-use futures::{stream::StreamExt,sink::SinkExt};
+use futures::{sink::SinkExt, stream::StreamExt};
 use libra_crypto::hash::CryptoHash;
-use libra_crypto::{test_utils::KeyPair, Uniform};
+use libra_crypto::{
+    ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
+    test_utils::KeyPair,
+    Uniform,
+};
 use libra_logger::prelude::*;
-use libra_types::account_address::AccountAddress;
 use libra_tools::tempdir::TempPath;
+use libra_types::account_address::AccountAddress;
 use message_processor::{MessageFuture, MessageProcessor};
 use path_finder::SeedManager;
 use seed_generator::{generate_random_u128, SValueGenerator};
@@ -25,10 +29,10 @@ use seed_generator::{generate_random_u128, SValueGenerator};
 use rand::prelude::*;
 use sgchain::star_chain_client::{faucet_async_2, MockChainClient};
 
-use std::{
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use network::build_network_service;
+use sg_config::config::NetworkConfig;
 
 use sgtypes::message::{
     AntFinalMessage, AntQueryMessage, BalanceQueryResponse, ExchangeSeedMessageRequest,
@@ -408,6 +412,21 @@ fn _get_unix_ts() -> u64 {
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards");
     since_the_epoch.as_millis() as u64
+}
+
+fn _create_node_network_config(addr: String, seeds: Vec<String>) -> NetworkConfig {
+    return NetworkConfig {
+        listen: addr,
+        seeds,
+    };
+}
+
+fn _build_network(
+    config: &NetworkConfig,
+    keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
+) {
+    let (network, _tx, _rx, _close_tx) = build_network_service(config, keypair);
+    let _identify = network.identify();
 }
 
 #[test]
