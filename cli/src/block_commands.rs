@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{commands::*, sg_client_proxy::SGClientProxy};
-use sgtypes::account_state::AccountState;
 
 /// Major command for block explorer operations.
 pub struct BlockCommand {}
@@ -15,10 +14,8 @@ impl Command for BlockCommand {
         "Block explorer operations"
     }
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        let commands: Vec<Box<dyn Command>> = vec![
-            Box::new(BlockLatestHeight {}),
-            Box::new(BlockList {}),
-        ];
+        let commands: Vec<Box<dyn Command>> =
+            vec![Box::new(BlockLatestHeight {}), Box::new(BlockList {})];
 
         subcommand_execute(&params[0], commands, client, &params[1..]);
     }
@@ -37,10 +34,7 @@ impl Command for BlockLatestHeight {
     fn execute(&self, client: &mut SGClientProxy, _params: &[&str]) {
         println!(">> ");
         match client.latest_height() {
-            Ok(height) => println!(
-                "latest height is : {:?}",
-                height
-            ),
+            Ok(height) => println!("latest height is : {:?}", height),
             Err(e) => report_error("Error query latest height", e),
         }
     }
@@ -65,16 +59,13 @@ impl Command for BlockList {
             None
         };
         match client.get_block_summary_list_request(block_id) {
-            Ok(list) => println!(
-                "block summary list : {:?}",
-                "list"
-            ),
+            Ok(list) => println!("block summary list : {:?}", list),
             Err(e) => report_error("Error query block list", e),
         }
     }
 }
 
-pub struct BlockDetail{}
+pub struct BlockDetail {}
 
 impl Command for BlockDetail {
     fn get_aliases(&self) -> Vec<&'static str> {
@@ -87,12 +78,8 @@ impl Command for BlockDetail {
         println!(">> Query block info");
 
         match client.block_detail(params) {
-            Ok(list) => println!(
-                "block summary list : {:?}",
-                "list"
-            ),
+            Ok(_list) => println!("block summary list : {:?}", "list"),
             Err(e) => report_error("Error query block list", e),
         }
     }
 }
-

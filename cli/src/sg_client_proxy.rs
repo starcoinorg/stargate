@@ -4,17 +4,20 @@ use crate::commands::*;
 use anyhow::{ensure, format_err, Error, Result};
 use grpcio::EnvBuilder;
 use libra_crypto::HashValue;
+use libra_types::transaction::Transaction;
 use libra_types::{
     account_address::{AccountAddress, ADDRESS_LENGTH},
+    explorer::{
+        BlockId, BlockRequestItem, BlockResponseItem, GetBlockSummaryListRequest,
+        GetBlockSummaryListResponse, GetTransactionListRequest, GetTransactionListResponse,
+        TxnRequestItem, TxnResponseItem, Version as TxnVersion,
+    },
     proof::SparseMerkleProof,
     transaction::{parse_as_transaction_argument, Version},
-    explorer::{BlockRequestItem, BlockResponseItem, TxnRequestItem, TxnResponseItem,
-               GetBlockSummaryListResponse, GetBlockSummaryListRequest, BlockId,
-               Version as TxnVersion, GetTransactionListRequest, GetTransactionListResponse}
 };
-use network::proto::consensus::Block;
 use libra_wallet::key_factory::ChildNumber;
 use libra_wallet::wallet_library::WalletLibrary;
+use network::proto::consensus::Block;
 use node_client::NodeClient;
 use node_proto::{
     AddInvoiceRequest, AddInvoiceResponse, ChannelBalanceRequest, ChannelBalanceResponse,
@@ -23,6 +26,7 @@ use node_proto::{
     InstallChannelScriptPackageRequest, OpenChannelRequest, OpenChannelResponse, PayRequest,
     PayResponse, PaymentRequest, WithdrawRequest, WithdrawResponse,
 };
+use sgchain::star_chain_client::ChainExplorer;
 use sgchain::{
     client_state_view::ClientStateView,
     star_chain_client::{faucet_sync, ChainClient, StarChainClient},
@@ -30,8 +34,6 @@ use sgchain::{
 use sgcompiler::{Compiler, StateViewModuleLoader};
 use std::str::FromStr;
 use std::{convert::TryFrom, fs, path::Path, sync::Arc};
-use sgchain::star_chain_client::ChainExplorer;
-use libra_types::transaction::Transaction;
 
 /// Enum used for error formatting.
 #[derive(Debug)]
@@ -354,51 +356,52 @@ impl SGClientProxy {
         let resp = self.chain_client.block_explorer(req.into())?;
         let response = BlockResponseItem::try_from(resp)?;
         match response {
-            BlockResponseItem::LatestBlockHeightResponseItem{height} => {
-                return Ok(height)
-            },
-            _ => {return Err(format_err!("err BlockRequestItem type."))},
+            BlockResponseItem::LatestBlockHeightResponseItem { height } => return Ok(height),
+            _ => return Err(format_err!("err BlockRequestItem type.")),
         }
     }
 
-    pub fn block_detail(&self, params: &[&str]) -> Result<Block> {
-//        ensure!(
-//            params.len() == 1,
-//            "Invalid number of arguments for querying block info."
-//        );
-//        let hash = from_hex_literal(params[0])?;
-//        let block_id = BlockId{id:hash};
-//        let req = BlockRequestItem::BlockIdItem {block_id};
-//        let resp = self.chain_client.txn_explorer(req.into())?;
-//
-//        match response {
-//            BlockResponseItem::GetBlockSummaryListResponseItem{resp} => {
-//                return Ok(resp)
-//            },
-//            _ => {return Err(format_err!("err BlockRequestItem type."))},
-//        }
+    pub fn block_detail(&self, _params: &[&str]) -> Result<Block> {
+        //        ensure!(
+        //            params.len() == 1,
+        //            "Invalid number of arguments for querying block info."
+        //        );
+        //        let hash = from_hex_literal(params[0])?;
+        //        let block_id = BlockId{id:hash};
+        //        let req = BlockRequestItem::BlockIdItem {block_id};
+        //        let resp = self.chain_client.txn_explorer(req.into())?;
+        //
+        //        match response {
+        //            BlockResponseItem::GetBlockSummaryListResponseItem{resp} => {
+        //                return Ok(resp)
+        //            },
+        //            _ => {return Err(format_err!("err BlockRequestItem type."))},
+        //        }
         unimplemented!()
     }
 
     ///
-    pub fn get_block_summary_list_request(&self, block_id: Option<&str>) -> Result<GetBlockSummaryListResponse> {
+    pub fn get_block_summary_list_request(
+        &self,
+        block_id: Option<&str>,
+    ) -> Result<GetBlockSummaryListResponse> {
         let id = match block_id {
             Some(s) => {
                 let hash = from_hex_literal(s)?;
-                Some(BlockId{id: hash})
-            },
+                Some(BlockId { id: hash })
+            }
             None => None,
         };
 
-        let req = BlockRequestItem::GetBlockSummaryListRequestItem{request: GetBlockSummaryListRequest {block_id:id}};
+        let req = BlockRequestItem::GetBlockSummaryListRequestItem {
+            request: GetBlockSummaryListRequest { block_id: id },
+        };
         let resp = self.chain_client.block_explorer(req.into())?;
         let response = BlockResponseItem::try_from(resp)?;
 
         match response {
-            BlockResponseItem::GetBlockSummaryListResponseItem{resp} => {
-                return Ok(resp)
-            },
-            _ => {return Err(format_err!("err BlockRequestItem type."))},
+            BlockResponseItem::GetBlockSummaryListResponseItem { resp } => return Ok(resp),
+            _ => return Err(format_err!("err BlockRequestItem type.")),
         }
     }
 
@@ -408,30 +411,32 @@ impl SGClientProxy {
         let resp = self.chain_client.txn_explorer(req.into())?;
         let response = TxnResponseItem::try_from(resp)?;
         match response {
-            TxnResponseItem::LatestVersionResponseItem(r) => {
-                match r.version {
-                    Some(ver) => return Ok(ver.ver),
-                    _ => {return Err(format_err!("version is none."))},
-                }
+            TxnResponseItem::LatestVersionResponseItem(r) => match r.version {
+                Some(ver) => return Ok(ver.ver),
+                _ => return Err(format_err!("version is none.")),
             },
-            _ => {return Err(format_err!("err TxnResponseItem type."))},
+            _ => return Err(format_err!("err TxnResponseItem type.")),
         }
     }
 
     pub fn txn_list(&self, params: &[&str]) -> Result<GetTransactionListResponse> {
         let version = if params.len() > 0 {
-            Some(TxnVersion{ver: params[0].parse::<u64>()?})
-        }else {None};
+            Some(TxnVersion {
+                ver: params[0].parse::<u64>()?,
+            })
+        } else {
+            None
+        };
 
-        let req = TxnRequestItem::GetTransactionListRequestItem{request: GetTransactionListRequest {version}};
+        let req = TxnRequestItem::GetTransactionListRequestItem {
+            request: GetTransactionListRequest { version },
+        };
         let resp = self.chain_client.txn_explorer(req.into())?;
         let response = TxnResponseItem::try_from(resp)?;
 
         match response {
-            TxnResponseItem::GetTransactionListResponseItem(resp) => {
-                return Ok(resp)
-            },
-            _ => {return Err(format_err!("err GetTransactionListResponse type."))},
+            TxnResponseItem::GetTransactionListResponseItem(resp) => return Ok(resp),
+            _ => return Err(format_err!("err GetTransactionListResponse type.")),
         }
     }
 
@@ -441,18 +446,16 @@ impl SGClientProxy {
             "Invalid number of arguments for querying transaction."
         );
         let version = params[0].parse::<u64>()?;
-        let req = TxnRequestItem::GetTransactionByVersionRequestItem{version};
+        let req = TxnRequestItem::GetTransactionByVersionRequestItem { version };
         let resp = self.chain_client.txn_explorer(req.into())?;
         let response = TxnResponseItem::try_from(resp)?;
 
         match response {
-            TxnResponseItem::GetTransactionByVersionResponseItem(resp) => {
-                match resp.txn {
-                    Some(t) => return Ok(t),
-                    _ => {return Err(format_err!("txn is none."))},
-                }
+            TxnResponseItem::GetTransactionByVersionResponseItem(resp) => match resp.txn {
+                Some(t) => return Ok(t),
+                _ => return Err(format_err!("txn is none.")),
             },
-            _ => {return Err(format_err!("err TxnResponseItem type."))},
+            _ => return Err(format_err!("err TxnResponseItem type.")),
         }
     }
 }
