@@ -87,13 +87,30 @@ pub trait TypedActor<ReqT, RespT>: Send {
     async fn handle_cast(&mut self, msg: ReqT);
 }
 
-/// `S` is inner state of actor, and `HS` is inner state of actor handle
-pub struct Actor<S, H> {
-    inner: S,
-    phantom_data: PhantomData<H>,
+pub fn start<S, HS, ReqT, RespT>(
+    executor: &tokio::runtime::Handle,
+    actor: Actor<S, (ReqT, RespT)>,
+    hs: HS,
+) -> ActorHandle<HS, Msg<ReqT, RespT>>
+where
+    HS: Send + 'static,
+    ReqT: Send + 'static,
+    RespT: Send + 'static,
+    S: TypedActor<ReqT, RespT> + 'static,
+{
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let (tx, rx) = mpsc::channel(1024);
+    executor.spawn(actor.start_async(rx, shutdown_rx));
+    ActorHandle::new(hs, tx, Arc::new(shutdown_tx))
 }
 
-impl<S, H> Actor<S, H> {
+/// `S` is inner state of actor, and `T` is the typed actor's type.
+pub struct Actor<S, T> {
+    inner: S,
+    phantom_data: PhantomData<T>,
+}
+
+impl<S, T> Actor<S, T> {
     pub fn new(inner: S) -> Self {
         Self {
             inner,
@@ -102,24 +119,13 @@ impl<S, H> Actor<S, H> {
     }
 }
 
-impl<S, HS, ReqT, RespT> Actor<S, (HS, ReqT, RespT)>
+impl<S, ReqT, RespT> Actor<S, (ReqT, RespT)>
 where
-    HS: Send + 'static,
     ReqT: Send + 'static,
     RespT: Send + 'static,
     S: TypedActor<ReqT, RespT> + 'static,
 {
-    pub fn start(
-        self,
-        executor: tokio::runtime::Handle,
-        hs: HS,
-    ) -> ActorHandle<HS, Msg<ReqT, RespT>> {
-        let (shutdown_tx, shutdown_rx) = oneshot::channel();
-        let (tx, rx) = mpsc::channel(1024);
-        executor.spawn(self.inner_start(rx, shutdown_rx));
-        ActorHandle::new(hs, tx, Arc::new(shutdown_tx))
-    }
-    async fn inner_start(
+    pub async fn start_async(
         mut self,
         mailbox: mpsc::Receiver<Msg<ReqT, RespT>>,
         shutdown: oneshot::Receiver<()>,
