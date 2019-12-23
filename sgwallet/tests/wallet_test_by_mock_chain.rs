@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 mod common;
 pub mod wallet_test_helper;
+use libra_logger::prelude::*;
 
 #[test]
 fn test_wallet_with_mock_client() {
@@ -228,6 +229,7 @@ where
     F: FnMut(Arc<dyn ChainClient>) -> T,
 {
     libra_logger::try_init_for_testing();
+    slog_stdlog::init();
     let (mock_chain_service, _handle) = MockChainClient::new();
     std::thread::sleep(Duration::from_millis(1500));
     let chain_client = Arc::new(mock_chain_service);

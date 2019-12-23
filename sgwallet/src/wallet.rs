@@ -842,9 +842,11 @@ impl Inner {
         let account_state = account_state.unwrap();
 
         // start chain txn watcher
-        let chain_txn_watcher = ChainWatcher::new(self.inner.client.clone());
+        let chain_txn_watcher =
+            ChainWatcher::new(self.inner.client.clone(), account_state.version(), 16);
         let chain_txn_handle = chain_txn_watcher
-            .start(self.rt_handle.clone(), account_state.version(), 16)
+            .start()
+            .await
             .expect("start chain watcher should ok");
         self.chain_txn_handle = Some(chain_txn_handle);
 
@@ -883,6 +885,9 @@ impl Inner {
             if self.should_stop {
                 break;
             }
+        }
+        if let Some(h) = self.chain_txn_handle.take() {
+            h.stop().await;
         }
         crit!("wallet {} task stopped", self.inner.account);
     }

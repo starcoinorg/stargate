@@ -32,17 +32,17 @@ pub fn test_chain_watcher() {
 }
 
 fn run_test_chain_watcher(chain_client: Arc<dyn ChainClient>) -> Result<()> {
-    let chain_watcher = ChainWatcher::new(chain_client.clone());
     let mut rt = tokio::runtime::Runtime::new().expect("create tokio runtime should ok");
-    let rt_handle = rt.handle().clone();
-    let chain_watcher_handle = chain_watcher
-        .start(rt_handle, 0, 100)
-        .expect("spawn chain watcher should ok");
-    let chain_state_accessor = ChainStateAccessor::new(chain_client.clone());
-    let chain_state_accessor_actor_ref =
-        rt.block_on(async move { coerce_rt::actor::new_actor(chain_state_accessor).await })?;
-    let mut actor_ref = chain_state_accessor_actor_ref.clone();
     rt.block_on(async move {
+        let chain_watcher = ChainWatcher::new(chain_client.clone(), 0, 100);
+        let chain_watcher_handle = chain_watcher
+            .start()
+            .await
+            .expect("spawn chain watcher should ok");
+
+        let chain_state_accessor = ChainStateAccessor::new(chain_client.clone());
+        let mut actor_ref = coerce_rt::actor::new_actor(chain_state_accessor).await?;
+
         let mut receiver = chain_watcher_handle
             .add_interest("test".to_string().into_bytes(), Box::new(|_txn| true))
             .await?;
@@ -66,6 +66,9 @@ fn run_test_chain_watcher(chain_client: Arc<dyn ChainClient>) -> Result<()> {
         let state: Vec<u8> = state.unwrap();
         let account_resource: AccountResource = lcs::from_bytes::<AccountResource>(&state).unwrap();
         assert_eq!(10000, account_resource.balance());
+
+        let _ = actor_ref.stop().await;
+        chain_watcher_handle.stop().await;
         Ok::<_, Error>(())
     })?;
     Ok(())

@@ -46,3 +46,4 @@ sgchain = { path = "../sgchain" }
 [dev-dependencies]
 libra-tools = { path = "../libra/common/tools"}
 rusty-fork = "0.2.1"
+slog-stdlog = "4"

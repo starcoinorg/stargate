@@ -97,6 +97,6 @@ where
     let (config, _logger, _handler) = sgchain::main_node::run_node(None, false, true);
     info!("node is running.");
     let ac_port = config.admission_control.admission_control_service_port;
-    let rpc_client = StarChainClient::new("127.0.0.1", ac_port as u32);
-    f(Arc::new(rpc_client))
+    let rpc_client = Arc::new(StarChainClient::new("127.0.0.1", ac_port as u32));
+    f(rpc_client.clone())
 }
