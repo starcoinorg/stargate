@@ -23,4 +23,8 @@ libra-tools = {path ="../../libra/common/tools", package = "libra-tools"}
 
 sgtypes = { path = "../../sgtypes" }
 anyhow = "1.0"
+hex = { version = "0.3.2", default-features = false }
+
+[dev-dependencies]
+libra-config = { path = "../../libra/config"}
 

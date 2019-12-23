@@ -31,7 +31,7 @@ use sgchain::star_chain_client::{faucet_async_2, MockChainClient};
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use network::build_network_service;
+use network::{build_network_service, NetworkMessage};
 use sg_config::config::NetworkConfig;
 
 use sgtypes::message::{
@@ -351,7 +351,11 @@ fn respond_with<T>(responder: futures::channel::oneshot::Sender<T>, msg: T) {
 fn _gen_wallet(
     executor: Handle,
     client: Arc<MockChainClient>,
-) -> Result<(Arc<Wallet>, AccountAddress)> {
+) -> Result<(
+    Arc<Wallet>,
+    AccountAddress,
+    Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
+)> {
     let amount: u64 = 10_000_000;
     let mut rng: StdRng = SeedableRng::seed_from_u64(_get_unix_ts()); //SeedableRng::from_seed([0; 32]);
     let keypair = Arc::new(KeyPair::generate_for_testing(&mut rng));
@@ -374,7 +378,7 @@ fn _gen_wallet(
     };
     rt.block_on(f);
 
-    Ok((Arc::new(wallet), account_address))
+    Ok((Arc::new(wallet), account_address, keypair))
 }
 
 async fn _delay(duration: Duration) {
@@ -432,6 +436,7 @@ fn _build_network(
 #[test]
 fn ant_router_test() {
     use anyhow::Error;
+    use libra_config::utils::get_available_port;
     use libra_logger::prelude::*;
     use sgchain::star_chain_client::MockChainClient;
     use std::sync::Arc;
@@ -443,13 +448,40 @@ fn ant_router_test() {
     let (mock_chain_service, _handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
 
-    let (wallet1, _addr1) = _gen_wallet(executor.clone(), client.clone()).unwrap();
-    let (wallet2, _addr2) = _gen_wallet(executor.clone(), client.clone()).unwrap();
-    let (wallet3, _addr3) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+    let (wallet1, addr1, keypair1) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+    let (wallet2, _addr2, keypair2) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+    let (wallet3, _addr3, keypair3) = _gen_wallet(executor.clone(), client.clone()).unwrap();
 
     let _wallet1 = wallet1.clone();
     let _wallet2 = wallet2.clone();
     let _wallet3 = wallet3.clone();
+
+    let network_config1 = _create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![],
+    );
+
+    let addr1_hex = hex::encode(addr1);
+    let seed = format!("{}/p2p/{}", &network_config1.listen, addr1_hex);
+
+    let network_config2 = _create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![seed.clone()],
+    );
+
+    let network_config3 = _create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![seed.clone()],
+    );
+
+    let (_network1, tx1, rx1, close_tx1) = build_network_service(&network_config1, keypair1);
+    let _identify1 = _network1.identify();
+
+    let (_network2, tx2, rx2, close_tx2) = build_network_service(&network_config2, keypair2);
+    let _identify2 = _network2.identify();
+
+    let (_network3, tx3, rx3, close_tx3) = build_network_service(&network_config3, keypair3);
+    let _identify3 = _network3.identify();
 
     let f = async move {
         _open_channel(wallet1.clone(), wallet2.clone(), 100000, 100000).await?;
@@ -466,4 +498,29 @@ fn ant_router_test() {
     rt.block_on(f).unwrap();
 
     debug!("here");
+}
+
+async fn _send_router_message(
+    tx: UnboundedSender<NetworkMessage>,
+    peer_id: AccountAddress,
+    message: RouterNetworkMessage,
+) -> Result<()> {
+    tx.unbounded_send(NetworkMessage {
+        peer_id,
+        data: message.into_proto_bytes()?,
+    })?;
+    Ok(())
+}
+
+async fn _receive_router_message(
+    mut rx: UnboundedReceiver<NetworkMessage>,
+    tx: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
+) {
+    while let Some(s) = rx.next().await {
+        tx.unbounded_send((
+            s.peer_id,
+            RouterNetworkMessage::from_proto_bytes(s.data).unwrap(),
+        ))
+        .unwrap();
+    }
 }

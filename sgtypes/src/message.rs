@@ -788,9 +788,82 @@ pub enum NodeNetworkMessage {
     BalanceQueryResponseEnum(BalanceQueryResponse),
 }
 
+#[allow(clippy::large_enum_variant)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum RouterNetworkMessage {
     ExchangeSeedMessageRequest(ExchangeSeedMessageRequest),
     ExchangeSeedMessageResponse(ExchangeSeedMessageResponse),
     AntQueryMessage(AntQueryMessage),
     AntFinalMessage(AntFinalMessage),
+}
+
+impl RouterNetworkMessage {
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+    where
+        B: IntoBuf,
+    {
+        crate::proto::sgtypes::RouterNetworkMessage::decode(buf)?.try_into()
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(TryInto::<crate::proto::sgtypes::RouterNetworkMessage>::try_into(self)?.to_vec()?)
+    }
+}
+
+impl TryFrom<crate::proto::sgtypes::RouterNetworkMessage> for RouterNetworkMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(proto: crate::proto::sgtypes::RouterNetworkMessage) -> Result<Self> {
+        use crate::proto::sgtypes::router_network_message::RouterMessageItems;
+
+        let item = proto
+            .router_message_items
+            .ok_or_else(|| format_err!("Missing txn_response_items"))?;
+
+        let response = match item {
+            RouterMessageItems::ExchangeSeedRequest(resp) => {
+                RouterNetworkMessage::ExchangeSeedMessageRequest(
+                    ExchangeSeedMessageRequest::try_from(resp)?,
+                )
+            }
+            RouterMessageItems::ExchangeSeedResponse(resp) => {
+                RouterNetworkMessage::ExchangeSeedMessageResponse(
+                    ExchangeSeedMessageResponse::try_from(resp)?,
+                )
+            }
+            RouterMessageItems::AntQueryMessage(resp) => {
+                RouterNetworkMessage::AntQueryMessage(AntQueryMessage::try_from(resp)?)
+            }
+            RouterMessageItems::AntFinalMessage(resp) => {
+                RouterNetworkMessage::AntFinalMessage(AntFinalMessage::try_from(resp)?)
+            }
+        };
+
+        Ok(response)
+    }
+}
+
+impl From<RouterNetworkMessage> for crate::proto::sgtypes::RouterNetworkMessage {
+    fn from(response: RouterNetworkMessage) -> Self {
+        use crate::proto::sgtypes::router_network_message::RouterMessageItems;
+
+        let resp = match response {
+            RouterNetworkMessage::ExchangeSeedMessageRequest(r) => {
+                RouterMessageItems::ExchangeSeedRequest(r.into())
+            }
+            RouterNetworkMessage::ExchangeSeedMessageResponse(r) => {
+                RouterMessageItems::ExchangeSeedResponse(r.into())
+            }
+            RouterNetworkMessage::AntQueryMessage(r) => {
+                RouterMessageItems::AntQueryMessage(r.into())
+            }
+            RouterNetworkMessage::AntFinalMessage(r) => {
+                RouterMessageItems::AntFinalMessage(r.into())
+            }
+        };
+
+        Self {
+            router_message_items: Some(resp),
+        }
+    }
 }
