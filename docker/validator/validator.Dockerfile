@@ -11,7 +11,7 @@ ENV RUST_BACKTRACE "1"
 
 WORKDIR /starcoin
 COPY . /starcoin
-RUN cargo build  -p sgchain && cd target/debug && rm -r build deps incremental
+RUN cargo build  -p sgchain && cd target/debug && rm -r deps incremental
 
 ### Production Image ###
 
@@ -20,6 +20,9 @@ FROM debian:buster As prod
 RUN mkdir -p /opt/starcoin/bin /opt/starcoin/etc
 COPY libra/docker/install-tools.sh /root
 COPY --from=builder /starcoin/target/debug/sgchain /opt/starcoin/bin
+COPY --from=builder /starcoin/target/debug/build/scrypt-*/out/lib /opt/starcoin/bin
+RUN LD_LIBRARY_PATH="/opt/starcoin/bin"
+RUN export LD_LIBRARY_PATH
 
 # Admission control
 EXPOSE 8000
