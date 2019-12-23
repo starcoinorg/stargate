@@ -34,6 +34,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use network::{build_network_service, NetworkMessage};
 use sg_config::config::NetworkConfig;
 
+use futures::compat::Stream01CompatExt;
 use sgtypes::message::{
     AntFinalMessage, AntQueryMessage, BalanceQueryResponse, ExchangeSeedMessageRequest,
     ExchangeSeedMessageResponse, RouterNetworkMessage,
@@ -164,12 +165,8 @@ impl AntRouterInner {
         router_inner: Arc<AntRouterInner>,
         mut command_receiver: UnboundedReceiver<RouterCommand>,
     ) {
-        loop {
-            futures::select! {
-                command = command_receiver.select_next_some()=>{
-                    router_inner.handle_command(command).await.unwrap();
-                },
-            }
+        while let Some(command) = command_receiver.next().await {
+            router_inner.handle_command(command).await.unwrap();
         }
     }
 
@@ -476,12 +473,21 @@ fn ant_router_test() {
 
     let (_network1, tx1, rx1, close_tx1) = build_network_service(&network_config1, keypair1);
     let _identify1 = _network1.identify();
+    let (rtx1, rrx1) = _prepare_network(tx1, rx1, executor.clone());
+    let mut router1 = AntRouter::new(executor.clone(), rtx1, rrx1, wallet1.clone());
+    router1.start().unwrap();
 
     let (_network2, tx2, rx2, close_tx2) = build_network_service(&network_config2, keypair2);
     let _identify2 = _network2.identify();
+    let (rtx2, rrx2) = _prepare_network(tx2, rx2, executor.clone());
+    let mut router2 = AntRouter::new(executor.clone(), rtx2, rrx2, wallet2.clone());
+    router2.start().unwrap();
 
     let (_network3, tx3, rx3, close_tx3) = build_network_service(&network_config3, keypair3);
     let _identify3 = _network3.identify();
+    let (rtx3, rrx3) = _prepare_network(tx3, rx3, executor.clone());
+    let mut router3 = AntRouter::new(executor.clone(), rtx3, rrx3, wallet3.clone());
+    router3.start().unwrap();
 
     let f = async move {
         _open_channel(wallet1.clone(), wallet2.clone(), 100000, 100000).await?;
@@ -489,9 +495,16 @@ fn ant_router_test() {
 
         _delay(Duration::from_millis(5000)).await;
 
+        close_tx1.send(()).unwrap();
+        close_tx2.send(()).unwrap();
+        close_tx3.send(()).unwrap();
         wallet1.stop().await?;
         wallet2.stop().await?;
         wallet3.stop().await?;
+
+        router1.shutdown().await?;
+        router2.shutdown().await?;
+        router3.shutdown().await?;
         Ok::<_, Error>(())
     };
 
@@ -500,23 +513,42 @@ fn ant_router_test() {
     debug!("here");
 }
 
+fn _prepare_network(
+    tx: futures_01::sync::mpsc::UnboundedSender<NetworkMessage>,
+    rx: futures_01::sync::mpsc::UnboundedReceiver<NetworkMessage>,
+    executor: Handle,
+) -> (
+    UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
+    UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
+) {
+    let (inbound_sender, inbound_receiver) = futures::channel::mpsc::unbounded();
+    let (outbound_sender, outbound_receiver) = futures::channel::mpsc::unbounded();
+
+    executor.spawn(_receive_router_message(rx, inbound_sender));
+    executor.spawn(_send_router_message(outbound_receiver, tx));
+
+    (outbound_sender, inbound_receiver)
+}
+
 async fn _send_router_message(
-    tx: UnboundedSender<NetworkMessage>,
-    peer_id: AccountAddress,
-    message: RouterNetworkMessage,
-) -> Result<()> {
-    tx.unbounded_send(NetworkMessage {
-        peer_id,
-        data: message.into_proto_bytes()?,
-    })?;
-    Ok(())
+    mut rx: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
+    tx: futures_01::sync::mpsc::UnboundedSender<NetworkMessage>,
+) {
+    while let Some((peer_id, message)) = rx.next().await {
+        tx.unbounded_send(NetworkMessage {
+            peer_id,
+            data: message.into_proto_bytes().unwrap(),
+        })
+        .unwrap();
+    }
 }
 
 async fn _receive_router_message(
-    mut rx: UnboundedReceiver<NetworkMessage>,
+    rx: futures_01::sync::mpsc::UnboundedReceiver<NetworkMessage>,
     tx: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
 ) {
-    while let Some(s) = rx.next().await {
+    let mut rx = rx.compat();
+    while let Some(Ok(s)) = rx.next().await {
         tx.unbounded_send((
             s.peer_id,
             RouterNetworkMessage::from_proto_bytes(s.data).unwrap(),
