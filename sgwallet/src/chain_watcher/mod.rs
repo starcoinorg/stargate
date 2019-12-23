@@ -1,14 +1,12 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::chain_watcher::txn_stream::TxnStream;
 use anyhow::bail;
 use anyhow::Result;
 use futures::channel::mpsc;
 use futures::channel::oneshot;
 use futures::{FutureExt, SinkExt, StreamExt};
 use libra_logger::prelude::*;
-use libra_types::transaction::Transaction;
 use sgchain::star_chain_client::ChainClient;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -16,8 +14,10 @@ mod txn_stream;
 use super::utils::{call, cast, respond_with, Msg};
 use std::time::Duration;
 use tokio::time::interval;
+pub use txn_stream::TransactionWithInfo;
+use txn_stream::TxnStream;
 
-pub type Interest = Box<dyn Fn(&Transaction) -> bool + Send>;
+pub type Interest = Box<dyn Fn(&TransactionWithInfo) -> bool + Send>;
 
 pub struct ChainWatcherHandle {
     mail_sender: mpsc::Sender<InnerMsg>,
@@ -30,7 +30,7 @@ impl ChainWatcherHandle {
         &self,
         tag: Vec<u8>,
         interest: Interest,
-    ) -> Result<oneshot::Receiver<Transaction>> {
+    ) -> Result<oneshot::Receiver<TransactionWithInfo>> {
         let (tx, rx) = oneshot::channel();
         call(
             self.mail_sender.clone(),
@@ -50,7 +50,7 @@ impl ChainWatcherHandle {
         &self,
         tag: Vec<u8>,
         interest: Interest,
-    ) -> Result<mpsc::Receiver<Transaction>> {
+    ) -> Result<mpsc::Receiver<TransactionWithInfo>> {
         let (tx, rx) = mpsc::channel(1024);
         let resp = call(
             self.mail_sender.clone(),
@@ -185,7 +185,7 @@ impl ChainWatcher {
         });
     }
 
-    async fn handle_txn(&mut self, txn: Result<Transaction>) {
+    async fn handle_txn(&mut self, txn: Result<TransactionWithInfo>) {
         match txn {
             Err(e) => error!("fail to get txn from chain, e: {:#?}", e),
             Ok(t) => {
@@ -303,6 +303,6 @@ impl DownStream {
 }
 
 enum Trans {
-    Oneshot(oneshot::Sender<Transaction>),
-    Mpsc(mpsc::Sender<Transaction>),
+    Oneshot(oneshot::Sender<TransactionWithInfo>),
+    Mpsc(mpsc::Sender<TransactionWithInfo>),
 }

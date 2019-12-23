@@ -1,6 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::chain_watcher::TransactionWithInfo;
 use crate::channel_state_view::ChannelStateView;
 use crate::scripts::PackageRegistry;
 use crate::tx_applier::TxApplier;
@@ -28,7 +29,7 @@ use libra_types::language_storage::{ModuleId, StructTag};
 use libra_types::transaction::helpers::TransactionSigner;
 use libra_types::transaction::{
     ChannelTransactionPayload, ChannelTransactionPayloadBody, RawTransaction, ScriptAction,
-    TransactionArgument, TransactionPayload, Version,
+    Transaction, TransactionArgument, TransactionPayload, TransactionWithProof, Version,
 };
 use libra_types::write_set::WriteSet;
 use libra_types::{
@@ -79,6 +80,9 @@ pub enum ChannelMsg {
     },
     ApplyPendingTxn {
         proposal: ChannelTransactionProposal,
+        responder: oneshot::Sender<Result<u64>>,
+    },
+    SoloTravelTxn {
         responder: oneshot::Sender<Result<u64>>,
     },
     GetPendingTxn {
@@ -254,8 +258,15 @@ impl Channel {
         let (internal_msg_tx, mut internal_msg_rx) = mpsc::channel(1024);
         self.bootstrap(internal_msg_tx.clone());
         let mut fused_shutdown_rx = shutdown_rx.fuse();
+        //        let mut chain_txn_receiver = chain_txn_receiver.fuse();
 
         loop {
+            //                maybe_chain_txn = chain_txn_receiver.next() => {
+            //                    if let Some(txn) = maybe_chain_txn {
+            //                        self.handle_chain_txn(txn).await;
+            //                    }
+            //                }
+
             ::futures::select! {
                 maybe_external_msg = self.mailbox.next() => {
                     if let Some(msg) = maybe_external_msg {
@@ -353,6 +364,10 @@ impl Channel {
                 let response = self.apply_pending_txn_async(proposal).await;
                 respond_with(responder, response);
             }
+            ChannelMsg::SoloTravelTxn { responder } => {
+                let response = self.solo_travel_proposal().await;
+                respond_with(responder, response);
+            }
             ChannelMsg::AccessPath { path, responder } => {
                 let response = self.get_local(&path);
                 respond_with(responder, response);
@@ -380,6 +395,63 @@ impl Channel {
                 }
             }
         }
+    }
+
+    async fn handle_chain_txn(&mut self, txn_with_info: TransactionWithInfo) {
+        let TransactionWithInfo {
+            txn,
+            txn_info: _,
+            version: _,
+        } = txn_with_info;
+        if let Transaction::UserTransaction(signed_txn) = txn {
+            let txn_sender = signed_txn.sender();
+            let raw_txn = signed_txn.into_raw_transaction();
+            let txn_payload = raw_txn.into_payload();
+            debug_assert!(txn_payload.is_channel());
+            if let TransactionPayload::Channel(channel_txn_payload) = txn_payload {
+                debug_assert!(self.participant_addresses.contains(&txn_sender));
+                debug_assert!(self.channel_address == channel_txn_payload.channel_address());
+                // found participant submit a new txn
+                if txn_sender != self.account_address {
+                    // and the txn is authorized by me
+                    if channel_txn_payload.is_authorized() {
+                        unimplemented!()
+                    } else {
+                        if let Err(e) = self
+                            .handle_unauthorized_travel_txn(channel_txn_payload)
+                            .await
+                        {
+                            error!("fail to handle unauthorized tranvel txn, e: {}", e);
+                        }
+                    }
+                } else {
+                    // ignore my own txn?
+                }
+            }
+        }
+    }
+
+    async fn handle_unauthorized_travel_txn(
+        &mut self,
+        channel_txn_payload: ChannelTransactionPayload,
+    ) -> Result<()> {
+        let txn_channel_seq_number = channel_txn_payload.witness().channel_sequence_number();
+        if txn_channel_seq_number > self.channel_sequence_number() {
+            // TODO: better handle
+            // this should not happen.
+            // If chain include a txn whose witness data is signed by myself,
+            // and the channel seq number is bigger than my local's,
+            // it means the local implementation contains some bugs.
+            panic!("Local state is stale, there must be some bugs");
+        }
+
+        if txn_channel_seq_number == self.channel_sequence_number() {
+            // TODO: should resolve
+        } else if txn_channel_seq_number + 1 == self.channel_sequence_number() {
+        } else if txn_channel_seq_number + 1 < self.channel_sequence_number() {
+        }
+
+        Ok(())
     }
 
     fn channel_view(&self, version: Option<Version>) -> Result<ChannelStateView> {
@@ -613,6 +685,46 @@ impl Channel {
             self.should_stop = true;
         }
         Ok(())
+    }
+
+    async fn solo_travel_proposal(&mut self) -> Result<u64> {
+        debug!("user {} apply txn", self.account_address);
+        ensure!(self.pending_txn().is_some(), "should have txn to apply");
+        let pending_txn = self.pending_txn().unwrap();
+        ensure!(!pending_txn.fulfilled(), "txn should not be fulfilled");
+        let (proposal, output, signatures) = pending_txn.into();
+        let channel_txn = &proposal.channel_txn;
+        ensure!(
+            self.account_address == channel_txn.proposer(),
+            "solo should only use myself's proposal"
+        );
+
+        let max_gas_amount = std::cmp::min(
+            (output.gas_used() as f64 * 1.1) as u64,
+            MAX_GAS_AMOUNT_ONCHAIN,
+        );
+        let (payload_body, _) =
+            self.build_and_sign_channel_txn_payload_body(self.witness_data(), channel_txn)?;
+
+        let new_raw_txn = self.build_raw_txn_from_channel_txn(
+            payload_body,
+            &channel_txn,
+            Some(&signatures),
+            max_gas_amount,
+        )?;
+        let signed_txn = self.keypair.sign_txn(new_raw_txn)?;
+        submit_transaction(self.chain_client.as_ref(), signed_txn).await?;
+
+        let txn_with_proof = watch_transaction(
+            self.chain_client.as_ref(),
+            channel_txn.proposer(),
+            channel_txn.sequence_number(),
+        )
+        .await?;
+        let gas_used = txn_with_proof.proof.transaction_info().gas_used();
+        let channel_txn = chain_txn_to_local_channel_txn(txn_with_proof)?;
+        self.apply(channel_txn, output, signatures)?;
+        Ok(gas_used)
     }
 
     async fn apply_pending_txn_async(
@@ -1136,4 +1248,31 @@ pub(crate) fn access_local<'a>(
             }
         }
     }
+}
+
+fn chain_txn_to_local_channel_txn(
+    _txn_with_proof: TransactionWithProof,
+) -> Result<ChannelTransaction> {
+    //    let TransactionWithProof {
+    //        transaction: txn, ..
+    //    } = txn_with_proof;
+    //    let signed_user_txn = txn.as_signed_user_txn()?;
+    //    let signed_user_txn = match txn {
+    //        Transaction::UserTransaction(signed_user_txn) => signed_user_txn,
+    //        _ => bail!("should be user txn"),
+    //    };
+    //    let raw_txn = signed_user_txn.into_raw_transaction();
+    //    let channel_txn_payload = match raw_txn.payload() {
+    //        TransactionPayload::Channel(p) => p,
+    //        _ => bail!("should be channel txn"),
+    //    };
+
+    // TODO: change channel txn to make it work
+
+    //    ChannelTransaction::new(
+    //        version,
+    //        channel_txn_payload.channel_address(),
+    //        channel_txn_payload.action(),
+    //    );
+    unimplemented!()
 }

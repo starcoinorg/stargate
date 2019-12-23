@@ -6,7 +6,11 @@ use crate::s_value::SValue;
 use crate::sg_error::SgError;
 use anyhow::{bail, format_err, Error, Result};
 use bytes::IntoBuf;
-use libra_crypto::{ed25519::Ed25519Signature, HashValue};
+use libra_crypto::{
+    ed25519::Ed25519Signature,
+    hash::{CryptoHash, CryptoHasher, DefaultHasher},
+    HashValue,
+};
 use libra_prost_ext::MessageExt;
 use libra_types::account_address::AccountAddress;
 use parity_multiaddr::Multiaddr;
@@ -441,54 +445,22 @@ impl From<BalanceQueryResponse> for crate::proto::sgtypes::BalanceQueryResponse 
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct VertexInfo {
-    pub addr: AccountAddress,
-}
-
-impl VertexInfo {
-    pub fn new(addr: AccountAddress) -> Self {
-        Self { addr }
-    }
-
-    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
-    where
-        B: IntoBuf,
-    {
-        crate::proto::sgtypes::VertexInfo::decode(buf)?.try_into()
-    }
-
-    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
-        Ok(TryInto::<crate::proto::sgtypes::VertexInfo>::try_into(self)?.to_vec()?)
-    }
-}
-
-impl TryFrom<crate::proto::sgtypes::VertexInfo> for VertexInfo {
-    type Error = Error;
-
-    fn try_from(value: crate::proto::sgtypes::VertexInfo) -> Result<Self> {
-        Ok(Self::new(value.addr.try_into()?))
-    }
-}
-
-impl From<VertexInfo> for crate::proto::sgtypes::VertexInfo {
-    fn from(value: VertexInfo) -> Self {
-        Self {
-            addr: value.addr.to_vec(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AntMessage {
+pub struct AntQueryMessage {
     pub s_value: SValue,
-    pub vertex_list: Vec<VertexInfo>,
+    pub sender_addr: AccountAddress,
+    pub balance_query_response_list: Vec<BalanceQueryResponse>,
 }
 
-impl AntMessage {
-    pub fn new(s_value: SValue, vertex_list: Vec<VertexInfo>) -> Self {
+impl AntQueryMessage {
+    pub fn new(
+        s_value: SValue,
+        sender_addr: AccountAddress,
+        balance_query_response_list: Vec<BalanceQueryResponse>,
+    ) -> Self {
         Self {
             s_value,
-            vertex_list,
+            sender_addr,
+            balance_query_response_list,
         }
     }
 
@@ -496,35 +468,40 @@ impl AntMessage {
     where
         B: IntoBuf,
     {
-        crate::proto::sgtypes::AntMessage::decode(buf)?.try_into()
+        crate::proto::sgtypes::AntQueryMessage::decode(buf)?.try_into()
     }
 
     pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
-        Ok(TryInto::<crate::proto::sgtypes::AntMessage>::try_into(self)?.to_vec()?)
+        Ok(TryInto::<crate::proto::sgtypes::AntQueryMessage>::try_into(self)?.to_vec()?)
     }
 }
 
-impl TryFrom<crate::proto::sgtypes::AntMessage> for AntMessage {
+impl TryFrom<crate::proto::sgtypes::AntQueryMessage> for AntQueryMessage {
     type Error = Error;
 
-    fn try_from(value: crate::proto::sgtypes::AntMessage) -> Result<Self> {
-        let vertex_list: Result<Vec<VertexInfo>> = value
-            .vertex_list
+    fn try_from(value: crate::proto::sgtypes::AntQueryMessage) -> Result<Self> {
+        let balance_query_response_list: Result<Vec<BalanceQueryResponse>> = value
+            .balance_query_response_list
             .iter()
             .clone()
-            .map(|v| VertexInfo::try_from(v.clone()))
+            .map(|v| BalanceQueryResponse::try_from(v.clone()))
             .collect();
 
-        Ok(Self::new(value.s_value.try_into()?, vertex_list?))
+        Ok(Self::new(
+            value.s_value.try_into()?,
+            value.sender_addr.try_into()?,
+            balance_query_response_list?,
+        ))
     }
 }
 
-impl From<AntMessage> for crate::proto::sgtypes::AntMessage {
-    fn from(value: AntMessage) -> Self {
+impl From<AntQueryMessage> for crate::proto::sgtypes::AntQueryMessage {
+    fn from(value: AntQueryMessage) -> Self {
         Self {
             s_value: value.s_value.to_vec(),
-            vertex_list: value
-                .vertex_list
+            sender_addr: value.sender_addr.to_vec(),
+            balance_query_response_list: value
+                .balance_query_response_list
                 .iter()
                 .cloned()
                 .map(|v| v.into())
@@ -629,6 +606,191 @@ impl From<MultiHopChannelRequest> for crate::proto::sgtypes::MultiHopChannelRequ
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExchangeSeedMessageRequest {
+    pub sender_seed: u128,
+}
+
+impl ExchangeSeedMessageRequest {
+    pub fn new(seed: u128) -> Self {
+        Self { sender_seed: seed }
+    }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+    where
+        B: IntoBuf,
+    {
+        crate::proto::sgtypes::ExchangeSeedMessageRequest::decode(buf)?.try_into()
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(
+            TryInto::<crate::proto::sgtypes::ExchangeSeedMessageRequest>::try_into(self)?
+                .to_vec()?,
+        )
+    }
+}
+
+impl TryFrom<crate::proto::sgtypes::ExchangeSeedMessageRequest> for ExchangeSeedMessageRequest {
+    type Error = Error;
+
+    fn try_from(value: crate::proto::sgtypes::ExchangeSeedMessageRequest) -> Result<Self> {
+        let mut result: [u8; 16] = [0; 16];
+        result.copy_from_slice(value.sender_seed.as_ref());
+        let seed = u128::from_le_bytes(result);
+        Ok(Self::new(seed))
+    }
+}
+
+impl From<ExchangeSeedMessageRequest> for crate::proto::sgtypes::ExchangeSeedMessageRequest {
+    fn from(value: ExchangeSeedMessageRequest) -> Self {
+        let mut seed = Vec::new();
+        seed.extend_from_slice(&value.sender_seed.to_le_bytes());
+        Self { sender_seed: seed }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExchangeSeedMessageResponse {
+    pub sender_seed: u128,
+    pub receiver_seed: u128,
+}
+
+impl ExchangeSeedMessageResponse {
+    pub fn new(sender_seed: u128, receiver_seed: u128) -> Self {
+        Self {
+            sender_seed,
+            receiver_seed,
+        }
+    }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+    where
+        B: IntoBuf,
+    {
+        crate::proto::sgtypes::ExchangeSeedMessageResponse::decode(buf)?.try_into()
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(
+            TryInto::<crate::proto::sgtypes::ExchangeSeedMessageResponse>::try_into(self)?
+                .to_vec()?,
+        )
+    }
+}
+
+impl TryFrom<crate::proto::sgtypes::ExchangeSeedMessageResponse> for ExchangeSeedMessageResponse {
+    type Error = Error;
+
+    fn try_from(value: crate::proto::sgtypes::ExchangeSeedMessageResponse) -> Result<Self> {
+        let mut result: [u8; 16] = [0; 16];
+        result.copy_from_slice(value.sender_seed.as_ref());
+        let sender_seed = u128::from_le_bytes(result);
+
+        result.copy_from_slice(value.receiver_seed.as_ref());
+        let receiver_seed = u128::from_le_bytes(result);
+
+        Ok(Self::new(sender_seed, receiver_seed))
+    }
+}
+
+impl From<ExchangeSeedMessageResponse> for crate::proto::sgtypes::ExchangeSeedMessageResponse {
+    fn from(value: ExchangeSeedMessageResponse) -> Self {
+        let mut sender_seed = Vec::new();
+        sender_seed.extend_from_slice(&value.sender_seed.to_le_bytes());
+        let mut receiver_seed = Vec::new();
+        receiver_seed.extend_from_slice(&value.receiver_seed.to_le_bytes());
+
+        Self {
+            sender_seed,
+            receiver_seed,
+        }
+    }
+}
+
+impl CryptoHash for ExchangeSeedMessageRequest {
+    type Hasher = DefaultHasher;
+
+    fn hash(&self) -> HashValue {
+        let mut state = Self::Hasher::default();
+        state.write(&self.sender_seed.to_le_bytes());
+        state.finish()
+    }
+}
+
+impl ExchangeSeedMessageResponse {
+    pub fn request_hash(&self) -> HashValue {
+        let mut state = DefaultHasher::default();
+        state.write(&self.sender_seed.to_le_bytes());
+        state.finish()
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AntFinalMessage {
+    pub r_value: HashValue,
+    pub balance_query_response_list: Vec<BalanceQueryResponse>,
+}
+
+impl AntFinalMessage {
+    pub fn new(r_value: HashValue, balance_query_response_list: Vec<BalanceQueryResponse>) -> Self {
+        Self {
+            r_value,
+            balance_query_response_list,
+        }
+    }
+
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+    where
+        B: IntoBuf,
+    {
+        crate::proto::sgtypes::AntFinalMessage::decode(buf)?.try_into()
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(TryInto::<crate::proto::sgtypes::AntFinalMessage>::try_into(self)?.to_vec()?)
+    }
+}
+
+impl TryFrom<crate::proto::sgtypes::AntFinalMessage> for AntFinalMessage {
+    type Error = Error;
+
+    fn try_from(value: crate::proto::sgtypes::AntFinalMessage) -> Result<Self> {
+        let balance_query_response_list: Result<Vec<BalanceQueryResponse>> = value
+            .balance_query_response_list
+            .iter()
+            .clone()
+            .map(|v| BalanceQueryResponse::try_from(v.clone()))
+            .collect();
+
+        Ok(Self::new(
+            HashValue::from_slice(&value.r_value)?,
+            balance_query_response_list?,
+        ))
+    }
+}
+
+impl From<AntFinalMessage> for crate::proto::sgtypes::AntFinalMessage {
+    fn from(value: AntFinalMessage) -> Self {
+        Self {
+            r_value: value.r_value.to_vec(),
+            balance_query_response_list: value
+                .balance_query_response_list
+                .iter()
+                .cloned()
+                .map(|v| v.into())
+                .collect(),
+        }
+    }
+}
+
 pub enum NodeNetworkMessage {
     BalanceQueryResponseEnum(BalanceQueryResponse),
+}
+
+pub enum RouterNetworkMessage {
+    ExchangeSeedMessageRequest(ExchangeSeedMessageRequest),
+    ExchangeSeedMessageResponse(ExchangeSeedMessageResponse),
+    AntQueryMessage(AntQueryMessage),
+    AntFinalMessage(AntFinalMessage),
 }

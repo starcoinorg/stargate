@@ -37,5 +37,6 @@ sgchain = { path = "../sgchain" }
 sgtypes = { path = "../sgtypes" }
 sgcompiler = { path = "../sgcompiler" }
 lcs = { path = "../libra/common/lcs", package = "libra-canonical-serialization" }
+network = { path = "../libra/network" }
 
 [dev-dependencies]
