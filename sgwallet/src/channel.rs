@@ -5,6 +5,7 @@ use crate::chain_watcher::TransactionWithInfo;
 use crate::channel_state_view::ChannelStateView;
 use crate::scripts::PackageRegistry;
 use crate::tx_applier::TxApplier;
+use crate::utils::contract::{challenge_channel_action, resolve_channel_action};
 use crate::wallet::{
     execute_transaction, respond_with, submit_transaction, txn_expiration, watch_transaction,
     GAS_UNIT_PRICE, MAX_GAS_AMOUNT_OFFCHAIN, MAX_GAS_AMOUNT_ONCHAIN,
@@ -26,10 +27,10 @@ use libra_types::channel::{
 };
 use libra_types::identifier::Identifier;
 use libra_types::language_storage::{ModuleId, StructTag};
-use libra_types::transaction::helpers::TransactionSigner;
 use libra_types::transaction::{
     ChannelTransactionPayload, ChannelTransactionPayloadBody, RawTransaction, ScriptAction,
-    Transaction, TransactionArgument, TransactionPayload, TransactionWithProof, Version,
+    SignedTransaction, Transaction, TransactionArgument, TransactionPayload, TransactionWithProof,
+    Version,
 };
 use libra_types::write_set::WriteSet;
 use libra_types::{
@@ -39,7 +40,7 @@ use libra_types::{
 use sgchain::star_chain_client::ChainClient;
 use sgstorage::channel_db::ChannelDB;
 use sgstorage::channel_store::ChannelStore;
-use sgtypes::channel::ChannelState;
+use sgtypes::channel::{ChannelStage, ChannelState};
 use sgtypes::channel_transaction::{ChannelOp, ChannelTransaction, ChannelTransactionProposal};
 use sgtypes::channel_transaction_sigs::ChannelTransactionSigs;
 use sgtypes::channel_transaction_to_commit::ChannelTransactionToApply;
@@ -48,6 +49,7 @@ use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use sgtypes::signed_channel_transaction_with_proof::SignedChannelTransactionWithProof;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+use std::time::Duration;
 use vm::gas_schedule::GasAlgebra;
 
 #[derive(Debug)]
@@ -397,6 +399,7 @@ impl Channel {
         }
     }
 
+    #[allow(dead_code)]
     async fn handle_chain_txn(&mut self, txn_with_info: TransactionWithInfo) {
         let TransactionWithInfo {
             txn,
@@ -446,12 +449,67 @@ impl Channel {
         }
 
         if txn_channel_seq_number == self.channel_sequence_number() {
-            // TODO: should resolve
-        } else if txn_channel_seq_number + 1 == self.channel_sequence_number() {
-        } else if txn_channel_seq_number + 1 < self.channel_sequence_number() {
+            self.resolve_channel().await?;
+        } else if txn_channel_seq_number < self.channel_sequence_number() {
+            self.challenge_channel().await?;
         }
 
         Ok(())
+    }
+
+    async fn resolve_channel(&mut self) -> Result<()> {
+        let signed_txn = self.build_solo_txn(resolve_channel_action(), u64::max_value())?;
+        let txn_sender = signed_txn.sender();
+        let seq_number = signed_txn.sequence_number();
+        submit_transaction(self.chain_client.as_ref(), signed_txn).await?;
+
+        let txn_with_proof =
+            watch_transaction(self.chain_client.as_ref(), txn_sender, seq_number).await?;
+        let _gas_used = txn_with_proof.proof.transaction_info().gas_used();
+        // TODO: handle apply state into local
+        Ok(())
+    }
+    async fn challenge_channel(&mut self) -> Result<()> {
+        let signed_txn = self.build_solo_txn(challenge_channel_action(), u64::max_value())?;
+        let txn_sender = signed_txn.sender();
+        let seq_number = signed_txn.sequence_number();
+
+        submit_transaction(self.chain_client.as_ref(), signed_txn).await?;
+
+        let txn_with_proof =
+            watch_transaction(self.chain_client.as_ref(), txn_sender, seq_number).await?;
+        let _gas_used = txn_with_proof.proof.transaction_info().gas_used();
+        // TODO: handle apply state into local
+        Ok(())
+    }
+
+    fn build_solo_txn(
+        &self,
+        action: ScriptAction,
+        max_gas_amount: u64,
+    ) -> Result<SignedTransaction> {
+        //        RawTransaction::new()
+        let (body, payload_body_signature) =
+            self.propose_channel_action(self.account_address, action)?;
+        let mut signatures = BTreeMap::new();
+        signatures.insert(
+            self.account_address,
+            (self.keypair.public_key.clone(), payload_body_signature),
+        );
+
+        let account_seq_number = self
+            .chain_client
+            .account_sequence_number(&self.account_address)
+            .ok_or(format_err!("account not exists"))?;
+        let txn = self.build_chain_txn(
+            body,
+            Some(signatures),
+            self.account_address,
+            account_seq_number,
+            max_gas_amount,
+            Duration::from_secs(60),
+        )?;
+        Ok(txn)
     }
 
     fn channel_view(&self, version: Option<Version>) -> Result<ChannelStateView> {
@@ -465,13 +523,15 @@ impl Channel {
         )
     }
 
-    fn build_raw_txn_from_channel_txn(
+    fn build_chain_txn(
         &self,
         channel_payload_body: ChannelTransactionPayloadBody,
-        channel_txn: &ChannelTransaction,
-        txn_signatures: Option<&BTreeMap<AccountAddress, ChannelTransactionSigs>>,
+        txn_signatures: Option<BTreeMap<AccountAddress, (Ed25519PublicKey, Ed25519Signature)>>,
+        txn_sender: AccountAddress,
+        sender_seq_number: u64,
         max_gas_amount: u64,
-    ) -> Result<RawTransaction> {
+        expiration_time: Duration,
+    ) -> Result<SignedTransaction> {
         let channel_participant_size = self.participant_addresses.len();
         let mut participant_keys = self.store.get_participant_keys();
         let mut sigs = Vec::with_capacity(channel_participant_size);
@@ -479,14 +539,14 @@ impl Channel {
             for addr in self.participant_addresses.iter() {
                 let sig = signatures.get(&addr);
                 if let Some(s) = sig {
-                    participant_keys.insert(addr.clone(), s.public_key.clone());
+                    participant_keys.insert(addr.clone(), s.0.clone());
                 }
-                sigs.push(sig.map(|s| s.channel_payload_signature.clone()));
+                sigs.push(sig.map(|s| s.1.clone()));
             }
         }
 
         if channel_payload_body.witness().channel_sequence_number() == 0 {
-            debug_assert!(channel_txn.operator().is_open());
+            //            debug_assert!(channel_txn.operator().is_open());
         } else {
             debug_assert!(channel_participant_size == participant_keys.len());
         }
@@ -498,35 +558,76 @@ impl Channel {
 
         let channel_txn_payload = ChannelTransactionPayload::new(channel_payload_body, keys, sigs);
         let txn_payload = TransactionPayload::Channel(channel_txn_payload);
+
         let raw_txn = RawTransaction::new(
-            channel_txn.proposer(),
-            channel_txn.sequence_number(),
+            txn_sender,
+            sender_seq_number,
             txn_payload,
             max_gas_amount,
             GAS_UNIT_PRICE,
-            channel_txn.expiration_time(),
+            expiration_time,
         );
-        Ok(raw_txn)
+        Ok(raw_txn
+            .sign(&self.keypair.private_key, self.keypair.public_key.clone())?
+            .into_inner())
+    }
+
+    fn build_raw_txn_from_channel_txn(
+        &self,
+        channel_payload_body: ChannelTransactionPayloadBody,
+        channel_txn: &ChannelTransaction,
+        txn_signatures: Option<&BTreeMap<AccountAddress, ChannelTransactionSigs>>,
+        max_gas_amount: u64,
+    ) -> Result<SignedTransaction> {
+        let channel_payload_signatures = txn_signatures.map(|s| {
+            s.into_iter()
+                .map(|(k, v)| {
+                    let ChannelTransactionSigs {
+                        public_key,
+                        channel_payload_signature,
+                        ..
+                    } = v;
+                    (
+                        k.clone(),
+                        (public_key.clone(), channel_payload_signature.clone()),
+                    )
+                })
+                .collect::<BTreeMap<_, _>>()
+        });
+        self.build_chain_txn(
+            channel_payload_body,
+            channel_payload_signatures,
+            channel_txn.proposer(),
+            channel_txn.sequence_number(),
+            max_gas_amount,
+            channel_txn.expiration_time(),
+        )
+    }
+
+    fn propose_channel_action(
+        &self,
+        proposer: AccountAddress,
+        action: ScriptAction,
+    ) -> Result<(ChannelTransactionPayloadBody, Ed25519Signature)> {
+        let body = ChannelTransactionPayloadBody::new(
+            self.channel_address,
+            proposer,
+            action,
+            self.witness_data(),
+        );
+        let body_hash = CryptoHash::hash(&body);
+        let sig = self.keypair.private_key.sign_message(&body_hash);
+        Ok((body, sig))
     }
 
     /// build channel txn payload version 2.
     fn build_and_sign_channel_txn_payload_body(
         &self,
-        channel_witness: Witness,
         channel_txn: &ChannelTransaction,
     ) -> Result<(ChannelTransactionPayloadBody, Ed25519Signature)> {
         let action =
             self.channel_op_to_action(channel_txn.operator(), channel_txn.args().to_vec())?;
-
-        let body = ChannelTransactionPayloadBody::new(
-            channel_txn.channel_address(),
-            channel_txn.proposer(),
-            action,
-            channel_witness,
-        );
-        let body_hash = CryptoHash::hash(&body);
-        let sig = self.keypair.private_key.sign_message(&body_hash);
-        Ok((body, sig))
+        self.propose_channel_action(channel_txn.proposer(), action)
     }
 
     pub async fn execute_async(
@@ -600,11 +701,8 @@ impl Channel {
                 );
                 verified_signatures = signatures;
 
-                let (payload_body, payload_body_signature) = self
-                    .build_and_sign_channel_txn_payload_body(
-                        self.witness_data(),
-                        &proposal.channel_txn,
-                    )?;
+                let (payload_body, payload_body_signature) =
+                    self.build_and_sign_channel_txn_payload_body(&proposal.channel_txn)?;
                 (payload_body, payload_body_signature, output)
             }
             Some(PendingTransaction::WaitForApply { signatures, .. }) => {
@@ -703,24 +801,14 @@ impl Channel {
             (output.gas_used() as f64 * 1.1) as u64,
             MAX_GAS_AMOUNT_ONCHAIN,
         );
-        let (payload_body, _) =
-            self.build_and_sign_channel_txn_payload_body(self.witness_data(), channel_txn)?;
 
-        let new_raw_txn = self.build_raw_txn_from_channel_txn(
-            payload_body,
-            &channel_txn,
-            Some(&signatures),
-            max_gas_amount,
-        )?;
-        let signed_txn = self.keypair.sign_txn(new_raw_txn)?;
+        let signed_txn = self.build_solo_txn(channel_txn.action(), max_gas_amount)?;
+        let txn_sender = signed_txn.sender();
+        let seq_number = signed_txn.sequence_number();
+
         submit_transaction(self.chain_client.as_ref(), signed_txn).await?;
-
-        let txn_with_proof = watch_transaction(
-            self.chain_client.as_ref(),
-            channel_txn.proposer(),
-            channel_txn.sequence_number(),
-        )
-        .await?;
+        let txn_with_proof =
+            watch_transaction(self.chain_client.as_ref(), txn_sender, seq_number).await?;
         let gas_used = txn_with_proof.proof.transaction_info().gas_used();
         let channel_txn = chain_txn_to_local_channel_txn(txn_with_proof)?;
         self.apply(channel_txn, output, signatures)?;
@@ -757,15 +845,15 @@ impl Channel {
                     MAX_GAS_AMOUNT_ONCHAIN,
                 );
                 let (payload_body, _) =
-                    self.build_and_sign_channel_txn_payload_body(self.witness_data(), channel_txn)?;
+                    self.build_and_sign_channel_txn_payload_body(channel_txn)?;
 
-                let new_raw_txn = self.build_raw_txn_from_channel_txn(
+                let signed_txn = self.build_raw_txn_from_channel_txn(
                     payload_body,
                     &channel_txn,
                     Some(&signatures),
                     max_gas_amount,
                 )?;
-                let signed_txn = self.keypair.sign_txn(new_raw_txn)?;
+
                 submit_transaction(self.chain_client.as_ref(), signed_txn).await?;
             }
 
@@ -896,6 +984,9 @@ impl Channel {
         self.store.get_pending_txn()
     }
 
+    fn stage(&self) -> ChannelStage {
+        unimplemented!()
+    }
     // TODO: should stage is needed?
     //    fn _stage(&self) -> ChannelStage {
     //        match self.pending_txn() {
@@ -981,19 +1072,19 @@ impl Channel {
     )> {
         let channel_txn = &proposal.channel_txn;
         let (payload_body, payload_body_signature) =
-            self.build_and_sign_channel_txn_payload_body(self.witness_data(), channel_txn)?;
+            self.build_and_sign_channel_txn_payload_body(channel_txn)?;
 
         let output = {
             // create mocked txn to execute
-            let raw_txn = self.build_raw_txn_from_channel_txn(
+            // execute txn on offchain vm, should mock sender and receiver signature with a local
+            // keypair. the vm will skip signature check on offchain vm.
+            let txn = self.build_raw_txn_from_channel_txn(
                 payload_body.clone(),
                 channel_txn,
                 None,
                 MAX_GAS_AMOUNT_OFFCHAIN,
             )?;
-            // execute txn on offchain vm, should mock sender and receiver signature with a local
-            // keypair. the vm will skip signature check on offchain vm.
-            let txn = self.keypair.sign_txn(raw_txn)?;
+
             let version = channel_txn.version();
             let state_view = self.channel_view(Some(version))?;
             execute_transaction(&state_view, txn)?
@@ -1047,7 +1138,7 @@ impl Channel {
         output: &TransactionOutput,
     ) -> Result<ChannelTransactionSigs> {
         let (_, payload_body_signature) =
-            self.build_and_sign_channel_txn_payload_body(self.witness_data(), channel_txn)?;
+            self.build_and_sign_channel_txn_payload_body(channel_txn)?;
 
         let ws = if output.is_travel_txn() {
             WriteSet::default()

@@ -1,7 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 #![allow(dead_code)]
-use anyhow::{anyhow, Result};
+use anyhow::{format_err, Result};
 use async_trait::async_trait;
 use coerce_rt::actor::context::{ActorContext, ActorHandlerContext};
 use coerce_rt::actor::message::{Handler, Message};
@@ -233,7 +233,7 @@ impl Handler<RemoteAccessResult> for ChainStateAccessor {
                                 .expect("cache should contain this");
                             Ok(s)
                         }
-                        Err(_e) => Err(anyhow!("fail to get remote data")),
+                        Err(_e) => Err(format_err!("fail to get remote data")),
                     };
                     if let Err(_) = sender.send(to_send) {
                         warn!("receiver is already dropped");

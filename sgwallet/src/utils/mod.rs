@@ -8,6 +8,7 @@ use sgtypes::channel_transaction::ChannelOp;
 use sgtypes::htlc::HtlcPayment;
 mod actor;
 pub use actor::*;
+pub(crate) mod contract;
 
 /// check if the `op` is a htlc transfer
 pub fn is_htlc_transfer(op: &ChannelOp) -> bool {

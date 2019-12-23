@@ -19,6 +19,9 @@ pub enum ChannelStage {
     Syncing,
     /// Channel is closed.
     Closed,
+    Locked,
+    Challenged,
+    Resolved,
 }
 
 #[derive(Clone, Debug)]
