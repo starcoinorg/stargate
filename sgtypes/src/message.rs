@@ -418,6 +418,15 @@ impl BalanceQueryResponse {
     pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
         Ok(TryInto::<crate::proto::sgtypes::BalanceQueryResponse>::try_into(self)?.to_vec()?)
     }
+
+    pub fn revert(&self) -> Self {
+        Self {
+            local_addr: self.remote_addr.clone(),
+            remote_addr: self.local_addr.clone(),
+            local_balance: self.remote_balance,
+            remote_balance: self.local_balance,
+        }
+    }
 }
 
 impl TryFrom<crate::proto::sgtypes::BalanceQueryResponse> for BalanceQueryResponse {
