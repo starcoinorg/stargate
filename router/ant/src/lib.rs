@@ -34,12 +34,15 @@ use network::{build_network_service, NetworkMessage};
 use sg_config::config::NetworkConfig;
 
 use futures::compat::Stream01CompatExt;
+use futures_timer::Delay;
+use libra_crypto::HashValue;
 use sgtypes::message::{
     AntFinalMessage, AntQueryMessage, BalanceQueryResponse, ExchangeSeedMessageRequest,
     ExchangeSeedMessageResponse, RouterNetworkMessage,
 };
 use sgtypes::s_value::SValue;
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub struct AntRouter {
     executor: Handle,
@@ -54,6 +57,8 @@ struct AntRouterInner {
     wallet: Arc<Wallet>,
     seed_manager: SeedManager,
     message_processor: MessageProcessor<RouterNetworkMessage>,
+    default_future_timeout: AtomicU64,
+    executor: Handle,
 }
 
 enum RouterCommand {
@@ -70,6 +75,7 @@ impl AntRouter {
         network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
         network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
         wallet: Arc<Wallet>,
+        default_future_timeout: u64,
     ) -> Self {
         let (command_sender, command_receiver) = futures::channel::mpsc::unbounded();
 
@@ -79,6 +85,8 @@ impl AntRouter {
             network_sender,
             seed_manager: SeedManager::new(),
             message_processor,
+            default_future_timeout: AtomicU64::new(default_future_timeout),
+            executor: executor.clone(),
         };
         Self {
             executor,
@@ -217,8 +225,12 @@ impl AntRouterInner {
         let (tx, rx) = futures::channel::mpsc::channel(1);
         let message_future = MessageFuture::new(rx);
         self.message_processor
-            .add_future(request_hash, tx.clone())
+            .add_future(request_hash.clone(), tx.clone())
             .await;
+        self.future_timeout(
+            request_hash,
+            self.default_future_timeout.load(Ordering::Relaxed),
+        );
         let response = message_future.await?;
 
         match response {
@@ -230,9 +242,12 @@ impl AntRouterInner {
                     .await?;
                 let (tx, rx) = futures::channel::mpsc::channel(1);
                 let message_future = MessageFuture::new(rx);
+                let r = s_generator.get_r();
                 self.message_processor
-                    .add_future(s_generator.get_r(), tx.clone())
+                    .add_future(r.clone(), tx.clone())
                     .await;
+                self.future_timeout(r, self.default_future_timeout.load(Ordering::Relaxed));
+
                 let response = message_future.await?;
 
                 match response {
@@ -240,13 +255,15 @@ impl AntRouterInner {
                         respond_with(responder, self.format_response_list(resp, start, end));
                     }
                     _ => {
-                        warn!("should not be here");
+                        respond_with(responder, vec![]);
+                        warn!("no path found");
                         return Ok(());
                     }
                 }
             }
             _ => {
-                warn!("should not be here");
+                respond_with(responder, vec![]);
+                warn!("no path found");
                 return Ok(());
             }
         }
@@ -411,6 +428,18 @@ impl AntRouterInner {
         }
         Ok(())
     }
+
+    fn future_timeout(&self, hash: HashValue, timeout: u64) {
+        if timeout == 0 {
+            return;
+        }
+        let processor = self.message_processor.clone();
+        let task = async move {
+            Delay::new(Duration::from_millis(timeout)).await;
+            processor.remove_future(hash).await;
+        };
+        self.executor.spawn(task);
+    }
 }
 
 fn respond_with<T>(responder: futures::channel::oneshot::Sender<T>, msg: T) {
@@ -523,11 +552,14 @@ fn ant_router_test() {
     let (wallet2, _addr2, keypair2) = _gen_wallet(executor.clone(), client.clone()).unwrap();
     let (wallet3, _addr3, keypair3) = _gen_wallet(executor.clone(), client.clone()).unwrap();
     let (wallet4, addr4, keypair4) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+    let (wallet5, addr5, keypair5) = _gen_wallet(executor.clone(), client.clone()).unwrap();
 
     let _wallet1 = wallet1.clone();
     let _wallet2 = wallet2.clone();
     let _wallet3 = wallet3.clone();
     let _wallet4 = wallet4.clone();
+    let _wallet5 = wallet5.clone();
+    let _client = client.clone();
 
     let network_config1 = _create_node_network_config(
         format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
@@ -552,29 +584,40 @@ fn ant_router_test() {
         vec![seed.clone()],
     );
 
+    let network_config5 = _create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![seed.clone()],
+    );
+
     let (_network1, tx1, rx1, close_tx1) = build_network_service(&network_config1, keypair1);
     let _identify1 = _network1.identify();
     let (rtx1, rrx1) = _prepare_network(tx1, rx1, executor.clone());
-    let mut router1 = AntRouter::new(executor.clone(), rtx1, rrx1, wallet1.clone());
+    let mut router1 = AntRouter::new(executor.clone(), rtx1, rrx1, wallet1.clone(), 5000);
     router1.start().unwrap();
 
     let (_network2, tx2, rx2, close_tx2) = build_network_service(&network_config2, keypair2);
     let _identify2 = _network2.identify();
     let (rtx2, rrx2) = _prepare_network(tx2, rx2, executor.clone());
-    let mut router2 = AntRouter::new(executor.clone(), rtx2, rrx2, wallet2.clone());
+    let mut router2 = AntRouter::new(executor.clone(), rtx2, rrx2, wallet2.clone(), 5000);
     router2.start().unwrap();
 
     let (_network3, tx3, rx3, close_tx3) = build_network_service(&network_config3, keypair3);
     let _identify3 = _network3.identify();
     let (rtx3, rrx3) = _prepare_network(tx3, rx3, executor.clone());
-    let mut router3 = AntRouter::new(executor.clone(), rtx3, rrx3, wallet3.clone());
+    let mut router3 = AntRouter::new(executor.clone(), rtx3, rrx3, wallet3.clone(), 5000);
     router3.start().unwrap();
 
     let (_network4, tx4, rx4, close_tx4) = build_network_service(&network_config4, keypair4);
     let _identify4 = _network4.identify();
     let (rtx4, rrx4) = _prepare_network(tx4, rx4, executor.clone());
-    let mut router4 = AntRouter::new(executor.clone(), rtx4, rrx4, wallet4.clone());
+    let mut router4 = AntRouter::new(executor.clone(), rtx4, rrx4, wallet4.clone(), 5000);
     router4.start().unwrap();
+
+    let (_network5, tx5, rx5, close_tx5) = build_network_service(&network_config5, keypair5);
+    let _identify5 = _network5.identify();
+    let (rtx5, rrx5) = _prepare_network(tx5, rx5, executor.clone());
+    let mut router5 = AntRouter::new(executor.clone(), rtx5, rrx5, wallet5.clone(), 5000);
+    router5.start().unwrap();
 
     let f = async move {
         _open_channel(wallet1.clone(), wallet2.clone(), 100000, 100000).await?;
@@ -591,15 +634,25 @@ fn ant_router_test() {
         assert_eq!(path.get(0).expect("should have").local_addr, addr1.clone());
         assert_eq!(path.get(2).expect("should have").remote_addr, addr4.clone());
 
+        let path = router1
+            .find_path_by_addr(addr1.clone(), addr5.clone())
+            .await;
+        match path {
+            Ok(_) => assert_eq!(1, 2),
+            Err(_) => assert_eq!(1, 1),
+        }
+
         close_tx1.send(()).unwrap();
         close_tx2.send(()).unwrap();
         close_tx3.send(()).unwrap();
         close_tx4.send(()).unwrap();
+        close_tx5.send(()).unwrap();
 
         wallet1.stop().await?;
         wallet2.stop().await?;
         wallet3.stop().await?;
         wallet4.stop().await?;
+        wallet5.stop().await?;
 
         Ok::<_, Error>(())
     };
