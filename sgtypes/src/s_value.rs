@@ -1,8 +1,12 @@
-use libra_crypto::HashValue;
 use std::hash::{Hash, Hasher};
 use std::{convert::TryFrom, fmt};
 
 use anyhow::{ensure, Error, Result};
+
+use libra_crypto::{
+    hash::{CryptoHasher, TestOnlyHasher},
+    HashValue,
+};
 
 #[derive(Clone, Copy)]
 pub struct SValue([u8; S_VALUE_LENGTH]);
@@ -15,7 +19,9 @@ impl SValue {
     }
 
     pub fn get_r(self) -> HashValue {
-        return HashValue::from_sha3_256(&self.0[1..33]);
+        let mut hasher = TestOnlyHasher::default();
+        hasher.write(&self.0[1..33]);
+        hasher.finish()
     }
 
     pub fn to_vec(&self) -> Vec<u8> {

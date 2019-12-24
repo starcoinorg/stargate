@@ -8,6 +8,8 @@ use std::sync::Arc;
 use sgtypes::message::BalanceQueryResponse;
 use sgtypes::s_value::SValue;
 
+use libra_logger::prelude::*;
+
 #[derive(Clone)]
 pub struct SeedManager {
     seed_hash_map: Arc<Mutex<HashMap<SValue, Vec<BalanceQueryResponse>>>>,
@@ -26,11 +28,13 @@ impl SeedManager {
         mut value: Vec<BalanceQueryResponse>,
     ) -> Option<Vec<BalanceQueryResponse>> {
         let has_key = self.seed_hash_map.lock().await.contains_key(&key);
+        info!("has key is {}", has_key);
         if has_key {
             return None;
         }
         let peer = key.get_peer();
         let has_peer = self.seed_hash_map.lock().await.contains_key(&peer);
+        info!("peer is is {},has peer is {}", peer, has_peer);
         if has_peer {
             let mut result = self
                 .seed_hash_map
@@ -40,8 +44,10 @@ impl SeedManager {
                 .take()
                 .expect("should have key");
             result.append(&mut value);
+            info!("return result {:?}", result);
             return Some(result);
         }
+        info!("insert key {},value {:?}", key, value);
         self.seed_hash_map.lock().await.insert(key, value);
         None
     }

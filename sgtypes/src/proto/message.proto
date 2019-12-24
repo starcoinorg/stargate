@@ -83,3 +83,12 @@ message AntFinalMessage {
     bytes r_value = 1;
     repeated BalanceQueryResponse balance_query_response_list= 2;
 }
+
+message RouterNetworkMessage {
+    oneof router_message_items {
+        ExchangeSeedMessageRequest exchange_seed_request = 1;
+        ExchangeSeedMessageResponse exchange_seed_response = 2;
+        AntQueryMessage ant_query_message = 3;
+        AntFinalMessage ant_final_message = 4;
+    }
+}
