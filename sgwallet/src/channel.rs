@@ -434,6 +434,10 @@ impl Channel {
         }
     }
 
+    /// unauthorized txns should be:
+    /// 1. solo travel txn
+    /// 2. challenge txn
+    /// 3. resolve txn
     async fn handle_unauthorized_travel_txn(
         &mut self,
         channel_txn_payload: ChannelTransactionPayload,
@@ -453,7 +457,6 @@ impl Channel {
         } else if txn_channel_seq_number < self.channel_sequence_number() {
             self.challenge_channel().await?;
         }
-
         Ok(())
     }
 
@@ -984,6 +987,7 @@ impl Channel {
         self.store.get_pending_txn()
     }
 
+    #[allow(dead_code)]
     fn stage(&self) -> ChannelStage {
         unimplemented!()
     }

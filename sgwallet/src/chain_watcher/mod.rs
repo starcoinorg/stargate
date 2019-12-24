@@ -133,8 +133,8 @@ impl ChainWatcher {
         }
     }
 
-    pub async fn start(self) -> Result<ChainWatcherHandle> {
-        let actor_ref = actor::new_actor(self).await?;
+    pub async fn start(self, mut context: ActorContext) -> Result<ChainWatcherHandle> {
+        let actor_ref = context.new_actor(self).await?;
         Ok(ChainWatcherHandle { actor_ref })
     }
 }
@@ -144,7 +144,8 @@ impl actor::Actor for ChainWatcher {
     async fn started(&mut self, ctx: &mut ActorHandlerContext) {
         // TODO: spawn txn stream
         let my_actor_id = ctx.actor_id().clone();
-        let mut myself = ActorContext::current_context()
+        let mut myself = ctx
+            .actor_context_mut()
             .get_actor::<Self>(my_actor_id.clone())
             .await
             .unwrap();

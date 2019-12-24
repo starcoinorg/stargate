@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 use anyhow::{format_err, Result};
 use async_trait::async_trait;
-use coerce_rt::actor::context::{ActorContext, ActorHandlerContext};
+use coerce_rt::actor::context::ActorHandlerContext;
 use coerce_rt::actor::message::{Handler, Message};
 use coerce_rt::actor::Actor;
 use futures::channel::oneshot;
@@ -162,7 +162,8 @@ impl Handler<AccessState> for ChainStateAccessor {
                 } else {
                     let (cancel_tx, cancel_rx) = oneshot::channel();
                     let my_actor_id = ctx.actor_id().clone();
-                    let mut myself = ActorContext::current_context()
+                    let mut myself = ctx
+                        .actor_context_mut()
                         .get_actor::<Self>(my_actor_id.clone())
                         .await
                         .unwrap();

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::{Error, Result};
+use coerce_rt::actor::context::ActorContext;
 use futures::StreamExt;
 use libra_logger::{debug, error};
 use libra_types::access_path::DataPath;
@@ -34,14 +35,15 @@ pub fn test_chain_watcher() {
 fn run_test_chain_watcher(chain_client: Arc<dyn ChainClient>) -> Result<()> {
     let mut rt = tokio::runtime::Runtime::new().expect("create tokio runtime should ok");
     rt.block_on(async move {
+        let mut actor_context = ActorContext::new();
         let chain_watcher = ChainWatcher::new(chain_client.clone(), 0, 100);
         let chain_watcher_handle = chain_watcher
-            .start()
+            .start(actor_context.clone())
             .await
             .expect("spawn chain watcher should ok");
 
         let chain_state_accessor = ChainStateAccessor::new(chain_client.clone());
-        let mut actor_ref = coerce_rt::actor::new_actor(chain_state_accessor).await?;
+        let mut actor_ref = actor_context.new_actor(chain_state_accessor).await?;
 
         let mut receiver = chain_watcher_handle
             .add_interest("test".to_string().into_bytes(), Box::new(|_txn| true))

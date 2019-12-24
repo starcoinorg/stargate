@@ -5,6 +5,7 @@ use crate::channel::{Channel, ChannelEvent, ChannelMsg};
 use crate::{channel::ChannelHandle, scripts::*};
 use anyhow::{bail, ensure, format_err, Error, Result};
 use chrono::Utc;
+use coerce_rt::actor::context::ActorContext;
 use futures::{
     channel::{mpsc, oneshot},
     SinkExt, StreamExt,
@@ -831,6 +832,7 @@ pub struct Inner {
 
 impl Inner {
     async fn start(mut self) {
+        let actor_context = ActorContext::new();
         let account_state = self
             .inner
             .client
@@ -845,7 +847,7 @@ impl Inner {
         let chain_txn_watcher =
             ChainWatcher::new(self.inner.client.clone(), account_state.version(), 16);
         let chain_txn_handle = chain_txn_watcher
-            .start()
+            .start(actor_context.clone())
             .await
             .expect("start chain watcher should ok");
         self.chain_txn_handle = Some(chain_txn_handle);
