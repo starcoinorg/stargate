@@ -12,7 +12,7 @@ use libra_types::write_set::{WriteOp, WriteSetMut};
 use rand::prelude::*;
 use sgtypes::channel_transaction::{ChannelOp, ChannelTransaction, ChannelTransactionProposal};
 use sgtypes::channel_transaction_sigs::ChannelTransactionSigs;
-use sgtypes::channel_transaction_to_commit::ChannelTransactionToApply;
+use sgtypes::channel_transaction_to_commit::ChannelTransactionToCommit;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -21,7 +21,7 @@ fn generate_txn_to_apply(
     sender: AccountAddress,
     _receiver: AccountAddress,
     channel_sequence_number: u64,
-) -> ChannelTransactionToApply {
+) -> ChannelTransactionToCommit {
     let mut rng0: StdRng = SeedableRng::from_seed([0; 32]);
 
     let keypair: KeyPair<Ed25519PrivateKey, Ed25519PublicKey> =
@@ -62,12 +62,12 @@ fn generate_txn_to_apply(
         s.insert(channel_txn_signatures.address, channel_txn_signatures);
         s
     };
-    let txn_to_apply = ChannelTransactionToApply {
+    let txn_to_apply = ChannelTransactionToCommit {
         signed_channel_txn: SignedChannelTransaction {
             raw_tx: txn,
             signatures,
         },
-        write_set: Some(ws),
+        write_set: ws,
         events: vec![],
         travel: false,
         major_status: StatusCode::ABORTED,

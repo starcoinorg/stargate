@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::channel_db::ChannelAddressProvider;
-use crate::channel_state_store::ChannelStateStore;
 use crate::channel_transaction_store::ChannelTransactionStore;
 use crate::channel_write_set_store::ChannelWriteSetStore;
 use crate::ledger_info_store::LedgerStore;
@@ -15,9 +14,7 @@ use libra_crypto::ed25519::Ed25519PublicKey;
 use libra_crypto::hash::CryptoHash;
 use libra_crypto::HashValue;
 use libra_types::account_address::AccountAddress;
-use libra_types::account_state_blob::AccountStateBlob;
 use libra_types::channel::{Witness, WitnessData};
-use libra_types::proof::SparseMerkleProof;
 use libra_types::transaction::Version;
 use libra_types::write_set::WriteSet;
 use rocksdb::ReadOptions;
@@ -37,7 +34,6 @@ use std::sync::{Arc, RwLock};
 #[derive(Clone)]
 pub struct ChannelStore<S> {
     db: S,
-    state_store: ChannelStateStore<S>,
     ledger_store: LedgerStore<S>,
     transaction_store: ChannelTransactionStore<S>,
     write_set_store: ChannelWriteSetStore<S>,
@@ -75,7 +71,6 @@ where
     pub fn new(db: S) -> Self {
         let store = ChannelStore {
             db: db.clone(),
-            state_store: ChannelStateStore::new(db.clone()),
             ledger_store: LedgerStore::new(db.clone()),
             transaction_store: ChannelTransactionStore::new(db.clone()),
             write_set_store: ChannelWriteSetStore::new(db.clone()),
@@ -107,10 +102,6 @@ where
         &self.pending_txn_store
     }
 
-    #[cfg(test)]
-    pub fn state_store(&self) -> &ChannelStateStore<S> {
-        &self.state_store
-    }
     #[cfg(test)]
     pub fn ledger_store(&self) -> &LedgerStore<S> {
         &self.ledger_store
@@ -298,11 +289,14 @@ where
         version: Version,
         mut schema_batch: &mut SchemaBatch,
     ) -> Result<HashValue> {
-        let (signed_txn, write_set, travel, witness_states, _events, major_status, gas_used) =
-            tx.into();
-        let state_root_hash =
-            self.state_store
-                .put_channel_state_set(witness_states, version, &mut schema_batch)?;
+        let ChannelTransactionToCommit {
+            signed_channel_txn: signed_txn,
+            write_set,
+            travel,
+            major_status,
+            gas_used,
+            ..
+        } = tx;
         // TODO: save write set
         let write_set_root_hash =
             self.write_set_store
@@ -319,7 +313,6 @@ where
         let tx_info = ChannelTransactionInfo::new(
             tx_hash,
             write_set_root_hash,
-            state_root_hash,
             HashValue::default(),
             major_status,
             travel,
@@ -362,9 +355,7 @@ where
             None => return Ok(None),
         };
 
-        let (latest_version, txn_info) = self.ledger_store.get_latest_transaction_info()?;
-
-        let account_state_root_hash = txn_info.state_root_hash();
+        let (latest_version, _txn_info) = self.ledger_store.get_latest_transaction_info()?;
 
         let ledger_frozen_subtree_hashes = self
             .ledger_store
@@ -373,7 +364,6 @@ where
         Ok(Some(StartupInfo {
             ledger_info,
             latest_version,
-            account_state_root_hash,
             ledger_frozen_subtree_hashes,
         }))
     }
@@ -470,19 +460,6 @@ where
     //        ))
     //    }
     //
-
-    /// Gets an account state by account address, out of the ledger state indicated by the state
-    /// Merkle tree root hash.
-    ///
-    /// This is used by tx applier internally.
-    pub fn get_account_state_with_proof_by_version(
-        &self,
-        address: AccountAddress,
-        version: Version,
-    ) -> Result<(Option<AccountStateBlob>, SparseMerkleProof)> {
-        self.state_store
-            .get_account_state_with_proof_by_version(address, version)
-    }
 
     // Gets the latest version number available in the ledger.
     //    fn get_latest_version(&self) -> Result<Version> {

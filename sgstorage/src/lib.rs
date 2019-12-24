@@ -7,7 +7,6 @@ use crate::storage::SgStorage;
 use libra_types::account_address::AccountAddress;
 use std::sync::Arc;
 pub mod channel_db;
-pub mod channel_state_store;
 pub mod channel_store;
 pub mod channel_transaction_store;
 pub mod channel_write_set_store;

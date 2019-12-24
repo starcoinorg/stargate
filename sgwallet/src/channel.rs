@@ -43,7 +43,7 @@ use sgstorage::channel_store::ChannelStore;
 use sgtypes::channel::{ChannelStage, ChannelState};
 use sgtypes::channel_transaction::{ChannelOp, ChannelTransaction, ChannelTransactionProposal};
 use sgtypes::channel_transaction_sigs::ChannelTransactionSigs;
-use sgtypes::channel_transaction_to_commit::ChannelTransactionToApply;
+use sgtypes::channel_transaction_to_commit::ChannelTransactionToCommit;
 use sgtypes::pending_txn::PendingTransaction;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use sgtypes::signed_channel_transaction_with_proof::SignedChannelTransactionWithProof;
@@ -909,21 +909,21 @@ impl Channel {
         txn_output: TransactionOutput,
         signatures: BTreeMap<AccountAddress, ChannelTransactionSigs>,
     ) -> Result<()> {
-        let txn_to_apply = ChannelTransactionToApply {
+        let txn_to_commit = ChannelTransactionToCommit {
             signed_channel_txn: SignedChannelTransaction::new(channel_txn, signatures),
             events: txn_output.events().to_vec(),
             major_status: txn_output.status().vm_status().major_status,
             write_set: if txn_output.is_travel_txn() {
-                None
+                WriteSet::default()
             } else {
-                Some(txn_output.write_set().clone())
+                txn_output.write_set().clone()
             },
             travel: txn_output.is_travel_txn(),
             gas_used: txn_output.gas_used(),
         };
 
         // apply txn  also delete pending txn from db
-        self.tx_applier.apply(txn_to_apply)?;
+        self.tx_applier.apply(txn_to_commit)?;
 
         if txn_output.is_travel_txn() {
             self.apply_travel_output(txn_output.write_set())?;
