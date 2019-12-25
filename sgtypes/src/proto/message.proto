@@ -90,5 +90,7 @@ message RouterNetworkMessage {
         ExchangeSeedMessageResponse exchange_seed_response = 2;
         AntQueryMessage ant_query_message = 3;
         AntFinalMessage ant_final_message = 4;
+        BalanceQueryRequest balance_query_request = 5;
+        BalanceQueryResponse balance_query_response = 6;
     }
 }
