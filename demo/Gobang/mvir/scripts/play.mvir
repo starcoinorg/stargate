@@ -1,11 +1,10 @@
-import 0x0.ChannelAccount;
-import {{starlab}}.TheFive;
+import 0xbb76dc088e22b841f011bdf5057761f954c8cd70f5b6d4d62ba906f58b358c32.TheFive;
 
 //args: x, y (x<20, y<20)
-main(x: u64, y: u64) {
+main(receiver: address, x: u64, y: u64) {
     let result: u64;
 
-    result = TheFive.play(move(x), move(y));
+    result = TheFive.play(move(receiver), move(x), move(y));
     assert(move(result) == 0, 66);
     return;
 }

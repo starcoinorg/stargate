@@ -1,9 +1,8 @@
-import 0x0.ChannelAccount;
-import {{starlab}}.TheFive;
+import 0xbb76dc088e22b841f011bdf5057761f954c8cd70f5b6d4d62ba906f58b358c32.TheFive;
 
-main(){
+main(receiver: address){
     let result: u64;
-    result = TheFive.new();
+    result = TheFive.new(move(receiver));
     assert(move(result) == 0, 61);
     return;
 }
