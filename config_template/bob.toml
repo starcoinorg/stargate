@@ -1,6 +1,8 @@
 [rpc_config]
 address = 'localhost'
 port = 9001
+timeout = 200000
+auto_approve = true
 
 [rest_config]
 address = '127.0.0.1'
@@ -10,9 +12,9 @@ port = 7001
 listen = '/ip4/127.0.0.1/tcp/10001'
 max_sockets = 20
 in_memory = false
-seeds = ['/ip4/127.0.0.1/tcp/10000/p2p/80731e386aeba31813bee57882a4af64922afca7ee8ca51f8914b7405a066028']
+seeds = ['/ip4/127.0.0.1/tcp/10000/p2p/5181c01f6005d3236cb950f21a83c22489b9f9d1fadc027cf9532d6f99041522']
 
 [wallet]
-chain_address = 'localhost'
-chain_port = 8000
-store_dir='bob'
+chain_address = '39.98.196.244'
+chain_port = 8001
+store_dir = 'bob'
