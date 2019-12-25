@@ -148,7 +148,9 @@ impl Wallet {
         participant_address: AccountAddress,
         channel_seq_number: u64,
     ) -> Result<SignedChannelTransaction> {
-        let channel_db = ChannelDB::new(participant_address, self.sgdb.clone());
+        let (channel_address, _) =
+            generate_channel_address(self.shared.account, participant_address);
+        let channel_db = ChannelDB::new(channel_address, self.sgdb.clone());
         let txn = ChannelStore::new(channel_db)
             .get_transaction_by_channel_seq_number(channel_seq_number, false)?;
         Ok(txn.signed_transaction)
