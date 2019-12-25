@@ -9,7 +9,7 @@ use std::{sync::Arc, time::Duration};
 use tokio::runtime::{Handle, Runtime};
 
 use anyhow::{bail, ensure, Error, Result};
-use libra_crypto::{hash::CryptoHash, HashValue};
+use libra_crypto::HashValue;
 
 use libra_logger::prelude::*;
 use libra_types::{account_address::AccountAddress, account_config::AccountResource};
@@ -64,7 +64,6 @@ struct NodeInner {
     executor: Handle,
     sender: UnboundedSender<NetworkMessage>,
     message_processor: MessageProcessor<u64>,
-    network_processor: MessageProcessor<NodeNetworkMessage>,
     default_future_timeout: AtomicU64,
     network_service: NetworkService,
     auto_approve: bool,
@@ -107,7 +106,6 @@ impl Node {
             wallet: wallet.clone(),
             sender,
             message_processor: MessageProcessor::new(),
-            network_processor: MessageProcessor::new(),
             default_future_timeout: AtomicU64::new(default_future_timeout),
             network_service: network_service.clone(),
             auto_approve,
