@@ -51,8 +51,10 @@ pub fn gen_node(
 
     let wallet = Arc::new(wallet);
 
-    let (tx, rx) = futures::channel::mpsc::unbounded();
-    let mut router = TableRouter::new(client, executor.clone(), wallet.clone(), tx, rx);
+    let (rtx1, rrx1) = futures::channel::mpsc::unbounded();
+    let (rtx2, rrx2) = futures::channel::mpsc::unbounded();
+
+    let mut router = TableRouter::new(client, executor.clone(), wallet.clone(), rtx1, rrx2);
     router.start().unwrap();
 
     let (network, tx, rx, close_tx) = build_network_service(config, keypair.clone());
@@ -66,10 +68,12 @@ pub fn gen_node(
             network,
             tx,
             rx,
+            rtx2,
+            rrx1,
             close_tx,
             auto_approve,
             5000,
-            router,
+            Box::new(router),
         ),
         account_address,
     )

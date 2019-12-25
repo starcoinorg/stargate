@@ -308,6 +308,7 @@ pub enum MessageType {
     ChannelTransactionResponse,
     ErrorMessage,
     MultiHopChannelTransactionRequest,
+    RouterMessage,
 }
 
 impl MessageType {
@@ -318,6 +319,7 @@ impl MessageType {
             MessageType::ChannelTransactionResponse => 3,
             MessageType::ErrorMessage => 4,
             MessageType::MultiHopChannelTransactionRequest => 5,
+            MessageType::RouterMessage => 6,
         }
     }
 
@@ -328,6 +330,7 @@ impl MessageType {
             3 => Ok(MessageType::ChannelTransactionResponse),
             4 => Ok(MessageType::ErrorMessage),
             5 => Ok(MessageType::MultiHopChannelTransactionRequest),
+            6 => Ok(MessageType::RouterMessage),
             _ => bail!("no such type"),
         }
     }

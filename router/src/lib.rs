@@ -260,7 +260,7 @@ impl RouterInner {
         &self,
         mut vertexes: Vec<Vertex>,
     ) -> Result<Vec<BalanceQueryResponse>> {
-        ensure!(vertexes.len() > 2, "should have at lease 1 hops");
+        ensure!(vertexes.len() >= 2, "should have at lease 1 hops");
         let mut result = Vec::new();
         let first = vertexes.remove(0).id;
         let second = vertexes.get(0).expect("should have").id;
@@ -277,6 +277,7 @@ impl RouterInner {
                 .participant_channel_balance(second.clone())
                 .await?,
         );
+        info!("find first hop balance info {:?}", response);
         result.push(response);
 
         let length = vertexes.len();
@@ -457,7 +458,7 @@ fn router_test() {
     let client = Arc::new(mock_chain_service);
 
     let (wallet1, addr1, keypair1) = _gen_wallet(executor.clone(), client.clone()).unwrap();
-    let (wallet2, _addr2, keypair2) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+    let (wallet2, addr2, keypair2) = _gen_wallet(executor.clone(), client.clone()).unwrap();
     let (wallet3, _addr3, keypair3) = _gen_wallet(executor.clone(), client.clone()).unwrap();
     let (wallet4, addr4, keypair4) = _gen_wallet(executor.clone(), client.clone()).unwrap();
     let (wallet5, addr5, keypair5) = _gen_wallet(executor.clone(), client.clone()).unwrap();
@@ -575,6 +576,14 @@ fn router_test() {
         _open_channel(wallet3.clone(), wallet4.clone(), 100000, 100000).await?;
 
         _delay(Duration::from_millis(5000)).await;
+
+        let path = router1
+            .find_path_by_addr(addr1.clone(), addr2.clone())
+            .await?;
+
+        assert_eq!(path.len(), 1);
+        assert_eq!(path.get(0).expect("should have").local_addr, addr1.clone());
+        assert_eq!(path.get(0).expect("should have").remote_addr, addr2.clone());
 
         let path = router1
             .find_path_by_addr(addr1.clone(), addr4.clone())

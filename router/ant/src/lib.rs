@@ -554,7 +554,7 @@ fn ant_router_test() {
     let client = Arc::new(mock_chain_service);
 
     let (wallet1, addr1, keypair1) = _gen_wallet(executor.clone(), client.clone()).unwrap();
-    let (wallet2, _addr2, keypair2) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+    let (wallet2, addr2, keypair2) = _gen_wallet(executor.clone(), client.clone()).unwrap();
     let (wallet3, _addr3, keypair3) = _gen_wallet(executor.clone(), client.clone()).unwrap();
     let (wallet4, addr4, keypair4) = _gen_wallet(executor.clone(), client.clone()).unwrap();
     let (wallet5, addr5, keypair5) = _gen_wallet(executor.clone(), client.clone()).unwrap();
@@ -638,6 +638,14 @@ fn ant_router_test() {
         assert_eq!(path.len(), 3);
         assert_eq!(path.get(0).expect("should have").local_addr, addr1.clone());
         assert_eq!(path.get(2).expect("should have").remote_addr, addr4.clone());
+
+        let path = router1
+            .find_path_by_addr(addr1.clone(), addr2.clone())
+            .await?;
+
+        assert_eq!(path.len(), 1);
+        assert_eq!(path.get(0).expect("should have").local_addr, addr1.clone());
+        assert_eq!(path.get(0).expect("should have").remote_addr, addr2.clone());
 
         let path = router1
             .find_path_by_addr(addr1.clone(), addr5.clone())

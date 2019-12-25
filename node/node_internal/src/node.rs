@@ -34,7 +34,7 @@ use futures_01::sync::{
     mpsc::{UnboundedReceiver, UnboundedSender},
     oneshot,
 };
-use router::{Router, TableRouter};
+use router::Router;
 use sgtypes::sg_error::{SgError, SgErrorCode};
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use std::convert::TryInto;
@@ -53,6 +53,8 @@ pub struct Node {
     network_event_receiver: Option<UnboundedReceiver<Event>>,
     command_receiver: Option<UnboundedReceiver<NodeMessage>>,
     network_service_close_tx: Option<oneshot::Sender<()>>,
+    router_message_receiver:
+        Option<futures::channel::mpsc::UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>>,
     wallet: Arc<Wallet>,
     invoice_mgr: InvoiceManager,
 }
@@ -67,6 +69,8 @@ struct NodeInner {
     network_service: NetworkService,
     auto_approve: bool,
     invoice_mgr: InvoiceManager,
+    router_message_sender:
+        futures::channel::mpsc::UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
     router: Box<dyn Router>,
 }
 
@@ -77,6 +81,14 @@ impl Node {
         network_service: NetworkService,
         sender: UnboundedSender<NetworkMessage>,
         receiver: UnboundedReceiver<NetworkMessage>,
+        router_message_sender: futures::channel::mpsc::UnboundedSender<(
+            AccountAddress,
+            RouterNetworkMessage,
+        )>,
+        router_message_receiver: futures::channel::mpsc::UnboundedReceiver<(
+            AccountAddress,
+            RouterNetworkMessage,
+        )>,
         net_close_tx: oneshot::Sender<()>,
         auto_approve: bool,
         default_future_timeout: u64,
@@ -100,6 +112,7 @@ impl Node {
             network_service: network_service.clone(),
             auto_approve,
             invoice_mgr: invoice_mgr.clone(),
+            router_message_sender,
             router,
         };
         Self {
@@ -115,6 +128,7 @@ impl Node {
             network_event_receiver: Some(network_event_receiver),
             command_receiver: Some(command_receiver),
             network_service_close_tx: Some(net_close_tx),
+            router_message_receiver: Some(router_message_receiver),
             wallet,
             invoice_mgr,
         }
@@ -383,6 +397,11 @@ impl Node {
             .take()
             .expect("tx already taken");
 
+        let router_message_rx = self
+            .router_message_receiver
+            .take()
+            .expect("receiver already taken.");
+
         let node_inner = self.node_inner.take().expect("node inner already taken");
 
         let f = async {
@@ -397,13 +416,12 @@ impl Node {
         };
         rt.block_on(f);
 
-        //let executor = self.executor.clone();
-
         let node_inner = Arc::new(node_inner);
         self.executor.spawn(Self::start_network(
             node_inner.clone(),
             network_event_receiver,
             receiver,
+            router_message_rx,
         ));
 
         self.executor.spawn(Self::start_command(
@@ -612,10 +630,15 @@ impl Node {
         node_inner: Arc<NodeInner>,
         event_receiver: UnboundedReceiver<Event>,
         receiver: UnboundedReceiver<NetworkMessage>,
+        mut router_message_receiver: futures::channel::mpsc::UnboundedReceiver<(
+            AccountAddress,
+            RouterNetworkMessage,
+        )>,
     ) {
         info!("start receive message");
         let mut receiver = receiver.compat().fuse();
         let mut event_receiver = event_receiver.compat().fuse();
+        //let mut router_message_receiver = router_message_receiver.compat().fuse();
 
         loop {
             futures::select! {
@@ -625,6 +648,9 @@ impl Node {
                         Err(_) => {
                         }
                     }
+                },
+                (peer_id,message) = router_message_receiver.select_next_some() => {
+                       node_inner.send_router_message(peer_id,message).await.unwrap();
                 },
                 _ = event_receiver.select_next_some() => {
                     debug!("To shutdown network");
@@ -676,14 +702,28 @@ impl NodeInner {
         if let Err(e) = self.wallet.stop().await {
             error!("fail to stop wallet, {}", e);
         }
-        match self.router.shutdown().await {
-            Ok(_) => {
-                info!("shutdown router succ");
-            }
-            Err(e) => {
-                warn!("check shutdown router error,{}", e);
-            }
-        }
+        //        match self.router.shutdown().await {
+        //            Ok(_) => {
+        //                info!("shutdown router succ");
+        //            }
+        //            Err(e) => {
+        //                warn!("check shutdown router error,{}", e);
+        //            }
+        //        }
+    }
+
+    async fn send_router_message(
+        &self,
+        peer_id: AccountAddress,
+        msg: RouterNetworkMessage,
+    ) -> Result<()> {
+        let data = msg.into_proto_bytes()?;
+        let msg = add_message_type(data, MessageType::RouterMessage);
+        self.sender.unbounded_send(NetworkMessage {
+            peer_id,
+            data: msg.to_vec(),
+        })?;
+        Ok(())
     }
 
     async fn handle_network_msg(&self, msg: NetworkMessage) {
@@ -707,7 +747,17 @@ impl NodeInner {
                 .handle_multi_hop_receiver_channel(data[2..].to_vec(), peer_id)
                 .await
                 .unwrap(),
+            MessageType::RouterMessage => self
+                .handle_router_msg(peer_id, data[2..].to_vec())
+                .await
+                .unwrap(),
         };
+    }
+
+    async fn handle_router_msg(&self, peer_id: AccountAddress, data: Vec<u8>) -> Result<()> {
+        let msg = RouterNetworkMessage::from_proto_bytes(data)?;
+        self.router_message_sender.unbounded_send((peer_id, msg))?;
+        Ok(())
     }
 
     async fn handle_node_msg(&self, msg: NodeMessage) {
@@ -1169,7 +1219,7 @@ impl NodeInner {
         response_list: &Vec<BalanceQueryResponse>,
     ) -> Result<Vec<AccountAddress>> {
         let mut result = Vec::new();
-        ensure!(response_list.len() >= 2, "should have at least 2 hops");
+        ensure!(response_list.len() >= 1, "should have at least 1 hops");
         result.push(
             response_list
                 .get(0)

@@ -107,8 +107,16 @@ fn gen_node(
     info!("account resource is {:?}", wallet.account_resource());
 
     let wallet = Arc::new(wallet);
-    let (tx, rx) = futures::channel::mpsc::unbounded();
-    let mut router = TableRouter::new(client, executor.clone(), wallet.clone(), tx, rx);
+    let (tx_node, rx_router) = futures::channel::mpsc::unbounded();
+    let (tx_router, rx_node) = futures::channel::mpsc::unbounded();
+
+    let mut router = TableRouter::new(
+        client,
+        executor.clone(),
+        wallet.clone(),
+        tx_router,
+        rx_router,
+    );
     router.start().unwrap();
 
     Ok(Node::new(
@@ -117,10 +125,12 @@ fn gen_node(
         network_service,
         sender,
         receiver,
+        tx_node,
+        rx_node,
         close_tx,
         auto_approve,
         timeout,
-        router,
+        Box::new(router),
     ))
 }
 
