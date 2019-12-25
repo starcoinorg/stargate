@@ -67,7 +67,7 @@ struct NodeInner {
     network_service: NetworkService,
     auto_approve: bool,
     invoice_mgr: InvoiceManager,
-    router: TableRouter,
+    router: Box<dyn Router>,
 }
 
 impl Node {
@@ -80,7 +80,7 @@ impl Node {
         net_close_tx: oneshot::Sender<()>,
         auto_approve: bool,
         default_future_timeout: u64,
-        router: TableRouter,
+        router: Box<dyn Router>,
     ) -> Self {
         let executor_clone = executor.clone();
         let (event_sender, event_receiver) = futures_01::sync::mpsc::unbounded();

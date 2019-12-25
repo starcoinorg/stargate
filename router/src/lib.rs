@@ -129,15 +129,25 @@ impl TableRouter {
         let chain_client = self.chain_client.clone();
         let receiver = self.receiver.take().expect("should have");
         let control_receiver = self.control_receiver.take().expect("should have");
-        let executor = self.executor.clone();
-        self.executor.spawn(RouterInner::start(
-            executor,
-            inner,
-            chain_client,
+
+        let inner = Arc::new(inner);
+        self.executor.spawn(RouterInner::start_command(
+            self.executor.clone(),
+            inner.clone(),
             receiver,
+        ));
+        self.executor.spawn(RouterInner::start_network(
+            self.executor.clone(),
+            inner.clone(),
             network_receiver,
+        ));
+        self.executor.spawn(RouterInner::start_chain_stream(
+            self.executor.clone(),
+            inner.clone(),
+            chain_client,
             control_receiver,
         ));
+
         Ok(())
     }
 }
@@ -157,12 +167,34 @@ impl Router for TableRouter {
 }
 
 impl RouterInner {
-    async fn start(
+    async fn start_network(
         executor: Handle,
-        inner: RouterInner,
-        chain_client: Arc<dyn ChainClient>,
-        mut receiver: UnboundedReceiver<RouterMessage>,
+        inner: Arc<RouterInner>,
         mut network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
+    ) {
+        while let Some((peer_id, network_message)) = network_receiver.next().await {
+            executor.spawn(Self::handle_router_network_msg(
+                inner.clone(),
+                peer_id,
+                network_message,
+            ));
+        }
+    }
+
+    async fn start_command(
+        executor: Handle,
+        inner: Arc<RouterInner>,
+        mut command_receiver: UnboundedReceiver<RouterMessage>,
+    ) {
+        while let Some(command) = command_receiver.next().await {
+            executor.spawn(Self::handle_router_msg(inner.clone(), command));
+        }
+    }
+
+    async fn start_chain_stream(
+        executor: Handle,
+        inner: Arc<RouterInner>,
+        chain_client: Arc<dyn ChainClient>,
         mut control_receiver: UnboundedReceiver<Event>,
     ) {
         let client = chain_client.clone();
@@ -170,17 +202,10 @@ impl RouterInner {
         let stream = get_channel_events(client, 0, 100).fuse();
         let mut stream = Box::pin(stream);
 
-        let inner = Arc::new(inner);
         loop {
             futures::select! {
                 message = stream.select_next_some() => {
                     executor.spawn(Self::handle_stream(inner.clone(),message));
-                },
-                router_message = receiver.select_next_some()=>{
-                    executor.spawn(Self::handle_router_msg(inner.clone(),router_message));
-                },
-                (peer_id,network_message) = network_receiver.select_next_some() =>{
-                    executor.spawn(Self::handle_router_network_msg(inner.clone(),peer_id,network_message));
                 },
                 _ = control_receiver.select_next_some() =>{
                     info!("shutdown");
@@ -531,6 +556,18 @@ fn router_test() {
         rrx5,
     );
     router5.start().unwrap();
+
+    let router1 = Arc::new(router1);
+    let router2 = Arc::new(router2);
+    let router3 = Arc::new(router3);
+    let router4 = Arc::new(router4);
+    let router5 = Arc::new(router5);
+
+    let _router1 = router1.clone();
+    let _router2 = router2.clone();
+    let _router3 = router3.clone();
+    let _router4 = router4.clone();
+    let _router5 = router5.clone();
 
     let f = async move {
         _open_channel(wallet1.clone(), wallet2.clone(), 100000, 100000).await?;
