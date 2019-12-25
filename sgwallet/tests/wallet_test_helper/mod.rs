@@ -176,6 +176,10 @@ pub async fn test_wallet_async(
     )
     .await?;
 
+    let channel_seq_number = sender_wallet.channel_sequence_number(receiver).await?;
+    let txn = sender_wallet.get_txn_by_channel_sequence_number(receiver, channel_seq_number - 1)?;
+    assert_eq!(sender, txn.raw_tx.proposer());
+
     let sender_channel_balance = sender_wallet.channel_balance(receiver).await?;
     assert_eq!(
         sender_channel_balance,

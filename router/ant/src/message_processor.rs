@@ -96,11 +96,19 @@ where
         Ok(())
     }
 
-    pub async fn _remove_future(&self, hash: HashValue) {
+    pub async fn remove_future(&self, hash: HashValue) {
         let mut tx_map = self.tx_map.lock().await;
         match tx_map.get(&hash) {
-            Some(_tx) => {
+            Some(tx) => {
                 info!("future time out,hash is {:?}", hash);
+                tx.clone()
+                    .send(Err(SgError::new(
+                        sgtypes::sg_error::SgErrorCode::TIMEOUT,
+                        "future time out".to_string(),
+                    )
+                    .into()))
+                    .await
+                    .unwrap();
                 tx_map.remove(&hash);
             }
             _ => info!("tx hash {} not in map,timeout is not necessary", hash),

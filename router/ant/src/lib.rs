@@ -4,7 +4,6 @@ mod path_finder;
 mod seed_generator;
 
 use anyhow::*;
-use sgtypes::system_event::Event;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
 
@@ -12,7 +11,7 @@ use sgwallet::wallet::Wallet;
 use std::sync::Arc;
 
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
-use futures::{sink::SinkExt, stream::StreamExt};
+use futures::stream::StreamExt;
 use libra_crypto::hash::CryptoHash;
 use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
@@ -31,20 +30,24 @@ use sgchain::star_chain_client::{faucet_async_2, MockChainClient};
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use network::build_network_service;
+use network::{build_network_service, NetworkMessage};
 use sg_config::config::NetworkConfig;
 
+use futures::compat::Stream01CompatExt;
+use futures_timer::Delay;
+use libra_crypto::HashValue;
 use sgtypes::message::{
     AntFinalMessage, AntQueryMessage, BalanceQueryResponse, ExchangeSeedMessageRequest,
     ExchangeSeedMessageResponse, RouterNetworkMessage,
 };
+use sgtypes::s_value::SValue;
+use std::collections::HashSet;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub struct AntRouter {
     executor: Handle,
-    control_sender: UnboundedSender<Event>,
     command_sender: UnboundedSender<RouterCommand>,
     inner: Option<AntRouterInner>,
-    control_receiver: Option<UnboundedReceiver<Event>>,
     network_receiver: Option<UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>>,
     command_receiver: Option<UnboundedReceiver<RouterCommand>>,
 }
@@ -54,6 +57,8 @@ struct AntRouterInner {
     wallet: Arc<Wallet>,
     seed_manager: SeedManager,
     message_processor: MessageProcessor<RouterNetworkMessage>,
+    default_future_timeout: AtomicU64,
+    executor: Handle,
 }
 
 enum RouterCommand {
@@ -70,8 +75,8 @@ impl AntRouter {
         network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
         network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
         wallet: Arc<Wallet>,
+        default_future_timeout: u64,
     ) -> Self {
-        let (control_sender, control_receiver) = futures::channel::mpsc::unbounded();
         let (command_sender, command_receiver) = futures::channel::mpsc::unbounded();
 
         let message_processor = MessageProcessor::new();
@@ -80,22 +85,16 @@ impl AntRouter {
             network_sender,
             seed_manager: SeedManager::new(),
             message_processor,
+            default_future_timeout: AtomicU64::new(default_future_timeout),
+            executor: executor.clone(),
         };
         Self {
             executor,
-            control_sender,
             command_sender,
             network_receiver: Some(network_receiver),
-            control_receiver: Some(control_receiver),
             command_receiver: Some(command_receiver),
             inner: Some(inner),
         }
-    }
-
-    pub async fn shutdown(&mut self) -> Result<()> {
-        self.control_sender.unbounded_send(Event::SHUTDOWN)?;
-        self.command_sender.close().await?;
-        Ok(())
     }
 
     pub fn start(&mut self) -> Result<()> {
@@ -104,22 +103,23 @@ impl AntRouter {
             .network_receiver
             .take()
             .expect("should have network receiver");
-        let control_receiver = self
-            .control_receiver
-            .take()
-            .expect("should have control receiver");
         let command_receiver = self
             .command_receiver
             .take()
             .expect("should have command receiver");
         let inner = Arc::new(inner);
+        let executor = self.executor.clone();
         self.executor.spawn(AntRouterInner::start_network(
+            executor,
             inner.clone(),
             network_receiver,
-            control_receiver,
         ));
-        self.executor
-            .spawn(AntRouterInner::start_command(inner, command_receiver));
+        let executor = self.executor.clone();
+        self.executor.spawn(AntRouterInner::start_command(
+            executor,
+            inner,
+            command_receiver,
+        ));
         Ok(())
     }
 
@@ -143,67 +143,67 @@ impl AntRouter {
 
 impl AntRouterInner {
     async fn start_network(
+        executor: Handle,
         router_inner: Arc<AntRouterInner>,
         mut network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
-        mut control_receiver: UnboundedReceiver<Event>,
     ) {
-        loop {
-            futures::select! {
-                (peer_id,network_message) = network_receiver.select_next_some()=>{
-                    router_inner.handle_network_msg(peer_id,network_message).await.unwrap();
-                },
-                _ = control_receiver.select_next_some() =>{
-                    info!("shutdown");
-                    break;
-                },
-            }
+        while let Some((peer_id, network_message)) = network_receiver.next().await {
+            let router_inner_clone = router_inner.clone();
+            executor.spawn(Self::handle_network_msg(
+                router_inner_clone,
+                peer_id,
+                network_message,
+            ));
         }
     }
 
     async fn start_command(
+        executor: Handle,
         router_inner: Arc<AntRouterInner>,
         mut command_receiver: UnboundedReceiver<RouterCommand>,
     ) {
-        loop {
-            futures::select! {
-                command = command_receiver.select_next_some()=>{
-                    router_inner.handle_command(command).await.unwrap();
-                },
-            }
+        while let Some(command) = command_receiver.next().await {
+            let router_inner_clone = router_inner.clone();
+            executor.spawn(Self::handle_command(router_inner_clone, command));
         }
     }
 
-    async fn handle_command(&self, command: RouterCommand) -> Result<()> {
+    async fn handle_command(
+        router_inner: Arc<AntRouterInner>,
+        command: RouterCommand,
+    ) -> Result<()> {
         match command {
             RouterCommand::FindPath {
                 start,
                 end,
                 responder,
             } => {
-                return self.find_path(start, end, responder).await;
+                return router_inner.find_path(start, end, responder).await;
             }
         }
     }
 
     async fn handle_network_msg(
-        &self,
+        router_inner: Arc<AntRouterInner>,
         peer_id: AccountAddress,
         msg: RouterNetworkMessage,
     ) -> Result<()> {
         match msg {
             RouterNetworkMessage::ExchangeSeedMessageResponse(response) => {
-                return self.handle_exchange_seed_message_response(response).await;
+                return router_inner
+                    .handle_exchange_seed_message_response(response)
+                    .await;
             }
             RouterNetworkMessage::AntFinalMessage(response) => {
-                return self.handle_ant_final_message(response).await;
+                return router_inner.handle_ant_final_message(response).await;
             }
             RouterNetworkMessage::ExchangeSeedMessageRequest(request) => {
-                return self
+                return router_inner
                     .handle_exchange_seed_message_request(request, peer_id)
                     .await;
             }
             RouterNetworkMessage::AntQueryMessage(message) => {
-                return self.handle_ant_query_message(message).await;
+                return router_inner.handle_ant_query_message(message).await;
             }
         }
     }
@@ -225,8 +225,12 @@ impl AntRouterInner {
         let (tx, rx) = futures::channel::mpsc::channel(1);
         let message_future = MessageFuture::new(rx);
         self.message_processor
-            .add_future(request_hash, tx.clone())
+            .add_future(request_hash.clone(), tx.clone())
             .await;
+        self.future_timeout(
+            request_hash,
+            self.default_future_timeout.load(Ordering::Relaxed),
+        );
         let response = message_future.await?;
 
         match response {
@@ -234,39 +238,88 @@ impl AntRouterInner {
                 let s_generator = SValueGenerator::new(resp.sender_seed, resp.receiver_seed);
                 let s = s_generator.get_s(true);
 
-                let all_channels = self.wallet.get_all_channels().await?;
-                for participant in all_channels.iter() {
-                    let ant_query_message = AntQueryMessage::new(s, start, vec![]);
-                    self.network_sender.unbounded_send((
-                        participant.clone(),
-                        RouterNetworkMessage::AntQueryMessage(ant_query_message),
-                    ))?;
-                }
-
+                self.send_ant_query_message(s, start.clone(), vec![])
+                    .await?;
                 let (tx, rx) = futures::channel::mpsc::channel(1);
                 let message_future = MessageFuture::new(rx);
+                let r = s_generator.get_r();
                 self.message_processor
-                    .add_future(s_generator.get_r(), tx.clone())
+                    .add_future(r.clone(), tx.clone())
                     .await;
+                self.future_timeout(r, self.default_future_timeout.load(Ordering::Relaxed));
+
                 let response = message_future.await?;
 
                 match response {
                     RouterNetworkMessage::AntFinalMessage(resp) => {
-                        respond_with(responder, resp.balance_query_response_list);
+                        respond_with(responder, self.format_response_list(resp, start, end));
                     }
                     _ => {
-                        warn!("should not be here");
+                        respond_with(responder, vec![]);
+                        warn!("no path found");
                         return Ok(());
                     }
                 }
             }
             _ => {
-                warn!("should not be here");
+                respond_with(responder, vec![]);
+                warn!("no path found");
                 return Ok(());
             }
         }
 
         Ok(())
+    }
+
+    fn format_response_list(
+        &self,
+        resp: AntFinalMessage,
+        start: AccountAddress,
+        end: AccountAddress,
+    ) -> Vec<BalanceQueryResponse> {
+        let mut result = Vec::new();
+        let mut seed = start;
+        let mut done = false;
+        let mut list = resp.balance_query_response_list;
+        while !done {
+            match self.find_response(seed, &mut list) {
+                Some(balance_response) => {
+                    if balance_response.remote_addr == end {
+                        done = true;
+                    }
+                    seed = balance_response.remote_addr.clone();
+                    result.push(balance_response);
+                }
+                None => {
+                    done = true;
+                }
+            }
+        }
+        result
+    }
+
+    fn find_response(
+        &self,
+        local: AccountAddress,
+        response_list: &mut Vec<BalanceQueryResponse>,
+    ) -> Option<BalanceQueryResponse> {
+        let mut index = 0;
+        let mut find = false;
+        for (i, response) in response_list.iter().enumerate() {
+            if response.local_addr == local || response.remote_addr == local {
+                index = i;
+                find = true;
+            }
+        }
+        if find {
+            let response = response_list.remove(index);
+            if response.remote_addr == local {
+                return Some(response.revert());
+            } else {
+                return Some(response);
+            }
+        }
+        None
     }
 
     async fn handle_exchange_seed_message_response(
@@ -302,16 +355,9 @@ impl AntRouterInner {
         let s_generator = SValueGenerator::new(request.sender_seed, receiver_seed);
         let s = s_generator.get_s(false);
 
-        let all_channels = self.wallet.get_all_channels().await?;
-        for participant in all_channels.iter() {
-            let ant_query_message = AntQueryMessage::new(s, peer_id.clone(), vec![]);
-            self.network_sender.unbounded_send((
-                participant.clone(),
-                RouterNetworkMessage::AntQueryMessage(ant_query_message),
-            ))?;
-        }
-
         let response = ExchangeSeedMessageResponse::new(request.sender_seed, receiver_seed);
+        self.send_ant_query_message(s, peer_id.clone(), vec![])
+            .await?;
         self.network_sender.unbounded_send((
             peer_id,
             RouterNetworkMessage::ExchangeSeedMessageResponse(response),
@@ -320,7 +366,44 @@ impl AntRouterInner {
         Ok(())
     }
 
+    async fn send_ant_query_message(
+        &self,
+        s: SValue,
+        peer_id: AccountAddress,
+        balance_list: Vec<BalanceQueryResponse>,
+    ) -> Result<()> {
+        let all_channels = self.wallet.get_all_channels().await?;
+
+        let mut already_send_set = HashSet::new();
+        for balance_query_response in &balance_list {
+            already_send_set.insert(balance_query_response.remote_addr.clone());
+            already_send_set.insert(balance_query_response.local_addr.clone());
+        }
+        for participant in all_channels.iter() {
+            if already_send_set.contains(participant) {
+                continue;
+            }
+            let mut balance_list_clone = balance_list.clone();
+            let balance_query_response = BalanceQueryResponse::new(
+                self.wallet.account(),
+                participant.clone(),
+                self.wallet.channel_balance(participant.clone()).await?,
+                self.wallet
+                    .participant_channel_balance(participant.clone())
+                    .await?,
+            );
+            balance_list_clone.push(balance_query_response);
+            let ant_query_message = AntQueryMessage::new(s, peer_id, balance_list_clone);
+            self.network_sender.unbounded_send((
+                participant.clone(),
+                RouterNetworkMessage::AntQueryMessage(ant_query_message),
+            ))?;
+        }
+        Ok(())
+    }
+
     async fn handle_ant_query_message(&self, message: AntQueryMessage) -> Result<()> {
+        let query_message = message.clone();
         match self
             .seed_manager
             .match_or_add(message.s_value, message.balance_query_response_list)
@@ -335,10 +418,27 @@ impl AntRouterInner {
                 ))?;
             }
             None => {
-                info!("waiting for match");
+                self.send_ant_query_message(
+                    query_message.s_value,
+                    query_message.sender_addr,
+                    query_message.balance_query_response_list,
+                )
+                .await?;
             }
         }
         Ok(())
+    }
+
+    fn future_timeout(&self, hash: HashValue, timeout: u64) {
+        if timeout == 0 {
+            return;
+        }
+        let processor = self.message_processor.clone();
+        let task = async move {
+            Delay::new(Duration::from_millis(timeout)).await;
+            processor.remove_future(hash).await;
+        };
+        self.executor.spawn(task);
     }
 }
 
@@ -351,7 +451,11 @@ fn respond_with<T>(responder: futures::channel::oneshot::Sender<T>, msg: T) {
 fn _gen_wallet(
     executor: Handle,
     client: Arc<MockChainClient>,
-) -> Result<(Arc<Wallet>, AccountAddress)> {
+) -> Result<(
+    Arc<Wallet>,
+    AccountAddress,
+    Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
+)> {
     let amount: u64 = 10_000_000;
     let mut rng: StdRng = SeedableRng::seed_from_u64(_get_unix_ts()); //SeedableRng::from_seed([0; 32]);
     let keypair = Arc::new(KeyPair::generate_for_testing(&mut rng));
@@ -374,7 +478,7 @@ fn _gen_wallet(
     };
     rt.block_on(f);
 
-    Ok((Arc::new(wallet), account_address))
+    Ok((Arc::new(wallet), account_address, keypair))
 }
 
 async fn _delay(duration: Duration) {
@@ -432,6 +536,7 @@ fn _build_network(
 #[test]
 fn ant_router_test() {
     use anyhow::Error;
+    use libra_config::utils::get_available_port;
     use libra_logger::prelude::*;
     use sgchain::star_chain_client::MockChainClient;
     use std::sync::Arc;
@@ -443,27 +548,160 @@ fn ant_router_test() {
     let (mock_chain_service, _handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
 
-    let (wallet1, _addr1) = _gen_wallet(executor.clone(), client.clone()).unwrap();
-    let (wallet2, _addr2) = _gen_wallet(executor.clone(), client.clone()).unwrap();
-    let (wallet3, _addr3) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+    let (wallet1, addr1, keypair1) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+    let (wallet2, _addr2, keypair2) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+    let (wallet3, _addr3, keypair3) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+    let (wallet4, addr4, keypair4) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+    let (wallet5, addr5, keypair5) = _gen_wallet(executor.clone(), client.clone()).unwrap();
 
     let _wallet1 = wallet1.clone();
     let _wallet2 = wallet2.clone();
     let _wallet3 = wallet3.clone();
+    let _wallet4 = wallet4.clone();
+    let _wallet5 = wallet5.clone();
+    let _client = client.clone();
+
+    let network_config1 = _create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![],
+    );
+
+    let addr1_hex = hex::encode(addr1);
+    let seed = format!("{}/p2p/{}", &network_config1.listen, addr1_hex);
+
+    let network_config2 = _create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![seed.clone()],
+    );
+
+    let network_config3 = _create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![seed.clone()],
+    );
+
+    let network_config4 = _create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![seed.clone()],
+    );
+
+    let network_config5 = _create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![seed.clone()],
+    );
+
+    let (_network1, tx1, rx1, close_tx1) = build_network_service(&network_config1, keypair1);
+    let _identify1 = _network1.identify();
+    let (rtx1, rrx1) = _prepare_network(tx1, rx1, executor.clone());
+    let mut router1 = AntRouter::new(executor.clone(), rtx1, rrx1, wallet1.clone(), 5000);
+    router1.start().unwrap();
+
+    let (_network2, tx2, rx2, close_tx2) = build_network_service(&network_config2, keypair2);
+    let _identify2 = _network2.identify();
+    let (rtx2, rrx2) = _prepare_network(tx2, rx2, executor.clone());
+    let mut router2 = AntRouter::new(executor.clone(), rtx2, rrx2, wallet2.clone(), 5000);
+    router2.start().unwrap();
+
+    let (_network3, tx3, rx3, close_tx3) = build_network_service(&network_config3, keypair3);
+    let _identify3 = _network3.identify();
+    let (rtx3, rrx3) = _prepare_network(tx3, rx3, executor.clone());
+    let mut router3 = AntRouter::new(executor.clone(), rtx3, rrx3, wallet3.clone(), 5000);
+    router3.start().unwrap();
+
+    let (_network4, tx4, rx4, close_tx4) = build_network_service(&network_config4, keypair4);
+    let _identify4 = _network4.identify();
+    let (rtx4, rrx4) = _prepare_network(tx4, rx4, executor.clone());
+    let mut router4 = AntRouter::new(executor.clone(), rtx4, rrx4, wallet4.clone(), 5000);
+    router4.start().unwrap();
+
+    let (_network5, tx5, rx5, close_tx5) = build_network_service(&network_config5, keypair5);
+    let _identify5 = _network5.identify();
+    let (rtx5, rrx5) = _prepare_network(tx5, rx5, executor.clone());
+    let mut router5 = AntRouter::new(executor.clone(), rtx5, rrx5, wallet5.clone(), 5000);
+    router5.start().unwrap();
 
     let f = async move {
         _open_channel(wallet1.clone(), wallet2.clone(), 100000, 100000).await?;
         _open_channel(wallet2.clone(), wallet3.clone(), 100000, 100000).await?;
+        _open_channel(wallet3.clone(), wallet4.clone(), 100000, 100000).await?;
 
         _delay(Duration::from_millis(5000)).await;
+
+        let path = router1
+            .find_path_by_addr(addr1.clone(), addr4.clone())
+            .await?;
+
+        assert_eq!(path.len(), 3);
+        assert_eq!(path.get(0).expect("should have").local_addr, addr1.clone());
+        assert_eq!(path.get(2).expect("should have").remote_addr, addr4.clone());
+
+        let path = router1
+            .find_path_by_addr(addr1.clone(), addr5.clone())
+            .await;
+        match path {
+            Ok(_) => assert_eq!(1, 2),
+            Err(_) => assert_eq!(1, 1),
+        }
+
+        close_tx1.send(()).unwrap();
+        close_tx2.send(()).unwrap();
+        close_tx3.send(()).unwrap();
+        close_tx4.send(()).unwrap();
+        close_tx5.send(()).unwrap();
 
         wallet1.stop().await?;
         wallet2.stop().await?;
         wallet3.stop().await?;
+        wallet4.stop().await?;
+        wallet5.stop().await?;
+
         Ok::<_, Error>(())
     };
 
     rt.block_on(f).unwrap();
 
     debug!("here");
+}
+
+fn _prepare_network(
+    tx: futures_01::sync::mpsc::UnboundedSender<NetworkMessage>,
+    rx: futures_01::sync::mpsc::UnboundedReceiver<NetworkMessage>,
+    executor: Handle,
+) -> (
+    UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
+    UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
+) {
+    let (inbound_sender, inbound_receiver) = futures::channel::mpsc::unbounded();
+    let (outbound_sender, outbound_receiver) = futures::channel::mpsc::unbounded();
+
+    executor.spawn(_receive_router_message(rx, inbound_sender));
+    executor.spawn(_send_router_message(outbound_receiver, tx));
+
+    (outbound_sender, inbound_receiver)
+}
+
+async fn _send_router_message(
+    mut rx: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
+    tx: futures_01::sync::mpsc::UnboundedSender<NetworkMessage>,
+) {
+    while let Some((peer_id, message)) = rx.next().await {
+        tx.unbounded_send(NetworkMessage {
+            peer_id,
+            data: message.into_proto_bytes().unwrap(),
+        })
+        .unwrap();
+    }
+}
+
+async fn _receive_router_message(
+    rx: futures_01::sync::mpsc::UnboundedReceiver<NetworkMessage>,
+    tx: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
+) {
+    let mut rx = rx.compat();
+    while let Some(Ok(s)) = rx.next().await {
+        tx.unbounded_send((
+            s.peer_id,
+            RouterNetworkMessage::from_proto_bytes(s.data).unwrap(),
+        ))
+        .unwrap();
+    }
 }
