@@ -253,7 +253,7 @@
 
 
 		function sendTxnNew(server, receiver) {
-			var testURL = server.concat("/exec");
+			var testURL = server.concat("/node/execute_script");
 			var para = {
 				address: receiver,
 				package_name: "scripts",
