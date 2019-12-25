@@ -307,8 +307,6 @@ pub enum MessageType {
     ChannelTransactionRequest,
     ChannelTransactionResponse,
     ErrorMessage,
-    BalanceQueryResponse,
-    BalanceQueryRequest,
     MultiHopChannelTransactionRequest,
 }
 
@@ -319,9 +317,7 @@ impl MessageType {
             MessageType::ChannelTransactionRequest => 2,
             MessageType::ChannelTransactionResponse => 3,
             MessageType::ErrorMessage => 4,
-            MessageType::BalanceQueryResponse => 5,
-            MessageType::BalanceQueryRequest => 6,
-            MessageType::MultiHopChannelTransactionRequest => 7,
+            MessageType::MultiHopChannelTransactionRequest => 5,
         }
     }
 
@@ -331,9 +327,7 @@ impl MessageType {
             2 => Ok(MessageType::ChannelTransactionRequest),
             3 => Ok(MessageType::ChannelTransactionResponse),
             4 => Ok(MessageType::ErrorMessage),
-            5 => Ok(MessageType::BalanceQueryResponse),
-            6 => Ok(MessageType::BalanceQueryRequest),
-            7 => Ok(MessageType::MultiHopChannelTransactionRequest),
+            5 => Ok(MessageType::MultiHopChannelTransactionRequest),
             _ => bail!("no such type"),
         }
     }
@@ -793,9 +787,7 @@ impl From<AntFinalMessage> for crate::proto::sgtypes::AntFinalMessage {
     }
 }
 
-pub enum NodeNetworkMessage {
-    BalanceQueryResponseEnum(BalanceQueryResponse),
-}
+pub enum NodeNetworkMessage {}
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Eq, PartialEq)]
@@ -804,6 +796,8 @@ pub enum RouterNetworkMessage {
     ExchangeSeedMessageResponse(ExchangeSeedMessageResponse),
     AntQueryMessage(AntQueryMessage),
     AntFinalMessage(AntFinalMessage),
+    BalanceQueryRequest(BalanceQueryRequest),
+    BalanceQueryResponse(BalanceQueryResponse),
 }
 
 impl RouterNetworkMessage {
@@ -846,6 +840,12 @@ impl TryFrom<crate::proto::sgtypes::RouterNetworkMessage> for RouterNetworkMessa
             RouterMessageItems::AntFinalMessage(resp) => {
                 RouterNetworkMessage::AntFinalMessage(AntFinalMessage::try_from(resp)?)
             }
+            RouterMessageItems::BalanceQueryRequest(resp) => {
+                RouterNetworkMessage::BalanceQueryRequest(BalanceQueryRequest::try_from(resp)?)
+            }
+            RouterMessageItems::BalanceQueryResponse(resp) => {
+                RouterNetworkMessage::BalanceQueryResponse(BalanceQueryResponse::try_from(resp)?)
+            }
         };
 
         Ok(response)
@@ -868,6 +868,12 @@ impl From<RouterNetworkMessage> for crate::proto::sgtypes::RouterNetworkMessage 
             }
             RouterNetworkMessage::AntFinalMessage(r) => {
                 RouterMessageItems::AntFinalMessage(r.into())
+            }
+            RouterNetworkMessage::BalanceQueryRequest(r) => {
+                RouterMessageItems::BalanceQueryRequest(r.into())
+            }
+            RouterNetworkMessage::BalanceQueryResponse(r) => {
+                RouterMessageItems::BalanceQueryResponse(r.into())
             }
         };
 

@@ -10,7 +10,7 @@ use anyhow::Error;
 use libra_crypto::{test_utils::KeyPair, Uniform};
 use libra_tools::tempdir::TempPath;
 use libra_types::account_address::AccountAddress;
-use router::Router;
+use router::TableRouter;
 use sg_config::config::NetworkConfig;
 use sgchain::star_chain_client::{faucet_sync, MockChainClient};
 use sgwallet::wallet::*;
@@ -31,12 +31,13 @@ pub fn gen_node(
     faucet_sync(client.as_ref().clone(), account_address, amount).unwrap();
     let store_path = TempPath::new();
 
-    let mut router = Router::new(client.clone(), executor.clone());
-    router.start().unwrap();
-
-    let mut wallet =
-        Wallet::new_with_client(account_address, keypair.clone(), client, store_path.path())
-            .unwrap();
+    let mut wallet = Wallet::new_with_client(
+        account_address,
+        keypair.clone(),
+        client.clone(),
+        store_path.path(),
+    )
+    .unwrap();
     wallet.start(&executor).unwrap();
 
     let f = async {
@@ -47,6 +48,12 @@ pub fn gen_node(
         Ok::<_, Error>(())
     };
     rt.block_on(f).unwrap();
+
+    let wallet = Arc::new(wallet);
+
+    let (tx, rx) = futures::channel::mpsc::unbounded();
+    let mut router = TableRouter::new(client, executor.clone(), wallet.clone(), tx, rx);
+    router.start().unwrap();
 
     let (network, tx, rx, close_tx) = build_network_service(config, keypair.clone());
     let _identify = network.identify();

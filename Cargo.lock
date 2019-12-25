@@ -127,6 +127,7 @@ name = "ant"
 version = "0.1.0"
 dependencies = [
  "anyhow 1.0.25 (registry+https://github.com/rust-lang/crates.io-index)",
+ "async-trait 0.1.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures-timer 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -137,6 +138,7 @@ dependencies = [
  "libra-tools 0.1.0",
  "libra-types 0.1.0",
  "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "router 0.1.0",
  "sg_config 0.1.0",
  "sgchain 0.1.0",
  "sgnetwork 0.1.0",
@@ -4235,15 +4237,21 @@ name = "router"
 version = "0.1.0"
 dependencies = [
  "anyhow 1.0.25 (registry+https://github.com/rust-lang/crates.io-index)",
+ "async-trait 0.1.17 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "graphdb 0.1.0",
+ "hex 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "libra-canonical-serialization 0.1.0",
+ "libra-config 0.1.0",
  "libra-crypto 0.1.0",
  "libra-logger 0.1.0",
  "libra-tools 0.1.0",
  "libra-types 0.1.0",
  "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "sg_config 0.1.0",
  "sgchain 0.1.0",
+ "sgnetwork 0.1.0",
  "sgtypes 0.1.0",
  "sgwallet 0.1.0",
  "tokio 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
