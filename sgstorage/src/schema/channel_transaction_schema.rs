@@ -4,7 +4,7 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-//! This module defines physical storage schema for signed channel transactions.
+//! This module defines physical storage schema for applied channel transactions.
 //!
 //! Serialized signed transaction bytes identified by version.
 //! ```text
@@ -15,7 +15,7 @@
 //! `Version` is serialized in big endian so that records in RocksDB will be in order of it's
 //! numeric value.
 
-use crate::schema::{ensure_slice_len_eq, SIGNED_CHANNEL_TRANSACTION_CF_NAME};
+use crate::schema::{ensure_slice_len_eq, APPLIED_CHANNEL_TRANSACTION_CF_NAME};
 use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt};
 use libra_types::transaction::Version;
@@ -23,17 +23,17 @@ use schemadb::{
     define_schema,
     schema::{KeyCodec, ValueCodec},
 };
-use sgtypes::signed_channel_transaction::SignedChannelTransaction;
+use sgtypes::applied_channel_txn::AppliedChannelTxn;
 use std::mem::size_of;
 
 define_schema!(
-    SignedChannelTransactionSchema,
+    AppliedChannelTransactionSchema,
     Version,
-    SignedChannelTransaction,
-    SIGNED_CHANNEL_TRANSACTION_CF_NAME
+    AppliedChannelTxn,
+    APPLIED_CHANNEL_TRANSACTION_CF_NAME
 );
 
-impl KeyCodec<SignedChannelTransactionSchema> for Version {
+impl KeyCodec<AppliedChannelTransactionSchema> for Version {
     fn encode_key(&self) -> Result<Vec<u8>> {
         Ok(self.to_be_bytes().to_vec())
     }
@@ -44,7 +44,7 @@ impl KeyCodec<SignedChannelTransactionSchema> for Version {
     }
 }
 
-impl ValueCodec<SignedChannelTransactionSchema> for SignedChannelTransaction {
+impl ValueCodec<AppliedChannelTransactionSchema> for AppliedChannelTxn {
     fn encode_value(&self) -> Result<Vec<u8>> {
         lcs::to_bytes(self).map_err(Into::into)
     }

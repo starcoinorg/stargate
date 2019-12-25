@@ -1,9 +1,10 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::Result;
-use libra_types::{access_path::DataPath, account_address::AccountAddress};
-use std::collections::{BTreeMap, HashSet};
+use crate::account_state::AccountState;
+
+use libra_types::account_address::AccountAddress;
+use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 
 //TODO (jole) need maintain network state?
@@ -27,35 +28,35 @@ pub enum ChannelStage {
 #[derive(Clone, Debug)]
 pub struct ChannelState {
     address: AccountAddress,
-    state: BTreeMap<Vec<u8>, Vec<u8>>,
+    state: AccountState,
 }
 
 impl ChannelState {
     pub fn empty(address: AccountAddress) -> Self {
         Self {
             address,
-            state: BTreeMap::new(),
+            state: AccountState::new(),
         }
     }
 
-    pub fn new(address: AccountAddress, state: BTreeMap<Vec<u8>, Vec<u8>>) -> Self {
+    pub fn new(address: AccountAddress, state: AccountState) -> Self {
         Self { address, state }
     }
 
-    pub fn paths(&self) -> Result<HashSet<DataPath>> {
-        let paths =
-            self.state
-                .keys()
-                .map(|k| DataPath::from(k))
-                .try_fold(HashSet::new(), |mut s, e| {
-                    e.map(|dp| {
-                        s.insert(dp);
-                        s
-                    })
-                });
-
-        paths
-    }
+    //    pub fn paths(&self) -> Result<HashSet<DataPath>> {
+    //        let paths =
+    //            self.state
+    //                .keys()
+    //                .map(|k| DataPath::from(k))
+    //                .try_fold(HashSet::new(), |mut s, e| {
+    //                    e.map(|dp| {
+    //                        s.insert(dp);
+    //                        s
+    //                    })
+    //                });
+    //
+    //        paths
+    //    }
 
     pub fn address(&self) -> &AccountAddress {
         &self.address

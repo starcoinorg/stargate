@@ -11,6 +11,7 @@ use libra_types::{
     proof::SparseMerkleProof,
     transaction::Version,
 };
+use std::ops::{Deref, DerefMut};
 use std::{collections::BTreeMap, convert::TryFrom};
 
 #[derive(Clone, Debug)]
@@ -21,8 +22,7 @@ pub struct AccountState {
 }
 
 impl AccountState {
-    #[allow(dead_code)]
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             version: 0,
             state: BTreeMap::new(),
@@ -79,6 +79,31 @@ impl AccountState {
 
     pub fn into_map(self) -> BTreeMap<Vec<u8>, Vec<u8>> {
         self.state
+    }
+}
+impl Deref for AccountState {
+    type Target = BTreeMap<Vec<u8>, Vec<u8>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.state
+    }
+}
+
+impl DerefMut for AccountState {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.state
+    }
+}
+
+impl AsRef<BTreeMap<Vec<u8>, Vec<u8>>> for AccountState {
+    fn as_ref(&self) -> &BTreeMap<Vec<u8>, Vec<u8>> {
+        &self.state
+    }
+}
+
+impl AsMut<BTreeMap<Vec<u8>, Vec<u8>>> for AccountState {
+    fn as_mut(&mut self) -> &mut BTreeMap<Vec<u8>, Vec<u8>> {
+        &mut self.state
     }
 }
 

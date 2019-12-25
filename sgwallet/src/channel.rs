@@ -40,6 +40,7 @@ use libra_types::{
 use sgchain::star_chain_client::ChainClient;
 use sgstorage::channel_db::ChannelDB;
 use sgstorage::channel_store::ChannelStore;
+use sgtypes::applied_channel_txn::AppliedChannelTxn;
 use sgtypes::channel::{ChannelStage, ChannelState};
 use sgtypes::channel_transaction::{ChannelOp, ChannelTransaction, ChannelTransactionProposal};
 use sgtypes::channel_transaction_sigs::ChannelTransactionSigs;
@@ -202,12 +203,6 @@ pub struct Channel {
 }
 
 impl Channel {
-    fn channel_address(&self) -> &AccountAddress {
-        &self.channel_address
-    }
-}
-
-impl Channel {
     /// load channel from storage
     pub fn load(
         channel_address: AccountAddress,
@@ -222,7 +217,8 @@ impl Channel {
         script_registry: Arc<PackageRegistry>,
         chain_client: Arc<dyn ChainClient>,
     ) -> Self {
-        let store = ChannelStore::new(db.clone());
+        let store = ChannelStore::new(participant_addresses.clone(), db.clone())
+            .unwrap_or_else(|e| panic!("create channel store should be ok, e: {}", e));
         let inner = Self {
             channel_address,
             account_address,
@@ -669,13 +665,25 @@ impl Channel {
 
         // if found an already applied txn in local storage,
         // we can return directly after check the hash of transaction and signatures.
-        if let Some(mut signed_txn) = self.check_applied(&proposal)? {
-            let signature = signed_txn
-                .signed_transaction
-                .signatures
-                .remove(&self.account_address)
-                .expect("applied txn should have user signature");
-            return Ok(Some(signature));
+        if let Some(signed_txn) =
+            self.check_applied(proposal.channel_txn.channel_sequence_number())?
+        {
+            let version = signed_txn.version;
+            let applied_txn = signed_txn.signed_transaction;
+            match applied_txn {
+                AppliedChannelTxn::Travel(_) => bail!("proposal is already commited onchain"),
+                AppliedChannelTxn::Offchain(mut t) => {
+                    if CryptoHash::hash(&proposal.channel_txn) != CryptoHash::hash(&t.raw_tx) {
+                        bail!("invalid proposal, channel already applied a different proposal with same channel seq number {}", version);
+                    }
+
+                    let signature = t
+                        .signatures
+                        .remove(&self.account_address)
+                        .expect("applied txn should have user signature");
+                    return Ok(Some(signature));
+                }
+            }
         }
 
         self.verify_proposal(&proposal)?;
@@ -822,7 +830,9 @@ impl Channel {
         &mut self,
         proposal: ChannelTransactionProposal,
     ) -> Result<u64> {
-        if let Some(signed_txn) = self.check_applied(&proposal)? {
+        if let Some(signed_txn) =
+            self.check_applied(proposal.channel_txn.channel_sequence_number())?
+        {
             warn!(
                 "txn {} already applied!",
                 &CryptoHash::hash(&proposal.channel_txn)
@@ -866,11 +876,13 @@ impl Channel {
                 channel_txn.sequence_number(),
             )
             .await?;
-            txn_with_proof.proof.transaction_info().gas_used()
+            let gas_used = txn_with_proof.proof.transaction_info().gas_used();
+            self.apply_travel(txn_with_proof)?;
+            gas_used
         } else {
+            self.apply(proposal.channel_txn, output, signatures)?;
             0
         };
-        self.apply(proposal.channel_txn, output, signatures)?;
         Ok(gas)
     }
 
@@ -902,6 +914,40 @@ impl Channel {
         Ok(())
     }
 
+    fn apply_travel(&mut self, txn_with_proof: TransactionWithProof) -> Result<()> {
+        let TransactionWithProof {
+            events,
+            transaction,
+            proof,
+            version,
+            ..
+        } = txn_with_proof;
+        let signed_txn = match transaction {
+            Transaction::UserTransaction(s) => s,
+            _ => bail!("should be user txn"),
+        };
+        let txn_to_commit = ChannelTransactionToCommit {
+            signed_channel_txn: AppliedChannelTxn::Travel(signed_txn),
+            events: events.unwrap_or_default(),
+            major_status: proof.transaction_info().major_status(),
+            write_set: WriteSet::default(),
+            gas_used: proof.transaction_info().gas_used(),
+        };
+        self.tx_applier.apply(txn_to_commit)?;
+
+        self.refresh_channel_state(version)?;
+        Ok(())
+    }
+
+    fn refresh_channel_state(&mut self, version: u64) -> Result<()> {
+        let channel_address_state = self
+            .chain_client
+            .get_account_state(self.channel_address, Some(version))?;
+        self.channel_state = ChannelState::new(self.channel_address, channel_address_state);
+
+        Ok(())
+    }
+
     /// apply data into local channel storage
     fn apply(
         &mut self,
@@ -910,46 +956,18 @@ impl Channel {
         signatures: BTreeMap<AccountAddress, ChannelTransactionSigs>,
     ) -> Result<()> {
         let txn_to_commit = ChannelTransactionToCommit {
-            signed_channel_txn: SignedChannelTransaction::new(channel_txn, signatures),
+            signed_channel_txn: AppliedChannelTxn::Offchain(SignedChannelTransaction::new(
+                channel_txn,
+                signatures,
+            )),
             events: txn_output.events().to_vec(),
             major_status: txn_output.status().vm_status().major_status,
-            write_set: if txn_output.is_travel_txn() {
-                WriteSet::default()
-            } else {
-                txn_output.write_set().clone()
-            },
-            travel: txn_output.is_travel_txn(),
+            write_set: txn_output.write_set().clone(),
             gas_used: txn_output.gas_used(),
         };
 
         // apply txn  also delete pending txn from db
         self.tx_applier.apply(txn_to_commit)?;
-
-        if txn_output.is_travel_txn() {
-            self.apply_travel_output(txn_output.write_set())?;
-        }
-
-        Ok(())
-    }
-
-    // FIXME
-    pub fn apply_travel_output(&mut self, write_set: &WriteSet) -> Result<()> {
-        for (ap, op) in write_set {
-            if ap.is_channel_resource() {
-                ensure!(
-                    &ap.address == self.channel_address(),
-                    "Unexpected witness_payload access_path {:?} apply to channel {:?}",
-                    &ap.address,
-                    self.channel_address()
-                );
-                match op {
-                    WriteOp::Value(value) => {
-                        self.channel_state.insert(ap.path.clone(), value.clone())
-                    }
-                    WriteOp::Deletion => self.channel_state.remove(&ap.path),
-                };
-            }
-        }
         Ok(())
     }
 
@@ -1108,27 +1126,19 @@ impl Channel {
     }
     fn check_applied(
         &self,
-        proposal: &ChannelTransactionProposal,
+        channel_sequence_number: u64,
     ) -> Result<Option<(SignedChannelTransactionWithProof)>> {
-        let channel_txn = &proposal.channel_txn;
         if let Some(info) = self.store.get_startup_info()? {
-            if channel_txn.channel_sequence_number() > info.latest_version {
+            if channel_sequence_number > info.latest_version {
                 Ok(None)
             } else {
-                let signed_channel_txn_with_proof =
-                    self.store.get_transaction_by_channel_seq_number(
-                        channel_txn.channel_sequence_number(),
-                        false,
-                    )?;
+                let signed_channel_txn_with_proof = self
+                    .store
+                    .get_transaction_by_channel_seq_number(channel_sequence_number, false)?;
                 debug_assert_eq!(
                     signed_channel_txn_with_proof.version,
-                    channel_txn.channel_sequence_number()
+                    channel_sequence_number
                 );
-                if CryptoHash::hash(&proposal.channel_txn)
-                    != CryptoHash::hash(&signed_channel_txn_with_proof.signed_transaction.raw_tx)
-                {
-                    bail!("invalid proposal, channel already applied a different proposal with same channel seq number {}", signed_channel_txn_with_proof.version);
-                }
                 Ok(Some(signed_channel_txn_with_proof))
             }
         } else {

@@ -10,6 +10,7 @@ use libra_types::account_address::AccountAddress;
 use libra_types::vm_error::StatusCode;
 use libra_types::write_set::{WriteOp, WriteSetMut};
 use rand::prelude::*;
+use sgtypes::applied_channel_txn::AppliedChannelTxn;
 use sgtypes::channel_transaction::{ChannelOp, ChannelTransaction, ChannelTransactionProposal};
 use sgtypes::channel_transaction_sigs::ChannelTransactionSigs;
 use sgtypes::channel_transaction_to_commit::ChannelTransactionToCommit;
@@ -63,13 +64,12 @@ fn generate_txn_to_apply(
         s
     };
     let txn_to_apply = ChannelTransactionToCommit {
-        signed_channel_txn: SignedChannelTransaction {
+        signed_channel_txn: AppliedChannelTxn::Offchain(SignedChannelTransaction {
             raw_tx: txn,
             signatures,
-        },
+        }),
         write_set: ws,
         events: vec![],
-        travel: false,
         major_status: StatusCode::ABORTED,
         gas_used: 0,
     };

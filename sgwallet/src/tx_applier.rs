@@ -5,9 +5,9 @@ use anyhow::{ensure, Result};
 use itertools::Itertools;
 use libra_crypto::hash::{CryptoHash, EventAccumulatorHasher, HashValue};
 use libra_logger::prelude::*;
-use libra_types::account_address::AccountAddress;
+
 use libra_types::proof::accumulator::InMemoryAccumulator;
-use sgstorage::channel_db::{ChannelAddressProvider, ChannelDB};
+use sgstorage::channel_db::ChannelDB;
 use sgstorage::channel_store::ChannelStore;
 use sgtypes::channel_transaction_info::ChannelTransactionInfo;
 use sgtypes::channel_transaction_to_commit::ChannelTransactionToCommit;
@@ -26,18 +26,6 @@ pub struct AppliedTrees {
 pub struct TxApplier {
     applied_trees: AppliedTrees,
     store: ChannelStore<ChannelDB>,
-}
-
-impl TxApplier {
-    #[inline]
-    pub fn participant_address(&self) -> AccountAddress {
-        self.store.db().participant_address()
-    }
-
-    #[inline]
-    pub fn owner_address(&self) -> AccountAddress {
-        self.store.db().owner_address()
-    }
 }
 
 impl TxApplier {
@@ -82,13 +70,12 @@ impl TxApplier {
         let ChannelTransactionToCommit {
             signed_channel_txn,
             write_set,
-            travel,
             events,
             major_status,
             gas_used,
             ..
         } = tx_to_commit;
-        let channel_seq_number = signed_channel_txn.raw_tx.channel_sequence_number();
+        let channel_seq_number = signed_channel_txn.channel_sequence_number();
         ensure!(
             channel_seq_number == self.applied_trees.tx_accumulator.num_leaves(),
             "tx channel seq number mismatched"
@@ -104,6 +91,7 @@ impl TxApplier {
                 .collect_vec()
                 .as_slice(),
         );
+        let travel = signed_channel_txn.travel();
         let txn_info = ChannelTransactionInfo::new(
             signed_channel_txn.hash(),
             write_set_tree.root_hash(),
@@ -135,7 +123,6 @@ impl TxApplier {
         let txn_to_commit = ChannelTransactionToCommit {
             signed_channel_txn,
             write_set,
-            travel,
             events,
             major_status,
             gas_used,
