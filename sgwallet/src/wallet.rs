@@ -22,7 +22,7 @@ use libra_logger::prelude::*;
 use libra_state_view::StateView;
 use libra_types::byte_array::ByteArray;
 use libra_types::channel::{
-    channel_mirror_struct_tag, channel_participant_struct_tag, channel_struct_tag,
+    channel_mirror_struct_tag, channel_participant_struct_tag, channel_struct_tag, make_resource,
     user_channels_struct_tag, ChannelMirrorResource, ChannelParticipantAccountResource,
     ChannelResource, UserChannelsResource,
 };
@@ -57,7 +57,7 @@ use sgtypes::{
     script_package::{ChannelScriptPackage, ScriptCode},
 };
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::convert::TryFrom;
+
 use std::path::Path;
 use std::{sync::Arc, time::Duration};
 use tokio::runtime;
@@ -861,7 +861,7 @@ impl Inner {
         {
             self.channel_enabled = true;
             let user_channels: UserChannelsResource =
-                TryFrom::try_from(blob.as_slice()).expect("parse user channels should work");
+                make_resource(blob.as_slice()).expect("parse user channels should work");
             if let Err(e) = self.refresh_channels(user_channels, account_state.version()) {
                 error!("fail to start all channels, err: {:?}", e);
                 return ();

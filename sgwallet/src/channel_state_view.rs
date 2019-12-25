@@ -48,7 +48,9 @@ impl<'txn> ChannelStateView<'txn> {
     }
 
     pub fn get_local(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
-        super::channel::access_local(&self.latest_write_set, self.channel_state, access_path)
+        let d =
+            super::channel::access_local(&self.latest_write_set, self.channel_state, access_path)?;
+        Ok(d.map(|t| t.to_vec()))
     }
 }
 

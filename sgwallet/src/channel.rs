@@ -1,7 +1,6 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::chain_watcher::TransactionWithInfo;
 use crate::channel_state_view::ChannelStateView;
 use crate::scripts::PackageRegistry;
 use crate::tx_applier::TxApplier;
@@ -22,26 +21,29 @@ use libra_logger::prelude::*;
 use libra_state_view::StateView;
 use libra_types::access_path::DataPath;
 use libra_types::channel::{
-    channel_mirror_struct_tag, channel_participant_struct_tag, ChannelMirrorResource,
-    ChannelParticipantAccountResource, Witness, WitnessData,
+    make_resource, ChannelMirrorResource, ChannelParticipantAccountResource, ChannelResource,
+    LibraResource, Witness, WitnessData,
 };
+use libra_types::contract_event::ContractEvent;
 use libra_types::identifier::Identifier;
 use libra_types::language_storage::{ModuleId, StructTag};
 use libra_types::transaction::{
     ChannelTransactionPayload, ChannelTransactionPayloadBody, RawTransaction, ScriptAction,
-    SignedTransaction, Transaction, TransactionArgument, TransactionPayload, TransactionWithProof,
-    Version,
+    SignedTransaction, Transaction, TransactionArgument, TransactionInfo, TransactionPayload,
+    TransactionWithProof, Version,
 };
 use libra_types::write_set::WriteSet;
 use libra_types::{
     access_path::AccessPath, account_address::AccountAddress, transaction::TransactionOutput,
     write_set::WriteOp,
 };
+use serde::de::DeserializeOwned;
+
 use sgchain::star_chain_client::ChainClient;
 use sgstorage::channel_db::ChannelDB;
 use sgstorage::channel_store::ChannelStore;
 use sgtypes::applied_channel_txn::AppliedChannelTxn;
-use sgtypes::channel::{ChannelStage, ChannelState};
+use sgtypes::channel::ChannelState;
 use sgtypes::channel_transaction::{ChannelOp, ChannelTransaction, ChannelTransactionProposal};
 use sgtypes::channel_transaction_sigs::ChannelTransactionSigs;
 use sgtypes::channel_transaction_to_commit::ChannelTransactionToCommit;
@@ -49,6 +51,7 @@ use sgtypes::pending_txn::PendingTransaction;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use sgtypes::signed_channel_transaction_with_proof::SignedChannelTransactionWithProof;
 use std::collections::{BTreeMap, BTreeSet};
+
 use std::sync::Arc;
 use std::time::Duration;
 use vm::gas_schedule::GasAlgebra;
@@ -367,7 +370,9 @@ impl Channel {
                 respond_with(responder, response);
             }
             ChannelMsg::AccessPath { path, responder } => {
-                let response = self.get_local(&path);
+                let response =
+                    access_local(self.witness_data().write_set(), &self.channel_state, &path)
+                        .map(|d| d.map(|o| o.to_vec()));
                 respond_with(responder, response);
             }
             ChannelMsg::GetPendingTxn { responder } => {
@@ -396,89 +401,107 @@ impl Channel {
     }
 
     #[allow(dead_code)]
-    async fn handle_chain_txn(&mut self, txn_with_info: TransactionWithInfo) {
-        let TransactionWithInfo {
-            txn,
-            txn_info: _,
-            version: _,
-        } = txn_with_info;
-        if let Transaction::UserTransaction(signed_txn) = txn {
-            let txn_sender = signed_txn.sender();
-            let raw_txn = signed_txn.into_raw_transaction();
-            let txn_payload = raw_txn.into_payload();
-            debug_assert!(txn_payload.is_channel());
-            if let TransactionPayload::Channel(channel_txn_payload) = txn_payload {
-                debug_assert!(self.participant_addresses.contains(&txn_sender));
-                debug_assert!(self.channel_address == channel_txn_payload.channel_address());
-                // found participant submit a new txn
-                if txn_sender != self.account_address {
-                    // and the txn is authorized by me
-                    if channel_txn_payload.is_authorized() {
-                        unimplemented!()
+    async fn handle_chain_txn(
+        &mut self,
+        version: u64,
+        signed_txn: SignedTransaction,
+        txn_info: TransactionInfo,
+        events: Vec<ContractEvent>,
+    ) -> Result<()> {
+        let txn_sender = signed_txn.sender();
+        let raw_txn = signed_txn.raw_txn();
+        let txn_payload = raw_txn.payload();
+        let channel_txn_payload = match txn_payload {
+            TransactionPayload::Channel(channel_txn_payload) => channel_txn_payload,
+            _ => bail!("should watch channel txn"),
+        };
+
+        debug_assert!(self.participant_addresses.contains(&txn_sender));
+        debug_assert!(self.channel_address == channel_txn_payload.channel_address());
+
+        let txn_channel_seq_number = channel_txn_payload.witness().channel_sequence_number();
+        let local_channel_seq_number = self.channel_sequence_number();
+
+        // found participant submit a new txn
+        if txn_sender != self.account_address {
+            // compare the new txn's witness sequence number with local sequence_number
+            // if equal, it means new txn committed onchain, but I don't aware.
+            // if less by only one, maybe proposer didn't receive my signature, and he proposed the txn onchian,
+            // or it means the new txn proposer had submitted a stale channel txn purposely.
+            // if bigger, it's a bug.
+            debug_assert!(
+                txn_channel_seq_number <= local_channel_seq_number,
+                "Local state is stale, there must be some bugs"
+            );
+
+            // and the txn is authorized by me
+            if channel_txn_payload.is_authorized() {
+                if txn_channel_seq_number == local_channel_seq_number {
+                    // a new signed-by-me txn is committed onchain, that's wired,
+                    // because my local state didn't aware this txn.
+                    // anyway, I apply this
+                    self.apply_travel(version, signed_txn, txn_info, events)?;
+                } else if txn_channel_seq_number < local_channel_seq_number {
+                    // it means participant make a stale offchain txn travel directly.
+                    // but I already applied the txn locally.
+                    // FIXME: what's should I do.
+                    // I cannot challenge him, because the channel is not locked.
+                }
+            } else {
+                // unauthorized txns should be:
+                // 1. solo travel txn
+                // 2. challenge txn
+                // 3. resolve txn
+                if txn_channel_seq_number == local_channel_seq_number {
+                    warn!(
+                        "watch a newer channel txn on chain, based on channel_sequence_number {}",
+                        txn_channel_seq_number
+                    );
+                    // 1. apply the solo txn first.
+                    self.apply_travel(version, signed_txn, txn_info, events)?;
+                    // 2. after apply, check channel state
+                    let channel_resource: ChannelResource = self
+                        .channel_resource()
+                        .ok_or(format_err!("channel resource should exists in local"))?;
+
+                    if channel_resource.locked() {
+                        // locked by proposer.
+                        // try to resolve
+                        self.solo_txn(resolve_channel_action(), u64::max_value())
+                            .await?;
+                    } else if channel_resource.closed() {
+                        // participant close the channel.
+                        // TODO: close channel now
+                        self.should_stop = true;
                     } else {
-                        if let Err(e) = self
-                            .handle_unauthorized_travel_txn(channel_txn_payload)
-                            .await
-                        {
-                            error!("fail to handle unauthorized tranvel txn, e: {}", e);
-                        }
+                        // nothing todo. everything is good now.
                     }
-                } else {
-                    // ignore my own txn?
+                } else if txn_channel_seq_number < local_channel_seq_number {
+                    warn!(
+                        "watch a stale channel txn on chain, based on channel_sequence_number {}",
+                        txn_channel_seq_number
+                    );
+                    // NOTICE: I cannot apply the txn locally.
+
+                    let _ = self
+                        .solo_txn(challenge_channel_action(), u64::max_value())
+                        .await?;
+                    // after challenge success, channel should be closed
+                    let channel_resource: ChannelResource = self
+                        .channel_resource()
+                        .ok_or(format_err!("channel resource should exists in local"))?;
+                    debug_assert!(
+                        channel_resource.closed(),
+                        "channel should be closed after challenge success"
+                    );
+                    // now, we can clean the channel data, and stop the channel actor.
+                    // TODO: cleanup data
+                    self.should_stop = true;
                 }
             }
+        } else {
+            // ignore my own txn?
         }
-    }
-
-    /// unauthorized txns should be:
-    /// 1. solo travel txn
-    /// 2. challenge txn
-    /// 3. resolve txn
-    async fn handle_unauthorized_travel_txn(
-        &mut self,
-        channel_txn_payload: ChannelTransactionPayload,
-    ) -> Result<()> {
-        let txn_channel_seq_number = channel_txn_payload.witness().channel_sequence_number();
-        if txn_channel_seq_number > self.channel_sequence_number() {
-            // TODO: better handle
-            // this should not happen.
-            // If chain include a txn whose witness data is signed by myself,
-            // and the channel seq number is bigger than my local's,
-            // it means the local implementation contains some bugs.
-            panic!("Local state is stale, there must be some bugs");
-        }
-
-        if txn_channel_seq_number == self.channel_sequence_number() {
-            self.resolve_channel().await?;
-        } else if txn_channel_seq_number < self.channel_sequence_number() {
-            self.challenge_channel().await?;
-        }
-        Ok(())
-    }
-
-    async fn resolve_channel(&mut self) -> Result<()> {
-        let signed_txn = self.build_solo_txn(resolve_channel_action(), u64::max_value())?;
-        let txn_sender = signed_txn.sender();
-        let seq_number = signed_txn.sequence_number();
-        submit_transaction(self.chain_client.as_ref(), signed_txn).await?;
-
-        let txn_with_proof =
-            watch_transaction(self.chain_client.as_ref(), txn_sender, seq_number).await?;
-        let _gas_used = txn_with_proof.proof.transaction_info().gas_used();
-        // TODO: handle apply state into local
-        Ok(())
-    }
-    async fn challenge_channel(&mut self) -> Result<()> {
-        let signed_txn = self.build_solo_txn(challenge_channel_action(), u64::max_value())?;
-        let txn_sender = signed_txn.sender();
-        let seq_number = signed_txn.sequence_number();
-
-        submit_transaction(self.chain_client.as_ref(), signed_txn).await?;
-
-        let txn_with_proof =
-            watch_transaction(self.chain_client.as_ref(), txn_sender, seq_number).await?;
-        let _gas_used = txn_with_proof.proof.transaction_info().gas_used();
-        // TODO: handle apply state into local
         Ok(())
     }
 
@@ -801,7 +824,7 @@ impl Channel {
         ensure!(self.pending_txn().is_some(), "should have txn to apply");
         let pending_txn = self.pending_txn().unwrap();
         ensure!(!pending_txn.fulfilled(), "txn should not be fulfilled");
-        let (proposal, output, signatures) = pending_txn.into();
+        let (proposal, output, _signatures) = pending_txn.into();
         let channel_txn = &proposal.channel_txn;
         ensure!(
             self.account_address == channel_txn.proposer(),
@@ -812,18 +835,38 @@ impl Channel {
             (output.gas_used() as f64 * 1.1) as u64,
             MAX_GAS_AMOUNT_ONCHAIN,
         );
+        self.solo_txn(channel_txn.action(), max_gas_amount).await
+    }
 
-        let signed_txn = self.build_solo_txn(channel_txn.action(), max_gas_amount)?;
+    async fn solo_txn(&mut self, action: ScriptAction, max_gas_amount: u64) -> Result<u64> {
+        let signed_txn = self.build_solo_txn(action, max_gas_amount)?;
         let txn_sender = signed_txn.sender();
         let seq_number = signed_txn.sequence_number();
 
         submit_transaction(self.chain_client.as_ref(), signed_txn).await?;
+
         let txn_with_proof =
             watch_transaction(self.chain_client.as_ref(), txn_sender, seq_number).await?;
-        let gas_used = txn_with_proof.proof.transaction_info().gas_used();
-        let channel_txn = chain_txn_to_local_channel_txn(txn_with_proof)?;
-        self.apply(channel_txn, output, signatures)?;
-        Ok(gas_used)
+        let _gas_used = txn_with_proof.proof.transaction_info().gas_used();
+
+        let TransactionWithProof {
+            events,
+            transaction,
+            version,
+            proof,
+        } = txn_with_proof;
+        let signed_txn = match transaction {
+            Transaction::UserTransaction(s) => s,
+            _ => bail!("should be user txn"),
+        };
+        self.apply_travel(
+            version,
+            signed_txn,
+            proof.transaction_info().clone(),
+            events.unwrap_or_default(),
+        )?;
+
+        Ok(_gas_used)
     }
 
     async fn apply_pending_txn_async(
@@ -877,7 +920,23 @@ impl Channel {
             )
             .await?;
             let gas_used = txn_with_proof.proof.transaction_info().gas_used();
-            self.apply_travel(txn_with_proof)?;
+            let TransactionWithProof {
+                events,
+                transaction,
+                version,
+                proof,
+            } = txn_with_proof;
+            let signed_txn = match transaction {
+                Transaction::UserTransaction(s) => s,
+                _ => bail!("should be user txn"),
+            };
+            self.apply_travel(
+                version,
+                signed_txn,
+                proof.transaction_info().clone(),
+                events.unwrap_or_default(),
+            )?;
+
             gas_used
         } else {
             self.apply(proposal.channel_txn, output, signatures)?;
@@ -914,24 +973,19 @@ impl Channel {
         Ok(())
     }
 
-    fn apply_travel(&mut self, txn_with_proof: TransactionWithProof) -> Result<()> {
-        let TransactionWithProof {
-            events,
-            transaction,
-            proof,
-            version,
-            ..
-        } = txn_with_proof;
-        let signed_txn = match transaction {
-            Transaction::UserTransaction(s) => s,
-            _ => bail!("should be user txn"),
-        };
+    fn apply_travel(
+        &mut self,
+        version: u64,
+        signed_txn: SignedTransaction,
+        txn_info: TransactionInfo,
+        events: Vec<ContractEvent>,
+    ) -> Result<()> {
         let txn_to_commit = ChannelTransactionToCommit {
             signed_channel_txn: AppliedChannelTxn::Travel(signed_txn),
-            events: events.unwrap_or_default(),
-            major_status: proof.transaction_info().major_status(),
+            events,
+            major_status: txn_info.major_status(),
             write_set: WriteSet::default(),
-            gas_used: proof.transaction_info().gas_used(),
+            gas_used: txn_info.gas_used(),
         };
         self.tx_applier.apply(txn_to_commit)?;
 
@@ -976,39 +1030,45 @@ impl Channel {
     }
 
     fn channel_sequence_number(&self) -> u64 {
-        let access_path = AccessPath::new_for_data_path(
-            self.channel_address,
-            DataPath::channel_resource_path(self.channel_address, channel_mirror_struct_tag()),
-        );
         let channel_mirror_resource = self
-            .get_local(&access_path)
-            .unwrap()
-            .and_then(|value| ChannelMirrorResource::make_from(value).ok());
+            .get_local::<ChannelMirrorResource>(&AccessPath::new_for_data_path(
+                self.channel_address,
+                DataPath::channel_resource_path(
+                    self.channel_address,
+                    ChannelMirrorResource::struct_tag(),
+                ),
+            ))
+            .unwrap();
         match channel_mirror_resource {
             None => 0,
             Some(r) => r.channel_sequence_number(),
         }
     }
 
+    pub fn channel_resource(&self) -> Option<ChannelResource> {
+        self.get_local::<ChannelResource>(&AccessPath::new_for_data_path(
+            self.channel_address,
+            DataPath::onchain_resource_path(ChannelResource::struct_tag()),
+        ))
+        .unwrap()
+    }
+
     #[allow(dead_code)]
     pub fn channel_account_resource(&self) -> Option<ChannelParticipantAccountResource> {
-        let access_path = AccessPath::new_for_data_path(
+        self.get_local::<ChannelParticipantAccountResource>(&AccessPath::new_for_data_path(
             self.channel_address,
-            DataPath::channel_resource_path(self.account_address, channel_participant_struct_tag()),
-        );
-        self.get_local(&access_path)
-            .unwrap()
-            .and_then(|value| ChannelParticipantAccountResource::make_from(value).ok())
+            DataPath::channel_resource_path(
+                self.account_address,
+                ChannelParticipantAccountResource::struct_tag(),
+            ),
+        ))
+        .unwrap()
     }
 
     fn pending_txn(&self) -> Option<PendingTransaction> {
         self.store.get_pending_txn()
     }
 
-    #[allow(dead_code)]
-    fn stage(&self) -> ChannelStage {
-        unimplemented!()
-    }
     // TODO: should stage is needed?
     //    fn _stage(&self) -> ChannelStage {
     //        match self.pending_txn() {
@@ -1035,9 +1095,13 @@ impl Channel {
     //        Ok(())
     //    }
 
-    fn get_local(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
+    fn get_local<T>(&self, access_path: &AccessPath) -> Result<Option<T>>
+    where
+        T: LibraResource + DeserializeOwned,
+    {
         let witness = self.witness_data();
-        access_local(witness.write_set(), &self.channel_state, access_path)
+        let data = access_local(witness.write_set(), &self.channel_state, access_path)?;
+        data.map(make_resource).transpose()
     }
 
     fn generate_proposal(
@@ -1339,22 +1403,24 @@ pub(crate) fn access_local<'a>(
     latest_write_set: &'a WriteSet,
     channel_state: &'a ChannelState,
     access_path: &AccessPath,
-) -> Result<Option<Vec<u8>>> {
-    match latest_write_set.get(access_path) {
+) -> Result<Option<&'a [u8]>> {
+    let data = match latest_write_set.get(access_path) {
         Some(op) => match op {
-            WriteOp::Value(value) => Ok(Some(value.clone())),
-            WriteOp::Deletion => Ok(None),
+            WriteOp::Value(value) => Some(value),
+            WriteOp::Deletion => None,
         },
         None => {
             if channel_state.address() != &access_path.address {
-                Err(format_err!("Unexpected access_path: {}", access_path))
+                bail!("Unexpected access_path: {}", access_path)
             } else {
-                Ok(channel_state.get(&access_path.path).cloned())
+                channel_state.get(&access_path.path)
             }
         }
-    }
+    };
+    Ok(data.map(|d| d.as_slice()))
 }
 
+#[allow(dead_code)]
 fn chain_txn_to_local_channel_txn(
     _txn_with_proof: TransactionWithProof,
 ) -> Result<ChannelTransaction> {
