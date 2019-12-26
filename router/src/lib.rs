@@ -116,7 +116,7 @@ impl TableRouter {
     }
 
     pub async fn shutdown(&self) -> Result<()> {
-        //self.control_sender.unbounded_send(Event::SHUTDOWN)?;
+        self.control_sender.unbounded_send(Event::SHUTDOWN)?;
         Ok(())
     }
 
@@ -222,6 +222,7 @@ impl RouterInner {
                 },
             }
         }
+        drop(stream);
     }
 
     async fn handle_router_network_msg(
