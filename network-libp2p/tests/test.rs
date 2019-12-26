@@ -129,7 +129,7 @@ fn two_nodes_transfer_lots_of_packets() {
                         return Ok(Async::Ready(()));
                     }
                 }
-                _ => panic!(),
+                _ => {}
             }
         }
     });
