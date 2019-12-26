@@ -12,7 +12,7 @@ port = 7001
 listen = '/ip4/127.0.0.1/tcp/10001'
 max_sockets = 20
 in_memory = false
-seeds = ['/ip4/127.0.0.1/tcp/10000/p2p/5181c01f6005d3236cb950f21a83c22489b9f9d1fadc027cf9532d6f99041522']
+seeds = ['/ip4/127.0.0.1/tcp/10000/p2p/98723ca74036da70025a74e4e0af6c476c3517e20308bf72554bb082cc8ec984']
 
 [wallet]
 chain_address = '39.98.196.244'
