@@ -53,6 +53,7 @@ channel = { path = "../libra/common/channel", version = "0.1.0" }
 futures-timer = "1.0.2"
 rusty-fork = "0.2.1"
 block-storage-client = { path = "../libra/consensus/block-storage-client" }
+chain-state = { path = "../libra/consensus/chain-state" }
 
 [dev-dependencies]
 rusty-fork = "0.2.1"

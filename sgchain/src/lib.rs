@@ -3,13 +3,9 @@
 
 mod mock_star_node;
 #[cfg(test)]
-mod pow_mine_test;
-#[cfg(test)]
-mod pow_node_test;
+mod tests;
 
-#[cfg(test)]
-mod chain_test;
-
+mod chain_state_client;
 pub mod client_state_view;
 pub mod main_node;
 pub mod star_chain_client;
