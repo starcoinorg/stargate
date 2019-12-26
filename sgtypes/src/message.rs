@@ -307,9 +307,8 @@ pub enum MessageType {
     ChannelTransactionRequest,
     ChannelTransactionResponse,
     ErrorMessage,
-    BalanceQueryResponse,
-    BalanceQueryRequest,
     MultiHopChannelTransactionRequest,
+    RouterMessage,
 }
 
 impl MessageType {
@@ -319,9 +318,8 @@ impl MessageType {
             MessageType::ChannelTransactionRequest => 2,
             MessageType::ChannelTransactionResponse => 3,
             MessageType::ErrorMessage => 4,
-            MessageType::BalanceQueryResponse => 5,
-            MessageType::BalanceQueryRequest => 6,
-            MessageType::MultiHopChannelTransactionRequest => 7,
+            MessageType::MultiHopChannelTransactionRequest => 5,
+            MessageType::RouterMessage => 6,
         }
     }
 
@@ -331,9 +329,8 @@ impl MessageType {
             2 => Ok(MessageType::ChannelTransactionRequest),
             3 => Ok(MessageType::ChannelTransactionResponse),
             4 => Ok(MessageType::ErrorMessage),
-            5 => Ok(MessageType::BalanceQueryResponse),
-            6 => Ok(MessageType::BalanceQueryRequest),
-            7 => Ok(MessageType::MultiHopChannelTransactionRequest),
+            5 => Ok(MessageType::MultiHopChannelTransactionRequest),
+            6 => Ok(MessageType::RouterMessage),
             _ => bail!("no such type"),
         }
     }
@@ -418,6 +415,15 @@ impl BalanceQueryResponse {
     pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
         Ok(TryInto::<crate::proto::sgtypes::BalanceQueryResponse>::try_into(self)?.to_vec()?)
     }
+
+    pub fn revert(&self) -> Self {
+        Self {
+            local_addr: self.remote_addr.clone(),
+            remote_addr: self.local_addr.clone(),
+            local_balance: self.remote_balance,
+            remote_balance: self.local_balance,
+        }
+    }
 }
 
 impl TryFrom<crate::proto::sgtypes::BalanceQueryResponse> for BalanceQueryResponse {
@@ -447,13 +453,19 @@ impl From<BalanceQueryResponse> for crate::proto::sgtypes::BalanceQueryResponse 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AntQueryMessage {
     pub s_value: SValue,
+    pub sender_addr: AccountAddress,
     pub balance_query_response_list: Vec<BalanceQueryResponse>,
 }
 
 impl AntQueryMessage {
-    pub fn new(s_value: SValue, balance_query_response_list: Vec<BalanceQueryResponse>) -> Self {
+    pub fn new(
+        s_value: SValue,
+        sender_addr: AccountAddress,
+        balance_query_response_list: Vec<BalanceQueryResponse>,
+    ) -> Self {
         Self {
             s_value,
+            sender_addr,
             balance_query_response_list,
         }
     }
@@ -483,6 +495,7 @@ impl TryFrom<crate::proto::sgtypes::AntQueryMessage> for AntQueryMessage {
 
         Ok(Self::new(
             value.s_value.try_into()?,
+            value.sender_addr.try_into()?,
             balance_query_response_list?,
         ))
     }
@@ -492,6 +505,7 @@ impl From<AntQueryMessage> for crate::proto::sgtypes::AntQueryMessage {
     fn from(value: AntQueryMessage) -> Self {
         Self {
             s_value: value.s_value.to_vec(),
+            sender_addr: value.sender_addr.to_vec(),
             balance_query_response_list: value
                 .balance_query_response_list
                 .iter()
@@ -776,13 +790,98 @@ impl From<AntFinalMessage> for crate::proto::sgtypes::AntFinalMessage {
     }
 }
 
-pub enum NodeNetworkMessage {
-    BalanceQueryResponseEnum(BalanceQueryResponse),
+pub enum NodeNetworkMessage {}
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Clone, Eq, PartialEq)]
+pub enum RouterNetworkMessage {
+    ExchangeSeedMessageRequest(ExchangeSeedMessageRequest),
+    ExchangeSeedMessageResponse(ExchangeSeedMessageResponse),
+    AntQueryMessage(AntQueryMessage),
+    AntFinalMessage(AntFinalMessage),
+    BalanceQueryRequest(BalanceQueryRequest),
+    BalanceQueryResponse(BalanceQueryResponse),
 }
 
-pub enum RouterNetworkMessage {
-    ExchangeSeedMessageRequest((AccountAddress, ExchangeSeedMessageRequest)),
-    ExchangeSeedMessageResponse(ExchangeSeedMessageResponse),
-    AntQueryMessage((AccountAddress, AntQueryMessage)),
-    AntFinalMessage(AntFinalMessage),
+impl RouterNetworkMessage {
+    pub fn from_proto_bytes<B>(buf: B) -> Result<Self>
+    where
+        B: IntoBuf,
+    {
+        crate::proto::sgtypes::RouterNetworkMessage::decode(buf)?.try_into()
+    }
+
+    pub fn into_proto_bytes(self) -> Result<Vec<u8>> {
+        Ok(TryInto::<crate::proto::sgtypes::RouterNetworkMessage>::try_into(self)?.to_vec()?)
+    }
+}
+
+impl TryFrom<crate::proto::sgtypes::RouterNetworkMessage> for RouterNetworkMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(proto: crate::proto::sgtypes::RouterNetworkMessage) -> Result<Self> {
+        use crate::proto::sgtypes::router_network_message::RouterMessageItems;
+
+        let item = proto
+            .router_message_items
+            .ok_or_else(|| format_err!("Missing txn_response_items"))?;
+
+        let response = match item {
+            RouterMessageItems::ExchangeSeedRequest(resp) => {
+                RouterNetworkMessage::ExchangeSeedMessageRequest(
+                    ExchangeSeedMessageRequest::try_from(resp)?,
+                )
+            }
+            RouterMessageItems::ExchangeSeedResponse(resp) => {
+                RouterNetworkMessage::ExchangeSeedMessageResponse(
+                    ExchangeSeedMessageResponse::try_from(resp)?,
+                )
+            }
+            RouterMessageItems::AntQueryMessage(resp) => {
+                RouterNetworkMessage::AntQueryMessage(AntQueryMessage::try_from(resp)?)
+            }
+            RouterMessageItems::AntFinalMessage(resp) => {
+                RouterNetworkMessage::AntFinalMessage(AntFinalMessage::try_from(resp)?)
+            }
+            RouterMessageItems::BalanceQueryRequest(resp) => {
+                RouterNetworkMessage::BalanceQueryRequest(BalanceQueryRequest::try_from(resp)?)
+            }
+            RouterMessageItems::BalanceQueryResponse(resp) => {
+                RouterNetworkMessage::BalanceQueryResponse(BalanceQueryResponse::try_from(resp)?)
+            }
+        };
+
+        Ok(response)
+    }
+}
+
+impl From<RouterNetworkMessage> for crate::proto::sgtypes::RouterNetworkMessage {
+    fn from(response: RouterNetworkMessage) -> Self {
+        use crate::proto::sgtypes::router_network_message::RouterMessageItems;
+
+        let resp = match response {
+            RouterNetworkMessage::ExchangeSeedMessageRequest(r) => {
+                RouterMessageItems::ExchangeSeedRequest(r.into())
+            }
+            RouterNetworkMessage::ExchangeSeedMessageResponse(r) => {
+                RouterMessageItems::ExchangeSeedResponse(r.into())
+            }
+            RouterNetworkMessage::AntQueryMessage(r) => {
+                RouterMessageItems::AntQueryMessage(r.into())
+            }
+            RouterNetworkMessage::AntFinalMessage(r) => {
+                RouterMessageItems::AntFinalMessage(r.into())
+            }
+            RouterNetworkMessage::BalanceQueryRequest(r) => {
+                RouterMessageItems::BalanceQueryRequest(r.into())
+            }
+            RouterNetworkMessage::BalanceQueryResponse(r) => {
+                RouterMessageItems::BalanceQueryResponse(r.into())
+            }
+        };
+
+        Self {
+            router_message_items: Some(resp),
+        }
+    }
 }

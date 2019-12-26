@@ -75,10 +75,22 @@ message ExchangeSeedMessageResponse{
 
 message AntQueryMessage {
     bytes s_value = 1;
-    repeated BalanceQueryResponse balance_query_response_list= 2;
+    bytes sender_addr = 2;
+    repeated BalanceQueryResponse balance_query_response_list= 3;
 }
 
 message AntFinalMessage {
     bytes r_value = 1;
     repeated BalanceQueryResponse balance_query_response_list= 2;
+}
+
+message RouterNetworkMessage {
+    oneof router_message_items {
+        ExchangeSeedMessageRequest exchange_seed_request = 1;
+        ExchangeSeedMessageResponse exchange_seed_response = 2;
+        AntQueryMessage ant_query_message = 3;
+        AntFinalMessage ant_final_message = 4;
+        BalanceQueryRequest balance_query_request = 5;
+        BalanceQueryResponse balance_query_response = 6;
+    }
 }

@@ -17,7 +17,16 @@ lcs = { path = "../libra/common/lcs", package = "libra-canonical-serialization" 
 libra-crypto = { path = "../libra/crypto/crypto"}
 libra-tools = {path ="../libra/common/tools", package = "libra-tools"}
 sgtypes = { path = "../sgtypes" }
+network = { package = "sgnetwork", path = "../sgnetwork"}
+sg_config = { path = "../sgconfig"}
 
 futures = { version = "0.3.0", features = ["io-compat", "compat"] }
+futures_01 = { version = "0.1.25", package = "futures" }
+
 tokio = { version = "0.2", features = ["full"] }
 rand = "0.6.5"
+async-trait = "0.1.13"
+hex = { version = "0.3.2", default-features = false }
+
+[dev-dependencies]
+libra-config = { path = "../libra/config"}

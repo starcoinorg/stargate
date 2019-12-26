@@ -38,8 +38,8 @@ impl SValueGenerator {
 
     pub fn get_r(&self) -> HashValue {
         let mut bytes_vec = Vec::new();
-        bytes_vec.copy_from_slice(&self.sender_r.to_le_bytes());
-        bytes_vec.copy_from_slice(&self.receiver_r.to_le_bytes());
+        bytes_vec.extend_from_slice(&self.sender_r.to_le_bytes());
+        bytes_vec.extend_from_slice(&self.receiver_r.to_le_bytes());
 
         let mut hasher = TestOnlyHasher::default();
         hasher.write(bytes_vec.as_slice());
@@ -47,11 +47,15 @@ impl SValueGenerator {
     }
 
     pub fn get_s(&self, is_sender: bool) -> SValue {
+        let mut bytes_vec = Vec::new();
+        bytes_vec.extend_from_slice(&self.sender_r.to_le_bytes());
+        bytes_vec.extend_from_slice(&self.receiver_r.to_le_bytes());
+
         let mut result: [u8; 33] = [0; 33];
         if !is_sender {
             result[0] = 1;
         }
-        result[1..33].copy_from_slice(self.get_r().as_ref());
+        result[1..33].copy_from_slice(&bytes_vec);
         SValue::new(result)
     }
 }

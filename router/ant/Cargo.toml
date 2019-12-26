@@ -12,11 +12,23 @@ futures = { version = "0.3.0", features = ["io-compat", "compat"] }
 futures_01 = { version = "0.1.25", package = "futures" }
 tokio = { version = "0.2", features = ["full"] }
 sgwallet = { path="../../sgwallet"}
+sgchain = { path = "../../sgchain" }
+network = { package = "sgnetwork", path = "../../sgnetwork"}
+sg_config = { path = "../../sgconfig"}
+router = {path ="../../router"}
 
 libra-logger = { path = "../../libra/common/logger" }
 libra-crypto = { path = "../../libra/crypto/crypto"}
 libra-types = { path = "../../libra/types" }
+libra-tools = {path ="../../libra/common/tools", package = "libra-tools"}
+
 
 sgtypes = { path = "../../sgtypes" }
 anyhow = "1.0"
+hex = { version = "0.3.2", default-features = false }
+futures-timer = "1.0.2"
+async-trait = "0.1.13"
+
+[dev-dependencies]
+libra-config = { path = "../../libra/config"}
 
