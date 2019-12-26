@@ -24,6 +24,7 @@ use path_finder::SeedManager;
 use seed_generator::{generate_random_u128, SValueGenerator};
 
 use rand::prelude::*;
+use sgchain::star_chain_client::ChainClient;
 use sgchain::star_chain_client::{faucet_async_2, MockChainClient};
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -34,7 +35,7 @@ use sg_config::config::NetworkConfig;
 use futures::compat::Stream01CompatExt;
 use futures_timer::Delay;
 use libra_crypto::HashValue;
-use router::{message_processor::*, Router};
+use router::{message_processor::*, Router, TableRouter};
 use sgtypes::message::{
     AntFinalMessage, AntQueryMessage, BalanceQueryResponse, ExchangeSeedMessageRequest,
     ExchangeSeedMessageResponse, RouterNetworkMessage,
@@ -44,6 +45,146 @@ use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use async_trait::async_trait;
+
+pub struct MixRouter {
+    ant_router: AntRouter,
+    table_router: TableRouter,
+    executor: Handle,
+    network_receiver: Option<UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>>,
+    ant_network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
+    table_network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
+}
+
+impl MixRouter {
+    pub fn new(
+        chain_client: Arc<dyn ChainClient>,
+        executor: Handle,
+        network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
+        network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
+        wallet: Arc<Wallet>,
+        default_future_timeout: u64,
+    ) -> Self {
+        let (ant_network_sender, ant_network_receiver) = futures::channel::mpsc::unbounded();
+        let (table_network_sender, table_network_receiver) = futures::channel::mpsc::unbounded();
+
+        let ant_router = AntRouter::new(
+            executor.clone(),
+            network_sender.clone(),
+            ant_network_receiver,
+            wallet.clone(),
+            default_future_timeout,
+        );
+
+        let table_router = TableRouter::new(
+            chain_client,
+            executor.clone(),
+            wallet,
+            network_sender.clone(),
+            table_network_receiver,
+        );
+
+        Self {
+            table_router,
+            ant_router,
+            executor,
+            network_receiver: Some(network_receiver),
+            ant_network_sender,
+            table_network_sender,
+        }
+    }
+
+    pub fn start(&mut self) -> Result<()> {
+        let network_receiver = self.network_receiver.take().expect("already taken");
+
+        self.executor.spawn(Self::start_network(
+            network_receiver,
+            self.table_network_sender.clone(),
+            self.ant_network_sender.clone(),
+        ));
+
+        self.table_router.start()?;
+        self.ant_router.start()?;
+
+        Ok(())
+    }
+
+    pub async fn shutdown(&self) -> Result<()> {
+        self.table_router.shutdown().await?;
+        Ok(())
+    }
+
+    async fn start_network(
+        mut network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
+        table_network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
+        ant_network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
+    ) -> Result<()> {
+        while let Some((peer_id, network_message)) = network_receiver.next().await {
+            match network_message {
+                RouterNetworkMessage::BalanceQueryRequest(message) => {
+                    table_network_sender.unbounded_send((
+                        peer_id,
+                        RouterNetworkMessage::BalanceQueryRequest(message),
+                    ))?;
+                }
+                RouterNetworkMessage::BalanceQueryResponse(message) => {
+                    table_network_sender.unbounded_send((
+                        peer_id,
+                        RouterNetworkMessage::BalanceQueryResponse(message),
+                    ))?;
+                }
+                RouterNetworkMessage::ExchangeSeedMessageRequest(message) => {
+                    ant_network_sender.unbounded_send((
+                        peer_id,
+                        RouterNetworkMessage::ExchangeSeedMessageRequest(message),
+                    ))?;
+                }
+                RouterNetworkMessage::ExchangeSeedMessageResponse(message) => {
+                    ant_network_sender.unbounded_send((
+                        peer_id,
+                        RouterNetworkMessage::ExchangeSeedMessageResponse(message),
+                    ))?;
+                }
+                RouterNetworkMessage::AntQueryMessage(message) => {
+                    ant_network_sender.unbounded_send((
+                        peer_id,
+                        RouterNetworkMessage::AntQueryMessage(message),
+                    ))?;
+                }
+                RouterNetworkMessage::AntFinalMessage(message) => {
+                    ant_network_sender.unbounded_send((
+                        peer_id,
+                        RouterNetworkMessage::AntFinalMessage(message),
+                    ))?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl Router for MixRouter {
+    async fn find_path_by_addr(
+        &self,
+        start: AccountAddress,
+        end: AccountAddress,
+    ) -> Result<Vec<BalanceQueryResponse>> {
+        match self.table_router.find_path_by_addr(start, end).await {
+            Ok(r) => {
+                if r.len() > 0 {
+                    return Ok(r);
+                }
+            }
+            Err(e) => {
+                warn!(
+                    "could not find path by table router from {},to {},e is {}",
+                    start, end, e
+                );
+            }
+        }
+        return self.ant_router.find_path_by_addr(start, end).await;
+    }
+}
 
 pub struct AntRouter {
     executor: Handle,
@@ -536,6 +677,129 @@ fn _build_network(
 ) {
     let (network, _tx, _rx, _close_tx) = build_network_service(config, keypair);
     let _identify = network.identify();
+}
+
+#[test]
+fn mix_router_test() {
+    use anyhow::Error;
+    use libra_config::utils::get_available_port;
+    use libra_logger::prelude::*;
+    use sgchain::star_chain_client::MockChainClient;
+    use std::sync::Arc;
+
+    libra_logger::init_for_e2e_testing();
+    let mut rt = Runtime::new().unwrap();
+    let executor = rt.handle().clone();
+
+    let (mock_chain_service, _handle) = MockChainClient::new();
+    let client = Arc::new(mock_chain_service);
+
+    let (wallet1, addr1, keypair1) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+    let (wallet2, addr2, keypair2) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+    let (wallet3, addr3, keypair3) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+
+    let _wallet1 = wallet1.clone();
+    let _wallet2 = wallet2.clone();
+    let _wallet3 = wallet3.clone();
+    let _client = client.clone();
+
+    let network_config1 = _create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![],
+    );
+
+    let addr1_hex = hex::encode(addr1);
+    let seed = format!("{}/p2p/{}", &network_config1.listen, addr1_hex);
+
+    let network_config2 = _create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![seed.clone()],
+    );
+
+    let network_config3 = _create_node_network_config(
+        format!("/ip4/127.0.0.1/tcp/{}", get_available_port()),
+        vec![seed.clone()],
+    );
+
+    let (_network1, tx1, rx1, close_tx1) = build_network_service(&network_config1, keypair1);
+    let _identify1 = _network1.identify();
+    let (rtx1, rrx1) = _prepare_network(tx1, rx1, executor.clone());
+    let mut router1 = MixRouter::new(
+        client.clone(),
+        executor.clone(),
+        rtx1,
+        rrx1,
+        wallet1.clone(),
+        5000,
+    );
+    router1.start().unwrap();
+
+    let (_network2, tx2, rx2, close_tx2) = build_network_service(&network_config2, keypair2);
+    let _identify2 = _network2.identify();
+    let (rtx2, rrx2) = _prepare_network(tx2, rx2, executor.clone());
+    let mut router2 = MixRouter::new(
+        client.clone(),
+        executor.clone(),
+        rtx2,
+        rrx2,
+        wallet2.clone(),
+        5000,
+    );
+    router2.start().unwrap();
+
+    let (_network3, tx3, rx3, close_tx3) = build_network_service(&network_config3, keypair3);
+    let _identify3 = _network3.identify();
+    let (rtx3, rrx3) = _prepare_network(tx3, rx3, executor.clone());
+    let mut router3 = MixRouter::new(
+        client.clone(),
+        executor.clone(),
+        rtx3,
+        rrx3,
+        wallet3.clone(),
+        5000,
+    );
+    router3.start().unwrap();
+
+    let f = async move {
+        _open_channel(wallet1.clone(), wallet2.clone(), 100000, 100000).await?;
+        _open_channel(wallet2.clone(), wallet3.clone(), 100000, 100000).await?;
+
+        _delay(Duration::from_millis(5000)).await;
+
+        let path = router1
+            .find_path_by_addr(addr1.clone(), addr3.clone())
+            .await?;
+
+        assert_eq!(path.len(), 2);
+        assert_eq!(path.get(0).expect("should have").local_addr, addr1.clone());
+        assert_eq!(path.get(1).expect("should have").remote_addr, addr3.clone());
+
+        let path = router1
+            .find_path_by_addr(addr1.clone(), addr2.clone())
+            .await?;
+
+        assert_eq!(path.len(), 1);
+        assert_eq!(path.get(0).expect("should have").local_addr, addr1.clone());
+        assert_eq!(path.get(0).expect("should have").remote_addr, addr2.clone());
+
+        close_tx1.send(()).unwrap();
+        close_tx2.send(()).unwrap();
+        close_tx3.send(()).unwrap();
+
+        wallet1.stop().await?;
+        wallet2.stop().await?;
+        wallet3.stop().await?;
+
+        router1.shutdown().await?;
+        router2.shutdown().await?;
+        router3.shutdown().await?;
+
+        Ok::<_, Error>(())
+    };
+
+    rt.block_on(f).unwrap();
+
+    debug!("here");
 }
 
 #[test]
