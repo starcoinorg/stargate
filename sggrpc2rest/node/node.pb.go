@@ -473,10 +473,10 @@ func (m *ChannelBalanceResponse) GetBalance() uint64 {
 }
 
 type InstallChannelScriptPackageRequest struct {
-	ChannelScriptPackage *ChannelScriptPackage `protobuf:"bytes,1,opt,name=channel_script_package,json=channelScriptPackage,proto3" json:"channel_script_package,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
-	XXX_unrecognized     []byte                `json:"-"`
-	XXX_sizecache        int32                 `json:"-"`
+	ChannelScriptPackage *sgtypes.ChannelScriptPackage `protobuf:"bytes,1,opt,name=channel_script_package,json=channelScriptPackage,proto3" json:"channel_script_package,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                      `json:"-"`
+	XXX_unrecognized     []byte                        `json:"-"`
+	XXX_sizecache        int32                         `json:"-"`
 }
 
 func (m *InstallChannelScriptPackageRequest) Reset()         { *m = InstallChannelScriptPackageRequest{} }
@@ -583,9 +583,9 @@ func (m *DeployModuleRequest) GetModuleBytes() []byte {
 
 type DeployModuleResponse struct {
 	TransactionWithProof *types.TransactionWithProof `protobuf:"bytes,1,opt,name=transaction_with_proof,json=transactionWithProof,proto3" json:"transaction_with_proof,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
-	XXX_unrecognized     []byte                `json:"-"`
-	XXX_sizecache        int32                 `json:"-"`
+	XXX_NoUnkeyedLiteral struct{}                    `json:"-"`
+	XXX_unrecognized     []byte                      `json:"-"`
+	XXX_sizecache        int32                       `json:"-"`
 }
 
 func (m *DeployModuleResponse) Reset()         { *m = DeployModuleResponse{} }
@@ -724,9 +724,9 @@ func (m *ExecuteScriptResponse) GetChannelSequenceNumber() uint64 {
 
 type GetChannelTransactionProposalResponse struct {
 	ChannelTransaction   *sgtypes.ChannelTransaction `protobuf:"bytes,1,opt,name=channel_transaction,json=channelTransaction,proto3" json:"channel_transaction,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
-	XXX_unrecognized     []byte              `json:"-"`
-	XXX_sizecache        int32               `json:"-"`
+	XXX_NoUnkeyedLiteral struct{}                    `json:"-"`
+	XXX_unrecognized     []byte                      `json:"-"`
+	XXX_sizecache        int32                       `json:"-"`
 }
 
 func (m *GetChannelTransactionProposalResponse) Reset()         { *m = GetChannelTransactionProposalResponse{} }
