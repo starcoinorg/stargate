@@ -760,6 +760,14 @@ fn mix_router_test() {
     );
     router3.start().unwrap();
 
+    let router1 = Arc::new(router1);
+    let router2 = Arc::new(router2);
+    let router3 = Arc::new(router3);
+
+    let _router1 = router1.clone();
+    let _router2 = router2.clone();
+    let _router3 = router3.clone();
+
     let f = async move {
         _open_channel(wallet1.clone(), wallet2.clone(), 100000, 100000).await?;
         _open_channel(wallet2.clone(), wallet3.clone(), 100000, 100000).await?;
@@ -887,6 +895,18 @@ fn ant_router_test() {
     let (rtx5, rrx5) = _prepare_network(tx5, rx5, executor.clone());
     let mut router5 = AntRouter::new(executor.clone(), rtx5, rrx5, wallet5.clone(), 5000);
     router5.start().unwrap();
+
+    let router1 = Arc::new(router1);
+    let router2 = Arc::new(router2);
+    let router3 = Arc::new(router3);
+    let router4 = Arc::new(router4);
+    let router5 = Arc::new(router5);
+
+    let _router1 = router1.clone();
+    let _router2 = router2.clone();
+    let _router3 = router3.clone();
+    let _router4 = router4.clone();
+    let _router5 = router5.clone();
 
     let f = async move {
         _open_channel(wallet1.clone(), wallet2.clone(), 100000, 100000).await?;
