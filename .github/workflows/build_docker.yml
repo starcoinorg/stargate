@@ -3,7 +3,7 @@ on:
   push:
     # only build master
     branches:
-      - 'cluster_deploy**'
+      - 'master'
     paths-ignore:
       - '**.md'
 jobs:

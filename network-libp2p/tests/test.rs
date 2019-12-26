@@ -147,7 +147,7 @@ fn many_nodes_connectivity() {
     // Note: if you increase this number, keep in mind that there's a limit to the number of
     // simultaneous connections which will make the test fail if it is reached. This can be
     // increased in the `NetworkConfiguration`.
-    const NUM_NODES: usize = 25;
+    const NUM_NODES: usize = 10;
 
     let mut futures = build_nodes::<Vec<u8>>(NUM_NODES, 50500)
         .into_iter()
