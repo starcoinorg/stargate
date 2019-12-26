@@ -108,8 +108,8 @@ impl MixRouter {
         Ok(())
     }
 
-    pub async fn shutdown(&self) -> Result<()> {
-        self.table_router.shutdown().await?;
+    pub fn shutdown(&self) -> Result<()> {
+        self.table_router.shutdown()?;
         Ok(())
     }
 
@@ -264,6 +264,8 @@ impl AntRouter {
         ));
         Ok(())
     }
+
+    pub fn shutdown(&self) {}
 }
 
 #[async_trait]
@@ -798,14 +800,14 @@ fn mix_router_test() {
         wallet2.stop().await?;
         wallet3.stop().await?;
 
-        router1.shutdown().await?;
-        router2.shutdown().await?;
-        router3.shutdown().await?;
-
         Ok::<_, Error>(())
     };
 
     rt.block_on(f).unwrap();
+
+    _router1.shutdown().unwrap();
+    _router2.shutdown().unwrap();
+    _router3.shutdown().unwrap();
 
     debug!("here");
 }
@@ -955,6 +957,12 @@ fn ant_router_test() {
     };
 
     rt.block_on(f).unwrap();
+
+    _router1.shutdown();
+    _router2.shutdown();
+    _router3.shutdown();
+    _router4.shutdown();
+    _router5.shutdown();
 
     debug!("here");
 }

@@ -115,7 +115,7 @@ impl TableRouter {
         result
     }
 
-    pub async fn shutdown(&self) -> Result<()> {
+    pub fn shutdown(&self) -> Result<()> {
         self.control_sender.unbounded_send(Event::SHUTDOWN)?;
         Ok(())
     }
@@ -623,16 +623,16 @@ fn router_test() {
         wallet4.stop().await?;
         wallet5.stop().await?;
 
-        router1.shutdown().await?;
-        router2.shutdown().await?;
-        router3.shutdown().await?;
-        router4.shutdown().await?;
-        router5.shutdown().await?;
-
         Ok::<_, Error>(())
     };
 
     rt.block_on(f).unwrap();
+
+    _router1.shutdown().unwrap();
+    _router2.shutdown().unwrap();
+    _router3.shutdown().unwrap();
+    _router4.shutdown().unwrap();
+    _router5.shutdown().unwrap();
 
     debug!("here");
 }
