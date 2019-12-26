@@ -6,14 +6,17 @@ use crate::scripts::PackageRegistry;
 use crate::tx_applier::TxApplier;
 use crate::utils::contract::{challenge_channel_action, resolve_channel_action};
 use crate::wallet::{
-    execute_transaction, respond_with, submit_transaction, txn_expiration, watch_transaction,
-    GAS_UNIT_PRICE, MAX_GAS_AMOUNT_OFFCHAIN, MAX_GAS_AMOUNT_ONCHAIN,
+    execute_transaction, submit_transaction, txn_expiration, watch_transaction, GAS_UNIT_PRICE,
+    MAX_GAS_AMOUNT_OFFCHAIN, MAX_GAS_AMOUNT_ONCHAIN,
 };
 use anyhow::{bail, ensure, format_err, Result};
-use futures::{
-    channel::{mpsc, oneshot},
-    FutureExt, SinkExt, StreamExt,
+use async_trait::async_trait;
+use coerce_rt::actor::{
+    context::{ActorContext, ActorHandlerContext, ActorStatus},
+    message::{Handler, Message},
+    Actor, ActorRef,
 };
+use futures::{channel::mpsc, SinkExt};
 use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
 use libra_crypto::test_utils::KeyPair;
 use libra_crypto::{hash::CryptoHash, HashValue, SigningKey, VerifyingKey};
@@ -38,7 +41,6 @@ use libra_types::{
     write_set::WriteOp,
 };
 use serde::de::DeserializeOwned;
-
 use sgchain::star_chain_client::ChainClient;
 use sgstorage::channel_db::ChannelDB;
 use sgstorage::channel_store::ChannelStore;
@@ -51,61 +53,66 @@ use sgtypes::pending_txn::PendingTransaction;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 use sgtypes::signed_channel_transaction_with_proof::SignedChannelTransactionWithProof;
 use std::collections::{BTreeMap, BTreeSet};
-
 use std::sync::Arc;
 use std::time::Duration;
 use vm::gas_schedule::GasAlgebra;
 
-#[derive(Debug)]
-pub enum ChannelMsg {
-    Execute {
-        channel_op: ChannelOp,
-        args: Vec<TransactionArgument>,
-        responder: oneshot::Sender<
-            Result<(
-                ChannelTransactionProposal,
-                ChannelTransactionSigs,
-                TransactionOutput,
-            )>,
-        >,
-    },
-    CollectProposalWithSigs {
-        proposal: ChannelTransactionProposal,
-        /// the sigs maybe proposer's, or other participant's.
-        sigs: ChannelTransactionSigs,
-        responder: oneshot::Sender<Result<Option<ChannelTransactionSigs>>>,
-    },
-    GrantProposal {
-        channel_txn_id: HashValue,
-        grant: bool,
-        responder: oneshot::Sender<Result<Option<ChannelTransactionSigs>>>,
-    },
-    CancelPendingTxn {
-        channel_txn_id: HashValue,
-        responder: oneshot::Sender<Result<()>>,
-    },
-    ApplyPendingTxn {
-        proposal: ChannelTransactionProposal,
-        responder: oneshot::Sender<Result<u64>>,
-    },
-    SoloTravelTxn {
-        responder: oneshot::Sender<Result<u64>>,
-    },
-    GetPendingTxn {
-        responder: oneshot::Sender<Option<PendingTransaction>>,
-    },
-    AccessPath {
-        path: AccessPath,
-        responder: oneshot::Sender<Result<Option<Vec<u8>>>>,
-    },
-    Stop {
-        responder: oneshot::Sender<()>,
-    },
+pub(crate) struct Execute {
+    pub channel_op: ChannelOp,
+    pub args: Vec<TransactionArgument>,
 }
-enum InternalMsg {
-    ApplyPendingTxn {
-        proposal: ChannelTransactionProposal,
-    }, // when channel bootstrap, it will send this msg if it found pending txn.
+impl Message for Execute {
+    type Result = Result<(
+        ChannelTransactionProposal,
+        ChannelTransactionSigs,
+        TransactionOutput,
+    )>;
+}
+pub(crate) struct CollectProposalWithSigs {
+    pub proposal: ChannelTransactionProposal,
+    /// the sigs maybe proposer's, or other participant's.
+    pub sigs: ChannelTransactionSigs,
+}
+impl Message for CollectProposalWithSigs {
+    type Result = Result<Option<ChannelTransactionSigs>>;
+}
+pub(crate) struct GrantProposal {
+    pub channel_txn_id: HashValue,
+    pub grant: bool,
+}
+impl Message for GrantProposal {
+    type Result = Result<Option<ChannelTransactionSigs>>;
+}
+pub(crate) struct CancelPendingTxn {
+    pub channel_txn_id: HashValue,
+}
+impl Message for CancelPendingTxn {
+    type Result = Result<()>;
+}
+pub(crate) struct ApplyPendingTxn {
+    pub proposal: ChannelTransactionProposal,
+}
+impl Message for ApplyPendingTxn {
+    type Result = Result<u64>;
+}
+pub(crate) struct SoloTravelTxn;
+impl Message for SoloTravelTxn {
+    type Result = Result<u64>;
+}
+pub(crate) struct GetPendingTxn;
+impl Message for GetPendingTxn {
+    type Result = Option<PendingTransaction>;
+}
+
+pub(crate) struct AccessingResource {
+    pub path: AccessPath,
+}
+impl Message for AccessingResource {
+    type Result = Result<Option<Vec<u8>>>;
+}
+pub(crate) struct Stop;
+impl Message for Stop {
+    type Result = ();
 }
 
 #[derive(Debug)]
@@ -115,8 +122,7 @@ pub struct ChannelHandle {
     participant_addresses: BTreeSet<AccountAddress>,
     //    db: ChannelDB,
     //    store: ChannelStore<ChannelDB>,
-    mail_sender: mpsc::Sender<ChannelMsg>,
-    _shutdown_tx: oneshot::Sender<()>,
+    channel_ref: ActorRef<Channel>,
 }
 
 impl ChannelHandle {
@@ -131,38 +137,18 @@ impl ChannelHandle {
         &self.participant_addresses
     }
 
+    pub fn channel_ref(&self) -> ActorRef<Channel> {
+        self.channel_ref.clone()
+    }
+
     #[allow(dead_code)]
     pub async fn stop(&self) -> Result<()> {
-        let (tx, rx) = oneshot::channel();
-        let msg = ChannelMsg::Stop { responder: tx };
-        self.send(msg)?;
-        rx.await?;
+        self.channel_ref.clone().stop().await?;
         Ok(())
     }
 
-    pub fn send(&self, msg: ChannelMsg) -> Result<()> {
-        if let Err(err) = self.mail_sender.clone().try_send(msg) {
-            let err_status = if err.is_disconnected() {
-                "closed"
-            } else {
-                "full"
-            };
-            let resp_err = format_err!(
-                "channel {:?} mailbox {:?}",
-                self.channel_address,
-                err_status
-            );
-            Err(resp_err)
-        } else {
-            Ok(())
-        }
-    }
-
     pub async fn get_pending_txn(&self) -> Result<Option<PendingTransaction>> {
-        let (tx, rx) = oneshot::channel();
-        let msg = ChannelMsg::GetPendingTxn { responder: tx };
-        self.send(msg)?;
-        Ok(rx.await?)
+        Ok(self.channel_ref.clone().send(GetPendingTxn).await?)
     }
     pub async fn get_channel_resource(
         &self,
@@ -170,13 +156,13 @@ impl ChannelHandle {
         struct_tag: StructTag,
     ) -> Result<Option<Vec<u8>>> {
         let data_path = DataPath::channel_resource_path(address, struct_tag);
-        let (tx, rx) = oneshot::channel();
-        let msg = ChannelMsg::AccessPath {
-            path: AccessPath::new_for_data_path(self.channel_address, data_path),
-            responder: tx,
-        };
-        self.send(msg)?;
-        rx.await?
+
+        self.channel_ref
+            .clone()
+            .send(AccessingResource {
+                path: AccessPath::new_for_data_path(self.channel_address, data_path),
+            })
+            .await?
     }
 }
 
@@ -197,12 +183,10 @@ pub struct Channel {
     chain_client: Arc<dyn ChainClient>,
     tx_applier: TxApplier,
 
-    mail_sender: Option<mpsc::Sender<ChannelMsg>>,
-    mailbox: mpsc::Receiver<ChannelMsg>,
-    shutdown_signal: Option<oneshot::Sender<()>>,
-    should_stop: bool,
     // event produced by the channel
     channel_event_sender: mpsc::Sender<ChannelEvent>,
+    // TODO: handle stop
+    should_stop: bool,
 }
 
 impl Channel {
@@ -213,8 +197,6 @@ impl Channel {
         participant_addresses: BTreeSet<AccountAddress>,
         channel_state: ChannelState,
         db: ChannelDB,
-        mail_sender: mpsc::Sender<ChannelMsg>,
-        mailbox: mpsc::Receiver<ChannelMsg>,
         channel_event_sender: mpsc::Sender<ChannelEvent>,
         keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
         script_registry: Arc<PackageRegistry>,
@@ -232,172 +214,31 @@ impl Channel {
             script_registry: script_registry.clone(),
             chain_client: chain_client.clone(),
             tx_applier: TxApplier::new(store.clone()),
-            mail_sender: Some(mail_sender),
-            mailbox,
             channel_event_sender,
-            shutdown_signal: None,
             should_stop: false,
         };
         inner
     }
 
-    pub fn start(mut self, executor: tokio::runtime::Handle) -> ChannelHandle {
-        let mail_sender = self.mail_sender.take().expect("mail sender shold exists");
-        let (shutdown_tx, shutdown_rx) = oneshot::channel();
-        let handle = ChannelHandle {
-            channel_address: self.channel_address,
-            account_address: self.account_address,
-            participant_addresses: self.participant_addresses.clone(),
-            mail_sender,
-            _shutdown_tx: shutdown_tx,
-        };
-        // TODO: wait channel start?
-        executor.spawn(self.inner_start(shutdown_rx));
-        handle
-    }
-    async fn inner_start(mut self, shutdown_rx: oneshot::Receiver<()>) {
-        let (internal_msg_tx, mut internal_msg_rx) = mpsc::channel(1024);
-        self.bootstrap(internal_msg_tx.clone());
-        let mut fused_shutdown_rx = shutdown_rx.fuse();
-        //        let mut chain_txn_receiver = chain_txn_receiver.fuse();
+    pub async fn start(self, mut context: ActorContext) -> ChannelHandle {
+        let channel_address = self.channel_address;
+        let account_address = self.account_address;
+        let participant_addresses = self.participant_addresses.clone();
 
-        loop {
-            //                maybe_chain_txn = chain_txn_receiver.next() => {
-            //                    if let Some(txn) = maybe_chain_txn {
-            //                        self.handle_chain_txn(txn).await;
-            //                    }
-            //                }
+        // TODO: return Result
 
-            ::futures::select! {
-                maybe_external_msg = self.mailbox.next() => {
-                    if let Some(msg) = maybe_external_msg {
-                         self.handle_external_msg(msg).await;
-                    }
-                }
-                maybe_internal_msg = internal_msg_rx.next() => {
-                    if let(Some(msg)) = maybe_internal_msg {
-                        self.handle_internal_msg(msg).await;
-                    }
-                }
-                _ = fused_shutdown_rx => {
-                    break;
-                }
-                complete => {
-                    break;
-                }
-            }
-            if self.should_stop {
-                if self.shutdown_signal.is_some() {
-                    respond_with(self.shutdown_signal.take().unwrap(), ());
-                }
-                break;
-            }
-        }
-        if let Err(e) = self
-            .channel_event_sender
-            .send(ChannelEvent::Stopped {
-                channel_address: self.channel_address.clone(),
-            })
+        let actor_ref = context
+            .new_actor(self)
             .await
-        {
-            error!(
-                "channel[{:?}]: fail to emit stopped event, error: {:?}",
-                &self.channel_address, e
-            );
-        }
-        crit!("channel {} task terminated", self.channel_address);
-    }
+            .expect("actor context is closed");
 
-    fn bootstrap(&mut self, mut internal_msg_tx: mpsc::Sender<InternalMsg>) {
-        match self.pending_txn() {
-            None => {}
-            Some(PendingTransaction::WaitForSig { .. }) => {}
-            Some(PendingTransaction::WaitForApply {
-                proposal, output, ..
-            }) => {
-                debug_assert!(output.is_travel_txn(), "only travel txn is persisted");
-                if let Err(_e) = internal_msg_tx.try_send(InternalMsg::ApplyPendingTxn { proposal })
-                {
-                    error!("should not happen");
-                }
-                //                let gas = self.apply_pending_txn_async().await?;
-                //                info!("sync txn from onchain successfully, gas used: {}", gas);
-            }
-        }
-    }
-
-    async fn handle_external_msg(&mut self, cmd: ChannelMsg) {
-        match cmd {
-            ChannelMsg::Execute {
-                channel_op,
-                args,
-                responder,
-            } => {
-                let request = self.execute_async(channel_op, args).await;
-                respond_with(responder, request);
-            }
-            ChannelMsg::CollectProposalWithSigs {
-                proposal,
-                sigs,
-                responder,
-            } => {
-                let response = self.collect_proposal_and_sigs_async(proposal, sigs).await;
-                respond_with(responder, response);
-            }
-            ChannelMsg::GrantProposal {
-                channel_txn_id,
-                grant,
-                responder,
-            } => {
-                let response = self.grant_proposal_async(channel_txn_id, grant).await;
-                respond_with(responder, response);
-            }
-            ChannelMsg::CancelPendingTxn {
-                channel_txn_id,
-                responder,
-            } => {
-                respond_with(responder, self.cancel_pending_txn(channel_txn_id));
-            }
-            ChannelMsg::ApplyPendingTxn {
-                proposal,
-                responder,
-            } => {
-                let response = self.apply_pending_txn_async(proposal).await;
-                respond_with(responder, response);
-            }
-            ChannelMsg::SoloTravelTxn { responder } => {
-                let response = self.solo_travel_proposal().await;
-                respond_with(responder, response);
-            }
-            ChannelMsg::AccessPath { path, responder } => {
-                let response =
-                    access_local(self.witness_data().write_set(), &self.channel_state, &path)
-                        .map(|d| d.map(|o| o.to_vec()));
-                respond_with(responder, response);
-            }
-            ChannelMsg::GetPendingTxn { responder } => {
-                respond_with(responder, self.pending_txn());
-            }
-            ChannelMsg::Stop { responder } => {
-                self.should_stop = true;
-                self.shutdown_signal = Some(responder);
-            }
+        let handle = ChannelHandle {
+            channel_address,
+            account_address,
+            participant_addresses,
+            channel_ref: actor_ref,
         };
-    }
-
-    async fn handle_internal_msg(&mut self, internal_msg: InternalMsg) {
-        match internal_msg {
-            InternalMsg::ApplyPendingTxn { proposal } => {
-                match self.apply_pending_txn_async(proposal).await {
-                    Ok(gas) => {
-                        info!("apply pending txn successfully, gas used: {}", gas);
-                    }
-                    Err(e) => {
-                        error!("apply pending txn failed, err: {:?}", e);
-                    }
-                }
-            }
-        }
+        handle
     }
 
     #[allow(dead_code)]
@@ -767,56 +608,6 @@ impl Channel {
         let pending = self.pending_txn().expect("pending txn must exists");
         let user_sigs = pending.get_signature(&self.account_address);
         Ok(user_sigs)
-    }
-
-    async fn grant_proposal_async(
-        &mut self,
-        channel_txn_id: HashValue,
-        grant: bool,
-    ) -> Result<Option<ChannelTransactionSigs>> {
-        let pending_txn = self.pending_txn();
-        ensure!(pending_txn.is_some(), "no pending txn");
-        let pending_txn = pending_txn.unwrap();
-        ensure!(!pending_txn.fulfilled(), "pending txn is already fulfilled");
-        let (proposal, output, signatures) = pending_txn.into();
-        if channel_txn_id != CryptoHash::hash(&proposal.channel_txn) {
-            let err = format_err!("channel_txn_id conflict with local pending txn");
-            return Err(err);
-        }
-        if grant {
-            // maybe already grant the proposal
-            if !signatures.contains_key(&self.account_address) {
-                self.do_grant_proposal(proposal, output, signatures)?;
-            }
-            let pending = self.pending_txn().expect("pending txn must exists");
-            let user_sigs = pending
-                .get_signature(&self.account_address)
-                .expect("user signature must exists");
-            Ok(Some(user_sigs))
-        } else {
-            self.clear_pending_txn()?;
-            if proposal.channel_txn.operator().is_open() {
-                self.should_stop = true;
-            }
-            Ok(None)
-        }
-    }
-
-    fn cancel_pending_txn(&mut self, channel_txn_id: HashValue) -> Result<()> {
-        let pending_txn = self.pending_txn();
-        ensure!(pending_txn.is_some(), "no pending txn");
-        let pending_txn = pending_txn.unwrap();
-        ensure!(!pending_txn.fulfilled(), "pending txn is already fulfilled");
-        let (proposal, _output, _signature) = pending_txn.into();
-        if channel_txn_id != CryptoHash::hash(&proposal.channel_txn) {
-            let err = format_err!("channel_txn_id conflict with local pending txn");
-            return Err(err);
-        }
-        self.clear_pending_txn()?;
-        if proposal.channel_txn.operator().is_open() {
-            self.should_stop = true;
-        }
-        Ok(())
     }
 
     async fn solo_travel_proposal(&mut self) -> Result<u64> {
@@ -1396,6 +1187,196 @@ impl Channel {
                 ))
             }
         }
+    }
+}
+
+#[async_trait]
+impl Actor for Channel {
+    async fn started(&mut self, _ctx: &mut ActorHandlerContext) {
+        let to_be_apply = match self.pending_txn() {
+            Some(PendingTransaction::WaitForApply {
+                proposal, output, ..
+            }) => {
+                debug_assert!(output.is_travel_txn(), "only travel txn is persisted");
+                Some(proposal)
+            }
+            _ => None,
+        };
+
+        let self_id = _ctx.actor_id().clone();
+        let mut myself = _ctx
+            .actor_context_mut()
+            .get_actor::<Self>(self_id)
+            .await
+            .expect("self actor should exists");
+
+        if let Some(proposal) = to_be_apply {
+            if let Err(_) = myself.notify(ApplyPendingTxn { proposal }).await {
+                panic!("should not happen");
+            }
+        }
+    }
+
+    async fn stopped(&mut self, _ctx: &mut ActorHandlerContext) {
+        if let Err(e) = self
+            .channel_event_sender
+            .send(ChannelEvent::Stopped {
+                channel_address: self.channel_address,
+            })
+            .await
+        {
+            error!(
+                "channel[{:?}]: fail to emit stopped event, error: {:?}",
+                &self.channel_address, e
+            );
+        }
+        crit!("channel {} task terminated", self.channel_address);
+    }
+}
+#[async_trait]
+impl Handler<Execute> for Channel {
+    async fn handle(
+        &mut self,
+        message: Execute,
+        _ctx: &mut ActorHandlerContext,
+    ) -> <Execute as Message>::Result {
+        let Execute { channel_op, args } = message;
+        self.execute_async(channel_op, args).await
+    }
+}
+#[async_trait]
+impl Handler<CollectProposalWithSigs> for Channel {
+    async fn handle(
+        &mut self,
+        message: CollectProposalWithSigs,
+        _ctx: &mut ActorHandlerContext,
+    ) -> <CollectProposalWithSigs as Message>::Result {
+        let CollectProposalWithSigs { proposal, sigs } = message;
+        self.collect_proposal_and_sigs_async(proposal, sigs).await
+    }
+}
+
+#[async_trait]
+impl Handler<GrantProposal> for Channel {
+    async fn handle(
+        &mut self,
+        message: GrantProposal,
+        ctx: &mut ActorHandlerContext,
+    ) -> <GrantProposal as Message>::Result {
+        let GrantProposal {
+            channel_txn_id,
+            grant,
+        } = message;
+        let pending_txn = self.pending_txn();
+        ensure!(pending_txn.is_some(), "no pending txn");
+        let pending_txn = pending_txn.unwrap();
+        ensure!(!pending_txn.fulfilled(), "pending txn is already fulfilled");
+        let (proposal, output, signatures) = pending_txn.into();
+        if channel_txn_id != CryptoHash::hash(&proposal.channel_txn) {
+            let err = format_err!("channel_txn_id conflict with local pending txn");
+            return Err(err);
+        }
+        if grant {
+            // maybe already grant the proposal
+            if !signatures.contains_key(&self.account_address) {
+                self.do_grant_proposal(proposal, output, signatures)?;
+            }
+            let pending = self.pending_txn().expect("pending txn must exists");
+            let user_sigs = pending
+                .get_signature(&self.account_address)
+                .expect("user signature must exists");
+            Ok(Some(user_sigs))
+        } else {
+            self.clear_pending_txn()?;
+            if proposal.channel_txn.operator().is_open() {
+                ctx.set_status(ActorStatus::Stopping);
+            }
+            Ok(None)
+        }
+    }
+}
+
+#[async_trait]
+impl Handler<CancelPendingTxn> for Channel {
+    async fn handle(
+        &mut self,
+        message: CancelPendingTxn,
+        ctx: &mut ActorHandlerContext,
+    ) -> <CancelPendingTxn as Message>::Result {
+        let CancelPendingTxn { channel_txn_id } = message;
+
+        let pending_txn = self.pending_txn();
+        ensure!(pending_txn.is_some(), "no pending txn");
+        let pending_txn = pending_txn.unwrap();
+        ensure!(!pending_txn.fulfilled(), "pending txn is already fulfilled");
+        let (proposal, _output, _signature) = pending_txn.into();
+        if channel_txn_id != CryptoHash::hash(&proposal.channel_txn) {
+            let err = format_err!("channel_txn_id conflict with local pending txn");
+            return Err(err);
+        }
+        self.clear_pending_txn()?;
+
+        if proposal.channel_txn.operator().is_open() {
+            ctx.set_status(ActorStatus::Stopping);
+        }
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl Handler<ApplyPendingTxn> for Channel {
+    async fn handle(
+        &mut self,
+        message: ApplyPendingTxn,
+        _ctx: &mut ActorHandlerContext,
+    ) -> <ApplyPendingTxn as Message>::Result {
+        let ApplyPendingTxn { proposal } = message;
+        self.apply_pending_txn_async(proposal).await
+    }
+}
+
+#[async_trait]
+impl Handler<SoloTravelTxn> for Channel {
+    async fn handle(
+        &mut self,
+        _message: SoloTravelTxn,
+        _ctx: &mut ActorHandlerContext,
+    ) -> <SoloTravelTxn as Message>::Result {
+        self.solo_travel_proposal().await
+    }
+}
+#[async_trait]
+impl Handler<AccessingResource> for Channel {
+    async fn handle(
+        &mut self,
+        message: AccessingResource,
+        _ctx: &mut ActorHandlerContext,
+    ) -> <AccessingResource as Message>::Result {
+        let AccessingResource { path } = message;
+        access_local(self.witness_data().write_set(), &self.channel_state, &path)
+            .map(|d| d.map(|o| o.to_vec()))
+    }
+}
+
+#[async_trait]
+impl Handler<GetPendingTxn> for Channel {
+    async fn handle(
+        &mut self,
+        _message: GetPendingTxn,
+        _ctx: &mut ActorHandlerContext,
+    ) -> <GetPendingTxn as Message>::Result {
+        self.pending_txn()
+    }
+}
+
+#[async_trait]
+impl Handler<Stop> for Channel {
+    async fn handle(
+        &mut self,
+        _message: Stop,
+        ctx: &mut ActorHandlerContext,
+    ) -> <Stop as Message>::Result {
+        ctx.set_status(ActorStatus::Stopping);
     }
 }
 
