@@ -222,7 +222,6 @@ impl RouterInner {
                 },
             }
         }
-        drop(stream);
     }
 
     async fn handle_router_network_msg(

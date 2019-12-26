@@ -33,6 +33,8 @@ use network::{build_network_service, NetworkMessage};
 use sg_config::config::NetworkConfig;
 
 use futures::compat::Stream01CompatExt;
+use sgtypes::system_event::Event;
+
 use futures_timer::Delay;
 use libra_crypto::HashValue;
 use router::{message_processor::*, Router, TableRouter};
@@ -47,8 +49,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use async_trait::async_trait;
 
 pub struct MixRouter {
-    ant_router: AntRouter,
-    table_router: TableRouter,
+    ant_router: Arc<AntRouter>,
+    table_router: Arc<TableRouter>,
     executor: Handle,
     network_receiver: Option<UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>>,
     ant_network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
@@ -63,11 +65,11 @@ impl MixRouter {
         network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
         wallet: Arc<Wallet>,
         default_future_timeout: u64,
-    ) -> Self {
+    ) -> Result<Self> {
         let (ant_network_sender, ant_network_receiver) = futures::channel::mpsc::unbounded();
         let (table_network_sender, table_network_receiver) = futures::channel::mpsc::unbounded();
 
-        let ant_router = AntRouter::new(
+        let mut ant_router = AntRouter::new(
             executor.clone(),
             network_sender.clone(),
             ant_network_receiver,
@@ -75,7 +77,7 @@ impl MixRouter {
             default_future_timeout,
         );
 
-        let table_router = TableRouter::new(
+        let mut table_router = TableRouter::new(
             chain_client,
             executor.clone(),
             wallet,
@@ -83,14 +85,17 @@ impl MixRouter {
             table_network_receiver,
         );
 
-        Self {
-            table_router,
-            ant_router,
+        table_router.start()?;
+        ant_router.start()?;
+
+        Ok(Self {
+            table_router: Arc::new(table_router),
+            ant_router: Arc::new(ant_router),
             executor,
             network_receiver: Some(network_receiver),
             ant_network_sender,
             table_network_sender,
-        }
+        })
     }
 
     pub fn start(&mut self) -> Result<()> {
@@ -102,13 +107,15 @@ impl MixRouter {
             self.ant_network_sender.clone(),
         ));
 
-        self.table_router.start()?;
-        self.ant_router.start()?;
-
         Ok(())
     }
 
+    fn _retain(&self) -> (Arc<AntRouter>, Arc<TableRouter>) {
+        (self.ant_router.clone(), self.table_router.clone())
+    }
+
     pub fn shutdown(&self) -> Result<()> {
+        self.ant_router.shutdown()?;
         self.table_router.shutdown()?;
         Ok(())
     }
@@ -192,6 +199,8 @@ pub struct AntRouter {
     inner: Option<AntRouterInner>,
     network_receiver: Option<UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>>,
     command_receiver: Option<UnboundedReceiver<RouterCommand>>,
+    control_receiver: Option<UnboundedReceiver<Event>>,
+    control_sender: UnboundedSender<Event>,
 }
 
 struct AntRouterInner {
@@ -220,6 +229,7 @@ impl AntRouter {
         default_future_timeout: u64,
     ) -> Self {
         let (command_sender, command_receiver) = futures::channel::mpsc::unbounded();
+        let (control_sender, control_receiver) = futures::channel::mpsc::unbounded();
 
         let message_processor = MessageProcessor::new();
         let inner = AntRouterInner {
@@ -235,6 +245,8 @@ impl AntRouter {
             command_sender,
             network_receiver: Some(network_receiver),
             command_receiver: Some(command_receiver),
+            control_sender,
+            control_receiver: Some(control_receiver),
             inner: Some(inner),
         }
     }
@@ -250,22 +262,21 @@ impl AntRouter {
             .take()
             .expect("should have command receiver");
         let inner = Arc::new(inner);
-        let executor = self.executor.clone();
-        self.executor.spawn(AntRouterInner::start_network(
-            executor,
-            inner.clone(),
-            network_receiver,
-        ));
-        let executor = self.executor.clone();
-        self.executor.spawn(AntRouterInner::start_command(
-            executor,
+        let control_receiver = self.control_receiver.take().expect("already taken");
+        self.executor.spawn(AntRouterInner::start(
+            self.executor.clone(),
             inner,
+            network_receiver,
             command_receiver,
+            control_receiver,
         ));
         Ok(())
     }
 
-    pub fn shutdown(&self) {}
+    pub fn shutdown(&self) -> Result<()> {
+        self.control_sender.unbounded_send(Event::SHUTDOWN)?;
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -289,29 +300,30 @@ impl Router for AntRouter {
 }
 
 impl AntRouterInner {
-    async fn start_network(
+    async fn start(
         executor: Handle,
         router_inner: Arc<AntRouterInner>,
         mut network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
-    ) {
-        while let Some((peer_id, network_message)) = network_receiver.next().await {
-            let router_inner_clone = router_inner.clone();
-            executor.spawn(Self::handle_network_msg(
-                router_inner_clone,
-                peer_id,
-                network_message,
-            ));
-        }
-    }
-
-    async fn start_command(
-        executor: Handle,
-        router_inner: Arc<AntRouterInner>,
         mut command_receiver: UnboundedReceiver<RouterCommand>,
+        mut control_receiver: UnboundedReceiver<Event>,
     ) {
-        while let Some(command) = command_receiver.next().await {
-            let router_inner_clone = router_inner.clone();
-            executor.spawn(Self::handle_command(router_inner_clone, command));
+        loop {
+            futures::select! {
+                message = command_receiver.select_next_some() => {
+                    executor.spawn(Self::handle_command(router_inner.clone(),message));
+                },
+                (peer_id, network_message) = network_receiver.select_next_some() =>{
+                    executor.spawn(Self::handle_network_msg(
+                        router_inner.clone(),
+                        peer_id,
+                        network_message,
+                       ));
+                },
+                _ = control_receiver.select_next_some() =>{
+                    info!("shutdown");
+                    break;
+                },
+            }
         }
     }
 
@@ -733,7 +745,8 @@ fn mix_router_test() {
         rrx1,
         wallet1.clone(),
         5000,
-    );
+    )
+    .unwrap();
     router1.start().unwrap();
 
     let (_network2, tx2, rx2, close_tx2) = build_network_service(&network_config2, keypair2);
@@ -746,7 +759,8 @@ fn mix_router_test() {
         rrx2,
         wallet2.clone(),
         5000,
-    );
+    )
+    .unwrap();
     router2.start().unwrap();
 
     let (_network3, tx3, rx3, close_tx3) = build_network_service(&network_config3, keypair3);
@@ -759,7 +773,8 @@ fn mix_router_test() {
         rrx3,
         wallet3.clone(),
         5000,
-    );
+    )
+    .unwrap();
     router3.start().unwrap();
 
     let router1 = Arc::new(router1);
@@ -769,6 +784,10 @@ fn mix_router_test() {
     let _router1 = router1.clone();
     let _router2 = router2.clone();
     let _router3 = router3.clone();
+
+    let (_ant_router1, _table_router1) = router1._retain();
+    let (_ant_router2, _table_router2) = router2._retain();
+    let (_ant_router3, _table_router3) = router3._retain();
 
     let f = async move {
         _open_channel(wallet1.clone(), wallet2.clone(), 100000, 100000).await?;
@@ -805,9 +824,18 @@ fn mix_router_test() {
 
     rt.block_on(f).unwrap();
 
-    _router1.shutdown().unwrap();
-    _router2.shutdown().unwrap();
-    _router3.shutdown().unwrap();
+    //_router1.shutdown().unwrap();
+    //_router2.shutdown().unwrap();
+    //_router3.shutdown().unwrap();
+
+    _ant_router1.shutdown().unwrap();
+    _table_router1.shutdown().unwrap();
+
+    _ant_router2.shutdown().unwrap();
+    _table_router2.shutdown().unwrap();
+
+    _ant_router3.shutdown().unwrap();
+    _table_router3.shutdown().unwrap();
 
     debug!("here");
 }
@@ -958,11 +986,11 @@ fn ant_router_test() {
 
     rt.block_on(f).unwrap();
 
-    _router1.shutdown();
-    _router2.shutdown();
-    _router3.shutdown();
-    _router4.shutdown();
-    _router5.shutdown();
+    _router1.shutdown().unwrap();
+    _router2.shutdown().unwrap();
+    _router3.shutdown().unwrap();
+    _router4.shutdown().unwrap();
+    _router5.shutdown().unwrap();
 
     debug!("here");
 }

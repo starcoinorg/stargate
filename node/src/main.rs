@@ -142,7 +142,8 @@ fn gen_node(
             rx_router,
             wallet.clone(),
             timeout,
-        );
+        )
+        .unwrap();
         router.start().unwrap();
         boxed_router = Box::new(router);
     }
