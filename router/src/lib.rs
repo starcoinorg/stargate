@@ -116,7 +116,7 @@ impl TableRouter {
     }
 
     pub async fn shutdown(&self) -> Result<()> {
-        self.control_sender.unbounded_send(Event::SHUTDOWN)?;
+        //self.control_sender.unbounded_send(Event::SHUTDOWN)?;
         Ok(())
     }
 
@@ -163,6 +163,12 @@ impl Router for TableRouter {
         let end_node = Vertex::new_with_bi_type(end);
         let vertexes = self.find_path(start_node, end_node).await;
         vertexes
+    }
+}
+
+impl Drop for TableRouter {
+    fn drop(&mut self) {
+        self.control_sender.unbounded_send(Event::SHUTDOWN).unwrap();
     }
 }
 
