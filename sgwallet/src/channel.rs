@@ -12,14 +12,14 @@ use crate::wallet::{
     execute_transaction, submit_transaction, txn_expiration, watch_transaction, GAS_UNIT_PRICE,
     MAX_GAS_AMOUNT_OFFCHAIN, MAX_GAS_AMOUNT_ONCHAIN,
 };
-use anyhow::{bail, ensure, format_err, Result};
+use anyhow::{bail, ensure, format_err, Error, Result};
 use async_trait::async_trait;
 use coerce_rt::actor::{
     context::{ActorContext, ActorHandlerContext, ActorStatus},
     message::{Handler, Message},
     Actor, ActorRef,
 };
-use futures::{channel::mpsc, SinkExt, StreamExt};
+use futures::{channel::mpsc, channel::oneshot, SinkExt, StreamExt};
 use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
 use libra_crypto::test_utils::KeyPair;
 use libra_crypto::{hash::CryptoHash, HashValue, SigningKey, VerifyingKey};
@@ -96,10 +96,10 @@ pub(crate) struct ApplyPendingTxn {
     pub proposal: ChannelTransactionProposal,
 }
 impl Message for ApplyPendingTxn {
-    type Result = Result<u64>;
+    type Result = Result<oneshot::Receiver<Result<u64>>>;
 }
-pub(crate) struct SoloTravelTxn;
-impl Message for SoloTravelTxn {
+pub(crate) struct ForceTravel;
+impl Message for ForceTravel {
     type Result = Result<u64>;
 }
 pub(crate) struct GetPendingTxn;
@@ -123,8 +123,6 @@ pub struct ChannelHandle {
     channel_address: AccountAddress,
     account_address: AccountAddress,
     participant_addresses: BTreeSet<AccountAddress>,
-    //    db: ChannelDB,
-    //    store: ChannelStore<ChannelDB>,
     channel_ref: ActorRef<Channel>,
 }
 
@@ -179,7 +177,6 @@ pub struct Channel {
     // participant contains self address, use btree to preserve address order.
     participant_addresses: BTreeSet<AccountAddress>,
     channel_state: ChannelState,
-    //    db: ChannelDB,
     store: ChannelStore<ChannelDB>,
     keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
     script_registry: Arc<PackageRegistry>,
@@ -250,7 +247,6 @@ impl Channel {
         action: ScriptAction,
         max_gas_amount: u64,
     ) -> Result<SignedTransaction> {
-        //        RawTransaction::new()
         let (body, payload_body_signature) =
             self.propose_channel_action(self.account_address, action)?;
         let mut signatures = BTreeMap::new();
@@ -538,102 +534,6 @@ impl Channel {
         )?;
 
         Ok(_gas_used)
-    }
-
-    async fn apply_pending_txn_async(
-        &mut self,
-        proposal: ChannelTransactionProposal,
-    ) -> Result<u64> {
-        if let Some(signed_txn) =
-            self.check_applied(proposal.channel_txn.channel_sequence_number())?
-        {
-            warn!(
-                "txn {} already applied!",
-                &CryptoHash::hash(&proposal.channel_txn)
-            );
-            if signed_txn.proof.transaction_info().travel() {
-                return Ok(signed_txn.proof.transaction_info().gas_used());
-            } else {
-                return Ok(0);
-            }
-        }
-
-        debug!("user {} apply txn", self.account_address);
-        ensure!(self.pending_txn().is_some(), "should have txn to apply");
-        let pending_txn = self.pending_txn().unwrap();
-        ensure!(pending_txn.fulfilled(), "txn should have been fulfilled");
-        let (proposal, output, signatures) = pending_txn.into();
-        let channel_txn = &proposal.channel_txn;
-
-        let gas = if output.is_travel_txn() {
-            if self.account_address == channel_txn.proposer() {
-                let max_gas_amount = std::cmp::min(
-                    (output.gas_used() as f64 * 1.1) as u64,
-                    MAX_GAS_AMOUNT_ONCHAIN,
-                );
-                let (payload_body, _) =
-                    self.build_and_sign_channel_txn_payload_body(channel_txn)?;
-
-                let signed_txn = self.build_raw_txn_from_channel_txn(
-                    payload_body,
-                    &channel_txn,
-                    Some(&signatures),
-                    max_gas_amount,
-                )?;
-
-                submit_transaction(self.chain_client.as_ref(), signed_txn).await?;
-            }
-
-            //            let watch_tag = {
-            //                let mut t = channel_txn.proposer().to_vec();
-            //                t.append(&mut channel_txn.channel_address().to_vec());
-            //                t.extend(format!("{}", channel_txn.channel_sequence_number()).as_ref());
-            //                t
-            //            };
-            //
-            //            let interest = self
-            //                .chain_txn_watcher
-            //                .add_interest_oneshot(
-            //                    watch_tag,
-            //                    channel_txn_oneshot_interest(
-            //                        channel_txn.channel_address(),
-            //                        channel_txn.channel_sequence_number(),
-            //                    ),
-            //                )
-            //                .await?;
-            //
-            //            // TODO: spawn oneshot task
-
-            let txn_with_proof = watch_transaction(
-                self.chain_client.as_ref(),
-                channel_txn.proposer(),
-                channel_txn.sequence_number(),
-            )
-            .await?;
-            let gas_used = txn_with_proof.proof.transaction_info().gas_used();
-            let TransactionWithProof {
-                events,
-                transaction,
-                version,
-                proof,
-            } = txn_with_proof;
-            let signed_txn = match transaction {
-                Transaction::UserTransaction(s) => s,
-                _ => bail!("should be user txn"),
-            };
-            self.apply_travel(
-                version,
-                signed_txn,
-                proof.transaction_info().clone(),
-                events.unwrap_or_default(),
-            )?;
-
-            gas_used
-        } else {
-            self.apply(proposal.channel_txn, output, signatures)?;
-            0
-        };
-        Ok(gas)
     }
 
     fn verify_proposal(&self, proposal: &ChannelTransactionProposal) -> Result<()> {
@@ -1308,20 +1208,101 @@ impl Handler<ApplyPendingTxn> for Channel {
     async fn handle(
         &mut self,
         message: ApplyPendingTxn,
-        _ctx: &mut ActorHandlerContext,
+        ctx: &mut ActorHandlerContext,
     ) -> <ApplyPendingTxn as Message>::Result {
         let ApplyPendingTxn { proposal } = message;
-        self.apply_pending_txn_async(proposal).await
+        let (tx, rx) = oneshot::channel();
+        if let Some(signed_txn) =
+            self.check_applied(proposal.channel_txn.channel_sequence_number())?
+        {
+            warn!(
+                "txn {} already applied!",
+                &CryptoHash::hash(&proposal.channel_txn)
+            );
+
+            let res = Ok::<u64, Error>(if signed_txn.proof.transaction_info().travel() {
+                signed_txn.proof.transaction_info().gas_used()
+            } else {
+                0
+            });
+            tx.send(res).expect("send should be ok");
+            return Ok(rx);
+        }
+
+        debug!("user {} apply txn", self.account_address);
+        ensure!(self.pending_txn().is_some(), "should have txn to apply");
+        let pending_txn = self.pending_txn().unwrap();
+        ensure!(pending_txn.fulfilled(), "txn should have been fulfilled");
+        let (proposal, output, signatures) = pending_txn.into();
+        let channel_txn = &proposal.channel_txn;
+
+        if !output.is_travel_txn() {
+            self.apply(proposal.channel_txn, output, signatures)?;
+            tx.send(Ok(0)).expect("send should be ok");
+            return Ok(rx);
+        }
+
+        if self.account_address == channel_txn.proposer() {
+            let max_gas_amount = std::cmp::min(
+                (output.gas_used() as f64 * 1.1) as u64,
+                MAX_GAS_AMOUNT_ONCHAIN,
+            );
+            let (payload_body, _) = self.build_and_sign_channel_txn_payload_body(channel_txn)?;
+
+            let signed_txn = self.build_raw_txn_from_channel_txn(
+                payload_body,
+                &channel_txn,
+                Some(&signatures),
+                max_gas_amount,
+            )?;
+
+            submit_transaction(self.chain_client.as_ref(), signed_txn).await?;
+        }
+
+        let watch_tag = {
+            let mut t = channel_txn.proposer().to_vec();
+            t.append(&mut channel_txn.channel_address().to_vec());
+            t.extend(format!("{}", channel_txn.channel_sequence_number()).as_bytes());
+            t
+        };
+
+        let interest = self
+            .chain_txn_watcher
+            .add_interest_oneshot(
+                watch_tag,
+                channel_txn_oneshot_interest(
+                    channel_txn.channel_address(),
+                    channel_txn.channel_sequence_number(),
+                ),
+            )
+            .await?;
+        let mut myself = self.actor_ref(ctx).await;
+        tokio::spawn(async move {
+            match interest.await {
+                Ok(t) => {
+                    let result = myself.send(ApplyTravelTxn { channel_txn: t }).await;
+                    let result = result
+                        .map_err(|_| format_err!("channel actor gone"))
+                        .and_then(|r| r);
+                    let _ = tx.send(result);
+                }
+                Err(_e) => {
+                    error!("sender is dropped by chain txn watcher, that's wired");
+                    let _ = tx.send(Err(format_err!("sender is dropped")));
+                }
+            }
+        });
+        Ok(rx)
     }
 }
 
 #[async_trait]
-impl Handler<SoloTravelTxn> for Channel {
+impl Handler<ForceTravel> for Channel {
     async fn handle(
         &mut self,
-        _message: SoloTravelTxn,
+        _message: ForceTravel,
         _ctx: &mut ActorHandlerContext,
-    ) -> <SoloTravelTxn as Message>::Result {
+    ) -> <ForceTravel as Message>::Result {
         debug!("user {} apply txn", self.account_address);
         ensure!(self.pending_txn().is_some(), "should have txn to apply");
         let pending_txn = self.pending_txn().unwrap();
@@ -1378,6 +1359,60 @@ impl Handler<Stop> for Channel {
         ctx: &mut ActorHandlerContext,
     ) -> <Stop as Message>::Result {
         ctx.set_status(ActorStatus::Stopping);
+    }
+}
+
+struct ApplyTravelTxn {
+    channel_txn: TransactionWithInfo,
+}
+impl Message for ApplyTravelTxn {
+    type Result = Result<u64>;
+}
+
+#[async_trait]
+impl Handler<ApplyTravelTxn> for Channel {
+    async fn handle(
+        &mut self,
+        message: ApplyTravelTxn,
+        _ctx: &mut ActorHandlerContext,
+    ) -> <ApplyTravelTxn as Message>::Result {
+        let ApplyTravelTxn {
+            channel_txn:
+                TransactionWithInfo {
+                    txn,
+                    txn_info,
+                    version,
+                    events,
+                    ..
+                },
+        } = message;
+        let signed_txn = match txn {
+            Transaction::UserTransaction(s) => s,
+            _ => {
+                bail!("should be user txn");
+            }
+        };
+
+        let raw_txn = signed_txn.raw_txn();
+        let txn_payload = raw_txn.payload();
+        let channel_txn_payload = match txn_payload {
+            TransactionPayload::Channel(channel_txn_payload) => channel_txn_payload,
+            _ => bail!("should be channel txn"),
+        };
+        if channel_txn_payload.channel_sequence_number() < self.channel_sequence_number() {
+            let applied_txn = self.check_applied(channel_txn_payload.channel_sequence_number())?;
+            debug_assert!(applied_txn.is_some());
+            let applied_txn = applied_txn.unwrap();
+            debug_assert!(applied_txn.signed_transaction.travel());
+            // TODO: should check txn hash?
+            return Ok(applied_txn.proof.transaction_info().gas_used());
+        }
+        debug_assert!(
+            channel_txn_payload.channel_sequence_number() == self.channel_sequence_number()
+        );
+        let gas_used = txn_info.gas_used();
+        self.apply_travel(version, signed_txn, txn_info, events)?;
+        Ok(gas_used)
     }
 }
 

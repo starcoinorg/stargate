@@ -82,7 +82,6 @@ pub struct Wallet {
     shared: Shared,
     sgdb: Arc<SgStorage>,
     inner: Option<Inner>,
-    //    _rt: runtime::Runtime,
 }
 
 impl Wallet {
@@ -107,13 +106,6 @@ impl Wallet {
         let sgdb = Arc::new(SgStorage::new(account, store_dir));
 
         let script_registry = Arc::new(PackageRegistry::build()?);
-
-        //        let mut builder = runtime::Builder::new();
-        //        let runtime = builder
-        //            .thread_name("wallet-")
-        //            .threaded_scheduler()
-        //            .enable_all()
-        //            .build()?;
 
         let shared = Shared {
             account,
@@ -605,11 +597,11 @@ impl Wallet {
 
         let (proposal, _) = txn_response.clone().into();
 
-        let gas = channel
+        let receiver = channel
             .channel_ref()
             .send(ApplyPendingTxn { proposal })
             .await??;
-
+        let gas = receiver.await??;
         Ok(gas)
     }
 
@@ -1005,16 +997,6 @@ impl Inner {
                 .map(Clone::clone)
                 .collect::<BTreeSet<_>>();
 
-            //            let state_blobs = channel_account_state.into_map();
-            //            let mut channel_state = BTreeMap::new();
-            //            for (path, value) in state_blobs.into_iter() {
-            //                match DataPath::from(&path).unwrap() {
-            //                    DataPath::ChannelResource { .. } => {
-            //                        channel_state.insert(path, value);
-            //                    }
-            //                    _ => {}
-            //                }
-            //            }
             channel_states.insert(
                 channel_address.clone(),
                 (participants, channel_account_state),
