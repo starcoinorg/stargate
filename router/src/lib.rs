@@ -168,7 +168,10 @@ impl Router for TableRouter {
 
 impl Drop for TableRouter {
     fn drop(&mut self) {
-        self.control_sender.unbounded_send(Event::SHUTDOWN).unwrap();
+        match self.control_sender.unbounded_send(Event::SHUTDOWN) {
+            Ok(_) => {}
+            Err(e) => warn!("shutdown error,{}", e),
+        }
     }
 }
 
