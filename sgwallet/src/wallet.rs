@@ -845,6 +845,7 @@ impl Inner {
         let account_state = account_state.unwrap();
 
         // start chain txn watcher
+        // TODO: what version should we start to watch on.
         let chain_txn_watcher =
             ChainWatcher::new(self.inner.client.clone(), account_state.version(), 16);
         let chain_txn_handle = chain_txn_watcher
@@ -1116,11 +1117,13 @@ impl Inner {
             participants,
             ChannelState::new(channel_address, channel_account_state),
             self.get_channel_db(channel_address),
+            self.chain_txn_handle.as_ref().unwrap().clone(),
             self.channel_event_sender.clone(),
             self.inner.keypair.clone(),
             self.inner.script_registry.clone(),
             self.inner.client.clone(),
         );
+
         let channel_handle = channel
             .start(self.actor_context.as_ref().unwrap().clone())
             .await;

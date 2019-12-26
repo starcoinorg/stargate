@@ -1,10 +1,13 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::chain_watcher::{ChainWatcherHandle, Interest, TransactionWithInfo};
 use crate::channel_state_view::ChannelStateView;
 use crate::scripts::PackageRegistry;
 use crate::tx_applier::TxApplier;
-use crate::utils::contract::{challenge_channel_action, resolve_channel_action};
+use crate::utils::contract::{
+    challenge_channel_action, close_channel_action, resolve_channel_action,
+};
 use crate::wallet::{
     execute_transaction, submit_transaction, txn_expiration, watch_transaction, GAS_UNIT_PRICE,
     MAX_GAS_AMOUNT_OFFCHAIN, MAX_GAS_AMOUNT_ONCHAIN,
@@ -16,7 +19,7 @@ use coerce_rt::actor::{
     message::{Handler, Message},
     Actor, ActorRef,
 };
-use futures::{channel::mpsc, SinkExt};
+use futures::{channel::mpsc, SinkExt, StreamExt};
 use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
 use libra_crypto::test_utils::KeyPair;
 use libra_crypto::{hash::CryptoHash, HashValue, SigningKey, VerifyingKey};
@@ -24,8 +27,8 @@ use libra_logger::prelude::*;
 use libra_state_view::StateView;
 use libra_types::access_path::DataPath;
 use libra_types::channel::{
-    make_resource, ChannelMirrorResource, ChannelParticipantAccountResource, ChannelResource,
-    LibraResource, Witness, WitnessData,
+    make_resource, ChannelChallengeBy, ChannelLockedBy, ChannelMirrorResource,
+    ChannelParticipantAccountResource, ChannelResource, LibraResource, Witness, WitnessData,
 };
 use libra_types::contract_event::ContractEvent;
 use libra_types::identifier::Identifier;
@@ -185,8 +188,8 @@ pub struct Channel {
 
     // event produced by the channel
     channel_event_sender: mpsc::Sender<ChannelEvent>,
-    // TODO: handle stop
-    should_stop: bool,
+    // watch onchain channel txn of this channel
+    chain_txn_watcher: ChainWatcherHandle,
 }
 
 impl Channel {
@@ -197,6 +200,7 @@ impl Channel {
         participant_addresses: BTreeSet<AccountAddress>,
         channel_state: ChannelState,
         db: ChannelDB,
+        chain_txn_watcher: ChainWatcherHandle,
         channel_event_sender: mpsc::Sender<ChannelEvent>,
         keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
         script_registry: Arc<PackageRegistry>,
@@ -215,7 +219,7 @@ impl Channel {
             chain_client: chain_client.clone(),
             tx_applier: TxApplier::new(store.clone()),
             channel_event_sender,
-            should_stop: false,
+            chain_txn_watcher,
         };
         inner
     }
@@ -239,111 +243,6 @@ impl Channel {
             channel_ref: actor_ref,
         };
         handle
-    }
-
-    #[allow(dead_code)]
-    async fn handle_chain_txn(
-        &mut self,
-        version: u64,
-        signed_txn: SignedTransaction,
-        txn_info: TransactionInfo,
-        events: Vec<ContractEvent>,
-    ) -> Result<()> {
-        let txn_sender = signed_txn.sender();
-        let raw_txn = signed_txn.raw_txn();
-        let txn_payload = raw_txn.payload();
-        let channel_txn_payload = match txn_payload {
-            TransactionPayload::Channel(channel_txn_payload) => channel_txn_payload,
-            _ => bail!("should watch channel txn"),
-        };
-
-        debug_assert!(self.participant_addresses.contains(&txn_sender));
-        debug_assert!(self.channel_address == channel_txn_payload.channel_address());
-
-        let txn_channel_seq_number = channel_txn_payload.witness().channel_sequence_number();
-        let local_channel_seq_number = self.channel_sequence_number();
-
-        // found participant submit a new txn
-        if txn_sender != self.account_address {
-            // compare the new txn's witness sequence number with local sequence_number
-            // if equal, it means new txn committed onchain, but I don't aware.
-            // if less by only one, maybe proposer didn't receive my signature, and he proposed the txn onchian,
-            // or it means the new txn proposer had submitted a stale channel txn purposely.
-            // if bigger, it's a bug.
-            debug_assert!(
-                txn_channel_seq_number <= local_channel_seq_number,
-                "Local state is stale, there must be some bugs"
-            );
-
-            // and the txn is authorized by me
-            if channel_txn_payload.is_authorized() {
-                if txn_channel_seq_number == local_channel_seq_number {
-                    // a new signed-by-me txn is committed onchain, that's wired,
-                    // because my local state didn't aware this txn.
-                    // anyway, I apply this
-                    self.apply_travel(version, signed_txn, txn_info, events)?;
-                } else if txn_channel_seq_number < local_channel_seq_number {
-                    // it means participant make a stale offchain txn travel directly.
-                    // but I already applied the txn locally.
-                    // FIXME: what's should I do.
-                    // I cannot challenge him, because the channel is not locked.
-                }
-            } else {
-                // unauthorized txns should be:
-                // 1. solo travel txn
-                // 2. challenge txn
-                // 3. resolve txn
-                if txn_channel_seq_number == local_channel_seq_number {
-                    warn!(
-                        "watch a newer channel txn on chain, based on channel_sequence_number {}",
-                        txn_channel_seq_number
-                    );
-                    // 1. apply the solo txn first.
-                    self.apply_travel(version, signed_txn, txn_info, events)?;
-                    // 2. after apply, check channel state
-                    let channel_resource: ChannelResource = self
-                        .channel_resource()
-                        .ok_or(format_err!("channel resource should exists in local"))?;
-
-                    if channel_resource.locked() {
-                        // locked by proposer.
-                        // try to resolve
-                        self.solo_txn(resolve_channel_action(), u64::max_value())
-                            .await?;
-                    } else if channel_resource.closed() {
-                        // participant close the channel.
-                        // TODO: close channel now
-                        self.should_stop = true;
-                    } else {
-                        // nothing todo. everything is good now.
-                    }
-                } else if txn_channel_seq_number < local_channel_seq_number {
-                    warn!(
-                        "watch a stale channel txn on chain, based on channel_sequence_number {}",
-                        txn_channel_seq_number
-                    );
-                    // NOTICE: I cannot apply the txn locally.
-
-                    let _ = self
-                        .solo_txn(challenge_channel_action(), u64::max_value())
-                        .await?;
-                    // after challenge success, channel should be closed
-                    let channel_resource: ChannelResource = self
-                        .channel_resource()
-                        .ok_or(format_err!("channel resource should exists in local"))?;
-                    debug_assert!(
-                        channel_resource.closed(),
-                        "channel should be closed after challenge success"
-                    );
-                    // now, we can clean the channel data, and stop the channel actor.
-                    // TODO: cleanup data
-                    self.should_stop = true;
-                }
-            }
-        } else {
-            // ignore my own txn?
-        }
-        Ok(())
     }
 
     fn build_solo_txn(
@@ -610,25 +509,6 @@ impl Channel {
         Ok(user_sigs)
     }
 
-    async fn solo_travel_proposal(&mut self) -> Result<u64> {
-        debug!("user {} apply txn", self.account_address);
-        ensure!(self.pending_txn().is_some(), "should have txn to apply");
-        let pending_txn = self.pending_txn().unwrap();
-        ensure!(!pending_txn.fulfilled(), "txn should not be fulfilled");
-        let (proposal, output, _signatures) = pending_txn.into();
-        let channel_txn = &proposal.channel_txn;
-        ensure!(
-            self.account_address == channel_txn.proposer(),
-            "solo should only use myself's proposal"
-        );
-
-        let max_gas_amount = std::cmp::min(
-            (output.gas_used() as f64 * 1.1) as u64,
-            MAX_GAS_AMOUNT_ONCHAIN,
-        );
-        self.solo_txn(channel_txn.action(), max_gas_amount).await
-    }
-
     async fn solo_txn(&mut self, action: ScriptAction, max_gas_amount: u64) -> Result<u64> {
         let signed_txn = self.build_solo_txn(action, max_gas_amount)?;
         let txn_sender = signed_txn.sender();
@@ -703,6 +583,26 @@ impl Channel {
 
                 submit_transaction(self.chain_client.as_ref(), signed_txn).await?;
             }
+
+            //            let watch_tag = {
+            //                let mut t = channel_txn.proposer().to_vec();
+            //                t.append(&mut channel_txn.channel_address().to_vec());
+            //                t.extend(format!("{}", channel_txn.channel_sequence_number()).as_ref());
+            //                t
+            //            };
+            //
+            //            let interest = self
+            //                .chain_txn_watcher
+            //                .add_interest_oneshot(
+            //                    watch_tag,
+            //                    channel_txn_oneshot_interest(
+            //                        channel_txn.channel_address(),
+            //                        channel_txn.channel_sequence_number(),
+            //                    ),
+            //                )
+            //                .await?;
+            //
+            //            // TODO: spawn oneshot task
 
             let txn_with_proof = watch_transaction(
                 self.chain_client.as_ref(),
@@ -840,6 +740,20 @@ impl Channel {
         self.get_local::<ChannelResource>(&AccessPath::new_for_data_path(
             self.channel_address,
             DataPath::onchain_resource_path(ChannelResource::struct_tag()),
+        ))
+        .unwrap()
+    }
+    pub fn channel_lock_by_resource(&self) -> Option<ChannelLockedBy> {
+        self.get_local::<ChannelLockedBy>(&AccessPath::new_for_data_path(
+            self.channel_address,
+            DataPath::onchain_resource_path(ChannelLockedBy::struct_tag()),
+        ))
+        .unwrap()
+    }
+    pub fn channel_challenge_by_resource(&self) -> Option<ChannelChallengeBy> {
+        self.get_local::<ChannelChallengeBy>(&AccessPath::new_for_data_path(
+            self.channel_address,
+            DataPath::onchain_resource_path(ChannelChallengeBy::struct_tag()),
         ))
         .unwrap()
     }
@@ -1123,6 +1037,53 @@ impl Channel {
         Ok(())
     }
 
+    /// helper method to get self actor ref from `ctx`
+    async fn actor_ref(&self, ctx: &mut ActorHandlerContext) -> ActorRef<Self> {
+        let self_id = ctx.actor_id().clone();
+        let self_ref = ctx
+            .actor_context_mut()
+            .get_actor::<Self>(self_id)
+            .await
+            .expect("get self actor ref should be ok");
+        self_ref
+    }
+    async fn watch_channel_lock_timeout(&self, ctx: &mut ActorHandlerContext) -> Result<()> {
+        let lock_by = self
+            .channel_lock_by_resource()
+            .expect("expect lock_by resource exists");
+
+        let time_lock = lock_by.time_lock;
+
+        let watch_tag = {
+            let mut t = self.channel_address.to_vec();
+            t.extend("lock".as_bytes());
+            t
+        };
+
+        let mut timeout_receiver = self
+            .chain_txn_watcher
+            .add_interest(watch_tag, Box::new(move |txn| txn.block_id > time_lock))
+            .await?;
+        let mut self_ref = self.actor_ref(ctx).await;
+
+        tokio::task::spawn(async move {
+            while let Some(_) = timeout_receiver.next().await {
+                match self_ref.send(ChannelLockTimeout).await {
+                    Err(_) => break,
+                    Ok(Ok(_)) => break,
+                    Ok(Err(e)) => {
+                        error!(
+                            "actor fail to handle channel lock timeout, continue watch, err: {}",
+                            e
+                        );
+                    }
+                }
+            }
+        });
+
+        Ok(())
+    }
+
     /// clear local pending state
     fn clear_pending_txn(&self) -> Result<()> {
         self.store.clear_pending_txn()
@@ -1192,7 +1153,7 @@ impl Channel {
 
 #[async_trait]
 impl Actor for Channel {
-    async fn started(&mut self, _ctx: &mut ActorHandlerContext) {
+    async fn started(&mut self, ctx: &mut ActorHandlerContext) {
         let to_be_apply = match self.pending_txn() {
             Some(PendingTransaction::WaitForApply {
                 proposal, output, ..
@@ -1203,18 +1164,37 @@ impl Actor for Channel {
             _ => None,
         };
 
-        let self_id = _ctx.actor_id().clone();
-        let mut myself = _ctx
-            .actor_context_mut()
-            .get_actor::<Self>(self_id)
-            .await
-            .expect("self actor should exists");
+        let mut myself = self.actor_ref(ctx).await;
 
         if let Some(proposal) = to_be_apply {
             if let Err(_) = myself.notify(ApplyPendingTxn { proposal }).await {
                 panic!("should not happen");
             }
         }
+        let mut channel_txn_receiver = self
+            .chain_txn_watcher
+            .add_interest(
+                self.channel_address.to_vec(),
+                channel_txn_interest(self.channel_address),
+            )
+            .await
+            .unwrap();
+
+        tokio::task::spawn(async move {
+            while let Some(channel_txn) = channel_txn_receiver.next().await {
+                let txn = channel_txn.clone();
+                match myself.send(TravelChannelTxn { channel_txn }).await {
+                    Err(_) => {
+                        info!("parent {:?} is gone, stop now", &myself);
+                        break;
+                    }
+                    Ok(Err(e)) => {
+                        error!("fail to handle travel txn: {:?}, e: {}", &txn, e);
+                    }
+                    _ => {}
+                }
+            }
+        });
     }
 
     async fn stopped(&mut self, _ctx: &mut ActorHandlerContext) {
@@ -1342,9 +1322,30 @@ impl Handler<SoloTravelTxn> for Channel {
         _message: SoloTravelTxn,
         _ctx: &mut ActorHandlerContext,
     ) -> <SoloTravelTxn as Message>::Result {
-        self.solo_travel_proposal().await
+        debug!("user {} apply txn", self.account_address);
+        ensure!(self.pending_txn().is_some(), "should have txn to apply");
+        let pending_txn = self.pending_txn().unwrap();
+        ensure!(!pending_txn.fulfilled(), "txn should not be fulfilled");
+        let (proposal, output, _signatures) = pending_txn.into();
+        let channel_txn = &proposal.channel_txn;
+        ensure!(
+            self.account_address == channel_txn.proposer(),
+            "solo should only use myself's proposal"
+        );
+
+        let max_gas_amount = std::cmp::min(
+            (output.gas_used() as f64 * 1.1) as u64,
+            MAX_GAS_AMOUNT_ONCHAIN,
+        );
+
+        let gas_use = self.solo_txn(channel_txn.action(), max_gas_amount).await?;
+
+        // I lock the channel, wait sender to resolve
+        self.watch_channel_lock_timeout(_ctx).await?;
+        Ok(gas_use)
     }
 }
+
 #[async_trait]
 impl Handler<AccessingResource> for Channel {
     async fn handle(
@@ -1377,6 +1378,170 @@ impl Handler<Stop> for Channel {
         ctx: &mut ActorHandlerContext,
     ) -> <Stop as Message>::Result {
         ctx.set_status(ActorStatus::Stopping);
+    }
+}
+
+struct TravelChannelTxn {
+    channel_txn: TransactionWithInfo,
+}
+
+impl Message for TravelChannelTxn {
+    type Result = Result<()>;
+}
+
+#[async_trait]
+impl Handler<TravelChannelTxn> for Channel {
+    async fn handle(
+        &mut self,
+        message: TravelChannelTxn,
+        ctx: &mut ActorHandlerContext,
+    ) -> <TravelChannelTxn as Message>::Result {
+        let TravelChannelTxn {
+            channel_txn:
+                TransactionWithInfo {
+                    txn,
+                    txn_info,
+                    version,
+                    events,
+                    ..
+                },
+        } = message;
+        let signed_txn = match txn {
+            Transaction::UserTransaction(s) => s,
+            _ => {
+                bail!("should be user txn");
+            }
+        };
+
+        let txn_sender = signed_txn.sender();
+        let raw_txn = signed_txn.raw_txn();
+        let txn_payload = raw_txn.payload();
+        let channel_txn_payload = match txn_payload {
+            TransactionPayload::Channel(channel_txn_payload) => channel_txn_payload,
+            _ => bail!("should be channel txn"),
+        };
+
+        debug_assert!(self.participant_addresses.contains(&txn_sender));
+        debug_assert!(self.channel_address == channel_txn_payload.channel_address());
+
+        let txn_channel_seq_number = channel_txn_payload.witness().channel_sequence_number();
+        let local_channel_seq_number = self.channel_sequence_number();
+
+        // compare the new txn's witness sequence number with local sequence_number
+        // if equal, it means new txn committed onchain, but I don't aware.
+        // if less by only one, maybe proposer didn't receive my signature, and he proposed the txn onchian,
+        // or it means the new txn proposer had submitted a stale channel txn purposely.
+        // if bigger, it's a bug.
+        debug_assert!(
+            txn_channel_seq_number <= local_channel_seq_number,
+            "Local state is stale, there must be some bugs"
+        );
+
+        if channel_txn_payload.is_authorized() {
+            // a new co-signed txn is committed onchain.
+            // It may be submitted by me or participant.
+            // anyway, I apply this, and cleanup my local pending txn
+            if txn_channel_seq_number == local_channel_seq_number {
+                self.apply_travel(version, signed_txn, txn_info, events)?;
+            } else if txn_channel_seq_number < local_channel_seq_number {
+                let local_txn = self
+                    .check_applied(txn_channel_seq_number)?
+                    .expect("get local applied txn should be ok");
+                match local_txn.signed_transaction {
+                    AppliedChannelTxn::Travel(s) if s.raw_txn().hash() == raw_txn.hash() => {
+                        // it's ok, it may be a late message.
+                        // Ignore it.
+                    }
+                    _ => {
+                        // it means participant make a stale offchain txn travel directly.
+                        // but I already applied the txn locally.
+                        // I cannot challenge him, because the channel is not locked.
+                        // FIXME: what's should I do.
+                        unimplemented!()
+                    }
+                }
+            }
+            return Ok(());
+        }
+
+        // ------------- The following codes handle unauthorized travel txn -----------
+
+        if txn_channel_seq_number == local_channel_seq_number {
+            // 1. apply the solo txn first.
+            self.apply_travel(version, signed_txn, txn_info, events)?;
+
+            // 2. after apply, check channel state
+            let channel_resource: ChannelResource = self
+                .channel_resource()
+                .ok_or(format_err!("channel resource should exists in local"))?;
+
+            if channel_resource.locked() {
+                if txn_sender == self.account_address {
+                    // I lock the channel, wait sender to resolve
+                    self.watch_channel_lock_timeout(ctx).await?;
+                } else {
+                    // locked by participant.
+                    // try to resolve
+                    self.solo_txn(resolve_channel_action(), u64::max_value())
+                        .await?;
+                }
+            } else if channel_resource.closed() {
+                // no matter who close ths channel, the channel is done. we just act on it.
+                // TODO: close channel now
+                ctx.set_status(ActorStatus::Stopping);
+            } else {
+                // nothing todo. everything is good now.
+            }
+        } else if txn_channel_seq_number < local_channel_seq_number {
+            // NOTICE: I cannot apply the txn locally.
+            if txn_sender != self.account_address {
+                let _ = self
+                    .solo_txn(challenge_channel_action(), u64::max_value())
+                    .await?;
+                // after challenge success, channel should be closed
+                let channel_resource: ChannelResource = self
+                    .channel_resource()
+                    .ok_or(format_err!("channel resource should exists in local"))?;
+                debug_assert!(
+                    channel_resource.closed(),
+                    "channel should be closed after challenge success"
+                );
+                // now, we can clean the channel data, and stop the channel actor.
+                // TODO: cleanup data
+                ctx.set_status(ActorStatus::Stopping);
+            }
+        }
+
+        Ok(())
+    }
+}
+
+struct ChannelLockTimeout;
+impl Message for ChannelLockTimeout {
+    type Result = Result<()>;
+}
+
+#[async_trait]
+impl Handler<ChannelLockTimeout> for Channel {
+    async fn handle(
+        &mut self,
+        _message: ChannelLockTimeout,
+        ctx: &mut ActorHandlerContext,
+    ) -> <ChannelLockTimeout as Message>::Result {
+        self.solo_txn(close_channel_action(), u64::max_value())
+            .await?;
+        // after challenge success, channel should be closed
+        let channel_resource: ChannelResource = self
+            .channel_resource()
+            .ok_or(format_err!("channel resource should exists in local"))?;
+        debug_assert!(
+            channel_resource.closed(),
+            "channel should be closed after challenge success"
+        );
+        // now, we can clean the channel data, and stop the channel actor.
+        // TODO: cleanup data
+        ctx.set_status(ActorStatus::Stopping);
+        Ok(())
     }
 }
 
@@ -1427,4 +1592,30 @@ fn chain_txn_to_local_channel_txn(
     //        channel_txn_payload.action(),
     //    );
     unimplemented!()
+}
+
+pub fn channel_txn_interest(channel_address: AccountAddress) -> Interest {
+    Box::new(move |txn_info| match &txn_info.txn {
+        Transaction::UserTransaction(t) => match t.raw_txn().payload() {
+            TransactionPayload::Channel(cp) => cp.channel_address() == channel_address,
+            _ => false,
+        },
+        _ => false,
+    })
+}
+
+pub fn channel_txn_oneshot_interest(
+    channel_address: AccountAddress,
+    channel_sequence_number: u64,
+) -> Interest {
+    Box::new(move |txn| match &txn.txn {
+        Transaction::UserTransaction(t) => match t.raw_txn().payload() {
+            TransactionPayload::Channel(cp) => {
+                cp.channel_address() == channel_address
+                    && cp.channel_sequence_number() == channel_sequence_number
+            }
+            _ => false,
+        },
+        _ => false,
+    })
 }

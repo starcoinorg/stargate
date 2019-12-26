@@ -4,6 +4,7 @@ use crate::data_stream::{DataQuery, DataStream};
 use anyhow::Result;
 use async_trait::async_trait;
 
+use libra_types::contract_event::ContractEvent;
 use libra_types::get_with_proof::RequestItem;
 use libra_types::transaction::{Transaction, TransactionInfo, TransactionListWithProof, Version};
 use sgchain::star_chain_client::ChainClient;
@@ -16,6 +17,8 @@ pub struct TransactionWithInfo {
     pub txn: Transaction,
     pub txn_info: TransactionInfo,
     pub version: u64,
+    pub events: Vec<ContractEvent>,
+    pub block_id: u64,
 }
 
 pub type TxnStream = DataStream<TransactionWithInfo>;
@@ -61,7 +64,7 @@ impl DataQuery for TxnQuerier {
         // FIXME: check proof
         let TransactionListWithProof {
             transactions,
-            events: _,
+            events,
             first_transaction_version,
             proof,
         } = txns;
@@ -69,9 +72,10 @@ impl DataQuery for TxnQuerier {
             None => Ok(BTreeMap::new()),
             Some(first_version) => {
                 let mut c = BTreeMap::default();
-                for (pos, (t, info)) in transactions
+                for (pos, ((t, info), events)) in transactions
                     .into_iter()
                     .zip(proof.transaction_infos().to_vec().into_iter())
+                    .zip(events.unwrap())
                     .enumerate()
                 {
                     let version = *first_version + (pos as u64);
@@ -81,6 +85,8 @@ impl DataQuery for TxnQuerier {
                             txn: t,
                             txn_info: info,
                             version,
+                            events,
+                            block_id: 0, // FIXME: implemnet me
                         },
                     );
                 }
