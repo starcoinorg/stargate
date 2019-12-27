@@ -115,7 +115,7 @@ impl TableRouter {
         result
     }
 
-    pub fn shutdown(&self) -> Result<()> {
+    pub async fn shutdown(&self) -> Result<()> {
         self.control_sender.unbounded_send(Event::SHUTDOWN)?;
         Ok(())
     }
@@ -131,23 +131,15 @@ impl TableRouter {
         let control_receiver = self.control_receiver.take().expect("should have");
 
         let inner = Arc::new(inner);
-        self.executor.spawn(RouterInner::start_command(
+
+        self.executor.spawn(RouterInner::start(
             self.executor.clone(),
-            inner.clone(),
-            receiver,
-        ));
-        self.executor.spawn(RouterInner::start_network(
-            self.executor.clone(),
-            inner.clone(),
-            network_receiver,
-        ));
-        self.executor.spawn(RouterInner::start_chain_stream(
-            self.executor.clone(),
-            inner.clone(),
+            inner,
             chain_client,
             control_receiver,
+            receiver,
+            network_receiver,
         ));
-
         Ok(())
     }
 }
@@ -166,45 +158,14 @@ impl Router for TableRouter {
     }
 }
 
-impl Drop for TableRouter {
-    fn drop(&mut self) {
-        match self.control_sender.unbounded_send(Event::SHUTDOWN) {
-            Ok(_) => {}
-            Err(e) => warn!("shutdown error,{}", e),
-        }
-    }
-}
-
 impl RouterInner {
-    async fn start_network(
-        executor: Handle,
-        inner: Arc<RouterInner>,
-        mut network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
-    ) {
-        while let Some((peer_id, network_message)) = network_receiver.next().await {
-            executor.spawn(Self::handle_router_network_msg(
-                inner.clone(),
-                peer_id,
-                network_message,
-            ));
-        }
-    }
-
-    async fn start_command(
-        executor: Handle,
-        inner: Arc<RouterInner>,
-        mut command_receiver: UnboundedReceiver<RouterMessage>,
-    ) {
-        while let Some(command) = command_receiver.next().await {
-            executor.spawn(Self::handle_router_msg(inner.clone(), command));
-        }
-    }
-
-    async fn start_chain_stream(
+    async fn start(
         executor: Handle,
         inner: Arc<RouterInner>,
         chain_client: Arc<dyn ChainClient>,
         mut control_receiver: UnboundedReceiver<Event>,
+        mut command_receiver: UnboundedReceiver<RouterMessage>,
+        mut network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
     ) {
         let client = chain_client.clone();
 
@@ -213,15 +174,26 @@ impl RouterInner {
 
         loop {
             futures::select! {
+                (peer_id, network_message) = network_receiver.select_next_some() =>{
+                    executor.spawn(Self::handle_router_network_msg(
+                    inner.clone(),
+                    peer_id,
+                    network_message,
+                    ));
+                }
+                command = command_receiver.select_next_some() => {
+                    executor.spawn(Self::handle_router_msg(inner.clone(), command));
+                },
                 message = stream.select_next_some() => {
                     executor.spawn(Self::handle_stream(inner.clone(),message));
                 },
                 _ = control_receiver.select_next_some() =>{
-                    info!("shutdown");
+                    info!("shutdown stream");
                     break;
                 },
             }
         }
+        drop(stream);
     }
 
     async fn handle_router_network_msg(
@@ -610,6 +582,12 @@ fn router_test() {
             Err(_) => assert_eq!(1, 1),
         }
 
+        router1.shutdown().await?;
+        router2.shutdown().await?;
+        router3.shutdown().await?;
+        router4.shutdown().await?;
+        router5.shutdown().await?;
+
         close_tx1.send(()).unwrap();
         close_tx2.send(()).unwrap();
         close_tx3.send(()).unwrap();
@@ -627,11 +605,7 @@ fn router_test() {
 
     rt.block_on(f).unwrap();
 
-    _router1.shutdown().unwrap();
-    _router2.shutdown().unwrap();
-    _router3.shutdown().unwrap();
-    _router4.shutdown().unwrap();
-    _router5.shutdown().unwrap();
+    drop(rt);
 
     debug!("here");
 }
