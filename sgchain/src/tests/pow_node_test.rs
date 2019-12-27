@@ -1,16 +1,16 @@
 use crate::star_chain_client::gen_node_config_with_genesis;
 use crate::star_chain_client::{faucet_async, submit_txn_async, ChainClient, StarChainClient};
 use admission_control_service::runtime::AdmissionControlRuntime;
-use anyhow::{ensure, Result};
+//use anyhow::{ensure};
+use anyhow::Result;
 use async_std::task;
 use consensus::consensus_provider::make_pow_consensus_provider;
 use consensus::MineClient;
 use futures::channel::oneshot::{channel, Sender};
 use futures::{future, StreamExt};
 use grpc_helpers::ServerHandle;
-use libra_config::config::{NetworkConfig, NodeConfig, RoleType, TestConfig};
+use libra_config::config::{NetworkConfig, NodeConfig, RoleType};
 use libra_crypto::traits::Uniform;
-use libra_crypto::x25519::X25519StaticPrivateKey;
 use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
@@ -28,6 +28,7 @@ use network::{
         // when you add a new protocol const, you must add this in either
         // .direct_send_protocols or .rpc_protocols vector of network_builder in setup_network()
         ADMISSION_CONTROL_RPC_PROTOCOL,
+        CHAIN_STATE_DIRECT_SEND_PROTOCOL,
         CONSENSUS_DIRECT_SEND_PROTOCOL,
         CONSENSUS_RPC_PROTOCOL,
         MEMPOOL_DIRECT_SEND_PROTOCOL,
@@ -37,7 +38,7 @@ use network::{
 };
 use rand::prelude::*;
 use rand::{rngs::StdRng, SeedableRng};
-use rusty_fork::{rusty_fork_id, rusty_fork_test, rusty_fork_test_name};
+//use rusty_fork::{rusty_fork_id, rusty_fork_test, rusty_fork_test_name};
 use state_synchronizer::StateSynchronizer;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -72,6 +73,7 @@ pub fn setup_network(
             ProtocolId::from_static(CONSENSUS_DIRECT_SEND_PROTOCOL),
             ProtocolId::from_static(MEMPOOL_DIRECT_SEND_PROTOCOL),
             ProtocolId::from_static(STATE_SYNCHRONIZER_DIRECT_SEND_PROTOCOL),
+            ProtocolId::from_static(CHAIN_STATE_DIRECT_SEND_PROTOCOL),
         ])
         .rpc_protocols(vec![
             ProtocolId::from_static(CONSENSUS_RPC_PROTOCOL),
@@ -104,14 +106,6 @@ pub fn setup_network(
         .trusted_peers(trusted_peers)
         .signing_keys((signing_private, signing_public))
         .discovery_interval_ms(config.discovery_interval_ms);
-
-    //    network_builder.transport(TransportType::PermissionlessMemoryNoise(Some((
-    //        config.network_keypairs.get_network_identity_private(),
-    //        config
-    //            .network_keypairs
-    //            .get_network_identity_public()
-    //            .clone(),
-    //    ))));
 
     let (_listen_addr, network_provider) = network_builder.build();
     (runtime, network_provider)
@@ -171,6 +165,7 @@ pub fn setup_environment(node_config: &mut NodeConfig, rollback_flag: bool) -> L
 
     let mut mempool = None;
     let mut consensus = None;
+    let (mut _cs_network_sender, mut _cs_network_events) = (None, None);
     if let Some((peer_id, runtime, mut network_provider)) = validator_network_provider {
         let (mempool_network_sender, mempool_network_events) = network_provider
             .add_mempool(vec![ProtocolId::from_static(MEMPOOL_DIRECT_SEND_PROTOCOL)]);
@@ -179,6 +174,15 @@ pub fn setup_environment(node_config: &mut NodeConfig, rollback_flag: bool) -> L
                 ProtocolId::from_static(CONSENSUS_RPC_PROTOCOL),
                 ProtocolId::from_static(CONSENSUS_DIRECT_SEND_PROTOCOL),
             ]);
+        //add chain state protocol
+        let (chain_state_network_sender, chain_state_network_events) = network_provider
+            .add_chain_state(vec![ProtocolId::from_static(
+                CHAIN_STATE_DIRECT_SEND_PROTOCOL,
+            )]);
+
+        _cs_network_sender = Some(chain_state_network_sender);
+        _cs_network_events = Some(chain_state_network_events);
+
         runtime.handle().clone().spawn(network_provider.start());
         network_runtimes.push(runtime);
         debug!("Network started for peer_id: {}", peer_id);
@@ -201,6 +205,8 @@ pub fn setup_environment(node_config: &mut NodeConfig, rollback_flag: bool) -> L
             executor,
             state_synchronizer.create_client(),
             rollback_flag,
+            _cs_network_sender.expect("cs_network_sender is none."),
+            _cs_network_events.expect("cs_network_events is none."),
         );
         consensus_provider
             .start()
@@ -239,11 +245,11 @@ fn print_ports(config: &NodeConfig) {
 //rusty_fork_test! {
 //    #[test]
 //    fn test_pow_with_fork() {
-//        test_pow_node().unwrap();
+//        _test_pow_node().unwrap();
 //    }
 //}
 
-fn test_pow_node() -> Result<()> {
+fn _test_pow_node() -> Result<()> {
     ::libra_logger::init_for_e2e_testing();
     let memory_address = "/memory/0";
     let mut conf_1 = gen_node_config_with_genesis(1, true, true, Some(memory_address), false);
@@ -293,19 +299,19 @@ fn test_pow_node() -> Result<()> {
 
         (s1, s2)
     } else {
-        let account_keypair_1: KeyPair<Ed25519PrivateKey, Ed25519PublicKey> = create_keypair();
-        let account_keypair_2: KeyPair<Ed25519PrivateKey, Ed25519PublicKey> = create_keypair();
+        let account_keypair_1: KeyPair<Ed25519PrivateKey, Ed25519PublicKey> = _create_keypair();
+        let account_keypair_2: KeyPair<Ed25519PrivateKey, Ed25519PublicKey> = _create_keypair();
 
-        let faucet_1 = faucet_txn(
+        let faucet_1 = _faucet_txn(
             AccountAddress::from_public_key(&account_keypair_1.public_key),
             1,
         );
-        let faucet_2 = faucet_txn(
+        let faucet_2 = _faucet_txn(
             AccountAddress::from_public_key(&account_keypair_2.public_key),
             2,
         );
 
-        let s1 = commit_tx_2(
+        let s1 = _commit_tx_2(
             conf_1.admission_control.admission_control_service_port as u32,
             runtime_1.handle().clone(),
             &faucet_2,
@@ -314,7 +320,7 @@ fn test_pow_node() -> Result<()> {
 
         sleep(Duration::from_secs(30));
 
-        let s2 = commit_tx_2(
+        let s2 = _commit_tx_2(
             conf_2.admission_control.admission_control_service_port as u32,
             runtime_2.handle().clone(),
             &faucet_1,
@@ -325,7 +331,7 @@ fn test_pow_node() -> Result<()> {
     };
 
     runtime_1.block_on(async {
-        check_latest_ledger(
+        _check_latest_ledger(
             conf_1.admission_control.admission_control_service_port as u32,
             conf_2.admission_control.admission_control_service_port as u32,
             s1,
@@ -335,7 +341,7 @@ fn test_pow_node() -> Result<()> {
     Ok(())
 }
 
-fn create_keypair() -> KeyPair<Ed25519PrivateKey, Ed25519PublicKey> {
+fn _create_keypair() -> KeyPair<Ed25519PrivateKey, Ed25519PublicKey> {
     let mut seed_rng = rand::rngs::OsRng::new().expect("can't access OsRng");
     let seed_buf: [u8; 32] = seed_rng.gen();
     let mut rng0: StdRng = SeedableRng::from_seed(seed_buf);
@@ -456,7 +462,7 @@ fn gen_account() -> AccountAddress {
     AccountAddress::from_public_key(&account_keypair.public_key)
 }
 
-fn transfer(
+fn _transfer(
     private_key: &Ed25519PrivateKey,
     public_key: Ed25519PublicKey,
     sequence_number: u64,
@@ -478,7 +484,7 @@ fn transfer(
     .into_inner()
 }
 
-fn faucet_txn(receiver: AccountAddress, sequence_number: u64) -> SignedTransaction {
+fn _faucet_txn(receiver: AccountAddress, sequence_number: u64) -> SignedTransaction {
     let script = encode_create_account_script(&receiver, 10_000_000);
     let sender = association_address();
     RawTransaction::new_script(
@@ -494,7 +500,7 @@ fn faucet_txn(receiver: AccountAddress, sequence_number: u64) -> SignedTransacti
     .into_inner()
 }
 
-fn commit_tx_2(
+fn _commit_tx_2(
     port: u32,
     executor: Handle,
     faucet: &SignedTransaction,
@@ -526,7 +532,7 @@ fn commit_tx_2(
             })
             .for_each(move |_| {
                 let account = gen_account();
-                let txn = transfer(
+                let txn = _transfer(
                     &key_pair.private_key,
                     key_pair.public_key.clone(),
                     count,
@@ -572,7 +578,7 @@ fn commit_tx(port: u32, executor: Handle) -> Sender<()> {
     shutdown_sender
 }
 
-fn check_latest_ledger(port1: u32, port2: u32, sender_1: Sender<()>, sender_2: Sender<()>) {
+fn _check_latest_ledger(port1: u32, port2: u32, sender_1: Sender<()>, sender_2: Sender<()>) {
     loop {
         sleep(Duration::from_secs(10));
         let client1 = StarChainClient::new("127.0.0.1", port1);
@@ -615,101 +621,3 @@ fn check_single_latest_ledger(port: u32, sender: Sender<()>, pow_mode: bool) {
         }
     }
 }
-
-#[test]
-fn test_config_times() {
-    let mut rng = StdRng::from_seed([0u8; 32]);
-    let mut test_conf_1 = TestConfig::new_with_temp_dir();
-    test_conf_1.random(&mut rng);
-
-    let mut test_conf_2 = TestConfig::new_with_temp_dir();
-    test_conf_2.random(&mut rng);
-
-    println!("test_conf_1 : {:?}", test_conf_1);
-    println!("test_conf_2 : {:?}", test_conf_2);
-}
-
-#[test]
-fn test_network_conf() {
-    let mut rng = StdRng::from_seed([0u8; 32]);
-    let mut network_conf_1 = NetworkConfig::default();
-    network_conf_1.random(&mut rng);
-    let mut network_conf_2 = NetworkConfig::default();
-    network_conf_2.random(&mut rng);
-    println!("network_conf_1 : {:?}", network_conf_1);
-    println!("network_conf_2 : {:?}", network_conf_2);
-}
-
-#[test]
-fn test_validator_conf() {
-    let conf_1 = gen_node_config_with_genesis(1, true, true, Some("/memory/0"), false);
-    let conf_2 = gen_node_config_with_genesis(2, true, true, Some("/memory/0"), false);
-    println!("conf_1 : {:?}", conf_1);
-    println!("conf_2 : {:?}", conf_2);
-}
-
-#[test]
-fn test_keys() -> Result<()> {
-    let mut rng = StdRng::from_seed([0u8; 32]);
-    let signing_key_1 = Ed25519PrivateKey::generate_for_testing(&mut rng);
-    let identity_key_1 = X25519StaticPrivateKey::generate_for_testing(&mut rng);
-
-    let signing_key_2 = Ed25519PrivateKey::generate_for_testing(&mut rng);
-    let identity_key_2 = X25519StaticPrivateKey::generate_for_testing(&mut rng);
-
-    ensure!((signing_key_1 != signing_key_2), "signing_key");
-    ensure!((identity_key_1 != identity_key_2), "identity_key");
-
-    Ok(())
-}
-
-fn keys(times: usize) -> (Ed25519PrivateKey, X25519StaticPrivateKey) {
-    let mut rng = StdRng::from_seed([0u8; 32]);
-    if times > 0 {
-        for _ in 0..times {
-            let _ = Ed25519PrivateKey::generate_for_testing(&mut rng);
-        }
-    }
-    let signing_key = Ed25519PrivateKey::generate_for_testing(&mut rng);
-
-    if times > 0 {
-        for _ in 0..times {
-            let _ = X25519StaticPrivateKey::generate_for_testing(&mut rng);
-        }
-    }
-    let identity_key = X25519StaticPrivateKey::generate_for_testing(&mut rng);
-    (signing_key, identity_key)
-}
-
-#[test]
-fn test_keys_2() -> Result<()> {
-    let (signing_key_1, identity_key_1) = keys(0);
-
-    let (signing_key_2, identity_key_2) = keys(0);
-
-    ensure!((signing_key_1 == signing_key_2), "signing_key");
-    ensure!((identity_key_1 == identity_key_2), "identity_key");
-
-    Ok(())
-}
-
-#[test]
-fn test_keys_3() -> Result<()> {
-    let (signing_key_1, identity_key_1) = keys(0);
-
-    let (signing_key_2, identity_key_2) = keys(1);
-
-    ensure!((signing_key_1 != signing_key_2), "signing_key");
-    ensure!((identity_key_1 != identity_key_2), "identity_key");
-
-    Ok(())
-}
-
-#[test]
-fn test_genesis() {
-    let conf = gen_node_config_with_genesis(1, false, true, Some("/memory/0"), false);
-    println!("{:?}", conf);
-}
-
-#[test]
-fn test_tokio() {}
