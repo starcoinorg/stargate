@@ -4,7 +4,6 @@ use crate::chain_watcher::{Interest, TransactionWithInfo};
 use crate::channel::{
     access_local, AccessingResource, ApplyPendingTxn, ApplyTravelTxn, CancelPendingTxn, Channel,
     ChannelEvent, CollectProposalWithSigs, Execute, ForceTravel, GetPendingTxn, GrantProposal,
-    Stop,
 };
 use crate::channel_state_view::ChannelStateView;
 use crate::utils::contract::{
@@ -188,17 +187,8 @@ impl Handler<CollectProposalWithSigs> for Channel {
         let mut verified_signatures = BTreeMap::new();
         let (payload_body, _payload_body_signature, output) = match self.pending_txn() {
             None => self.execute_proposal(&proposal)?,
-            Some(p) => {
-                let is_negotiating = p.is_negotiating();
+            Some(p) if p.is_negotiating() => {
                 let (local_proposal, output, signatures) = p.into();
-                if is_negotiating {
-                    match signatures.get(&self.account_address) {
-                        Some(s) => return Ok(Some(s.clone())),
-                        None => {
-                            panic!("should already give out user signature");
-                        }
-                    }
-                }
 
                 ensure!(
                     CryptoHash::hash(&proposal.channel_txn)
@@ -219,6 +209,12 @@ impl Handler<CollectProposalWithSigs> for Channel {
                     self.build_and_sign_channel_txn_payload_body(&proposal.channel_txn)?;
                 (payload_body, payload_body_signature, output)
             }
+            Some(p) => match p.get_signature(&self.account_address) {
+                Some(s) => return Ok(Some(s)),
+                None => {
+                    panic!("should already give out user signature");
+                }
+            },
         };
 
         self.verify_txn_sigs(&payload_body, &output, &sigs)?;
@@ -410,7 +406,9 @@ impl Handler<ForceTravel> for Channel {
             (output.gas_used() as f64 * 1.1) as u64,
             MAX_GAS_AMOUNT_ONCHAIN,
         );
-        let signed_txn = self.build_solo_txn(channel_txn.action(), max_gas_amount)?;
+        let action =
+            self.channel_op_to_action(channel_txn.operator(), channel_txn.args().to_vec())?;
+        let signed_txn = self.build_solo_txn(action, max_gas_amount)?;
         submit_transaction(self.chain_client.as_ref(), signed_txn.clone()).await?;
 
         let txn_sender = signed_txn.sender();
@@ -444,17 +442,6 @@ impl Handler<GetPendingTxn> for Channel {
     }
 }
 
-#[async_trait]
-impl Handler<Stop> for Channel {
-    async fn handle(
-        &mut self,
-        _message: Stop,
-        ctx: &mut ActorHandlerContext,
-    ) -> <Stop as Message>::Result {
-        ctx.set_status(ActorStatus::Stopping);
-    }
-}
-
 /// when a new txn is included on chain(no matter who proposed it), node should `ApplyTravelTxn`,
 /// It should also handle un-authorized txn.  
 #[async_trait]
@@ -483,8 +470,7 @@ impl Handler<ApplyTravelTxn> for Channel {
 
         let raw_txn = signed_txn.raw_txn();
         let txn_sender = raw_txn.sender();
-        let txn_payload = raw_txn.payload();
-        let channel_txn_payload = match txn_payload {
+        let channel_txn_payload = match raw_txn.payload() {
             TransactionPayload::Channel(channel_txn_payload) => channel_txn_payload,
             _ => bail!("should be channel txn"),
         };
@@ -495,8 +481,8 @@ impl Handler<ApplyTravelTxn> for Channel {
         let txn_channel_seq_number = channel_txn_payload.witness().channel_sequence_number();
         let local_channel_seq_number = self.channel_sequence_number();
         // compare the new txn's witness sequence number with local sequence_number
-        // if equal, it means new txn committed onchain, but I don't aware.
-        // if less by only one, maybe proposer didn't receive my signature, and he proposed the txn onchian,
+        // if equal, it means new txn committed on-chain, but I don't aware.
+        // if less by only one, maybe proposer didn't receive my signature, and he proposed the txn on-chain,
         // or it means the new txn proposer had submitted a stale channel txn purposely.
         // if bigger, it's a bug.
         debug_assert!(
@@ -530,11 +516,12 @@ impl Handler<ApplyTravelTxn> for Channel {
 
             if channel_resource.locked() {
                 // I lock the channel, wait sender to resolve
+                // TODO: move the timeout check into a timer
                 self.watch_channel_lock_timeout(_ctx).await?;
             } else if channel_resource.closed() {
                 _ctx.set_status(ActorStatus::Stopping);
             } else {
-                // nothing todo. everything is good now.
+                // nothing to do. everything is good now.
             }
             return Ok(gas_used);
         }
@@ -777,7 +764,6 @@ impl Channel {
         let watcher = watch_transaction(self.chain_client.clone(), txn_sender, seq_number);
         let (tx, rx) = oneshot::channel();
         let mut myself = self.actor_ref(ctx).await;
-        // TODO: if txn is send by participant, use a different message.
         tokio::spawn(async move {
             match watcher.await {
                 Ok(TransactionWithProof {
@@ -967,6 +953,7 @@ impl Channel {
     }
 
     // TODO: should stage is needed?
+
     //    fn _stage(&self) -> ChannelStage {
     //        match self.pending_txn() {
     //            Some(PendingTransaction::WaitForApply { .. }) => ChannelStage::Syncing,
@@ -1219,7 +1206,12 @@ impl Channel {
         signatures: BTreeMap<AccountAddress, ChannelTransactionSigs>,
     ) -> Result<()> {
         let mut pending_txn = PendingTransaction::new(proposal, output, signatures);
-        pending_txn.try_reach_consensus(&self.participant_addresses);
+        if pending_txn.try_reach_consensus(&self.participant_addresses) {
+            info!(
+                "wallet {}: consensus on channel {} is reached",
+                self.account_address, self.channel_address,
+            );
+        }
         // always persist pending txn
         self.store.save_pending_txn(pending_txn, true)?;
         Ok(())

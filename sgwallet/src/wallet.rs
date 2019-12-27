@@ -146,15 +146,26 @@ impl Wallet {
         participant_address: AccountAddress,
         channel_seq_number: u64,
     ) -> Result<SignedChannelTransaction> {
-        let (channel_address, ps) = generate_channel_address(self.account(), participant_address);
-        let channel_db = ChannelDB::new(channel_address, self.sgdb.clone());
-        let txn = ChannelStore::new(ps, channel_db)?
-            .get_transaction_by_channel_seq_number(channel_seq_number, false)?;
-        match txn.signed_transaction {
+        let txn = self
+            .get_applied_txn_by_channel_sequence_number(participant_address, channel_seq_number)?;
+        match txn {
             AppliedChannelTxn::Offchain(t) => Ok(t),
             _ => bail!("txn at {} is a travel txn", channel_seq_number),
         }
     }
+
+    pub fn get_applied_txn_by_channel_sequence_number(
+        &self,
+        participant_address: AccountAddress,
+        channel_seq_number: u64,
+    ) -> Result<AppliedChannelTxn> {
+        let (channel_address, ps) = generate_channel_address(self.account(), participant_address);
+        let channel_db = ChannelDB::new(channel_address, self.sgdb.clone());
+        let txn = ChannelStore::new(ps, channel_db)?
+            .get_transaction_by_channel_seq_number(channel_seq_number, false)?;
+        Ok(txn.signed_transaction)
+    }
+
     pub fn account(&self) -> AccountAddress {
         self.shared.account
     }

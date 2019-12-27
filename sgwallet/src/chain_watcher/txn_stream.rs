@@ -50,7 +50,7 @@ impl DataQuery for TxnQuerier {
         let ri = RequestItem::GetTransactions {
             start_version: version,
             limit,
-            fetch_events: false,
+            fetch_events: true,
         };
         let client = self.0.clone();
 

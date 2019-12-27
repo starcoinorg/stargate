@@ -82,8 +82,6 @@ impl Channel {
         let account_address = self.account_address;
         let participant_addresses = self.participant_addresses.clone();
 
-        // TODO: return Result
-
         let actor_ref = context
             .new_actor(self)
             .await
@@ -158,10 +156,6 @@ pub(crate) struct AccessingResource {
 }
 impl Message for AccessingResource {
     type Result = Result<Option<Vec<u8>>>;
-}
-pub(crate) struct Stop;
-impl Message for Stop {
-    type Result = ();
 }
 
 pub enum ChannelEvent {

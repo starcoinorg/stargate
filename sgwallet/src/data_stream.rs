@@ -46,7 +46,7 @@ impl<T> DataStream<T> {
         match self.backoff.next_backoff() {
             Some(next_backoff) => {
                 drop(self.delay.take());
-                debug!("next_backoff: {:?}", &next_backoff);
+                trace!("next_backoff: {:?}", &next_backoff);
                 let mut delay = Delay::new(next_backoff);
                 match Pin::new(&mut delay).poll(cx) {
                     Poll::Ready(_) => unreachable!(),
