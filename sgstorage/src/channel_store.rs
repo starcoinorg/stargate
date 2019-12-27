@@ -270,14 +270,11 @@ where
         persist: bool,
     ) -> Result<()> {
         let cur_pending_txn = self.get_pending_txn();
-        match (&cur_pending_txn, &pending_txn) {
-            (None, _)
-            | (
-                Some(PendingTransaction::WaitForSig { .. }),
-                PendingTransaction::WaitForApply { .. },
-            ) => {}
-            _ => bail!("cannot save pending txn, state invalid"),
-        };
+        if let Some(cur) = cur_pending_txn {
+            if cur.newer_than(&pending_txn) {
+                bail!("cannot save pending txn, state invalid");
+            }
+        }
         if persist {
             let mut sb = SchemaBatch::new();
             self.pending_txn_store

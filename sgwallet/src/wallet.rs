@@ -611,24 +611,19 @@ impl Wallet {
         participant: AccountAddress,
     ) -> Result<Option<ChannelTransactionProposal>> {
         let pending_txn = self.get_pending_txn(participant).await?;
-        let proposal = pending_txn.and_then(|pending| match pending {
-            PendingTransaction::WaitForSig {
-                proposal,
-                mut signatures,
-                ..
-            } => {
-                if proposal.channel_txn.proposer() == self.shared.account {
-                    None
+        let proposal = pending_txn.and_then(|pending| {
+            if pending.is_negotiating() {
+                let (proposal, _, signatures) = pending.into();
+                if !signatures.contains_key(&self.shared.account)
+                    && proposal.channel_txn.proposer() != self.shared.account
+                {
+                    Some(proposal)
                 } else {
-                    let _user_sigs = signatures.remove(&self.shared.account);
-                    if signatures.contains_key(&self.shared.account) {
-                        None
-                    } else {
-                        Some(proposal)
-                    }
+                    None
                 }
+            } else {
+                None
             }
-            PendingTransaction::WaitForApply { .. } => None,
         });
         Ok(proposal)
     }
@@ -639,24 +634,23 @@ impl Wallet {
         participant: AccountAddress,
     ) -> Result<Option<ChannelTransactionRequest>> {
         let pending_txn = self.get_pending_txn(participant).await?;
-        let request = pending_txn.and_then(|pending| match pending {
-            PendingTransaction::WaitForSig {
-                proposal,
-                mut signatures,
-                output,
-            } => {
+        let request = pending_txn.and_then(|pending| {
+            if pending.is_negotiating() {
+                let (proposal, output, mut signatures) = pending.into();
                 let proposer_sigs = signatures.remove(&proposal.channel_txn.proposer());
-                debug_assert!(proposer_sigs.is_some());
+                if proposal.channel_txn.proposer() == self.shared.account {
+                    debug_assert!(proposer_sigs.is_some());
+                }
 
                 Some(ChannelTransactionRequest::new(
                     proposal.clone(),
                     proposer_sigs.unwrap(),
                     output.is_travel_txn(),
                 ))
+            } else {
+                None
             }
-            _ => None,
         });
-
         Ok(request)
     }
 
@@ -1039,7 +1033,7 @@ impl Inner {
             .into_inner();
         let _ = submit_transaction(self.inner.client.as_ref(), signed_txn).await?;
         let proof =
-            watch_transaction(self.inner.client.as_ref(), self.inner.account, seq_number).await?;
+            watch_transaction(self.inner.client.clone(), self.inner.account, seq_number).await?;
         self.channel_enabled = true;
         Ok(proof.proof.transaction_info().gas_used())
     }
@@ -1061,7 +1055,7 @@ impl Inner {
         let address = txn.sender();
         let seq_number = txn.sequence_number();
         submit_transaction(self.inner.client.as_ref(), txn).await?;
-        watch_transaction(self.inner.client.as_ref(), address, seq_number).await
+        watch_transaction(self.inner.client.clone(), address, seq_number).await
     }
 
     /// TODO: use async version of cient
@@ -1193,7 +1187,7 @@ pub async fn submit_transaction(
 }
 
 pub async fn watch_transaction(
-    client: &dyn ChainClient,
+    client: Arc<dyn ChainClient>,
     sender: AccountAddress,
     seq_number: u64,
 ) -> Result<TransactionWithProof> {

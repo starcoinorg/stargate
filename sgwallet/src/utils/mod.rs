@@ -7,6 +7,7 @@ use libra_types::transaction::TransactionArgument;
 use sgtypes::channel_transaction::ChannelOp;
 use sgtypes::htlc::HtlcPayment;
 mod actor;
+pub(crate) mod actor_timer;
 pub use actor::*;
 pub(crate) mod contract;
 
