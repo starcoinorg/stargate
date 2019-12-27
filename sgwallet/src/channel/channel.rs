@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 use crate::chain_watcher::{Interest, TransactionWithInfo};
 use crate::channel::{
-    access_local, AccessingResource, ApplyPendingTxn, CancelPendingTxn, Channel, ChannelEvent,
-    CollectProposalWithSigs, Execute, ForceTravel, GetPendingTxn, GrantProposal, Stop,
+    access_local, AccessingResource, ApplyPendingTxn, ApplyTravelTxn, CancelPendingTxn, Channel,
+    ChannelEvent, CollectProposalWithSigs, Execute, ForceTravel, GetPendingTxn, GrantProposal,
+    Stop,
 };
 use crate::channel_state_view::ChannelStateView;
 use crate::utils::contract::{
@@ -13,7 +14,7 @@ use crate::wallet::{
     execute_transaction, submit_transaction, txn_expiration, watch_transaction, GAS_UNIT_PRICE,
     MAX_GAS_AMOUNT_OFFCHAIN, MAX_GAS_AMOUNT_ONCHAIN,
 };
-use anyhow::{bail, ensure, format_err, Error, Result};
+use anyhow::{bail, ensure, format_err, Result};
 use async_trait::async_trait;
 use coerce_rt::actor::{
     context::{ActorHandlerContext, ActorStatus},
@@ -319,25 +320,24 @@ impl Handler<ApplyPendingTxn> for Channel {
     async fn handle(
         &mut self,
         message: ApplyPendingTxn,
-        ctx: &mut ActorHandlerContext,
+        _ctx: &mut ActorHandlerContext,
     ) -> <ApplyPendingTxn as Message>::Result {
         let ApplyPendingTxn { proposal } = message;
-        let (tx, rx) = oneshot::channel();
-        if let Some(signed_txn) =
+
+        if let Some(_signed_txn) =
             self.check_applied(proposal.channel_txn.channel_sequence_number())?
         {
             warn!(
                 "txn {} already applied!",
                 &CryptoHash::hash(&proposal.channel_txn)
             );
-
-            let res = Ok::<u64, Error>(if signed_txn.proof.transaction_info().travel() {
-                signed_txn.proof.transaction_info().gas_used()
-            } else {
-                0
-            });
-            tx.send(res).expect("send should be ok");
-            return Ok(rx);
+            //            let res = Ok::<u64, Error>(if signed_txn.proof.transaction_info().travel() {
+            //                signed_txn.proof.transaction_info().gas_used()
+            //            } else {
+            //                0
+            //            });
+            //
+            return Ok(None);
         }
 
         debug!("user {} apply txn", self.account_address);
@@ -351,8 +351,7 @@ impl Handler<ApplyPendingTxn> for Channel {
 
         if !output.is_travel_txn() {
             self.apply(proposal.channel_txn, output, signatures)?;
-            tx.send(Ok(0)).expect("send should be ok");
-            return Ok(rx);
+            return Ok(None);
         }
 
         let channel_txn = &proposal.channel_txn;
@@ -380,8 +379,9 @@ impl Handler<ApplyPendingTxn> for Channel {
         pending_proposal.set_applying();
         self.store.save_pending_txn(pending_proposal, true)?;
 
-        self.watch_and_travel_txn_async(ctx, txn_sender, seq_number)
-            .await
+        Ok(Some((txn_sender, seq_number)))
+        //        self.watch_and_travel_txn_async(ctx, txn_sender, seq_number)
+        //            .await
     }
 }
 
@@ -390,7 +390,7 @@ impl Handler<ForceTravel> for Channel {
     async fn handle(
         &mut self,
         _message: ForceTravel,
-        ctx: &mut ActorHandlerContext,
+        _ctx: &mut ActorHandlerContext,
     ) -> <ForceTravel as Message>::Result {
         debug!("user {} apply txn", self.account_address);
         ensure!(self.pending_txn().is_some(), "should have txn to apply");
@@ -410,8 +410,13 @@ impl Handler<ForceTravel> for Channel {
             (output.gas_used() as f64 * 1.1) as u64,
             MAX_GAS_AMOUNT_ONCHAIN,
         );
-        self.solo_txn(ctx, channel_txn.action(), max_gas_amount)
-            .await
+        let signed_txn = self.build_solo_txn(channel_txn.action(), max_gas_amount)?;
+        submit_transaction(self.chain_client.as_ref(), signed_txn.clone()).await?;
+
+        let txn_sender = signed_txn.sender();
+        let seq_number = signed_txn.sequence_number();
+
+        Ok((txn_sender, seq_number))
     }
 }
 
@@ -450,12 +455,6 @@ impl Handler<Stop> for Channel {
     }
 }
 
-struct ApplyTravelTxn {
-    channel_txn: TransactionWithInfo,
-}
-impl Message for ApplyTravelTxn {
-    type Result = Result<u64>;
-}
 /// when a new txn is included on chain(no matter who proposed it), node should `ApplyTravelTxn`,
 /// It should also handle un-authorized txn.  
 #[async_trait]
@@ -941,6 +940,8 @@ impl Channel {
         ))
         .unwrap()
     }
+
+    #[allow(dead_code)]
     fn channel_challenge_by_resource(&self) -> Option<ChannelChallengeBy> {
         self.get_local::<ChannelChallengeBy>(&AccessPath::new_for_data_path(
             self.channel_address,

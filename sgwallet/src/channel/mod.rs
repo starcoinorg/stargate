@@ -1,12 +1,12 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::chain_watcher::ChainWatcherHandle;
+use crate::chain_watcher::{ChainWatcherHandle, TransactionWithInfo};
 use crate::scripts::PackageRegistry;
 use crate::tx_applier::TxApplier;
 use anyhow::{bail, Result};
 use coerce_rt::actor::{context::ActorContext, message::Message};
-use futures::{channel::mpsc, channel::oneshot};
+use futures::channel::mpsc;
 use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
 use libra_crypto::test_utils::KeyPair;
 use libra_crypto::HashValue;
@@ -133,12 +133,20 @@ impl Message for CancelPendingTxn {
 pub(crate) struct ApplyPendingTxn {
     pub proposal: ChannelTransactionProposal,
 }
+/// return a (sender, seq_number) txn to watch if travel.
 impl Message for ApplyPendingTxn {
-    type Result = Result<oneshot::Receiver<Result<u64>>>;
+    type Result = Result<Option<(AccountAddress, u64)>>;
 }
+pub(crate) struct ApplyTravelTxn {
+    pub channel_txn: TransactionWithInfo,
+}
+impl Message for ApplyTravelTxn {
+    type Result = Result<u64>;
+}
+
 pub(crate) struct ForceTravel;
 impl Message for ForceTravel {
-    type Result = Result<oneshot::Receiver<Result<u64>>>;
+    type Result = Result<(AccountAddress, u64)>;
 }
 pub(crate) struct GetPendingTxn;
 impl Message for GetPendingTxn {

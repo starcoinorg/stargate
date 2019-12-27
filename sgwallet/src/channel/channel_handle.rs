@@ -9,6 +9,7 @@ use libra_types::{
     account_address::AccountAddress,
     language_storage::StructTag,
 };
+
 use sgtypes::pending_txn::PendingTransaction;
 use std::collections::BTreeSet;
 
@@ -59,6 +60,7 @@ impl ChannelHandle {
     pub async fn get_pending_txn(&self) -> Result<Option<PendingTransaction>> {
         Ok(self.channel_ref.clone().send(GetPendingTxn).await?)
     }
+
     pub async fn get_channel_resource(
         &self,
         address: AccountAddress,

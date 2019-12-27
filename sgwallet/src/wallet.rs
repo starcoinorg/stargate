@@ -1,9 +1,9 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
-use crate::chain_watcher::{ChainWatcher, ChainWatcherHandle};
+use crate::chain_watcher::{ChainWatcher, ChainWatcherHandle, TransactionWithInfo};
 use crate::channel::{
-    ApplyPendingTxn, CancelPendingTxn, Channel, ChannelEvent, CollectProposalWithSigs, Execute,
-    GrantProposal,
+    ApplyPendingTxn, ApplyTravelTxn, CancelPendingTxn, Channel, ChannelEvent,
+    CollectProposalWithSigs, Execute, ForceTravel, GrantProposal,
 };
 use crate::{channel::ChannelHandle, scripts::*};
 use anyhow::{bail, ensure, format_err, Error, Result};
@@ -585,6 +585,37 @@ impl Wallet {
         Ok(())
     }
 
+    pub async fn force_travel_txn(&self, participant: AccountAddress) -> Result<u64> {
+        let (generated_channel_address, _participants) =
+            generate_channel_address(participant, self.shared.account);
+
+        let channel = self.get_channel(generated_channel_address).await?;
+        let (txn_sender, seq_number) = channel.channel_ref().send(ForceTravel).await??;
+
+        let TransactionWithProof {
+            version,
+            transaction,
+            events,
+            proof,
+        } = watch_transaction(self.shared.client.clone(), txn_sender, seq_number).await?;
+
+        let gas = channel
+            .channel_ref()
+            .send(ApplyTravelTxn {
+                channel_txn: TransactionWithInfo {
+                    version,
+                    txn: transaction,
+                    txn_info: proof.transaction_info().clone(),
+                    events: events.unwrap_or_default(),
+                    block_id: 0, // FIXME
+                },
+            })
+            .await
+            .map_err(|_| format_err!("channel actor gone"))
+            .and_then(|r| r)?;
+        Ok(gas)
+    }
+
     pub async fn apply_txn(
         &self,
         participant: AccountAddress,
@@ -597,11 +628,37 @@ impl Wallet {
 
         let (proposal, _) = txn_response.clone().into();
 
-        let receiver = channel
+        let option_watch = channel
             .channel_ref()
             .send(ApplyPendingTxn { proposal })
             .await??;
-        let gas = receiver.await??;
+        if option_watch.is_none() {
+            return Ok(0);
+        }
+        let (txn_sender, seq_number) = option_watch.unwrap();
+
+        let TransactionWithProof {
+            version,
+            transaction,
+            events,
+            proof,
+        } = watch_transaction(self.shared.client.clone(), txn_sender, seq_number).await?;
+
+        let gas = channel
+            .channel_ref()
+            .send(ApplyTravelTxn {
+                channel_txn: TransactionWithInfo {
+                    version,
+                    txn: transaction,
+                    txn_info: proof.transaction_info().clone(),
+                    events: events.unwrap_or_default(),
+                    block_id: 0, // FIXME
+                },
+            })
+            .await
+            .map_err(|_| format_err!("channel actor gone"))
+            .and_then(|r| r)?;
+
         Ok(gas)
     }
 
