@@ -17,7 +17,7 @@ use network::{build_network_service, NetworkMessage, NetworkService};
 use node::client;
 use node_internal::node::Node;
 use node_service::setup_node_service;
-use router::Router;
+use router::TableRouter;
 use sg_config::config::{load_from, NodeConfig, WalletConfig};
 use sgchain::star_chain_client::StarChainClient;
 use sgwallet::wallet::*;
@@ -83,14 +83,12 @@ fn gen_node(
     );
 
     let client = Arc::new(client);
-    let mut router = Router::new(client.clone(), executor.clone());
-    router.start().unwrap();
 
     info!("account addr is {:?}", hex::encode(account_address));
     let mut wallet = Wallet::new_with_client(
         account_address,
         keypair.clone(),
-        client,
+        client.clone(),
         &wallet_config.store_dir,
     )
     .unwrap();
@@ -107,16 +105,32 @@ fn gen_node(
     rt.block_on(f)?;
 
     info!("account resource is {:?}", wallet.account_resource());
+
+    let wallet = Arc::new(wallet);
+    let (tx_node, rx_router) = futures::channel::mpsc::unbounded();
+    let (tx_router, rx_node) = futures::channel::mpsc::unbounded();
+
+    let mut router = TableRouter::new(
+        client,
+        executor.clone(),
+        wallet.clone(),
+        tx_router,
+        rx_router,
+    );
+    router.start().unwrap();
+
     Ok(Node::new(
         executor.clone(),
         wallet,
         network_service,
         sender,
         receiver,
+        tx_node,
+        rx_node,
         close_tx,
         auto_approve,
         timeout,
-        router,
+        Box::new(router),
     ))
 }
 

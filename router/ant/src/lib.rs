@@ -1,5 +1,4 @@
 mod ant_generator_test;
-mod message_processor;
 mod path_finder;
 mod seed_generator;
 
@@ -21,7 +20,6 @@ use libra_crypto::{
 use libra_logger::prelude::*;
 use libra_tools::tempdir::TempPath;
 use libra_types::account_address::AccountAddress;
-use message_processor::{MessageFuture, MessageProcessor};
 use path_finder::SeedManager;
 use seed_generator::{generate_random_u128, SValueGenerator};
 
@@ -36,6 +34,7 @@ use sg_config::config::NetworkConfig;
 use futures::compat::Stream01CompatExt;
 use futures_timer::Delay;
 use libra_crypto::HashValue;
+use router::{message_processor::*, Router};
 use sgtypes::message::{
     AntFinalMessage, AntQueryMessage, BalanceQueryResponse, ExchangeSeedMessageRequest,
     ExchangeSeedMessageResponse, RouterNetworkMessage,
@@ -43,6 +42,8 @@ use sgtypes::message::{
 use sgtypes::s_value::SValue;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
+
+use async_trait::async_trait;
 
 pub struct AntRouter {
     executor: Handle,
@@ -122,8 +123,11 @@ impl AntRouter {
         ));
         Ok(())
     }
+}
 
-    pub async fn find_path_by_addr(
+#[async_trait]
+impl Router for AntRouter {
+    async fn find_path_by_addr(
         &self,
         start: AccountAddress,
         end: AccountAddress,
@@ -205,6 +209,7 @@ impl AntRouterInner {
             RouterNetworkMessage::AntQueryMessage(message) => {
                 return router_inner.handle_ant_query_message(message).await;
             }
+            _ => bail!("should not be here"),
         }
     }
 
@@ -549,7 +554,7 @@ fn ant_router_test() {
     let client = Arc::new(mock_chain_service);
 
     let (wallet1, addr1, keypair1) = _gen_wallet(executor.clone(), client.clone()).unwrap();
-    let (wallet2, _addr2, keypair2) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+    let (wallet2, addr2, keypair2) = _gen_wallet(executor.clone(), client.clone()).unwrap();
     let (wallet3, _addr3, keypair3) = _gen_wallet(executor.clone(), client.clone()).unwrap();
     let (wallet4, addr4, keypair4) = _gen_wallet(executor.clone(), client.clone()).unwrap();
     let (wallet5, addr5, keypair5) = _gen_wallet(executor.clone(), client.clone()).unwrap();
@@ -633,6 +638,14 @@ fn ant_router_test() {
         assert_eq!(path.len(), 3);
         assert_eq!(path.get(0).expect("should have").local_addr, addr1.clone());
         assert_eq!(path.get(2).expect("should have").remote_addr, addr4.clone());
+
+        let path = router1
+            .find_path_by_addr(addr1.clone(), addr2.clone())
+            .await?;
+
+        assert_eq!(path.len(), 1);
+        assert_eq!(path.get(0).expect("should have").local_addr, addr1.clone());
+        assert_eq!(path.get(0).expect("should have").remote_addr, addr2.clone());
 
         let path = router1
             .find_path_by_addr(addr1.clone(), addr5.clone())
