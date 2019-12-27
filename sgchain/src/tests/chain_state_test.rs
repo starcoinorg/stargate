@@ -47,5 +47,5 @@ fn test_chain_state() {
     sleep(Duration::from_secs(2 * 60));
     drop(_handle_1);
     drop(_cs_runtime);
-    drop(network_provider_2);
+    drop(runtime_2);
 }
