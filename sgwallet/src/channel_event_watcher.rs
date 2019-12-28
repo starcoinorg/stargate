@@ -96,18 +96,14 @@ fn parse_channel_event(event: &ContractEvent) -> Result<ChannelEvent> {
     Ok(channel_event)
 }
 
-type EventStream = DataStream<EventWithProof>;
+type EventStream = DataStream<ChainClientEventQuerier, EventWithProof>;
 impl EventStream {
     pub fn new_from_chain_client(
         chain_client: Arc<dyn ChainClient>,
         start_number: u64,
         limit: u64,
     ) -> Self {
-        DataStream::new(
-            Box::new(ChainClientEventQuerier(chain_client)),
-            start_number,
-            limit,
-        )
+        DataStream::new(ChainClientEventQuerier(chain_client), start_number, limit)
     }
 }
 
@@ -177,6 +173,7 @@ mod test {
     use libra_crypto::HashValue;
     use libra_logger::prelude::*;
 
+    use crate::data_stream::DataStream;
     use libra_types::contract_event::{ContractEvent, EventWithProof};
     use libra_types::event::{EventKey, EVENT_KEY_LENGTH};
     use libra_types::language_storage::TypeTag;
@@ -288,7 +285,7 @@ mod test {
             ];
             for q in qs.into_iter() {
                 info!("test on {:#?}", &q);
-                let mut s = EventStream::new(Box::new(q), 0, 1000);
+                let mut s = DataStream::new(q, 0, 1000);
                 for i in 0u64..5 {
                     match s.try_next().await {
                         Ok(Some(v)) => assert_eq!(i, v.event.sequence_number()),

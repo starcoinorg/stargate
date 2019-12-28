@@ -21,7 +21,7 @@ pub struct TransactionWithInfo {
     pub block_id: u64,
 }
 
-pub type TxnStream = DataStream<TransactionWithInfo>;
+pub(super) type TxnStream = DataStream<TxnQuerier, TransactionWithInfo>;
 
 impl TxnStream {
     pub fn new_from_chain_client(
@@ -29,7 +29,7 @@ impl TxnStream {
         start_version: u64,
         limit: u64,
     ) -> Self {
-        DataStream::new(Box::new(TxnQuerier(chain_client)), start_version, limit)
+        DataStream::new(TxnQuerier(chain_client), start_version, limit)
     }
 }
 
@@ -41,7 +41,7 @@ pub(crate) fn build_request(
         .into()
 }
 
-struct TxnQuerier(Arc<dyn ChainClient>);
+pub(super) struct TxnQuerier(Arc<dyn ChainClient>);
 #[async_trait]
 impl DataQuery for TxnQuerier {
     type Item = TransactionWithInfo;

@@ -25,6 +25,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 mod channel;
+mod channel_event_stream;
 mod channel_handle;
 pub use channel_handle::ChannelHandle;
 
