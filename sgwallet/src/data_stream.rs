@@ -2,16 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 use anyhow::{bail, Result};
 use async_trait::async_trait;
-use backoff::backoff::Backoff;
-use backoff::ExponentialBackoff;
-use futures::task::Context;
-use futures::task::Poll;
-use futures::{FutureExt, Stream};
+use backoff::{backoff::Backoff, ExponentialBackoff};
+use futures::{
+    task::{Context, Poll},
+    FutureExt, Stream,
+};
 use futures_timer::Delay;
 use libra_logger::prelude::*;
-use std::collections::BTreeMap;
-use std::future::Future;
-use std::pin::Pin;
+use std::{collections::BTreeMap, future::Future, pin::Pin};
 
 #[async_trait]
 pub trait DataQuery: Send + Sync {

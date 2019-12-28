@@ -7,13 +7,12 @@ use libra_crypto::hash::{CryptoHash, EventAccumulatorHasher, HashValue};
 use libra_logger::prelude::*;
 
 use libra_types::proof::accumulator::InMemoryAccumulator;
-use sgstorage::channel_db::ChannelDB;
-use sgstorage::channel_store::ChannelStore;
-use sgtypes::channel_transaction_info::ChannelTransactionInfo;
-use sgtypes::channel_transaction_to_commit::ChannelTransactionToCommit;
-use sgtypes::hash::*;
-use sgtypes::ledger_info::LedgerInfo;
-use sgtypes::write_set_item::WriteSetItem;
+use sgstorage::{channel_db::ChannelDB, channel_store::ChannelStore};
+use sgtypes::{
+    channel_transaction_info::ChannelTransactionInfo,
+    channel_transaction_to_commit::ChannelTransactionToCommit, hash::*, ledger_info::LedgerInfo,
+    write_set_item::WriteSetItem,
+};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]

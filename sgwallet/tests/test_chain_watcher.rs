@@ -5,12 +5,16 @@ use anyhow::{Error, Result};
 use coerce_rt::actor::context::ActorContext;
 use futures::StreamExt;
 use libra_logger::{debug, error};
-use libra_types::access_path::DataPath;
-use libra_types::account_address::AccountAddress;
-use libra_types::account_config::{account_struct_tag, AccountResource};
+use libra_types::{
+    access_path::DataPath,
+    account_address::AccountAddress,
+    account_config::{account_struct_tag, AccountResource},
+};
 use sgchain::star_chain_client::{ChainClient, MockChainClient};
-use sgwallet::chain_state_access::{AccessState, ChainStateAccessor};
-use sgwallet::chain_watcher::*;
+use sgwallet::{
+    chain_state_access::{AccessState, ChainStateAccessor},
+    chain_watcher::*,
+};
 use std::sync::Arc;
 
 pub fn run_with_mock_client<F, T>(mut f: F) -> T

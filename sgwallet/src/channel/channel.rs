@@ -1,17 +1,18 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
-use crate::chain_watcher::{Interest, TransactionWithInfo};
-use crate::channel::{
-    access_local, AccessingResource, ApplyPendingTxn, ApplyTravelTxn, CancelPendingTxn, Channel,
-    ChannelEvent, CollectProposalWithSigs, Execute, ForceTravel, GetPendingTxn, GrantProposal,
-};
-use crate::channel_state_view::ChannelStateView;
-use crate::utils::contract::{
-    challenge_channel_action, close_channel_action, resolve_channel_action,
-};
-use crate::wallet::{
-    execute_transaction, submit_transaction, txn_expiration, watch_transaction, GAS_UNIT_PRICE,
-    MAX_GAS_AMOUNT_OFFCHAIN, MAX_GAS_AMOUNT_ONCHAIN,
+use crate::{
+    chain_watcher::{Interest, TransactionWithInfo},
+    channel::{
+        access_local, AccessingResource, ApplyPendingTxn, ApplyTravelTxn, CancelPendingTxn,
+        Channel, ChannelEvent, CollectProposalWithSigs, Execute, ForceTravel, GetPendingTxn,
+        GrantProposal,
+    },
+    channel_state_view::ChannelStateView,
+    utils::contract::{challenge_channel_action, close_channel_action, resolve_channel_action},
+    wallet::{
+        execute_transaction, submit_transaction, txn_expiration, watch_transaction, GAS_UNIT_PRICE,
+        MAX_GAS_AMOUNT_OFFCHAIN, MAX_GAS_AMOUNT_ONCHAIN,
+    },
 };
 use anyhow::{bail, ensure, format_err, Result};
 use async_trait::async_trait;
@@ -21,38 +22,42 @@ use coerce_rt::actor::{
     Actor, ActorRef,
 };
 use futures::{channel::oneshot, SinkExt, StreamExt};
-use libra_crypto::ed25519::{Ed25519PublicKey, Ed25519Signature};
-use libra_crypto::{hash::CryptoHash, SigningKey, VerifyingKey};
+use libra_crypto::{
+    ed25519::{Ed25519PublicKey, Ed25519Signature},
+    hash::CryptoHash,
+    SigningKey, VerifyingKey,
+};
 use libra_logger::prelude::*;
 use libra_state_view::StateView;
-use libra_types::access_path::DataPath;
-use libra_types::channel::{
-    make_resource, ChannelChallengeBy, ChannelLockedBy, ChannelMirrorResource,
-    ChannelParticipantAccountResource, ChannelResource, LibraResource, Witness, WitnessData,
-};
-use libra_types::contract_event::ContractEvent;
-use libra_types::identifier::Identifier;
-use libra_types::language_storage::ModuleId;
-use libra_types::transaction::{
-    ChannelTransactionPayload, ChannelTransactionPayloadBody, RawTransaction, ScriptAction,
-    SignedTransaction, Transaction, TransactionArgument, TransactionInfo, TransactionPayload,
-    TransactionWithProof, Version,
-};
-use libra_types::write_set::WriteSet;
 use libra_types::{
-    access_path::AccessPath, account_address::AccountAddress, transaction::TransactionOutput,
+    access_path::{AccessPath, DataPath},
+    account_address::AccountAddress,
+    channel::{
+        make_resource, ChannelChallengeBy, ChannelLockedBy, ChannelMirrorResource,
+        ChannelParticipantAccountResource, ChannelResource, LibraResource, Witness, WitnessData,
+    },
+    contract_event::ContractEvent,
+    identifier::Identifier,
+    language_storage::ModuleId,
+    transaction::{
+        ChannelTransactionPayload, ChannelTransactionPayloadBody, RawTransaction, ScriptAction,
+        SignedTransaction, Transaction, TransactionArgument, TransactionInfo, TransactionOutput,
+        TransactionPayload, TransactionWithProof, Version,
+    },
+    write_set::WriteSet,
 };
 use serde::de::DeserializeOwned;
-use sgtypes::applied_channel_txn::AppliedChannelTxn;
-use sgtypes::channel::ChannelState;
-use sgtypes::channel_transaction::{ChannelOp, ChannelTransaction, ChannelTransactionProposal};
-use sgtypes::channel_transaction_sigs::ChannelTransactionSigs;
-use sgtypes::channel_transaction_to_commit::ChannelTransactionToCommit;
-use sgtypes::pending_txn::PendingTransaction;
-use sgtypes::signed_channel_transaction::SignedChannelTransaction;
-use sgtypes::signed_channel_transaction_with_proof::SignedChannelTransactionWithProof;
-use std::collections::BTreeMap;
-use std::time::Duration;
+use sgtypes::{
+    applied_channel_txn::AppliedChannelTxn,
+    channel::ChannelState,
+    channel_transaction::{ChannelOp, ChannelTransaction, ChannelTransactionProposal},
+    channel_transaction_sigs::ChannelTransactionSigs,
+    channel_transaction_to_commit::ChannelTransactionToCommit,
+    pending_txn::PendingTransaction,
+    signed_channel_transaction::SignedChannelTransaction,
+    signed_channel_transaction_with_proof::SignedChannelTransactionWithProof,
+};
+use std::{collections::BTreeMap, time::Duration};
 use vm::gas_schedule::GasAlgebra;
 
 #[async_trait]

@@ -2,20 +2,22 @@ use crate::data_stream::{DataQuery, DataStream};
 use anyhow::{bail, Result};
 use async_trait::async_trait;
 use futures::{Stream, TryStreamExt};
-use libra_types::access_path::{AccessPath, DataPath};
-use libra_types::account_address::AccountAddress;
-use libra_types::channel::{
-    channel_event_struct_tag, channel_struct_tag, ChannelEvent, ChannelResource,
-};
-use libra_types::contract_event::{ContractEvent, EventWithProof};
-use libra_types::language_storage::TypeTag;
 use libra_types::{
-    get_with_proof::RequestItem, proto::types::UpdateToLatestLedgerRequest, transaction::Version,
+    access_path::{AccessPath, DataPath},
+    account_address::AccountAddress,
+    channel::{channel_event_struct_tag, channel_struct_tag, ChannelEvent, ChannelResource},
+    contract_event::{ContractEvent, EventWithProof},
+    get_with_proof::RequestItem,
+    language_storage::TypeTag,
+    proto::types::UpdateToLatestLedgerRequest,
+    transaction::Version,
 };
 use sgchain::star_chain_client::ChainClient;
-use std::collections::{BTreeMap, HashMap};
-use std::convert::{TryFrom, TryInto};
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, HashMap},
+    convert::{TryFrom, TryInto},
+    sync::Arc,
+};
 
 #[derive(Clone, Debug)]
 pub enum ChannelChangeEvent {
@@ -165,7 +167,7 @@ fn build_request(req: RequestItem, ver: Option<Version>) -> UpdateToLatestLedger
 
 #[cfg(test)]
 mod test {
-    use crate::channel_event_watcher::EventStream;
+    
     use anyhow::{bail, Result};
     use async_trait::async_trait;
     use futures::TryStreamExt;
@@ -174,15 +176,19 @@ mod test {
     use libra_logger::prelude::*;
 
     use crate::data_stream::DataStream;
-    use libra_types::contract_event::{ContractEvent, EventWithProof};
-    use libra_types::event::{EventKey, EVENT_KEY_LENGTH};
-    use libra_types::language_storage::TypeTag;
-    use libra_types::proof::{EventAccumulatorProof, EventProof, TransactionAccumulatorProof};
-    use libra_types::transaction::TransactionInfo;
-    use libra_types::vm_error::StatusCode;
-    use std::collections::BTreeMap;
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::Duration;
+    use libra_types::{
+        contract_event::{ContractEvent, EventWithProof},
+        event::{EventKey, EVENT_KEY_LENGTH},
+        language_storage::TypeTag,
+        proof::{EventAccumulatorProof, EventProof, TransactionAccumulatorProof},
+        transaction::TransactionInfo,
+        vm_error::StatusCode,
+    };
+    use std::{
+        collections::BTreeMap,
+        sync::atomic::{AtomicU64, Ordering},
+        time::Duration,
+    };
 
     #[derive(Debug)]
     struct TestEventQuerier {

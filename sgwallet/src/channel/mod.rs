@@ -1,28 +1,34 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::chain_watcher::{ChainWatcherHandle, TransactionWithInfo};
-use crate::scripts::PackageRegistry;
-use crate::tx_applier::TxApplier;
+use crate::{
+    chain_watcher::{ChainWatcherHandle, TransactionWithInfo},
+    scripts::PackageRegistry,
+    tx_applier::TxApplier,
+};
 use anyhow::{bail, Result};
 use coerce_rt::actor::{context::ActorContext, message::Message};
 use futures::channel::mpsc;
-use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
-use libra_crypto::test_utils::KeyPair;
-use libra_crypto::HashValue;
+use libra_crypto::{
+    ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
+    test_utils::KeyPair,
+    HashValue,
+};
 use libra_types::{
-    access_path::AccessPath, account_address::AccountAddress, transaction::TransactionArgument,
-    transaction::TransactionOutput, write_set::WriteOp, write_set::WriteSet,
+    access_path::AccessPath,
+    account_address::AccountAddress,
+    transaction::{TransactionArgument, TransactionOutput},
+    write_set::{WriteOp, WriteSet},
 };
 use sgchain::star_chain_client::ChainClient;
-use sgstorage::channel_db::ChannelDB;
-use sgstorage::channel_store::ChannelStore;
-use sgtypes::channel::ChannelState;
-use sgtypes::channel_transaction::{ChannelOp, ChannelTransactionProposal};
-use sgtypes::channel_transaction_sigs::ChannelTransactionSigs;
-use sgtypes::pending_txn::PendingTransaction;
-use std::collections::BTreeSet;
-use std::sync::Arc;
+use sgstorage::{channel_db::ChannelDB, channel_store::ChannelStore};
+use sgtypes::{
+    channel::ChannelState,
+    channel_transaction::{ChannelOp, ChannelTransactionProposal},
+    channel_transaction_sigs::ChannelTransactionSigs,
+    pending_txn::PendingTransaction,
+};
+use std::{collections::BTreeSet, sync::Arc};
 
 mod channel;
 mod channel_event_stream;

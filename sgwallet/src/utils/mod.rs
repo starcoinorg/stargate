@@ -2,10 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 use anyhow::{bail, ensure, Result};
 use libra_crypto::HashValue;
-use libra_types::account_address::AccountAddress;
-use libra_types::transaction::TransactionArgument;
-use sgtypes::channel_transaction::ChannelOp;
-use sgtypes::htlc::HtlcPayment;
+use libra_types::{account_address::AccountAddress, transaction::TransactionArgument};
+use sgtypes::{channel_transaction::ChannelOp, htlc::HtlcPayment};
 mod actor;
 pub(crate) mod actor_timer;
 pub use actor::*;

@@ -1,9 +1,11 @@
 use lazy_static::lazy_static;
 use libra_types::account_config::{account_module_name, core_code_address};
 
-use libra_types::identifier::{IdentStr, Identifier};
-use libra_types::language_storage::ModuleId;
-use libra_types::transaction::ScriptAction;
+use libra_types::{
+    identifier::{IdentStr, Identifier},
+    language_storage::ModuleId,
+    transaction::ScriptAction,
+};
 
 lazy_static! {
     static ref CHALLENGE_METHOD_NAME: Identifier = Identifier::new("challenge").unwrap();

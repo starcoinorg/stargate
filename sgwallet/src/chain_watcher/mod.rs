@@ -2,19 +2,26 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::{bail, format_err, Result};
-use futures::channel::mpsc;
-use futures::channel::oneshot;
-use futures::{SinkExt, StreamExt};
+use futures::{
+    channel::{mpsc, oneshot},
+    SinkExt, StreamExt,
+};
 use libra_logger::prelude::*;
 use sgchain::star_chain_client::ChainClient;
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 mod txn_stream;
 use async_trait::async_trait;
-use coerce_rt::actor;
-use coerce_rt::actor::context::{ActorContext, ActorHandlerContext};
-use coerce_rt::actor::message::Message;
-use coerce_rt::actor::ActorRef;
+use coerce_rt::{
+    actor,
+    actor::{
+        context::{ActorContext, ActorHandlerContext},
+        message::Message,
+        ActorRef,
+    },
+};
 use std::time::Duration;
 use tokio::time::interval;
 pub use txn_stream::TransactionWithInfo;

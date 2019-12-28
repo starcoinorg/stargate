@@ -8,8 +8,7 @@ use anyhow::Result;
 use libra_types::transaction::TransactionArgument;
 use sgchain::star_chain_client::{ChainClient, MockChainClient};
 use sgtypes::script_package::ChannelScriptPackage;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 mod common;
 pub mod wallet_test_helper;
 

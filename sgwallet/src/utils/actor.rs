@@ -3,11 +3,12 @@
 
 use anyhow::{bail, Result};
 use async_trait::async_trait;
-use futures::channel::{mpsc, oneshot};
-use futures::{FutureExt, StreamExt};
+use futures::{
+    channel::{mpsc, oneshot},
+    FutureExt, StreamExt,
+};
 use libra_logger::prelude::*;
-use std::marker::PhantomData;
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 #[derive(Debug)]
 pub enum Msg<ReqT, RespT> {
     Call {

@@ -1,11 +1,13 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
-use crate::chain_watcher::{ChainWatcher, ChainWatcherHandle, TransactionWithInfo};
-use crate::channel::{
-    ApplyPendingTxn, ApplyTravelTxn, CancelPendingTxn, Channel, ChannelEvent,
-    CollectProposalWithSigs, Execute, ForceTravel, GrantProposal,
+use crate::{
+    chain_watcher::{ChainWatcher, ChainWatcherHandle, TransactionWithInfo},
+    channel::{
+        ApplyPendingTxn, ApplyTravelTxn, CancelPendingTxn, Channel, ChannelEvent, ChannelHandle,
+        CollectProposalWithSigs, Execute, ForceTravel, GrantProposal,
+    },
+    scripts::*,
 };
-use crate::{channel::ChannelHandle, scripts::*};
 use anyhow::{bail, ensure, format_err, Error, Result};
 use chrono::Utc;
 use coerce_rt::actor::context::ActorContext;
@@ -23,46 +25,44 @@ use libra_crypto::{
 };
 use libra_logger::prelude::*;
 use libra_state_view::StateView;
-use libra_types::byte_array::ByteArray;
-use libra_types::channel::{
-    channel_mirror_struct_tag, channel_participant_struct_tag, channel_struct_tag, make_resource,
-    user_channels_struct_tag, ChannelMirrorResource, ChannelParticipantAccountResource,
-    ChannelResource, UserChannelsResource,
-};
-use libra_types::transaction::Transaction;
 use libra_types::{
     access_path::DataPath,
     account_address::AccountAddress,
     account_config::{coin_struct_tag, AccountResource},
+    byte_array::ByteArray,
+    channel::{
+        channel_mirror_struct_tag, channel_participant_struct_tag, channel_struct_tag,
+        make_resource, user_channels_struct_tag, ChannelMirrorResource,
+        ChannelParticipantAccountResource, ChannelResource, UserChannelsResource,
+    },
     language_storage::StructTag,
     transaction::{
         helpers::{create_signed_payload_txn, TransactionSigner},
-        Module, RawTransaction, SignedTransaction, TransactionArgument, TransactionOutput,
-        TransactionPayload, TransactionStatus, TransactionWithProof,
+        Module, RawTransaction, SignedTransaction, Transaction, TransactionArgument,
+        TransactionOutput, TransactionPayload, TransactionStatus, TransactionWithProof,
     },
     vm_error::*,
 };
 use sgchain::star_chain_client::{ChainClient, StarChainClient};
 use sgconfig::config::WalletConfig;
-use sgstorage::channel_db::ChannelDB;
-use sgstorage::channel_store::ChannelStore;
-use sgstorage::storage::SgStorage;
-use sgtypes::account_state::AccountState;
-use sgtypes::applied_channel_txn::AppliedChannelTxn;
-use sgtypes::channel::ChannelState;
-use sgtypes::channel_transaction::ChannelTransactionProposal;
-use sgtypes::pending_txn::PendingTransaction;
-use sgtypes::sg_error::SgError;
-use sgtypes::signed_channel_transaction::SignedChannelTransaction;
+use sgstorage::{channel_db::ChannelDB, channel_store::ChannelStore, storage::SgStorage};
 use sgtypes::{
     account_resource_ext,
-    channel_transaction::{ChannelOp, ChannelTransactionRequest, ChannelTransactionResponse},
+    account_state::AccountState,
+    applied_channel_txn::AppliedChannelTxn,
+    channel::ChannelState,
+    channel_transaction::{
+        ChannelOp, ChannelTransactionProposal, ChannelTransactionRequest,
+        ChannelTransactionResponse,
+    },
+    pending_txn::PendingTransaction,
     script_package::{ChannelScriptPackage, ScriptCode},
+    sg_error::SgError,
+    signed_channel_transaction::SignedChannelTransaction,
 };
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use std::path::Path;
-use std::{sync::Arc, time::Duration};
+use std::{path::Path, sync::Arc, time::Duration};
 use tokio::runtime;
 use vm_runtime::{MoveVM, VMExecutor};
 

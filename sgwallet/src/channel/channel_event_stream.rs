@@ -4,15 +4,14 @@
 use crate::data_stream::{DataQuery, DataStream};
 use anyhow::Result;
 use async_trait::async_trait;
-use libra_types::access_path::AccessPath;
-use libra_types::account_address::AccountAddress;
-use libra_types::channel::ChannelEvent;
-use libra_types::contract_event::EventWithProof;
-use libra_types::get_with_proof::{RequestItem, ResponseItem, UpdateToLatestLedgerRequest};
+use libra_types::{
+    access_path::AccessPath,
+    account_address::AccountAddress,
+    contract_event::EventWithProof,
+    get_with_proof::{RequestItem, ResponseItem, UpdateToLatestLedgerRequest},
+};
 use sgchain::star_chain_client::ChainClient;
-use std::collections::BTreeMap;
-use std::convert::TryInto;
-use std::sync::Arc;
+use std::{collections::BTreeMap, convert::TryInto, sync::Arc};
 
 type ChannelEventStream = DataStream<ChannelEventQurier, EventWithProof>;
 

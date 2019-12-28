@@ -3,19 +3,20 @@
 #![allow(dead_code)]
 use anyhow::{format_err, Result};
 use async_trait::async_trait;
-use coerce_rt::actor::context::ActorHandlerContext;
-use coerce_rt::actor::message::{Handler, Message};
-use coerce_rt::actor::Actor;
+use coerce_rt::actor::{
+    context::ActorHandlerContext,
+    message::{Handler, Message},
+    Actor,
+};
 use futures::channel::oneshot;
 use libra_logger::prelude::*;
-use libra_types::access_path::DataPath;
-use libra_types::account_address::AccountAddress;
-use libra_types::transaction::Version;
+use libra_types::{access_path::DataPath, account_address::AccountAddress, transaction::Version};
 use sgchain::star_chain_client::ChainClient;
 use sgtypes::account_state::AccountState;
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    sync::Arc,
+};
 
 pub struct AccessState {
     pub version: Option<Version>,

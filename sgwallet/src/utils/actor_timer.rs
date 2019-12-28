@@ -1,8 +1,10 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use coerce_rt::actor::message::{Handler, Message};
-use coerce_rt::actor::{Actor, ActorRef};
+use coerce_rt::actor::{
+    message::{Handler, Message},
+    Actor, ActorRef,
+};
 use log::trace;
 use std::time::{Duration, Instant};
 use uuid::Uuid;

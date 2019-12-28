@@ -5,19 +5,18 @@ use super::common;
 use anyhow::{bail, Result};
 use futures::TryStreamExt;
 use libra_logger::prelude::*;
-use libra_types::access_path::AccessPath;
-use libra_types::account_address::AccountAddress;
-use libra_types::channel::ChannelEvent;
+use libra_types::{
+    access_path::AccessPath, account_address::AccountAddress, channel::ChannelEvent,
+};
 use sgchain::{client_state_view::ClientStateView, star_chain_client::ChainClient};
 use sgcompiler::{Compiler, StateViewModuleLoader};
 use sgtypes::script_package::ChannelScriptPackage;
-use sgwallet::wallet::Wallet;
-use sgwallet::{get_channel_events, ChannelChangeEvent};
-use std::time::Duration;
+use sgwallet::{get_channel_events, wallet::Wallet, ChannelChangeEvent};
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
     thread::sleep,
+    time::Duration,
 };
 
 //fn faucet_sync(client: Arc<dyn ChainClient>, receiver: AccountAddress, amount: u64) -> Result<()> {

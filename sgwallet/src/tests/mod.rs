@@ -1,22 +1,27 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
-use libra_crypto::hash::CryptoHash;
-use libra_crypto::test_utils::KeyPair;
-use libra_crypto::{HashValue, SigningKey, Uniform};
-use libra_types::access_path::AccessPath;
-use libra_types::account_address::AccountAddress;
-use libra_types::vm_error::StatusCode;
-use libra_types::write_set::{WriteOp, WriteSetMut};
+use libra_crypto::{
+    ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
+    hash::CryptoHash,
+    test_utils::KeyPair,
+    HashValue, SigningKey, Uniform,
+};
+use libra_types::{
+    access_path::AccessPath,
+    account_address::AccountAddress,
+    vm_error::StatusCode,
+    write_set::{WriteOp, WriteSetMut},
+};
 use rand::prelude::*;
-use sgtypes::applied_channel_txn::AppliedChannelTxn;
-use sgtypes::channel_transaction::{ChannelOp, ChannelTransaction, ChannelTransactionProposal};
-use sgtypes::channel_transaction_sigs::ChannelTransactionSigs;
-use sgtypes::channel_transaction_to_commit::ChannelTransactionToCommit;
-use sgtypes::signed_channel_transaction::SignedChannelTransaction;
-use std::collections::BTreeMap;
-use std::time::Duration;
+use sgtypes::{
+    applied_channel_txn::AppliedChannelTxn,
+    channel_transaction::{ChannelOp, ChannelTransaction, ChannelTransactionProposal},
+    channel_transaction_sigs::ChannelTransactionSigs,
+    channel_transaction_to_commit::ChannelTransactionToCommit,
+    signed_channel_transaction::SignedChannelTransaction,
+};
+use std::{collections::BTreeMap, time::Duration};
 
 fn generate_txn_to_apply(
     sender: AccountAddress,

@@ -3,14 +3,13 @@
 use crate::data_stream::{DataQuery, DataStream};
 use anyhow::Result;
 use async_trait::async_trait;
-
-use libra_types::contract_event::ContractEvent;
-use libra_types::get_with_proof::RequestItem;
-use libra_types::transaction::{Transaction, TransactionInfo, TransactionListWithProof, Version};
+use libra_types::{
+    contract_event::ContractEvent,
+    get_with_proof::RequestItem,
+    transaction::{Transaction, TransactionInfo, TransactionListWithProof, Version},
+};
 use sgchain::star_chain_client::ChainClient;
-use std::collections::BTreeMap;
-use std::convert::TryInto;
-use std::sync::Arc;
+use std::{collections::BTreeMap, convert::TryInto, sync::Arc};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TransactionWithInfo {
