@@ -142,10 +142,19 @@ pub(crate) struct ApplyPendingTxn {
 impl Message for ApplyPendingTxn {
     type Result = Result<Option<(AccountAddress, u64)>>;
 }
-pub(crate) struct ApplyTravelTxn {
+
+pub(crate) struct ApplySoloTxn {
     pub channel_txn: TransactionWithInfo,
 }
-impl Message for ApplyTravelTxn {
+
+impl Message for ApplySoloTxn {
+    type Result = Result<u64>;
+}
+
+pub(crate) struct ApplyCoSignedTxn {
+    pub channel_txn: TransactionWithInfo,
+}
+impl Message for ApplyCoSignedTxn {
     type Result = Result<u64>;
 }
 

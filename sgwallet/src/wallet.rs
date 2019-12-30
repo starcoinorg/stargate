@@ -3,7 +3,7 @@
 use crate::{
     chain_watcher::{ChainWatcher, ChainWatcherHandle, TransactionWithInfo},
     channel::{
-        ApplyPendingTxn, ApplyTravelTxn, CancelPendingTxn, Channel, ChannelEvent, ChannelHandle,
+        ApplyPendingTxn, CancelPendingTxn, Channel, ChannelEvent, ChannelHandle,
         CollectProposalWithSigs, Execute, ForceTravel, GrantProposal,
     },
     scripts::*,
@@ -62,6 +62,7 @@ use sgtypes::{
 };
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use crate::channel::{ApplyCoSignedTxn, ApplySoloTxn};
 use libra_types::channel::LibraResource;
 use std::{path::Path, sync::Arc, time::Duration};
 use tokio::runtime;
@@ -618,7 +619,7 @@ impl Wallet {
 
         let gas = channel
             .channel_ref()
-            .send(ApplyTravelTxn {
+            .send(ApplySoloTxn {
                 channel_txn: TransactionWithInfo {
                     version,
                     txn: transaction,
@@ -663,7 +664,7 @@ impl Wallet {
 
         let gas = channel
             .channel_ref()
-            .send(ApplyTravelTxn {
+            .send(ApplyCoSignedTxn {
                 channel_txn: TransactionWithInfo {
                     version,
                     txn: transaction,
