@@ -1,16 +1,19 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::wallet_test_helper::{
-    deploy_custom_module_and_script, test_deploy_custom_module, test_wallet_async,
-};
 use anyhow::Result;
 use libra_types::transaction::TransactionArgument;
+use mock_chain_test_helper::run_with_mock_client;
 use sgchain::star_chain_client::{ChainClient, MockChainClient};
 use sgtypes::script_package::ChannelScriptPackage;
 use std::{sync::Arc, time::Duration};
+use wallet_test_helper::{
+    deploy_custom_module_and_script, test_deploy_custom_module, test_wallet_async,
+};
+
 mod common;
-pub mod wallet_test_helper;
+mod mock_chain_test_helper;
+mod wallet_test_helper;
 
 #[test]
 fn test_wallet_with_mock_client() {
@@ -220,16 +223,4 @@ fn run_test_gobang() -> Result<()> {
             })
         })
     })
-}
-
-fn run_with_mock_client<F, T>(mut f: F) -> T
-where
-    F: FnMut(Arc<dyn ChainClient>) -> T,
-{
-    libra_logger::try_init_for_testing();
-    let _ = slog_stdlog::init();
-    let (mock_chain_service, _handle) = MockChainClient::new();
-    std::thread::sleep(Duration::from_millis(1500));
-    let chain_client = Arc::new(mock_chain_service);
-    f(chain_client)
 }

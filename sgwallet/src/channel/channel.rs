@@ -47,9 +47,11 @@ use libra_types::{
         TransactionListWithProof, TransactionOutput, TransactionPayload, TransactionWithProof,
         Version,
     },
+    vm_error::StatusCode,
     write_set::WriteSet,
 };
 use serde::de::DeserializeOwned;
+use sgchain::client_state_view::ClientStateView;
 use sgtypes::{
     applied_channel_txn::AppliedChannelTxn,
     channel::ChannelState,
@@ -89,42 +91,16 @@ impl Actor for Channel {
             }
         }
 
-        let start_number = self
-            .channel_resource()
-            .map(|r| r.event_handle().count())
-            .unwrap_or_default();
-        let channel_event_stream = ChannelEventStream::new_from_chain_client(
-            self.chain_client.clone(),
-            self.channel_address,
-            start_number,
-            10,
-        );
-        tokio::task::spawn(channel_event_loop(channel_event_stream, myself.clone()));
-
-        let mut channel_txn_receiver = self
-            .chain_txn_watcher
-            .add_interest(
-                self.channel_address.to_vec(),
-                channel_txn_interest(self.channel_address),
-            )
-            .await
-            .unwrap();
-
-        tokio::task::spawn(async move {
-            while let Some(channel_txn) = channel_txn_receiver.next().await {
-                let txn = channel_txn.clone();
-                match myself.send(ApplyTravelTxn { channel_txn }).await {
-                    Err(_) => {
-                        info!("parent {:?} is gone, stop now", &myself);
-                        break;
-                    }
-                    Ok(Err(e)) => {
-                        error!("fail to handle travel txn: {:?}, e: {}", &txn, e);
-                    }
-                    _ => {}
-                }
-            }
-        });
+        let start_number = self.channel_resource().map(|r| r.event_handle().count());
+        if let Some(c) = start_number {
+            let channel_event_stream = ChannelEventStream::new_from_chain_client(
+                self.chain_client.clone(),
+                self.channel_address,
+                c,
+                10,
+            );
+            tokio::task::spawn(channel_event_loop(channel_event_stream, myself.clone()));
+        }
     }
 
     async fn stopped(&mut self, _ctx: &mut ActorHandlerContext) {
@@ -536,13 +512,43 @@ impl Handler<ApplyTravelTxn> for Channel {
                 .ok_or(format_err!("channel resource should exists in local"))?;
 
             if channel_resource.locked() {
+                debug!(
+                    "{}/{} - applied a action which lock channel, txn: {:#?}",
+                    self.account_address,
+                    self.channel_address,
+                    signed_txn.payload()
+                );
                 // I lock the channel, wait sender to resolve
                 // TODO: move the timeout check into a timer
                 self.watch_channel_lock_timeout(_ctx).await?;
             } else if channel_resource.closed() {
+                debug!(
+                    "{}/{} - applied a action which close channel",
+                    self.account_address, self.channel_address,
+                );
                 _ctx.set_status(ActorStatus::Stopping);
             } else {
                 // nothing to do. everything is good now.
+                debug!(
+                    "{}/{} - channel resource seq number: {}",
+                    self.account_address,
+                    self.channel_address,
+                    channel_resource.channel_sequence_number()
+                );
+                if channel_resource.channel_sequence_number() == 1 {
+                    debug!(
+                        "{}/{} - just open channel, start watch channel event",
+                        self.account_address, self.channel_address
+                    );
+                    let channel_event_stream = ChannelEventStream::new_from_chain_client(
+                        self.chain_client.clone(),
+                        self.channel_address,
+                        channel_resource.event_handle().count(),
+                        10,
+                    );
+                    let mut myself = self.actor_ref(_ctx).await;
+                    tokio::task::spawn(channel_event_loop(channel_event_stream, myself));
+                }
             }
             return Ok(gas_used);
         }
@@ -570,11 +576,30 @@ impl Handler<ApplyTravelTxn> for Channel {
                 }
             } else {
                 // dual submits a stale txn, I need to challenge him
-
+                debug!(
+                    "{}/{} - unauthorized channel txn, going challenge dual",
+                    self.account_address, self.channel_address,
+                );
                 // so I submit a challenge to chain.
                 // and don't watch the txn.
+                let txn =
+                    self.build_solo_txn(challenge_channel_action(), MAX_GAS_AMOUNT_OFFCHAIN)?;
+                let txn_output = execute_transaction(
+                    &ClientStateView::new(None, self.chain_client.as_ref()),
+                    txn,
+                )?;
+                if txn_output.status().vm_status().major_status != StatusCode::EXECUTED {
+                    bail!(
+                        "execute challenge action offchain error, {:?}",
+                        txn_output.status()
+                    );
+                }
+                let max_gas_amount = std::cmp::min(
+                    (txn_output.gas_used() as f64 * 1.1) as u64,
+                    MAX_GAS_AMOUNT_ONCHAIN,
+                );
                 let _ = self
-                    .solo_txn(_ctx, challenge_channel_action(), u64::max_value())
+                    .solo_txn(_ctx, challenge_channel_action(), max_gas_amount)
                     .await?;
                 return Ok(0);
             }
@@ -595,9 +620,29 @@ impl Handler<ApplyTravelTxn> for Channel {
         // if channel is lock, it means dual submit a solo txn, I need to resolve it.
         if channel_resource.locked() {
             debug_assert!(!channel_txn_payload.is_authorized());
+            debug!(
+                "{}/{} - receiver a txn which lock channel, going to resolve it, txn: {:#?}",
+                self.account_address,
+                self.channel_address,
+                signed_txn.payload()
+            );
+            let txn = self.build_solo_txn(resolve_channel_action(), MAX_GAS_AMOUNT_OFFCHAIN)?;
+            let txn_output =
+                execute_transaction(&ClientStateView::new(None, self.chain_client.as_ref()), txn)?;
+            if txn_output.status().vm_status().major_status != StatusCode::EXECUTED {
+                bail!(
+                    "execute challenge action offchain error, {:?}",
+                    txn_output.status()
+                );
+            }
+            let max_gas_amount = std::cmp::min(
+                (txn_output.gas_used() as f64 * 1.1) as u64,
+                MAX_GAS_AMOUNT_ONCHAIN,
+            );
+
             // drop the receiver, as I don't need wait the result
             let _ = self
-                .solo_txn(_ctx, resolve_channel_action(), u64::max_value())
+                .solo_txn(_ctx, resolve_channel_action(), max_gas_amount)
                 .await?;
         } else if channel_resource.closed() {
             // no matter who close ths channel, the channel is done. we just act on it.
@@ -605,6 +650,20 @@ impl Handler<ApplyTravelTxn> for Channel {
             _ctx.set_status(ActorStatus::Stopping);
         } else {
             // every thing is fine.
+            if channel_resource.channel_sequence_number() == 1 {
+                debug!(
+                    "{}/{} - just open channel, start watch channel event",
+                    self.account_address, self.channel_address
+                );
+                let channel_event_stream = ChannelEventStream::new_from_chain_client(
+                    self.chain_client.clone(),
+                    self.channel_address,
+                    channel_resource.event_handle().count(),
+                    10,
+                );
+                let mut myself = self.actor_ref(_ctx).await;
+                tokio::task::spawn(channel_event_loop(channel_event_stream, myself));
+            }
         }
         return Ok(gas_used);
     }
@@ -621,8 +680,22 @@ impl Handler<ChannelLockTimeout> for Channel {
         _message: ChannelLockTimeout,
         ctx: &mut ActorHandlerContext,
     ) -> <ChannelLockTimeout as Message>::Result {
+        let txn = self.build_solo_txn(close_channel_action(), MAX_GAS_AMOUNT_OFFCHAIN)?;
+        let txn_output =
+            execute_transaction(&ClientStateView::new(None, self.chain_client.as_ref()), txn)?;
+        if txn_output.status().vm_status().major_status != StatusCode::EXECUTED {
+            bail!(
+                "execute challenge action offchain error, {:?}",
+                txn_output.status()
+            );
+        }
+        let max_gas_amount = std::cmp::min(
+            (txn_output.gas_used() as f64 * 1.1) as u64,
+            MAX_GAS_AMOUNT_ONCHAIN,
+        );
+
         let _ = self
-            .solo_txn(ctx, close_channel_action(), u64::max_value())
+            .solo_txn(ctx, close_channel_action(), max_gas_amount)
             .await?;
         Ok(())
     }
@@ -639,17 +712,15 @@ async fn channel_event_loop<A>(
             let EventWithProof {
                 transaction_version,
                 event,
-                event_index,
                 ..
             } = t;
             let channel_event = parse_channel_event(&event);
             channel_event.map(|evt| ChannelStageChange {
                 stage: evt.stage(),
                 version: transaction_version,
-                event_number: event_index,
+                event_number: event.sequence_number(),
             })
         });
-
         match result {
             Err(e) => error!("get channel state change error, {}", e),
             Ok(t) => {
@@ -662,6 +733,7 @@ async fn channel_event_loop<A>(
     }
 }
 
+#[derive(Debug)]
 struct ChannelStageChange {
     // channel stage, locked, closed
     pub stage: u64,
@@ -681,15 +753,28 @@ impl Handler<ChannelStageChange> for Channel {
         message: ChannelStageChange,
         _ctx: &mut ActorHandlerContext,
     ) -> <ChannelStageChange as Message>::Result {
+        debug!(
+            "{}/{} - receiver channel stage change event: {:?}",
+            self.account_address, self.channel_address, &message
+        );
+
         let ChannelStageChange {
             stage,
             version,
-            event_number: _,
+            event_number,
         } = message;
+
         if version <= self.channel_state.version() {
-            info!("outdated channel event, ignore it");
+            info!(
+                "{}/{}, outdated channel event, version: {}, local version: {} ignore it",
+                &self.account_address,
+                &self.channel_address,
+                version,
+                self.channel_state.version()
+            );
             return Ok(());
         }
+
         let TransactionListWithProof {
             mut transactions,
             events,

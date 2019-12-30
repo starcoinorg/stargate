@@ -10,6 +10,7 @@ use libra_types::{
     account_address::AccountAddress,
     account_config::{account_struct_tag, AccountResource},
 };
+use mock_chain_test_helper::run_with_mock_client;
 use sgchain::star_chain_client::{ChainClient, MockChainClient};
 use sgwallet::{
     chain_state_access::{AccessState, ChainStateAccessor},
@@ -17,16 +18,7 @@ use sgwallet::{
 };
 use std::sync::Arc;
 
-pub fn run_with_mock_client<F, T>(mut f: F) -> T
-where
-    F: FnMut(Arc<dyn ChainClient>) -> T,
-{
-    libra_logger::try_init_for_testing();
-    let (mock_chain_service, _handle) = MockChainClient::new();
-    //    std::thread::sleep(Duration::from_millis(1500));
-    let chain_client = Arc::new(mock_chain_service);
-    f(chain_client.clone())
-}
+mod mock_chain_test_helper;
 
 #[test]
 pub fn test_chain_watcher() {

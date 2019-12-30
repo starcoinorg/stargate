@@ -10,6 +10,8 @@ use libra_types::{
     language_storage::StructTag,
 };
 
+use libra_types::channel::{make_resource, LibraResource};
+use serde::de::DeserializeOwned;
 use sgtypes::pending_txn::PendingTransaction;
 use std::collections::BTreeSet;
 
@@ -61,18 +63,20 @@ impl ChannelHandle {
         Ok(self.channel_ref.clone().send(GetPendingTxn).await?)
     }
 
-    pub async fn get_channel_resource(
+    pub async fn get_channel_resource<R: LibraResource + DeserializeOwned>(
         &self,
-        address: AccountAddress,
-        struct_tag: StructTag,
-    ) -> Result<Option<Vec<u8>>> {
-        let data_path = DataPath::channel_resource_path(address, struct_tag);
-
-        self.channel_ref
+        data_path: DataPath,
+        //        address: AccountAddress,
+        //        struct_tag: StructTag,
+    ) -> Result<Option<R>> {
+        //        let data_path = DataPath::channel_resource_path(address, struct_tag);
+        let blob = self
+            .channel_ref
             .clone()
             .send(AccessingResource {
                 path: AccessPath::new_for_data_path(self.channel_address, data_path),
             })
-            .await?
+            .await??;
+        blob.map(|b| make_resource::<R>(&b)).transpose()
     }
 }

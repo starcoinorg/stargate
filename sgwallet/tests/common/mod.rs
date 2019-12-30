@@ -10,9 +10,9 @@ use libra_crypto::{
 use libra_tools::tempdir::TempPath;
 use libra_types::{account_address::AccountAddress, transaction::TransactionArgument};
 use rand::prelude::*;
-use sgchain::star_chain_client::ChainClient;
+use sgchain::star_chain_client::{ChainClient, MockChainClient};
 use sgwallet::wallet::Wallet;
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 use tokio::runtime::Runtime;
 pub fn setup_wallet(
     executor: tokio::runtime::Handle,

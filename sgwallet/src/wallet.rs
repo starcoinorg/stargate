@@ -62,6 +62,7 @@ use sgtypes::{
 };
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use libra_types::channel::LibraResource;
 use std::{path::Path, sync::Arc, time::Duration};
 use tokio::runtime;
 use vm_runtime::{MoveVM, VMExecutor};
@@ -227,13 +228,11 @@ impl Wallet {
 
         let struct_tag = channel_mirror_struct_tag();
         // channel mirror resource is a shared resource
-        let resp = channel
-            .get_channel_resource(generated_channel_address, struct_tag)
+        let data_path = DataPath::channel_resource_path(generated_channel_address, struct_tag);
+        let mirror = channel
+            .get_channel_resource::<ChannelMirrorResource>(data_path)
             .await?;
 
-        let mirror = resp
-            .map(|blob| ChannelMirrorResource::make_from(blob))
-            .transpose()?;
         Ok(mirror.map(|r| r.channel_sequence_number()).unwrap_or(0))
     }
 
@@ -251,6 +250,13 @@ impl Wallet {
             .await?
             .map(|account| account.balance())
             .unwrap_or(0))
+    }
+
+    pub async fn channel_handle(&self, participant: AccountAddress) -> Result<Arc<ChannelHandle>> {
+        let (channel_address, participants) =
+            generate_channel_address(participant, self.shared.account);
+        let handle = self.get_channel(channel_address).await?;
+        Ok(handle)
     }
 
     /// Open channel and deposit default asset.
@@ -800,10 +806,15 @@ impl Wallet {
             generate_channel_address(participant, self.shared.account);
         let channel = self.get_channel(generated_channel_address).await?;
 
-        let struct_tag = channel_participant_struct_tag();
-        let resp = channel.get_channel_resource(address, struct_tag).await?;
-        resp.map(|blob| ChannelParticipantAccountResource::make_from(blob))
-            .transpose()
+        let data_path = DataPath::channel_resource_path(
+            address,
+            ChannelParticipantAccountResource::struct_tag(),
+        );
+        let resp = channel
+            .get_channel_resource::<ChannelParticipantAccountResource>(data_path)
+            .await?;
+
+        Ok(resp)
     }
 
     pub async fn stop(&self) -> Result<()> {
@@ -1221,7 +1232,11 @@ pub(crate) fn execute_transaction(
     transaction: SignedTransaction,
 ) -> Result<TransactionOutput> {
     let tx_hash = transaction.raw_txn().hash();
-    debug!("execute txn {}: {:#?}", &tx_hash, transaction.raw_txn());
+    debug!(
+        "execute offchain txn {}: {:?}",
+        &tx_hash,
+        transaction.raw_txn().payload()
+    );
     let output = MoveVM::execute_block(
         vec![Transaction::UserTransaction(transaction)],
         &VM_CONFIG,
