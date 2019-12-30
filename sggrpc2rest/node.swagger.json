@@ -464,8 +464,7 @@
         "args": {
           "type": "array",
           "items": {
-            "type": "string",
-            "format": "byte"
+            "$ref": "#/definitions/typesTransactionArgument"
           }
         }
       }
