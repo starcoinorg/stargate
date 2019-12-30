@@ -214,8 +214,7 @@ impl SGClientProxy {
             .iter()
             .filter_map(|arg| {
                 let arg = parse_as_transaction_argument(arg).ok().unwrap();
-                let data = lcs::to_bytes(&arg).expect("Failed to serialize.");
-                Some(data)
+                Some(arg)
             })
             .collect();
 
