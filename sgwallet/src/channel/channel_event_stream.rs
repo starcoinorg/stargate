@@ -13,7 +13,7 @@ use libra_types::{
 use sgchain::star_chain_client::ChainClient;
 use std::{collections::BTreeMap, convert::TryInto, sync::Arc};
 
-type ChannelEventStream = DataStream<ChannelEventQurier, EventWithProof>;
+pub(super) type ChannelEventStream = DataStream<ChannelEventQurier, EventWithProof>;
 
 impl ChannelEventStream {
     pub fn new_from_chain_client(
@@ -30,7 +30,7 @@ impl ChannelEventStream {
     }
 }
 
-struct ChannelEventQurier {
+pub(super) struct ChannelEventQurier {
     chain_client: Arc<dyn ChainClient>,
     access_path: AccessPath,
 }

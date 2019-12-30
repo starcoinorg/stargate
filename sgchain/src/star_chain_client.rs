@@ -10,6 +10,7 @@ use anyhow::{bail, Result};
 use async_trait::async_trait;
 use core::borrow::Borrow;
 use futures::channel::oneshot::Sender;
+use futures::compat::Future01CompatExt;
 use futures_timer::Delay;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use libra_config::config::{ConsensusType, NodeConfig};
@@ -21,7 +22,7 @@ use libra_types::contract_event::EventWithProof;
 use libra_types::crypto_proxies::LedgerInfoWithSignatures;
 use libra_types::get_with_proof::ResponseItem;
 use libra_types::ledger_info::LedgerInfo;
-use libra_types::transaction::Transaction;
+use libra_types::transaction::{Transaction, TransactionListWithProof};
 use libra_types::{
     account_address::AccountAddress,
     account_config::{association_address, AccountResource},
@@ -62,6 +63,11 @@ pub trait ChainClient: Send + Sync {
     ) -> ::grpcio::Result<SubmitTransactionResponse>;
 
     fn update_to_latest_ledger(
+        &self,
+        req: &UpdateToLatestLedgerRequest,
+    ) -> ::grpcio::Result<UpdateToLatestLedgerResponse>;
+
+    async fn update_to_latest_ledger_async(
         &self,
         req: &UpdateToLatestLedgerRequest,
     ) -> ::grpcio::Result<UpdateToLatestLedgerResponse>;
@@ -273,6 +279,39 @@ pub trait ChainClient: Send + Sync {
         let resp = parse_response(self.do_request(&build_request(req, None)));
         resp.into_get_events_by_access_path_response()
     }
+
+    fn get_transaction(
+        &self,
+        start_version: Version,
+        limit: u64,
+        fetch_events: bool,
+    ) -> Result<TransactionListWithProof> {
+        let req = RequestItem::GetTransactions {
+            start_version,
+            limit,
+            fetch_events,
+        };
+        let resp = parse_response(self.update_to_latest_ledger(&build_request(req, None))?);
+        resp.into_get_transactions_response()
+    }
+
+    async fn get_transaction_async(
+        &self,
+        start_version: Version,
+        limit: u64,
+        fetch_events: bool,
+    ) -> Result<TransactionListWithProof> {
+        let req = RequestItem::GetTransactions {
+            start_version,
+            limit,
+            fetch_events,
+        };
+        let resp = parse_response(
+            self.update_to_latest_ledger_async(&build_request(req, None))
+                .await?,
+        );
+        resp.into_get_transactions_response()
+    }
 }
 
 #[derive(Clone)]
@@ -302,6 +341,7 @@ impl ChainExplorer for StarChainClient {
     }
 }
 
+#[async_trait]
 impl ChainClient for StarChainClient {
     fn submit_transaction(
         &self,
@@ -315,6 +355,15 @@ impl ChainClient for StarChainClient {
         req: &UpdateToLatestLedgerRequest,
     ) -> ::grpcio::Result<UpdateToLatestLedgerResponse> {
         self.ac_client.update_to_latest_ledger(req)
+    }
+    async fn update_to_latest_ledger_async(
+        &self,
+        req: &UpdateToLatestLedgerRequest,
+    ) -> ::grpcio::Result<UpdateToLatestLedgerResponse> {
+        self.ac_client
+            .update_to_latest_ledger_async(req)?
+            .compat()
+            .await
     }
 }
 
@@ -350,6 +399,7 @@ impl MockChainClient {
     }
 }
 
+#[async_trait]
 impl ChainClient for MockChainClient {
     fn submit_transaction(
         &self,
@@ -363,6 +413,12 @@ impl ChainClient for MockChainClient {
         req: &UpdateToLatestLedgerRequest,
     ) -> ::grpcio::Result<UpdateToLatestLedgerResponse> {
         self.ac_client.update_to_latest_ledger(req)
+    }
+    async fn update_to_latest_ledger_async(
+        &self,
+        req: &UpdateToLatestLedgerRequest,
+    ) -> ::grpcio::Result<UpdateToLatestLedgerResponse> {
+        self.update_to_latest_ledger(req)
     }
 }
 

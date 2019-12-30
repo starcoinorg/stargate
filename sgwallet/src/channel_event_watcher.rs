@@ -167,7 +167,7 @@ fn build_request(req: RequestItem, ver: Option<Version>) -> UpdateToLatestLedger
 
 #[cfg(test)]
 mod test {
-    
+
     use anyhow::{bail, Result};
     use async_trait::async_trait;
     use futures::TryStreamExt;

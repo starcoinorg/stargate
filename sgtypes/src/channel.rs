@@ -61,6 +61,10 @@ impl ChannelState {
     pub fn address(&self) -> &AccountAddress {
         &self.address
     }
+
+    pub fn version(&self) -> u64 {
+        self.state.version()
+    }
 }
 
 impl Deref for ChannelState {

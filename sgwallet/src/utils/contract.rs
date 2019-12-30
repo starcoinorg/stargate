@@ -1,9 +1,11 @@
+use anyhow::{bail, Result};
 use lazy_static::lazy_static;
-use libra_types::account_config::{account_module_name, core_code_address};
-
 use libra_types::{
+    account_config::{account_module_name, core_code_address},
+    channel::{make_resource, ChannelEvent, LibraResource},
+    contract_event::ContractEvent,
     identifier::{IdentStr, Identifier},
-    language_storage::ModuleId,
+    language_storage::{ModuleId, TypeTag},
     transaction::ScriptAction,
 };
 
@@ -44,4 +46,15 @@ pub fn close_channel_action() -> ScriptAction {
         channel_close_name().into(),
         vec![],
     )
+}
+
+pub fn parse_channel_event(event: &ContractEvent) -> Result<ChannelEvent> {
+    match event.type_tag() {
+        TypeTag::Struct(s) => {
+            debug_assert_eq!(&ChannelEvent::struct_tag(), s);
+        }
+        t => bail!("channel event type should not be {:#?}", &t),
+    }
+    let channel_event = make_resource::<ChannelEvent>(event.event_data())?;
+    Ok(channel_event)
 }

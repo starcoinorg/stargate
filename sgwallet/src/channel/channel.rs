@@ -3,12 +3,14 @@
 use crate::{
     chain_watcher::{Interest, TransactionWithInfo},
     channel::{
-        access_local, AccessingResource, ApplyPendingTxn, ApplyTravelTxn, CancelPendingTxn,
-        Channel, ChannelEvent, CollectProposalWithSigs, Execute, ForceTravel, GetPendingTxn,
-        GrantProposal,
+        access_local, channel_event_stream::ChannelEventStream, AccessingResource, ApplyPendingTxn,
+        ApplyTravelTxn, CancelPendingTxn, Channel, ChannelEvent, CollectProposalWithSigs, Execute,
+        ForceTravel, GetPendingTxn, GrantProposal,
     },
     channel_state_view::ChannelStateView,
-    utils::contract::{challenge_channel_action, close_channel_action, resolve_channel_action},
+    utils::contract::{
+        challenge_channel_action, close_channel_action, parse_channel_event, resolve_channel_action,
+    },
     wallet::{
         execute_transaction, submit_transaction, txn_expiration, watch_transaction, GAS_UNIT_PRICE,
         MAX_GAS_AMOUNT_OFFCHAIN, MAX_GAS_AMOUNT_ONCHAIN,
@@ -36,13 +38,14 @@ use libra_types::{
         make_resource, ChannelChallengeBy, ChannelLockedBy, ChannelMirrorResource,
         ChannelParticipantAccountResource, ChannelResource, LibraResource, Witness, WitnessData,
     },
-    contract_event::ContractEvent,
+    contract_event::{ContractEvent, EventWithProof},
     identifier::Identifier,
     language_storage::ModuleId,
     transaction::{
         ChannelTransactionPayload, ChannelTransactionPayloadBody, RawTransaction, ScriptAction,
-        SignedTransaction, Transaction, TransactionArgument, TransactionInfo, TransactionOutput,
-        TransactionPayload, TransactionWithProof, Version,
+        SignedTransaction, Transaction, TransactionArgument, TransactionInfo,
+        TransactionListWithProof, TransactionOutput, TransactionPayload, TransactionWithProof,
+        Version,
     },
     write_set::WriteSet,
 };
@@ -85,6 +88,19 @@ impl Actor for Channel {
                 panic!("should not happen");
             }
         }
+
+        let start_number = self
+            .channel_resource()
+            .map(|r| r.event_handle().count())
+            .unwrap_or_default();
+        let channel_event_stream = ChannelEventStream::new_from_chain_client(
+            self.chain_client.clone(),
+            self.channel_address,
+            start_number,
+            10,
+        );
+        tokio::task::spawn(channel_event_loop(channel_event_stream, myself.clone()));
+
         let mut channel_txn_receiver = self
             .chain_txn_watcher
             .add_interest(
@@ -608,6 +624,108 @@ impl Handler<ChannelLockTimeout> for Channel {
         let _ = self
             .solo_txn(ctx, close_channel_action(), u64::max_value())
             .await?;
+        Ok(())
+    }
+}
+
+async fn channel_event_loop<A>(
+    mut channel_event_stream: ChannelEventStream,
+    mut actor_ref: ActorRef<A>,
+) where
+    A: Actor + Handler<ChannelStageChange> + 'static + Send + Sync,
+{
+    while let Some(evt) = channel_event_stream.next().await {
+        let result = evt.and_then(|t| {
+            let EventWithProof {
+                transaction_version,
+                event,
+                event_index,
+                ..
+            } = t;
+            let channel_event = parse_channel_event(&event);
+            channel_event.map(|evt| ChannelStageChange {
+                stage: evt.stage(),
+                version: transaction_version,
+                event_number: event_index,
+            })
+        });
+
+        match result {
+            Err(e) => error!("get channel state change error, {}", e),
+            Ok(t) => {
+                if let Err(_e) = actor_ref.send(t).await {
+                    error!("actor {:?} is gone, stop now", &actor_ref);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+struct ChannelStageChange {
+    // channel stage, locked, closed
+    pub stage: u64,
+    // which txn version produce the change
+    pub version: u64,
+    pub event_number: u64,
+}
+
+impl Message for ChannelStageChange {
+    type Result = Result<()>;
+}
+
+#[async_trait]
+impl Handler<ChannelStageChange> for Channel {
+    async fn handle(
+        &mut self,
+        message: ChannelStageChange,
+        _ctx: &mut ActorHandlerContext,
+    ) -> <ChannelStageChange as Message>::Result {
+        let ChannelStageChange {
+            stage,
+            version,
+            event_number: _,
+        } = message;
+        if version <= self.channel_state.version() {
+            info!("outdated channel event, ignore it");
+            return Ok(());
+        }
+        let TransactionListWithProof {
+            mut transactions,
+            events,
+            proof,
+            first_transaction_version,
+        } = self
+            .chain_client
+            .get_transaction_async(version, 1, true)
+            .await?;
+
+        let (txn, txn_info, events) = match first_transaction_version {
+            Some(v) => {
+                debug_assert_eq!(v, version);
+                let txn = transactions.remove(0);
+                let txn_info = proof.transaction_infos().to_vec().remove(0);
+                let events = events.unwrap().remove(0);
+                (txn, txn_info, events)
+            }
+            None => {
+                bail!("get_transaction return empty txn for version {}", version);
+            }
+        };
+
+        self.handle(
+            ApplyTravelTxn {
+                channel_txn: TransactionWithInfo {
+                    txn,
+                    txn_info,
+                    events,
+                    version,
+                    block_id: 0,
+                },
+            },
+            _ctx,
+        )
+        .await;
         Ok(())
     }
 }
