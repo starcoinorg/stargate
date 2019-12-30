@@ -1,5 +1,5 @@
 #!/bin/sh
-cd ../proto
+cd ./proto
 echo "generate node pb..."
 protoc -I. -I./types -I./sgtypes \
            -I$GOPATH/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis \

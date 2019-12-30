@@ -19,8 +19,11 @@ Stargate项目grpc转rest API的实现
 ## 实现步骤
 1. 建立grpc网关的go项目
 2. 生成gateway本身和依赖的proto文件对应的go文件
+   建立proto文件目录：mkdir proto
    运行cmd/get.sh 获取proto文件
    运行cmd/gen_go.sh 生成go文件，相应修改--go_out=plugins=grpc,paths=source_relative:{{MODIFY_PATH}}
+   注：运行gen_go.sh之前，确保https://github.com/grpc-ecosystem/grpc-gateway插件生成文件已经安装正确，验证方法：
+        which protoc-gen-grpc-gateway(protoc-gen-swagger\protoc-gen-go)     
 3. 修改gateway.go
     a. 修改node节点的监听地址和端口
     line 22: grpcServerEndpoint = flag.String("node-grpc-endpoint",  "**127.0.0.1:9000**", "gRPC server endpoint")
