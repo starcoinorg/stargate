@@ -413,7 +413,7 @@ module TheFive {
         return;
     }
 
-    end_game() {
+    public end_game() {
         let s_ref: &mut Self.Shared;
         let status: &mut u64;
 
@@ -438,13 +438,23 @@ module TheFive {
         return;
     }
 
-    public play(receiver: address, x: u64, y: u64): u64 {
+    public play(receiver: address, canvas_x: u64, canvas_y: u64): u64 {
         let win: bool;
+        let x: u64;
+        let y: u64;
+        let status: u64;
+
+        status = Self.status();
+        if (copy(status) != 1) {
+            return 3;
+        }
 
         if (!Self.is_my_turn()) {
             return 1;
         }
 
+        x = move(canvas_x) + 1;
+        y = move(canvas_y) + 1;
         if (!Self.is_blank(copy(x), copy(y), copy(receiver))) {
             return 2;
         }
