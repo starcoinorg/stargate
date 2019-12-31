@@ -1,0 +1,28 @@
+[package]
+name = "stats"
+version = "0.1.0"
+authors = ["Starcoin Core Dev <dev@starcoin.org>"]
+license = "Apache-2.0"
+publish = false
+edition = "2018"
+
+[dependencies]
+rand = "0.6.5"
+futures = { version = "0.3.0", features = ["io-compat", "compat"] }
+tokio = { version = "0.2", features = ["full"] }
+
+libra-logger = { path = "../../libra/common/logger" }
+libra-crypto = { path = "../../libra/crypto/crypto"}
+libra-types = { path = "../../libra/types" }
+libra-tools = {path ="../../libra/common/tools", package = "libra-tools"}
+
+
+sgtypes = { path = "../../sgtypes" }
+anyhow = "1.0"
+hex = { version = "0.3.2", default-features = false }
+futures-timer = "1.0.2"
+async-trait = "0.1.13"
+
+[dev-dependencies]
+libra-config = { path = "../../libra/config"}
+

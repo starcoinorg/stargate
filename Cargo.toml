@@ -21,6 +21,7 @@ members = [
     "router",
     "router/graphdb",
     "router/ant",
+    "router/stats"
 ]
 
 exclude = ["libra"]

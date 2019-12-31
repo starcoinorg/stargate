@@ -3,14 +3,14 @@ use crate::storage::{EdgeSchema, Storage, VertexSchema};
 use crate::vertex::Vertex;
 use anyhow::{bail, Result};
 use libra_logger::prelude::*;
-use petgraph::algo::astar;
+use petgraph::algo::{all_simple_paths, astar};
 use petgraph::prelude::*;
 use petgraph::stable_graph::{EdgeIndex, NodeIndex};
 use petgraph::visit::Walker;
 use petgraph::Graph;
 use schemadb::ReadOptions;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 pub struct GraphStore {
@@ -213,6 +213,62 @@ impl GraphStore {
                 bail!("no path from {:?} to {:?}", start_node, end_node);
             }
         };
+    }
+
+    pub fn find_all_path(
+        &self,
+        start_node: &Vertex,
+        end_node: &Vertex,
+        max_deep: usize,
+    ) -> Result<Option<HashSet<Vec<Vertex>>>> {
+        let start_index;
+        let end_index;
+        match self.node_index_map.borrow().get(&start_node) {
+            Some(index) => {
+                start_index = index.clone();
+            }
+            None => {
+                bail!("no such node {:?}", start_node);
+            }
+        }
+
+        match self.node_index_map.borrow().get(&end_node) {
+            Some(index) => {
+                end_index = index.clone();
+            }
+            None => {
+                bail!("no such node {:?}", end_node);
+            }
+        }
+
+        let paths: HashSet<Vec<_>> = all_simple_paths(
+            &(*self.graph.borrow()),
+            start_index.into(),
+            end_index.into(),
+            0,
+            Some(max_deep),
+        )
+        .map(|v: Vec<_>| v.into_iter().collect())
+        .collect();
+
+        if paths.len() == 0 {
+            return Ok(None);
+        }
+        let mut result = HashSet::new();
+        for node_indexes in paths {
+            let mut path_vec = Vec::new();
+            for node_index in node_indexes.iter() {
+                let node = self
+                    .index_node_map
+                    .borrow()
+                    .get(node_index)
+                    .expect(format!("should have such node with index {:?}", node_index).as_str())
+                    .clone();
+                path_vec.push(node);
+            }
+            result.insert(path_vec);
+        }
+        return Ok(Some(result));
     }
 
     pub fn print_nodes(&self, start_node: &Vertex) {
