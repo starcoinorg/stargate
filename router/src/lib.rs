@@ -512,6 +512,7 @@ fn router_test() {
         wallet1.clone(),
         rtx1,
         rrx1,
+        Arc::new(Stats::new(executor.clone())),
     );
     router1.start().unwrap();
 
@@ -524,6 +525,7 @@ fn router_test() {
         wallet2.clone(),
         rtx2,
         rrx2,
+        Arc::new(Stats::new(executor.clone())),
     );
     router2.start().unwrap();
 
@@ -536,6 +538,7 @@ fn router_test() {
         wallet3.clone(),
         rtx3,
         rrx3,
+        Arc::new(Stats::new(executor.clone())),
     );
     router3.start().unwrap();
 
@@ -548,6 +551,7 @@ fn router_test() {
         wallet4.clone(),
         rtx4,
         rrx4,
+        Arc::new(Stats::new(executor.clone())),
     );
     router4.start().unwrap();
 
@@ -560,6 +564,7 @@ fn router_test() {
         wallet5.clone(),
         rtx5,
         rrx5,
+        Arc::new(Stats::new(executor.clone())),
     );
     router5.start().unwrap();
 

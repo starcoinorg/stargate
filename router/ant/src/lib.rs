@@ -795,6 +795,7 @@ fn mix_router_test() {
         rtx1,
         rrx1,
         wallet1.clone(),
+        Arc::new(Stats::new(executor.clone())),
         5000,
     );
     router1.start().unwrap();
@@ -808,6 +809,7 @@ fn mix_router_test() {
         rtx2,
         rrx2,
         wallet2.clone(),
+        Arc::new(Stats::new(executor.clone())),
         5000,
     );
     router2.start().unwrap();
@@ -821,6 +823,7 @@ fn mix_router_test() {
         rtx3,
         rrx3,
         wallet3.clone(),
+        Arc::new(Stats::new(executor.clone())),
         5000,
     );
     router3.start().unwrap();
@@ -945,31 +948,66 @@ fn ant_router_test() {
     let (_network1, tx1, rx1, close_tx1) = build_network_service(&network_config1, keypair1);
     let _identify1 = _network1.identify();
     let (rtx1, rrx1) = _prepare_network(tx1, rx1, executor.clone());
-    let mut router1 = AntRouter::new(executor.clone(), rtx1, rrx1, wallet1.clone(), 5000);
+    let mut router1 = AntRouter::new(
+        executor.clone(),
+        rtx1,
+        rrx1,
+        wallet1.clone(),
+        5000,
+        Arc::new(Stats::new(executor.clone())),
+    );
     router1.start().unwrap();
 
     let (_network2, tx2, rx2, close_tx2) = build_network_service(&network_config2, keypair2);
     let _identify2 = _network2.identify();
     let (rtx2, rrx2) = _prepare_network(tx2, rx2, executor.clone());
-    let mut router2 = AntRouter::new(executor.clone(), rtx2, rrx2, wallet2.clone(), 5000);
+    let mut router2 = AntRouter::new(
+        executor.clone(),
+        rtx2,
+        rrx2,
+        wallet2.clone(),
+        5000,
+        Arc::new(Stats::new(executor.clone())),
+    );
     router2.start().unwrap();
 
     let (_network3, tx3, rx3, close_tx3) = build_network_service(&network_config3, keypair3);
     let _identify3 = _network3.identify();
     let (rtx3, rrx3) = _prepare_network(tx3, rx3, executor.clone());
-    let mut router3 = AntRouter::new(executor.clone(), rtx3, rrx3, wallet3.clone(), 5000);
+    let mut router3 = AntRouter::new(
+        executor.clone(),
+        rtx3,
+        rrx3,
+        wallet3.clone(),
+        5000,
+        Arc::new(Stats::new(executor.clone())),
+    );
     router3.start().unwrap();
 
     let (_network4, tx4, rx4, close_tx4) = build_network_service(&network_config4, keypair4);
     let _identify4 = _network4.identify();
     let (rtx4, rrx4) = _prepare_network(tx4, rx4, executor.clone());
-    let mut router4 = AntRouter::new(executor.clone(), rtx4, rrx4, wallet4.clone(), 5000);
+    let mut router4 = AntRouter::new(
+        executor.clone(),
+        rtx4,
+        rrx4,
+        wallet4.clone(),
+        5000,
+        Arc::new(Stats::new(executor.clone())),
+    );
     router4.start().unwrap();
 
     let (_network5, tx5, rx5, close_tx5) = build_network_service(&network_config5, keypair5);
     let _identify5 = _network5.identify();
     let (rtx5, rrx5) = _prepare_network(tx5, rx5, executor.clone());
-    let mut router5 = AntRouter::new(executor.clone(), rtx5, rrx5, wallet5.clone(), 5000);
+    let mut router5 = AntRouter::new(
+        executor.clone(),
+        rtx5,
+        rrx5,
+        wallet5.clone(),
+        5000,
+        Arc::new(Stats::new(executor.clone())),
+    );
     router5.start().unwrap();
 
     let router1 = Arc::new(router1);
