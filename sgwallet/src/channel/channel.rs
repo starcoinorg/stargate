@@ -1,7 +1,6 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 use crate::{
-    chain_watcher::TransactionWithInfo,
     channel::{
         access_local, channel_event_stream::ChannelEventStream, AccessingResource,
         ApplyCoSignedTxn, ApplyPendingTxn, ApplySoloTxn, CancelPendingTxn, Channel, ChannelEvent,
@@ -35,12 +34,13 @@ use libra_types::{
     access_path::{AccessPath, DataPath},
     account_address::AccountAddress,
     channel::{
-        make_resource, ChannelChallengeBy, ChannelLockedBy, ChannelMirrorResource,
-        ChannelParticipantAccountResource, ChannelResource, LibraResource, Witness, WitnessData,
+        ChannelChallengeBy, ChannelLockedBy, ChannelMirrorResource,
+        ChannelParticipantAccountResource, ChannelResource, Witness, WitnessData,
     },
     contract_event::{ContractEvent, EventWithProof},
     identifier::Identifier,
     language_storage::ModuleId,
+    libra_resource::{make_resource, LibraResource},
     transaction::{
         ChannelTransactionPayload, ChannelTransactionPayloadBody, RawTransaction, ScriptAction,
         SignedTransaction, Transaction, TransactionArgument, TransactionInfo,
@@ -453,14 +453,11 @@ impl Handler<ApplyCoSignedTxn> for Channel {
         ctx: &mut ActorHandlerContext,
     ) -> <ApplyCoSignedTxn as Message>::Result {
         let ApplyCoSignedTxn {
-            channel_txn:
-                TransactionWithInfo {
-                    txn,
-                    txn_info,
-                    version,
-                    events,
-                    ..
-                },
+            txn,
+            txn_info,
+            version,
+            events,
+            ..
         } = message;
         let signed_txn = match txn {
             Transaction::UserTransaction(s) => s,
@@ -574,14 +571,11 @@ impl Handler<ApplySoloTxn> for Channel {
         ctx: &mut ActorHandlerContext,
     ) -> <ApplySoloTxn as Message>::Result {
         let ApplySoloTxn {
-            channel_txn:
-                TransactionWithInfo {
-                    txn,
-                    txn_info,
-                    version,
-                    events,
-                    ..
-                },
+            txn,
+            txn_info,
+            version,
+            events,
+            ..
         } = message;
         let signed_txn = match txn {
             Transaction::UserTransaction(s) => s,
@@ -660,25 +654,22 @@ impl Handler<ApplySoloTxn> for Channel {
             .ok_or(format_err!("channel resource should exists in local"))?;
         if channel_resource.locked() {
             debug!(
-                "{}/{} - applied a action which lock channel, txn: {:#?}",
-                self.account_address,
-                self.channel_address,
-                signed_txn.payload()
+                "{}/{} - applied a action which lock channel",
+                self.account_address, self.channel_address,
             );
             if self.account_address == txn_sender {
                 // I lock the channel, wait sender to resolve
                 // TODO: move the timeout check into a timer
+                let time_lock = self.channel_lock_by_resource().unwrap().time_lock;
                 debug!(
-                    "{}/{} - the solo txn I submitted applied locally, wait receiver timeout",
-                    self.account_address, self.channel_address
+                    "{}/{} - the solo txn I submitted applied locally, wait receiver timeout, time_lock: {}",
+                    self.account_address, self.channel_address, time_lock
                 );
                 self.watch_channel_lock_timeout(ctx).await?;
             } else {
                 debug!(
-                    "{}/{} - receiver a txn which lock channel, going to resolve it, txn: {:#?}",
-                    self.account_address,
-                    self.channel_address,
-                    signed_txn.payload()
+                    "{}/{} - receiver a txn which lock channel, going to resolve it",
+                    self.account_address, self.channel_address,
                 );
 
                 // drop the receiver, as I don't need wait the result
@@ -705,7 +696,10 @@ impl Handler<ApplySoloTxn> for Channel {
     }
 }
 
-struct ChannelLockTimeout;
+struct ChannelLockTimeout {
+    pub block_height: u64,
+    pub time_lock: u64,
+}
 impl Message for ChannelLockTimeout {
     type Result = Result<()>;
 }
@@ -713,10 +707,27 @@ impl Message for ChannelLockTimeout {
 impl Handler<ChannelLockTimeout> for Channel {
     async fn handle(
         &mut self,
-        _message: ChannelLockTimeout,
+        message: ChannelLockTimeout,
         _ctx: &mut ActorHandlerContext,
     ) -> <ChannelLockTimeout as Message>::Result {
-        let _ = self.solo_txn(close_channel_action(), None).await?;
+        let ChannelLockTimeout {
+            block_height,
+            time_lock,
+        } = message;
+        debug!(
+            "{}/{} - channel lock timeout-ed, block_height: {}, time_lock: {}, close channel now!",
+            self.account_address, self.channel_address, block_height, time_lock
+        );
+
+        let ps = {
+            let mut ps = self.participant_addresses.clone();
+            ps.remove(&self.account_address);
+            ps.into_iter()
+                .next()
+                .expect("should contain at least 1 participants")
+        };
+
+        let _ = self.solo_txn(close_channel_action(ps), None).await?;
         Ok(())
     }
 }
@@ -821,18 +832,30 @@ impl Handler<ChannelStageChange> for Channel {
 
         if let TransactionPayload::Channel(cp) = raw_txn.payload() {
             let is_authorized = cp.is_authorized();
-            let channel_txn = TransactionWithInfo {
-                txn,
-                txn_info,
-                events,
-                version,
-                block_id: 0,
-            };
-
             if is_authorized {
-                let _ = self.handle(ApplyCoSignedTxn { channel_txn }, _ctx).await?;
+                let _ = self
+                    .handle(
+                        ApplyCoSignedTxn {
+                            txn,
+                            txn_info,
+                            version,
+                            events,
+                        },
+                        _ctx,
+                    )
+                    .await?;
             } else {
-                let _ = self.handle(ApplySoloTxn { channel_txn }, _ctx).await?;
+                let _ = self
+                    .handle(
+                        ApplySoloTxn {
+                            txn,
+                            txn_info,
+                            version,
+                            events,
+                        },
+                        _ctx,
+                    )
+                    .await?;
             }
         }
 
@@ -1450,13 +1473,19 @@ impl Channel {
 
         let mut timeout_receiver = self
             .chain_txn_watcher
-            .add_interest(watch_tag, Box::new(move |txn| txn.block_id > time_lock))
+            .add_interest(watch_tag, Box::new(move |txn| txn.block_height > time_lock))
             .await?;
         let mut self_ref = self.actor_ref(ctx).await;
 
         tokio::task::spawn(async move {
-            while let Some(_) = timeout_receiver.next().await {
-                match self_ref.send(ChannelLockTimeout).await {
+            while let Some(txn_info) = timeout_receiver.next().await {
+                match self_ref
+                    .send(ChannelLockTimeout {
+                        block_height: txn_info.block_height,
+                        time_lock,
+                    })
+                    .await
+                {
                     Err(_) => break,
                     Ok(Ok(_)) => break,
                     Ok(Err(e)) => {

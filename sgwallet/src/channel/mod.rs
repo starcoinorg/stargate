@@ -1,11 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{
-    chain_watcher::{ChainWatcherHandle, TransactionWithInfo},
-    scripts::PackageRegistry,
-    tx_applier::TxApplier,
-};
+use crate::{chain_watcher::ChainWatcherHandle, scripts::PackageRegistry, tx_applier::TxApplier};
 use anyhow::{bail, Result};
 use coerce_rt::actor::{context::ActorContext, message::Message};
 use futures::channel::mpsc;
@@ -34,6 +30,10 @@ mod channel;
 mod channel_event_stream;
 mod channel_handle;
 pub use channel_handle::ChannelHandle;
+use libra_types::{
+    contract_event::ContractEvent,
+    transaction::{Transaction, TransactionInfo},
+};
 
 pub struct Channel {
     channel_address: AccountAddress,
@@ -144,7 +144,10 @@ impl Message for ApplyPendingTxn {
 }
 
 pub(crate) struct ApplySoloTxn {
-    pub channel_txn: TransactionWithInfo,
+    pub txn: Transaction,
+    pub txn_info: TransactionInfo,
+    pub version: u64,
+    pub events: Vec<ContractEvent>,
 }
 
 impl Message for ApplySoloTxn {
@@ -152,7 +155,10 @@ impl Message for ApplySoloTxn {
 }
 
 pub(crate) struct ApplyCoSignedTxn {
-    pub channel_txn: TransactionWithInfo,
+    pub txn: Transaction,
+    pub txn_info: TransactionInfo,
+    pub version: u64,
+    pub events: Vec<ContractEvent>,
 }
 impl Message for ApplyCoSignedTxn {
     type Result = Result<u64>;

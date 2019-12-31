@@ -1,12 +1,14 @@
 use anyhow::{bail, Result};
 use lazy_static::lazy_static;
 use libra_types::{
+    account_address::AccountAddress,
     account_config::{account_module_name, core_code_address},
-    channel::{make_resource, ChannelEvent, LibraResource},
+    channel::ChannelEvent,
     contract_event::ContractEvent,
     identifier::{IdentStr, Identifier},
     language_storage::{ModuleId, TypeTag},
-    transaction::ScriptAction,
+    libra_resource::{make_resource, LibraResource},
+    transaction::{ScriptAction, TransactionArgument},
 };
 
 lazy_static! {
@@ -40,11 +42,11 @@ pub fn challenge_channel_action() -> ScriptAction {
     )
 }
 
-pub fn close_channel_action() -> ScriptAction {
+pub fn close_channel_action(violator: AccountAddress) -> ScriptAction {
     ScriptAction::new_call(
         ModuleId::new(core_code_address(), account_module_name().into()),
         channel_close_name().into(),
-        vec![],
+        vec![TransactionArgument::Address(violator)],
     )
 }
 

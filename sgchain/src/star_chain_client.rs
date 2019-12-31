@@ -10,7 +10,6 @@ use anyhow::{bail, Result};
 use async_trait::async_trait;
 use core::borrow::Borrow;
 use futures::channel::oneshot::Sender;
-use futures::compat::Future01CompatExt;
 use futures_timer::Delay;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use libra_config::config::{ConsensusType, NodeConfig};
@@ -360,10 +359,8 @@ impl ChainClient for StarChainClient {
         &self,
         req: &UpdateToLatestLedgerRequest,
     ) -> ::grpcio::Result<UpdateToLatestLedgerResponse> {
-        self.ac_client
-            .update_to_latest_ledger_async(req)?
-            .compat()
-            .await
+        // FIXME: use async-call of grpc
+        tokio::task::block_in_place(|| self.ac_client.update_to_latest_ledger(req))
     }
 }
 

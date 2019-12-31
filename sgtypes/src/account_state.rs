@@ -4,6 +4,7 @@
 use crate::account_resource_ext;
 use anyhow::Result;
 
+use libra_types::libra_resource::{make_resource, LibraResource};
 use libra_types::{
     access_path::DataPath,
     account_config::{account_resource_path, AccountResource},
@@ -11,6 +12,7 @@ use libra_types::{
     proof::SparseMerkleProof,
     transaction::Version,
 };
+use serde::Deserialize;
 use std::ops::{Deref, DerefMut};
 use std::{collections::BTreeMap, convert::TryFrom};
 
@@ -62,6 +64,16 @@ impl AccountState {
 
     pub fn get_state(&self, data_path: &DataPath) -> Option<Vec<u8>> {
         self.get(&data_path.to_vec())
+    }
+
+    pub fn get_resource<'s, R: LibraResource + Deserialize<'s>>(
+        &'s self,
+        data_path: &DataPath,
+    ) -> Result<Option<R>> {
+        self.state
+            .get(&data_path.to_vec())
+            .map(|b| make_resource::<R>(b))
+            .transpose()
     }
 
     pub fn get_account_resource(&self) -> Option<AccountResource> {

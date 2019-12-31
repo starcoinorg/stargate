@@ -11,24 +11,45 @@ use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_types::{
     access_path::DataPath,
-    channel::{make_resource, ChannelResource, LibraResource},
-    transaction::TransactionPayload,
+    account_address::AccountAddress,
+    channel::ChannelResource,
+    libra_resource::{make_resource, LibraResource},
+    transaction::{Transaction, TransactionPayload},
 };
-use mock_chain_test_helper::run_with_mock_client;
+use rpc_chain_test_helper::run_with_rpc_client;
 use sgwallet::{
-    chain_watcher::{ChainWatcher, TransactionWithInfo},
+    chain_watcher::{ChainWatcher, Interest, TransactionWithInfo},
     wallet::Wallet,
 };
 use std::{sync::Arc, time::Duration};
 
 #[test]
 fn run_test_channel_lock_and_then_resolve() {
-    if let Err(e) = run_with_mock_client(|chain_client| {
+    if let Err(e) = run_with_rpc_client(|chain_client| {
         common::with_wallet(chain_client.clone(), |rt, sender, receiver| {
             rt.block_on(test_channel_lock_and_resolve(sender, receiver))
-        })?;
+        })
+    }) {
+        panic!("error, {}", e);
+    }
+}
+
+#[test]
+fn run_test_channel_lock_and_then_chanllenge() {
+    if let Err(e) = run_with_rpc_client(|chain_client| {
         common::with_wallet(chain_client, |rt, sender, receiver| {
             rt.block_on(test_channel_lock_and_challenge(sender, receiver))
+        })
+    }) {
+        panic!("error, {}", e);
+    }
+}
+
+#[test]
+fn run_test_channel_lock_and_then_timeout() {
+    if let Err(e) = run_with_rpc_client(|chain_client| {
+        common::with_wallet(chain_client, |rt, sender, receiver| {
+            rt.block_on(test_channel_lock_and_timeout(sender, receiver))
         })
     }) {
         panic!("error, {}", e);
@@ -89,15 +110,7 @@ async fn test_channel_lock_and_resolve(sender: Arc<Wallet>, receiver: Arc<Wallet
     let channel_txn_receiver = chain_watcher_handle
         .add_interest_oneshot(
             sender.account().to_vec(),
-            Box::new(move |txn| {
-                if let TransactionPayload::Channel(cp) =
-                    txn.txn.as_signed_user_txn().unwrap().payload()
-                {
-                    cp.channel_address() == channel_address && cp.channel_sequence_number() == 3
-                } else {
-                    false
-                }
-            }),
+            channel_txn_interest_oneshot(channel_address, 3),
         )
         .await?;
     let txn_with_info: TransactionWithInfo = channel_txn_receiver.await?;
@@ -162,15 +175,7 @@ async fn test_channel_lock_and_challenge(sender: Arc<Wallet>, receiver: Arc<Wall
     let channel_txn_receiver = chain_watcher_handle
         .add_interest_oneshot(
             sender.account().to_vec(),
-            Box::new(move |txn| {
-                if let TransactionPayload::Channel(cp) =
-                    txn.txn.as_signed_user_txn().unwrap().payload()
-                {
-                    cp.channel_address() == channel_address && cp.channel_sequence_number() == 3
-                } else {
-                    false
-                }
-            }),
+            channel_txn_interest_oneshot(channel_address, 3),
         )
         .await?;
     let txn_with_info: TransactionWithInfo = channel_txn_receiver.await?;
@@ -189,14 +194,88 @@ async fn test_channel_lock_and_challenge(sender: Arc<Wallet>, receiver: Arc<Wall
     );
     // delay 1s to let channel handle events
     tokio::time::delay_for(Duration::from_secs(1)).await;
-    debug!("here1");
     if let Ok(s) = sender_channel_handle.channel_ref().status().await {
         assert!(s == ActorStatus::Stopping || s == ActorStatus::Stopped)
     }
-    debug!("here2");
     if let Ok(s) = receiver_channel_handle.channel_ref().status().await {
         assert!(s == ActorStatus::Stopping || s == ActorStatus::Stopped)
     }
-    debug!("here3");
     Ok(())
+}
+
+async fn test_channel_lock_and_timeout(sender: Arc<Wallet>, receiver: Arc<Wallet>) -> Result<()> {
+    let _sender_init_balance = sender.balance()?;
+    let _receiver_init_balance = receiver.balance()?;
+    let _gas = common::open_channel(sender.clone(), receiver.clone(), 10000, 10000).await?;
+    assert_eq!(1, sender.channel_sequence_number(receiver.account()).await?);
+    assert_eq!(1, receiver.channel_sequence_number(sender.account()).await?);
+
+    let _ = common::transfer(sender.clone(), receiver.clone(), 300).await?;
+    assert_eq!(2, sender.channel_sequence_number(receiver.account()).await?);
+    assert_eq!(2, receiver.channel_sequence_number(sender.account()).await?);
+
+    let preimage = HashValue::random();
+    let lock = preimage.to_vec();
+    let _request = sender
+        .send_payment(receiver.account(), 500, lock, 10)
+        .await?;
+
+    receiver.stop().await?;
+
+    // but sender didn't receive the signature, so he solo
+    sender.force_travel_txn(receiver.account()).await?;
+    assert_eq!(3, sender.channel_sequence_number(receiver.account()).await?);
+
+    let sender_channel_handle = sender.channel_handle(receiver.account()).await?;
+    let chain_watcher = ChainWatcher::new(sender.get_chain_client(), 0, 10);
+    let actor_context = ActorContext::new();
+    let chain_watcher_handle = chain_watcher.start(actor_context.clone()).await?;
+    // wait timeout and close channel
+    let channel_address = sender_channel_handle.channel_address().clone();
+    let channel_txn_receiver = chain_watcher_handle
+        .add_interest_oneshot(
+            sender.account().to_vec(),
+            channel_txn_interest_oneshot(channel_address, 3),
+        )
+        .await?;
+    let txn_with_info: TransactionWithInfo = channel_txn_receiver.await?;
+    let channel_state = sender
+        .get_chain_client()
+        .get_account_state(channel_address, Some(txn_with_info.version))?;
+    let channel_resource = channel_state
+        .get(&DataPath::onchain_resource_path(ChannelResource::struct_tag()).to_vec())
+        .map(|b| make_resource::<ChannelResource>(&b))
+        .transpose()?
+        .expect("channel resource should exists");
+    assert!(
+        channel_resource.closed(),
+        "channel should be closed, locked: {}",
+        channel_resource.locked()
+    );
+
+    // delay 1s to let channel handle events
+    tokio::time::delay_for(Duration::from_secs(1)).await;
+    if let Ok(s) = sender_channel_handle.channel_ref().status().await {
+        assert!(s == ActorStatus::Stopping || s == ActorStatus::Stopped)
+    }
+
+    // FIXME: check receiver restart ok
+    Ok(())
+}
+
+fn channel_txn_interest_oneshot(
+    channel_address: AccountAddress,
+    channel_sequence_number: u64,
+) -> Interest {
+    Box::new(move |txn| match &txn.txn {
+        Transaction::UserTransaction(s) => {
+            if let TransactionPayload::Channel(cp) = s.payload() {
+                cp.channel_address() == channel_address
+                    && cp.channel_sequence_number() == channel_sequence_number
+            } else {
+                false
+            }
+        }
+        _ => false,
+    })
 }

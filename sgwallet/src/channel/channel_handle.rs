@@ -7,7 +7,7 @@ use coerce_rt::actor::ActorRef;
 use libra_types::{
     access_path::{AccessPath, DataPath},
     account_address::AccountAddress,
-    channel::{make_resource, LibraResource},
+    libra_resource::{make_resource, LibraResource},
 };
 use serde::de::DeserializeOwned;
 use sgtypes::pending_txn::PendingTransaction;

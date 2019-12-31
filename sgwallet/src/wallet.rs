@@ -1,7 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 use crate::{
-    chain_watcher::{ChainWatcher, ChainWatcherHandle, TransactionWithInfo},
+    chain_watcher::{ChainWatcher, ChainWatcherHandle},
     channel::{
         ApplyCoSignedTxn, ApplyPendingTxn, ApplySoloTxn, CancelPendingTxn, Channel, ChannelEvent,
         ChannelHandle, CollectProposalWithSigs, Execute, ForceTravel, GrantProposal,
@@ -31,11 +31,12 @@ use libra_types::{
     account_config::{coin_struct_tag, AccountResource},
     byte_array::ByteArray,
     channel::{
-        channel_mirror_struct_tag, channel_struct_tag, make_resource, user_channels_struct_tag,
-        ChannelMirrorResource, ChannelParticipantAccountResource, ChannelResource, LibraResource,
+        channel_mirror_struct_tag, channel_struct_tag, user_channels_struct_tag,
+        ChannelMirrorResource, ChannelParticipantAccountResource, ChannelResource,
         UserChannelsResource,
     },
     language_storage::StructTag,
+    libra_resource::{make_resource, LibraResource},
     transaction::{
         helpers::{create_signed_payload_txn, TransactionSigner},
         Module, RawTransaction, SignedTransaction, Transaction, TransactionArgument,
@@ -616,17 +617,13 @@ impl Wallet {
             events,
             proof,
         } = watch_transaction(self.shared.client.clone(), txn_sender, seq_number).await?;
-
         let gas = channel
             .channel_ref()
             .send(ApplySoloTxn {
-                channel_txn: TransactionWithInfo {
-                    version,
-                    txn: transaction,
-                    txn_info: proof.transaction_info().clone(),
-                    events: events.unwrap_or_default(),
-                    block_id: 0, // FIXME
-                },
+                version,
+                txn: transaction,
+                txn_info: proof.transaction_info().clone(),
+                events: events.unwrap_or_default(),
             })
             .await
             .map_err(|_| format_err!("channel actor gone"))
@@ -665,13 +662,10 @@ impl Wallet {
         let gas = channel
             .channel_ref()
             .send(ApplyCoSignedTxn {
-                channel_txn: TransactionWithInfo {
-                    version,
-                    txn: transaction,
-                    txn_info: proof.transaction_info().clone(),
-                    events: events.unwrap_or_default(),
-                    block_id: 0, // FIXME
-                },
+                version,
+                txn: transaction,
+                txn_info: proof.transaction_info().clone(),
+                events: events.unwrap_or_default(),
             })
             .await
             .map_err(|_| format_err!("channel actor gone"))
@@ -1233,11 +1227,6 @@ pub(crate) fn execute_transaction(
     transaction: SignedTransaction,
 ) -> Result<TransactionOutput> {
     let tx_hash = transaction.raw_txn().hash();
-    debug!(
-        "execute offchain txn {}: {:?}",
-        &tx_hash,
-        transaction.raw_txn().payload()
-    );
     let output = MoveVM::execute_block(
         vec![Transaction::UserTransaction(transaction)],
         &VM_CONFIG,
@@ -1245,7 +1234,7 @@ pub(crate) fn execute_transaction(
     )?
     .pop()
     .expect("at least return 1 output.");
-    debug!("txn:{} output: {}", tx_hash, output);
+    debug!("offchain execute txn:{} output: {}", tx_hash, output);
     match output.status() {
         TransactionStatus::Discard(vm_status) => {
             bail!("transaction execute fail for: {:#?}", vm_status)
