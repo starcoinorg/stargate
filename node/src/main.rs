@@ -5,6 +5,7 @@ mod wallet_utils;
 use std::sync::Arc;
 
 use crate::wallet_utils::WalletLibrary;
+use ant::{AntRouter, MixRouter};
 use anyhow::{Error, Result};
 use futures_01::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use libra_crypto::{
@@ -17,10 +18,11 @@ use network::{build_network_service, NetworkMessage, NetworkService};
 use node::client;
 use node_internal::node::Node;
 use node_service::setup_node_service;
-use router::TableRouter;
+use router::{Router, TableRouter};
 use sg_config::config::{load_from, NodeConfig, WalletConfig};
 use sgchain::star_chain_client::StarChainClient;
 use sgwallet::wallet::*;
+use stats::Stats;
 use structopt::StructOpt;
 use tokio::runtime::{Handle, Runtime};
 
@@ -75,6 +77,7 @@ fn gen_node(
     close_tx: futures_01::sync::oneshot::Sender<()>,
     timeout: u64,
     auto_approve: bool,
+    router_type: &String,
 ) -> Result<Node> {
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     let client = StarChainClient::new(
@@ -110,14 +113,44 @@ fn gen_node(
     let (tx_node, rx_router) = futures::channel::mpsc::unbounded();
     let (tx_router, rx_node) = futures::channel::mpsc::unbounded();
 
-    let mut router = TableRouter::new(
-        client,
-        executor.clone(),
-        wallet.clone(),
-        tx_router,
-        rx_router,
-    );
-    router.start().unwrap();
+    let router_type = router_type.to_uppercase();
+    let boxed_router: Box<dyn Router>;
+    let stats = Arc::new(Stats::new(executor.clone()));
+    if router_type == "TABLE" {
+        let mut router = TableRouter::new(
+            client,
+            executor.clone(),
+            wallet.clone(),
+            tx_router,
+            rx_router,
+            stats,
+        );
+        router.start().unwrap();
+        boxed_router = Box::new(router);
+    } else if router_type == "ANT" {
+        let mut router = AntRouter::new(
+            executor.clone(),
+            tx_router,
+            rx_router,
+            wallet.clone(),
+            timeout,
+            stats,
+        );
+        router.start().unwrap();
+        boxed_router = Box::new(router);
+    } else {
+        let mut router = MixRouter::new(
+            client,
+            executor.clone(),
+            tx_router,
+            rx_router,
+            wallet.clone(),
+            stats,
+            timeout,
+        );
+        router.start().unwrap();
+        boxed_router = Box::new(router);
+    }
 
     Ok(Node::new(
         executor.clone(),
@@ -130,7 +163,7 @@ fn gen_node(
         close_tx,
         auto_approve,
         timeout,
-        Box::new(router),
+        boxed_router,
     ))
 }
 
@@ -160,6 +193,7 @@ fn main() {
         close_tx,
         swarm.config.rpc_config.timeout,
         swarm.config.rpc_config.auto_approve,
+        &swarm.config.rpc_config.router_type,
     )
     .unwrap();
 

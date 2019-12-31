@@ -31,6 +31,8 @@ sgchain = { path = "../sgchain"}
 libra-crypto = { path = "../libra/crypto/crypto"}
 libra-wallet = { path = "../libra/client/libra_wallet"}
 router = { path = "../router" }
+ant = { path = "../router/ant" }
+stats = { path = "../router/stats" }
 
 prost = "0.5.0"
 anyhow = "1.0"

@@ -1,10 +1,11 @@
-FROM circleci/rust:stretch
+FROM rust:latest
 
-RUN rustup toolchain add beta nightly
-RUN rustup component add clippy rustfmt
-
-RUN sudo sh -c 'echo "deb http://deb.debian.org/debian stretch-backports main" > /etc/apt/sources.list.d/backports.list'
 RUN sudo apt-get update && \
- sudo apt-get install -y protobuf-compiler/stretch-backports cmake curl && \
+ sudo apt-get install -y protobuf-compiler cmake && \
+ sudo apt-get install --no-install-recommends -y nano net-tools tcpdump iproute2 netcat ngrep atop gdb strace && \
  sudo apt-get clean && \
  sudo rm -r /var/lib/apt/lists/*
+
+WORKDIR /starcoin
+COPY rust-toolchain /starcoin/rust-toolchain
+RUN rustup install $(cat rust-toolchain)

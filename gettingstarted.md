@@ -25,6 +25,11 @@ Then transfer some testing coin from coinbase to these new accounts
 ```
 ./target/debug/cli --chain_host localhost --chain_port 8000 --host localhost --port 9000 -m alice/key
 ```
+connect to starcoin test-net
+```
+./target/debug/cli --chain_host 39.98.196.244 --chain_port 8001 --host starcoin.io
+```
+
 Then the mint coin for alice.
 ```
 a m 10000000
@@ -53,8 +58,8 @@ account state
     
 2. Start node service
     ```
-    ./target/debug/node -c alice -f alice/key
-    ./target/debug/node -c bob -f bob/key
+    ./target/debug/node -c alice -f alice/key -n 0
+    ./target/debug/node -c bob -f bob/key -n 0
     ```
 
 ## Channel Operation

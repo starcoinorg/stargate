@@ -37,6 +37,7 @@ use futures_01::sync::{
 use router::Router;
 use sgtypes::sg_error::{SgError, SgErrorCode};
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
+use stats::PayEnum;
 use std::convert::TryInto;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -416,6 +417,7 @@ impl Node {
 
         let node_inner = Arc::new(node_inner);
         self.executor.spawn(Self::start_network(
+            self.executor.clone(),
             node_inner.clone(),
             network_event_receiver,
             receiver,
@@ -423,6 +425,7 @@ impl Node {
         ));
 
         self.executor.spawn(Self::start_command(
+            self.executor.clone(),
             node_inner,
             event_receiver,
             command_receiver,
@@ -625,6 +628,7 @@ impl Node {
     }
 
     async fn start_network(
+        executor: Handle,
         node_inner: Arc<NodeInner>,
         event_receiver: UnboundedReceiver<Event>,
         receiver: UnboundedReceiver<NetworkMessage>,
@@ -642,7 +646,10 @@ impl Node {
             futures::select! {
                 message = receiver.select_next_some() => {
                     match message {
-                        Ok(msg) => node_inner.handle_network_msg(msg).await,
+                        Ok(msg) => {
+                            let node_inner = node_inner.clone();
+                            executor.spawn(NodeInner::handle_network_msg(node_inner,msg));
+                        },
                         Err(_) => {
                         }
                     }
@@ -660,6 +667,7 @@ impl Node {
     }
 
     async fn start_command(
+        executor: Handle,
         node_inner: Arc<NodeInner>,
         event_receiver: UnboundedReceiver<Event>,
         command_receiver: UnboundedReceiver<NodeMessage>,
@@ -673,7 +681,10 @@ impl Node {
             futures::select! {
                 node_message = command_receiver.select_next_some()=>{
                     match node_message {
-                        Ok(msg) => node_inner.handle_node_msg(msg).await,
+                        Ok(msg) => {
+                            let node_inner = node_inner.clone();
+                            executor.spawn(NodeInner::handle_node_msg(node_inner,msg));
+                        },
                         Err(_) => {}
                     }
                 },
@@ -724,7 +735,7 @@ impl NodeInner {
         Ok(())
     }
 
-    async fn handle_network_msg(&self, msg: NetworkMessage) {
+    async fn handle_network_msg(node_inner: Arc<NodeInner>, msg: NetworkMessage) {
         let peer_id = msg.peer_id;
         info!("receive message from {}", peer_id);
         let data = bytes::Bytes::from(msg.data);
@@ -732,20 +743,20 @@ impl NodeInner {
         info!("message type is {:?}", msg_type);
         match msg_type {
             MessageType::OpenChannelNodeNegotiateMessage => {}
-            MessageType::ChannelTransactionRequest => self
+            MessageType::ChannelTransactionRequest => node_inner
                 .handle_receiver_channel(data[2..].to_vec(), peer_id)
                 .await
                 .unwrap(),
-            MessageType::ChannelTransactionResponse => self
+            MessageType::ChannelTransactionResponse => node_inner
                 .handle_sender_channel(data[2..].to_vec(), peer_id)
                 .await
                 .unwrap(),
-            MessageType::ErrorMessage => self.handle_error_message(data[2..].to_vec()),
-            MessageType::MultiHopChannelTransactionRequest => self
+            MessageType::ErrorMessage => node_inner.handle_error_message(data[2..].to_vec()),
+            MessageType::MultiHopChannelTransactionRequest => node_inner
                 .handle_multi_hop_receiver_channel(data[2..].to_vec(), peer_id)
                 .await
                 .unwrap(),
-            MessageType::RouterMessage => self
+            MessageType::RouterMessage => node_inner
                 .handle_router_msg(peer_id, data[2..].to_vec())
                 .await
                 .unwrap(),
@@ -758,13 +769,14 @@ impl NodeInner {
         Ok(())
     }
 
-    async fn handle_node_msg(&self, msg: NodeMessage) {
+    async fn handle_node_msg(node_inner: Arc<NodeInner>, msg: NodeMessage) {
         match msg {
             NodeMessage::Install {
                 channel_script_package,
                 responder,
             } => {
-                self.install_package(channel_script_package, responder)
+                node_inner
+                    .install_package(channel_script_package, responder)
                     .await;
             }
             NodeMessage::Execute {
@@ -774,21 +786,22 @@ impl NodeInner {
                 transaction_args,
                 responder,
             } => {
-                self.execute_script(
-                    receiver_address,
-                    package_name,
-                    script_name,
-                    transaction_args,
-                    responder,
-                )
-                .await;
+                node_inner
+                    .execute_script(
+                        receiver_address,
+                        package_name,
+                        script_name,
+                        transaction_args,
+                        responder,
+                    )
+                    .await;
             }
             NodeMessage::Deposit {
                 receiver,
                 sender_amount,
                 responder,
             } => {
-                self.deposit(receiver, sender_amount, responder).await;
+                node_inner.deposit(receiver, sender_amount, responder).await;
             }
             NodeMessage::OpenChannel {
                 receiver,
@@ -797,7 +810,8 @@ impl NodeInner {
                 responder,
             } => {
                 info!("get open channel message");
-                self.open_channel(receiver, sender_amount, receiver_amount, responder)
+                node_inner
+                    .open_channel(receiver, sender_amount, receiver_amount, responder)
                     .await;
             }
             NodeMessage::Withdraw {
@@ -805,15 +819,19 @@ impl NodeInner {
                 sender_amount,
                 responder,
             } => {
-                self.withdraw(receiver, sender_amount, responder).await;
+                node_inner
+                    .withdraw(receiver, sender_amount, responder)
+                    .await;
             }
             NodeMessage::ChannelPay {
                 receiver_address,
                 amount,
                 responder,
             } => {
-                self.off_chain_pay(receiver_address, amount, responder)
-                    .await;
+                node_inner
+                    .off_chain_pay(receiver_address, amount, responder)
+                    .await
+                    .unwrap();
             }
             NodeMessage::ChannelPayHTLC {
                 receiver_address,
@@ -822,7 +840,8 @@ impl NodeInner {
                 timeout,
                 responder,
             } => {
-                self.off_chain_pay_htlc(receiver_address, amount, hash_lock, timeout, responder)
+                node_inner
+                    .off_chain_pay_htlc(receiver_address, amount, hash_lock, timeout, responder)
                     .await
                     .unwrap();
             }
@@ -830,29 +849,30 @@ impl NodeInner {
                 participant,
                 responder,
             } => {
-                self.channel_balance(participant, responder).await;
+                node_inner.channel_balance(participant, responder).await;
             }
             NodeMessage::DeployModule {
                 module_code,
                 responder,
             } => {
-                self.deploy_module(module_code, responder).await;
+                node_inner.deploy_module(module_code, responder).await;
             }
             NodeMessage::ChainBalance { responder } => {
-                self.chain_balance(responder).await;
+                node_inner.chain_balance(responder).await;
             }
             NodeMessage::TxnBySn {
                 participant_address,
                 channel_seq_number,
                 responder,
             } => {
-                self.tnx_by_sn(participant_address, channel_seq_number, responder)
+                node_inner
+                    .tnx_by_sn(participant_address, channel_seq_number, responder)
                     .await;
             }
             NodeMessage::SetTimeout {
                 default_future_timeout,
             } => {
-                self.set_timeout(default_future_timeout);
+                node_inner.set_timeout(default_future_timeout);
             }
             NodeMessage::ChannelTransactionProposal {
                 participant_address,
@@ -860,13 +880,14 @@ impl NodeInner {
                 approve,
                 responder,
             } => {
-                self.channel_transaction_proposal(
-                    participant_address,
-                    transaction_hash,
-                    approve,
-                    responder,
-                )
-                .await;
+                node_inner
+                    .channel_transaction_proposal(
+                        participant_address,
+                        transaction_hash,
+                        approve,
+                        responder,
+                    )
+                    .await;
             }
         }
     }
@@ -1060,7 +1081,12 @@ impl NodeInner {
         let channel_seq_number = self.wallet.channel_sequence_number(peer_id).await?;
 
         self.message_processor
-            .send_response(open_channel_message.request_id(), channel_seq_number)
+            .send_response(open_channel_message.request_id(), channel_seq_number)?;
+
+        self.router.stats(
+            (self.wallet.account(), peer_id),
+            (open_channel_message.request_id(), 0, PayEnum::Payed),
+        )
     }
 
     fn handle_error_message(&self, data: Vec<u8>) {
@@ -1127,18 +1153,25 @@ impl NodeInner {
         receiver_address: AccountAddress,
         amount: u64,
         responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
-    ) {
+    ) -> Result<()> {
         match self.wallet.transfer(receiver_address, amount).await {
-            Ok(off_chain_pay_tx) => respond_with(
-                responder,
-                self.send_channel_request(
-                    receiver_address,
-                    off_chain_pay_tx,
-                    MessageType::ChannelTransactionRequest,
-                ),
-            ),
+            Ok(off_chain_pay_tx) => {
+                self.router.stats(
+                    (self.wallet.account(), receiver_address),
+                    (off_chain_pay_tx.request_id(), amount, PayEnum::Paying),
+                )?;
+                respond_with(
+                    responder,
+                    self.send_channel_request(
+                        receiver_address,
+                        off_chain_pay_tx,
+                        MessageType::ChannelTransactionRequest,
+                    ),
+                );
+            }
             Err(e) => respond_with(responder, Err(e)),
         }
+        Ok(())
     }
 
     async fn off_chain_pay_htlc(
@@ -1149,6 +1182,15 @@ impl NodeInner {
         timeout: u64,
         responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
     ) -> Result<()> {
+        self.router.stats(
+            (self.wallet.account(), receiver_address),
+            (
+                HashValue::from_sha3_256(&hash_lock),
+                amount,
+                PayEnum::Paying,
+            ),
+        )?;
+
         let path = self
             .router
             .find_path_by_addr(self.wallet.account(), receiver_address)

@@ -28,5 +28,7 @@ rand = "0.6.5"
 async-trait = "0.1.13"
 hex = { version = "0.3.2", default-features = false }
 
+stats = {path ="../router/stats"}
+
 [dev-dependencies]
 libra-config = { path = "../libra/config"}

@@ -1,0 +1,43 @@
+name: Build Docker
+on:
+  push:
+    # only build master
+    branches:
+      - 'master'
+    paths-ignore:
+      - '**.md'
+jobs:
+  build-sgchain-docker:
+    name: build sgchain docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          submodules: recursive
+      - uses: elgohr/Publish-Docker-Github-Action@master
+        env:
+          GIT_REV: $GITHUB_SHA
+        with:
+          name: starcoinorg/stargate/sgchain
+          username: $GITHUB_ACTOR
+          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: docker.pkg.github.com
+          dockerfile: docker/validator/validator.Dockerfile
+          buildargs: GIT_REV
+  build-node-docker:
+    name: build node docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          submodules: recursive
+      - uses: elgohr/Publish-Docker-Github-Action@master
+        env:
+          GIT_REV: $GITHUB_SHA
+        with:
+          name: starcoinorg/stargate/node
+          username: $GITHUB_ACTOR
+          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: docker.pkg.github.com
+          dockerfile: docker/node/node.Dockerfile
+          buildargs: GIT_REV
