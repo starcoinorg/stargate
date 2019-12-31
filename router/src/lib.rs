@@ -64,6 +64,7 @@ struct RouterInner {
     network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
     wallet: Arc<Wallet>,
     message_processor: MessageProcessor<RouterNetworkMessage>,
+    stats_mgr: Arc<Stats>,
 }
 
 enum RouterMessage {
@@ -92,6 +93,7 @@ impl TableRouter {
             network_sender,
             message_processor,
             graph_store: GraphStore::new(false, None).unwrap(),
+            stats_mgr: stats_mgr.clone(),
         };
         Self {
             chain_client,
@@ -261,6 +263,11 @@ impl RouterInner {
             first == self.wallet.account(),
             "first hop should be local address"
         );
+        let total_amount = self
+            .stats_mgr
+            .back_pressure(&(first, second.clone()))
+            .await?;
+
         let response = BalanceQueryResponse::new(
             first,
             second.clone(),
@@ -268,6 +275,7 @@ impl RouterInner {
             self.wallet
                 .participant_channel_balance(second.clone())
                 .await?,
+            total_amount,
         );
         info!("find first hop balance info {:?}", response);
         result.push(response);
@@ -358,6 +366,10 @@ impl RouterInner {
             return Ok(());
         }
         let balance = self.wallet.channel_balance(msg.remote_addr).await?;
+        let total_amount = self
+            .stats_mgr
+            .back_pressure(&(msg.local_addr, msg.remote_addr))
+            .await?;
         let response = BalanceQueryResponse::new(
             msg.local_addr,
             msg.remote_addr,
@@ -365,6 +377,7 @@ impl RouterInner {
             self.wallet
                 .participant_channel_balance(msg.remote_addr)
                 .await?,
+            total_amount,
         );
         info!("send message to {}", sender_addr);
         self.network_sender.unbounded_send((

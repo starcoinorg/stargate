@@ -223,7 +223,7 @@ impl Router for MixRouter {
     }
 
     fn stats(&self, channel: DirectedChannel, payment_info: PaymentInfo) -> Result<()> {
-        self.stats_mgr.stats(channel, payment_info);
+        self.stats_mgr.stats(channel, payment_info)?;
         Ok(())
     }
 }
@@ -246,6 +246,7 @@ struct AntRouterInner {
     message_processor: MessageProcessor<RouterNetworkMessage>,
     default_future_timeout: AtomicU64,
     executor: Handle,
+    stats_mgr: Arc<Stats>,
 }
 
 enum RouterCommand {
@@ -276,6 +277,7 @@ impl AntRouter {
             message_processor,
             default_future_timeout: AtomicU64::new(default_future_timeout),
             executor: executor.clone(),
+            stats_mgr: stats_mgr.clone(),
         };
         Self {
             executor,
@@ -587,6 +589,11 @@ impl AntRouterInner {
                 continue;
             }
             let mut balance_list_clone = balance_list.clone();
+            let total_amount = self
+                .stats_mgr
+                .back_pressure(&(self.wallet.account(), participant.clone()))
+                .await?;
+
             let balance_query_response = BalanceQueryResponse::new(
                 self.wallet.account(),
                 participant.clone(),
@@ -594,6 +601,7 @@ impl AntRouterInner {
                 self.wallet
                     .participant_channel_balance(participant.clone())
                     .await?,
+                total_amount,
             );
             balance_list_clone.push(balance_query_response);
             let ant_query_message = AntQueryMessage::new(s, peer_id, balance_list_clone);

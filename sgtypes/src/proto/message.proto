@@ -52,6 +52,7 @@ message BalanceQueryResponse{
     uint64 local_balance = 2;
     bytes remote_addr = 3;
     uint64 remote_balance = 4;
+    uint64 total_pay_amount = 5;
 }
 
 message NextHop {
