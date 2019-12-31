@@ -388,6 +388,7 @@ pub struct BalanceQueryResponse {
     pub remote_addr: AccountAddress,
     pub local_balance: u64,
     pub remote_balance: u64,
+    pub total_pay_amount: u64,
 }
 
 impl BalanceQueryResponse {
@@ -396,12 +397,14 @@ impl BalanceQueryResponse {
         remote_addr: AccountAddress,
         local_balance: u64,
         remote_balance: u64,
+        total_pay_amount: u64,
     ) -> Self {
         Self {
             local_addr,
             remote_addr,
             local_balance,
             remote_balance,
+            total_pay_amount,
         }
     }
 
@@ -422,6 +425,7 @@ impl BalanceQueryResponse {
             remote_addr: self.local_addr.clone(),
             local_balance: self.remote_balance,
             remote_balance: self.local_balance,
+            total_pay_amount: self.total_pay_amount,
         }
     }
 }
@@ -435,6 +439,7 @@ impl TryFrom<crate::proto::sgtypes::BalanceQueryResponse> for BalanceQueryRespon
             value.remote_addr.try_into()?,
             value.local_balance,
             value.remote_balance,
+            value.total_pay_amount,
         ))
     }
 }
@@ -446,6 +451,7 @@ impl From<BalanceQueryResponse> for crate::proto::sgtypes::BalanceQueryResponse 
             remote_addr: value.remote_addr.to_vec(),
             local_balance: value.local_balance,
             remote_balance: value.remote_balance,
+            total_pay_amount: value.total_pay_amount,
         }
     }
 }

@@ -144,6 +144,7 @@ dependencies = [
  "sgnetwork 0.1.0",
  "sgtypes 0.1.0",
  "sgwallet 0.1.0",
+ "stats 0.1.0",
  "tokio 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -3169,6 +3170,7 @@ dependencies = [
  "sgnetwork 0.1.0",
  "sgtypes 0.1.0",
  "sgwallet 0.1.0",
+ "stats 0.1.0",
  "structopt 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -3211,6 +3213,7 @@ dependencies = [
  "sgnetwork 0.1.0",
  "sgtypes 0.1.0",
  "sgwallet 0.1.0",
+ "stats 0.1.0",
  "tokio 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio-timer 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -4286,6 +4289,7 @@ dependencies = [
  "sgnetwork 0.1.0",
  "sgtypes 0.1.0",
  "sgwallet 0.1.0",
+ "stats 0.1.0",
  "tokio 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

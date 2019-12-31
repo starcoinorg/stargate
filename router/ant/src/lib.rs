@@ -43,6 +43,7 @@ use sgtypes::message::{
     ExchangeSeedMessageResponse, RouterNetworkMessage,
 };
 use sgtypes::s_value::SValue;
+use stats::{DirectedChannel, PaymentInfo, Stats};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -57,6 +58,7 @@ pub struct MixRouter {
     table_network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
     control_receiver: Option<UnboundedReceiver<Event>>,
     control_sender: UnboundedSender<Event>,
+    stats_mgr: Arc<Stats>,
 }
 
 impl MixRouter {
@@ -66,6 +68,7 @@ impl MixRouter {
         network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
         network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
         wallet: Arc<Wallet>,
+        stats_mgr: Arc<Stats>,
         default_future_timeout: u64,
     ) -> Self {
         let (ant_network_sender, ant_network_receiver) = futures::channel::mpsc::unbounded();
@@ -78,6 +81,7 @@ impl MixRouter {
             ant_network_receiver,
             wallet.clone(),
             default_future_timeout,
+            stats_mgr.clone(),
         );
 
         let table_router = TableRouter::new(
@@ -86,6 +90,7 @@ impl MixRouter {
             wallet,
             network_sender.clone(),
             table_network_receiver,
+            stats_mgr.clone(),
         );
 
         Self {
@@ -97,6 +102,7 @@ impl MixRouter {
             table_network_sender,
             control_sender,
             control_receiver: Some(control_receiver),
+            stats_mgr,
         }
     }
 
@@ -215,6 +221,11 @@ impl Router for MixRouter {
         }
         return self.ant_router.find_path_by_addr(start, end).await;
     }
+
+    fn stats(&self, channel: DirectedChannel, payment_info: PaymentInfo) -> Result<()> {
+        self.stats_mgr.stats(channel, payment_info)?;
+        Ok(())
+    }
 }
 
 pub struct AntRouter {
@@ -225,6 +236,7 @@ pub struct AntRouter {
     command_receiver: Option<UnboundedReceiver<RouterCommand>>,
     control_receiver: Option<UnboundedReceiver<Event>>,
     control_sender: UnboundedSender<Event>,
+    stats_mgr: Arc<Stats>,
 }
 
 struct AntRouterInner {
@@ -234,6 +246,7 @@ struct AntRouterInner {
     message_processor: MessageProcessor<RouterNetworkMessage>,
     default_future_timeout: AtomicU64,
     executor: Handle,
+    stats_mgr: Arc<Stats>,
 }
 
 enum RouterCommand {
@@ -251,6 +264,7 @@ impl AntRouter {
         network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
         wallet: Arc<Wallet>,
         default_future_timeout: u64,
+        stats_mgr: Arc<Stats>,
     ) -> Self {
         let (command_sender, command_receiver) = futures::channel::mpsc::unbounded();
         let (control_sender, control_receiver) = futures::channel::mpsc::unbounded();
@@ -263,6 +277,7 @@ impl AntRouter {
             message_processor,
             default_future_timeout: AtomicU64::new(default_future_timeout),
             executor: executor.clone(),
+            stats_mgr: stats_mgr.clone(),
         };
         Self {
             executor,
@@ -272,6 +287,7 @@ impl AntRouter {
             control_sender,
             control_receiver: Some(control_receiver),
             inner: Some(inner),
+            stats_mgr,
         }
     }
 
@@ -320,6 +336,11 @@ impl Router for AntRouter {
             })?;
 
         Ok(resp_receiver.await?)
+    }
+
+    fn stats(&self, channel: DirectedChannel, payment_info: PaymentInfo) -> Result<()> {
+        self.stats_mgr.stats(channel, payment_info)?;
+        Ok(())
     }
 }
 
@@ -568,6 +589,11 @@ impl AntRouterInner {
                 continue;
             }
             let mut balance_list_clone = balance_list.clone();
+            let total_amount = self
+                .stats_mgr
+                .back_pressure(&(self.wallet.account(), participant.clone()))
+                .await?;
+
             let balance_query_response = BalanceQueryResponse::new(
                 self.wallet.account(),
                 participant.clone(),
@@ -575,6 +601,7 @@ impl AntRouterInner {
                 self.wallet
                     .participant_channel_balance(participant.clone())
                     .await?,
+                total_amount,
             );
             balance_list_clone.push(balance_query_response);
             let ant_query_message = AntQueryMessage::new(s, peer_id, balance_list_clone);
@@ -768,6 +795,7 @@ fn mix_router_test() {
         rtx1,
         rrx1,
         wallet1.clone(),
+        Arc::new(Stats::new(executor.clone())),
         5000,
     );
     router1.start().unwrap();
@@ -781,6 +809,7 @@ fn mix_router_test() {
         rtx2,
         rrx2,
         wallet2.clone(),
+        Arc::new(Stats::new(executor.clone())),
         5000,
     );
     router2.start().unwrap();
@@ -794,6 +823,7 @@ fn mix_router_test() {
         rtx3,
         rrx3,
         wallet3.clone(),
+        Arc::new(Stats::new(executor.clone())),
         5000,
     );
     router3.start().unwrap();
@@ -918,31 +948,66 @@ fn ant_router_test() {
     let (_network1, tx1, rx1, close_tx1) = build_network_service(&network_config1, keypair1);
     let _identify1 = _network1.identify();
     let (rtx1, rrx1) = _prepare_network(tx1, rx1, executor.clone());
-    let mut router1 = AntRouter::new(executor.clone(), rtx1, rrx1, wallet1.clone(), 5000);
+    let mut router1 = AntRouter::new(
+        executor.clone(),
+        rtx1,
+        rrx1,
+        wallet1.clone(),
+        5000,
+        Arc::new(Stats::new(executor.clone())),
+    );
     router1.start().unwrap();
 
     let (_network2, tx2, rx2, close_tx2) = build_network_service(&network_config2, keypair2);
     let _identify2 = _network2.identify();
     let (rtx2, rrx2) = _prepare_network(tx2, rx2, executor.clone());
-    let mut router2 = AntRouter::new(executor.clone(), rtx2, rrx2, wallet2.clone(), 5000);
+    let mut router2 = AntRouter::new(
+        executor.clone(),
+        rtx2,
+        rrx2,
+        wallet2.clone(),
+        5000,
+        Arc::new(Stats::new(executor.clone())),
+    );
     router2.start().unwrap();
 
     let (_network3, tx3, rx3, close_tx3) = build_network_service(&network_config3, keypair3);
     let _identify3 = _network3.identify();
     let (rtx3, rrx3) = _prepare_network(tx3, rx3, executor.clone());
-    let mut router3 = AntRouter::new(executor.clone(), rtx3, rrx3, wallet3.clone(), 5000);
+    let mut router3 = AntRouter::new(
+        executor.clone(),
+        rtx3,
+        rrx3,
+        wallet3.clone(),
+        5000,
+        Arc::new(Stats::new(executor.clone())),
+    );
     router3.start().unwrap();
 
     let (_network4, tx4, rx4, close_tx4) = build_network_service(&network_config4, keypair4);
     let _identify4 = _network4.identify();
     let (rtx4, rrx4) = _prepare_network(tx4, rx4, executor.clone());
-    let mut router4 = AntRouter::new(executor.clone(), rtx4, rrx4, wallet4.clone(), 5000);
+    let mut router4 = AntRouter::new(
+        executor.clone(),
+        rtx4,
+        rrx4,
+        wallet4.clone(),
+        5000,
+        Arc::new(Stats::new(executor.clone())),
+    );
     router4.start().unwrap();
 
     let (_network5, tx5, rx5, close_tx5) = build_network_service(&network_config5, keypair5);
     let _identify5 = _network5.identify();
     let (rtx5, rrx5) = _prepare_network(tx5, rx5, executor.clone());
-    let mut router5 = AntRouter::new(executor.clone(), rtx5, rrx5, wallet5.clone(), 5000);
+    let mut router5 = AntRouter::new(
+        executor.clone(),
+        rtx5,
+        rrx5,
+        wallet5.clone(),
+        5000,
+        Arc::new(Stats::new(executor.clone())),
+    );
     router5.start().unwrap();
 
     let router1 = Arc::new(router1);

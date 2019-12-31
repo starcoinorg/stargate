@@ -27,6 +27,7 @@ use sgtypes::message::{BalanceQueryRequest, BalanceQueryResponse, RouterNetworkM
 use sgtypes::system_event::Event;
 use sgwallet::wallet::Wallet;
 use sgwallet::{get_channel_events, ChannelChangeEvent};
+use stats::{DirectedChannel, PaymentInfo, Stats};
 use std::collections::HashMap;
 use std::{
     sync::Arc,
@@ -42,6 +43,8 @@ pub trait Router: Send + Sync {
         start: AccountAddress,
         end: AccountAddress,
     ) -> Result<Vec<BalanceQueryResponse>>;
+
+    fn stats(&self, channel: DirectedChannel, payment_info: PaymentInfo) -> Result<()>;
 }
 
 pub struct TableRouter {
@@ -53,6 +56,7 @@ pub struct TableRouter {
     receiver: Option<UnboundedReceiver<RouterMessage>>,
     control_receiver: Option<UnboundedReceiver<Event>>,
     chain_client: Arc<dyn ChainClient>,
+    stats_mgr: Arc<Stats>,
 }
 
 struct RouterInner {
@@ -60,6 +64,7 @@ struct RouterInner {
     network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
     wallet: Arc<Wallet>,
     message_processor: MessageProcessor<RouterNetworkMessage>,
+    stats_mgr: Arc<Stats>,
 }
 
 enum RouterMessage {
@@ -77,6 +82,7 @@ impl TableRouter {
         wallet: Arc<Wallet>,
         network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
         network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
+        stats_mgr: Arc<Stats>,
     ) -> Self {
         let (sender, receiver) = futures::channel::mpsc::unbounded();
         let (control_sender, control_receiver) = futures::channel::mpsc::unbounded();
@@ -87,6 +93,7 @@ impl TableRouter {
             network_sender,
             message_processor,
             graph_store: GraphStore::new(false, None).unwrap(),
+            stats_mgr: stats_mgr.clone(),
         };
         Self {
             chain_client,
@@ -97,6 +104,7 @@ impl TableRouter {
             receiver: Some(receiver),
             network_receiver: Some(network_receiver),
             control_receiver: Some(control_receiver),
+            stats_mgr,
         }
     }
 
@@ -155,6 +163,11 @@ impl Router for TableRouter {
         let end_node = Vertex::new_with_bi_type(end);
         let vertexes = self.find_path(start_node, end_node).await;
         vertexes
+    }
+
+    fn stats(&self, channel: DirectedChannel, payment_info: PaymentInfo) -> Result<()> {
+        self.stats_mgr.stats(channel, payment_info)?;
+        Ok(())
     }
 }
 
@@ -250,6 +263,11 @@ impl RouterInner {
             first == self.wallet.account(),
             "first hop should be local address"
         );
+        let total_amount = self
+            .stats_mgr
+            .back_pressure(&(first, second.clone()))
+            .await?;
+
         let response = BalanceQueryResponse::new(
             first,
             second.clone(),
@@ -257,6 +275,7 @@ impl RouterInner {
             self.wallet
                 .participant_channel_balance(second.clone())
                 .await?,
+            total_amount,
         );
         info!("find first hop balance info {:?}", response);
         result.push(response);
@@ -347,6 +366,10 @@ impl RouterInner {
             return Ok(());
         }
         let balance = self.wallet.channel_balance(msg.remote_addr).await?;
+        let total_amount = self
+            .stats_mgr
+            .back_pressure(&(msg.local_addr, msg.remote_addr))
+            .await?;
         let response = BalanceQueryResponse::new(
             msg.local_addr,
             msg.remote_addr,
@@ -354,6 +377,7 @@ impl RouterInner {
             self.wallet
                 .participant_channel_balance(msg.remote_addr)
                 .await?,
+            total_amount,
         );
         info!("send message to {}", sender_addr);
         self.network_sender.unbounded_send((
@@ -488,6 +512,7 @@ fn router_test() {
         wallet1.clone(),
         rtx1,
         rrx1,
+        Arc::new(Stats::new(executor.clone())),
     );
     router1.start().unwrap();
 
@@ -500,6 +525,7 @@ fn router_test() {
         wallet2.clone(),
         rtx2,
         rrx2,
+        Arc::new(Stats::new(executor.clone())),
     );
     router2.start().unwrap();
 
@@ -512,6 +538,7 @@ fn router_test() {
         wallet3.clone(),
         rtx3,
         rrx3,
+        Arc::new(Stats::new(executor.clone())),
     );
     router3.start().unwrap();
 
@@ -524,6 +551,7 @@ fn router_test() {
         wallet4.clone(),
         rtx4,
         rrx4,
+        Arc::new(Stats::new(executor.clone())),
     );
     router4.start().unwrap();
 
@@ -536,6 +564,7 @@ fn router_test() {
         wallet5.clone(),
         rtx5,
         rrx5,
+        Arc::new(Stats::new(executor.clone())),
     );
     router5.start().unwrap();
 

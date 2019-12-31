@@ -22,6 +22,7 @@ use router::{Router, TableRouter};
 use sg_config::config::{load_from, NodeConfig, WalletConfig};
 use sgchain::star_chain_client::StarChainClient;
 use sgwallet::wallet::*;
+use stats::Stats;
 use structopt::StructOpt;
 use tokio::runtime::{Handle, Runtime};
 
@@ -114,6 +115,7 @@ fn gen_node(
 
     let router_type = router_type.to_uppercase();
     let boxed_router: Box<dyn Router>;
+    let stats = Arc::new(Stats::new(executor.clone()));
     if router_type == "TABLE" {
         let mut router = TableRouter::new(
             client,
@@ -121,6 +123,7 @@ fn gen_node(
             wallet.clone(),
             tx_router,
             rx_router,
+            stats,
         );
         router.start().unwrap();
         boxed_router = Box::new(router);
@@ -131,6 +134,7 @@ fn gen_node(
             rx_router,
             wallet.clone(),
             timeout,
+            stats,
         );
         router.start().unwrap();
         boxed_router = Box::new(router);
@@ -141,6 +145,7 @@ fn gen_node(
             tx_router,
             rx_router,
             wallet.clone(),
+            stats,
             timeout,
         );
         router.start().unwrap();

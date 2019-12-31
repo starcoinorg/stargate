@@ -14,6 +14,7 @@ use router::TableRouter;
 use sg_config::config::NetworkConfig;
 use sgchain::star_chain_client::{faucet_sync, MockChainClient};
 use sgwallet::wallet::*;
+use stats::Stats;
 use std::{sync::Arc, thread, time::Duration};
 use tokio::runtime::{Handle, Runtime};
 
@@ -54,7 +55,15 @@ pub fn gen_node(
     let (rtx1, rrx1) = futures::channel::mpsc::unbounded();
     let (rtx2, rrx2) = futures::channel::mpsc::unbounded();
 
-    let mut router = TableRouter::new(client, executor.clone(), wallet.clone(), rtx1, rrx2);
+    let stats_mgr = Stats::new(executor.clone());
+    let mut router = TableRouter::new(
+        client,
+        executor.clone(),
+        wallet.clone(),
+        rtx1,
+        rrx2,
+        Arc::new(stats_mgr),
+    );
     router.start().unwrap();
 
     let (network, tx, rx, close_tx) = build_network_service(config, keypair.clone());
