@@ -27,6 +27,7 @@ libra-types = { path = "../../libra/types" }
 sgtypes = { path = "../../sgtypes" }
 node_proto = { path = "../node_proto"}
 router = { path = "../../router" }
+stats = { path = "../../router/stats" }
 
 libra-crypto = { path = "../../libra/crypto/crypto"}
 prost = "0.5.0"

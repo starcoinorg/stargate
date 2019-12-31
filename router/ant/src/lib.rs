@@ -43,6 +43,7 @@ use sgtypes::message::{
     ExchangeSeedMessageResponse, RouterNetworkMessage,
 };
 use sgtypes::s_value::SValue;
+use stats::{DirectedChannel, PaymentInfo, Stats};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -57,6 +58,7 @@ pub struct MixRouter {
     table_network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
     control_receiver: Option<UnboundedReceiver<Event>>,
     control_sender: UnboundedSender<Event>,
+    stats_mgr: Arc<Stats>,
 }
 
 impl MixRouter {
@@ -66,6 +68,7 @@ impl MixRouter {
         network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
         network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
         wallet: Arc<Wallet>,
+        stats_mgr: Arc<Stats>,
         default_future_timeout: u64,
     ) -> Self {
         let (ant_network_sender, ant_network_receiver) = futures::channel::mpsc::unbounded();
@@ -78,6 +81,7 @@ impl MixRouter {
             ant_network_receiver,
             wallet.clone(),
             default_future_timeout,
+            stats_mgr.clone(),
         );
 
         let table_router = TableRouter::new(
@@ -86,6 +90,7 @@ impl MixRouter {
             wallet,
             network_sender.clone(),
             table_network_receiver,
+            stats_mgr.clone(),
         );
 
         Self {
@@ -97,6 +102,7 @@ impl MixRouter {
             table_network_sender,
             control_sender,
             control_receiver: Some(control_receiver),
+            stats_mgr,
         }
     }
 
@@ -215,6 +221,11 @@ impl Router for MixRouter {
         }
         return self.ant_router.find_path_by_addr(start, end).await;
     }
+
+    fn stats(&self, channel: DirectedChannel, payment_info: PaymentInfo) -> Result<()> {
+        self.stats_mgr.stats(channel, payment_info);
+        Ok(())
+    }
 }
 
 pub struct AntRouter {
@@ -225,6 +236,7 @@ pub struct AntRouter {
     command_receiver: Option<UnboundedReceiver<RouterCommand>>,
     control_receiver: Option<UnboundedReceiver<Event>>,
     control_sender: UnboundedSender<Event>,
+    stats_mgr: Arc<Stats>,
 }
 
 struct AntRouterInner {
@@ -251,6 +263,7 @@ impl AntRouter {
         network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
         wallet: Arc<Wallet>,
         default_future_timeout: u64,
+        stats_mgr: Arc<Stats>,
     ) -> Self {
         let (command_sender, command_receiver) = futures::channel::mpsc::unbounded();
         let (control_sender, control_receiver) = futures::channel::mpsc::unbounded();
@@ -272,6 +285,7 @@ impl AntRouter {
             control_sender,
             control_receiver: Some(control_receiver),
             inner: Some(inner),
+            stats_mgr,
         }
     }
 
@@ -320,6 +334,11 @@ impl Router for AntRouter {
             })?;
 
         Ok(resp_receiver.await?)
+    }
+
+    fn stats(&self, channel: DirectedChannel, payment_info: PaymentInfo) -> Result<()> {
+        self.stats_mgr.stats(channel, payment_info)?;
+        Ok(())
     }
 }
 

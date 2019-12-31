@@ -37,6 +37,7 @@ use futures_01::sync::{
 use router::Router;
 use sgtypes::sg_error::{SgError, SgErrorCode};
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
+use stats::PayEnum;
 use std::convert::TryInto;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -829,7 +830,8 @@ impl NodeInner {
             } => {
                 node_inner
                     .off_chain_pay(receiver_address, amount, responder)
-                    .await;
+                    .await
+                    .unwrap();
             }
             NodeMessage::ChannelPayHTLC {
                 receiver_address,
@@ -1079,7 +1081,12 @@ impl NodeInner {
         let channel_seq_number = self.wallet.channel_sequence_number(peer_id).await?;
 
         self.message_processor
-            .send_response(open_channel_message.request_id(), channel_seq_number)
+            .send_response(open_channel_message.request_id(), channel_seq_number)?;
+
+        self.router.stats(
+            (self.wallet.account(), peer_id),
+            (open_channel_message.request_id(), 0, PayEnum::Payed),
+        )
     }
 
     fn handle_error_message(&self, data: Vec<u8>) {
@@ -1146,18 +1153,25 @@ impl NodeInner {
         receiver_address: AccountAddress,
         amount: u64,
         responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
-    ) {
+    ) -> Result<()> {
         match self.wallet.transfer(receiver_address, amount).await {
-            Ok(off_chain_pay_tx) => respond_with(
-                responder,
-                self.send_channel_request(
-                    receiver_address,
-                    off_chain_pay_tx,
-                    MessageType::ChannelTransactionRequest,
-                ),
-            ),
+            Ok(off_chain_pay_tx) => {
+                self.router.stats(
+                    (self.wallet.account(), receiver_address),
+                    (off_chain_pay_tx.request_id(), amount, PayEnum::Paying),
+                )?;
+                respond_with(
+                    responder,
+                    self.send_channel_request(
+                        receiver_address,
+                        off_chain_pay_tx,
+                        MessageType::ChannelTransactionRequest,
+                    ),
+                );
+            }
             Err(e) => respond_with(responder, Err(e)),
         }
+        Ok(())
     }
 
     async fn off_chain_pay_htlc(
@@ -1168,6 +1182,15 @@ impl NodeInner {
         timeout: u64,
         responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
     ) -> Result<()> {
+        self.router.stats(
+            (self.wallet.account(), receiver_address),
+            (
+                HashValue::from_sha3_256(&hash_lock),
+                amount,
+                PayEnum::Paying,
+            ),
+        )?;
+
         let path = self
             .router
             .find_path_by_addr(self.wallet.account(), receiver_address)

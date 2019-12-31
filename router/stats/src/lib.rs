@@ -14,6 +14,7 @@ pub struct Stats {
     executor: Handle,
     inner: Arc<StatsInner>,
     data_receiver: Option<UnboundedReceiver<(DirectedChannel, PaymentInfo)>>,
+    data_sender: UnboundedSender<(DirectedChannel, PaymentInfo)>,
     control_receiver: Option<UnboundedReceiver<Event>>,
     control_sender: UnboundedSender<Event>,
 }
@@ -60,16 +61,15 @@ impl ChannelStats {
 }
 
 impl Stats {
-    pub fn new(
-        executor: Handle,
-        data_receiver: UnboundedReceiver<(DirectedChannel, PaymentInfo)>,
-    ) -> Self {
+    pub fn new(executor: Handle) -> Self {
         let (control_sender, control_receiver) = futures::channel::mpsc::unbounded();
+        let (data_sender, data_receiver) = futures::channel::mpsc::unbounded();
 
         let inner = StatsInner {
             user_channel_stats: Mutex::new(HashMap::new()),
         };
         Self {
+            data_sender,
             data_receiver: Some(data_receiver),
             inner: Arc::new(inner),
             control_sender,
@@ -92,6 +92,11 @@ impl Stats {
             control_receiver,
         ));
 
+        Ok(())
+    }
+
+    pub fn stats(&self, channel: DirectedChannel, payment_info: PaymentInfo) -> Result<()> {
+        self.data_sender.unbounded_send((channel, payment_info))?;
         Ok(())
     }
 

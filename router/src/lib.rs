@@ -27,6 +27,7 @@ use sgtypes::message::{BalanceQueryRequest, BalanceQueryResponse, RouterNetworkM
 use sgtypes::system_event::Event;
 use sgwallet::wallet::Wallet;
 use sgwallet::{get_channel_events, ChannelChangeEvent};
+use stats::{DirectedChannel, PaymentInfo, Stats};
 use std::collections::HashMap;
 use std::{
     sync::Arc,
@@ -42,6 +43,8 @@ pub trait Router: Send + Sync {
         start: AccountAddress,
         end: AccountAddress,
     ) -> Result<Vec<BalanceQueryResponse>>;
+
+    fn stats(&self, channel: DirectedChannel, payment_info: PaymentInfo) -> Result<()>;
 }
 
 pub struct TableRouter {
@@ -53,6 +56,7 @@ pub struct TableRouter {
     receiver: Option<UnboundedReceiver<RouterMessage>>,
     control_receiver: Option<UnboundedReceiver<Event>>,
     chain_client: Arc<dyn ChainClient>,
+    stats_mgr: Arc<Stats>,
 }
 
 struct RouterInner {
@@ -77,6 +81,7 @@ impl TableRouter {
         wallet: Arc<Wallet>,
         network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
         network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
+        stats_mgr: Arc<Stats>,
     ) -> Self {
         let (sender, receiver) = futures::channel::mpsc::unbounded();
         let (control_sender, control_receiver) = futures::channel::mpsc::unbounded();
@@ -97,6 +102,7 @@ impl TableRouter {
             receiver: Some(receiver),
             network_receiver: Some(network_receiver),
             control_receiver: Some(control_receiver),
+            stats_mgr,
         }
     }
 
@@ -155,6 +161,11 @@ impl Router for TableRouter {
         let end_node = Vertex::new_with_bi_type(end);
         let vertexes = self.find_path(start_node, end_node).await;
         vertexes
+    }
+
+    fn stats(&self, channel: DirectedChannel, payment_info: PaymentInfo) -> Result<()> {
+        self.stats_mgr.stats(channel, payment_info)?;
+        Ok(())
     }
 }
 
