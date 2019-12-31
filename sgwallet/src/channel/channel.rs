@@ -1,19 +1,18 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
-use crate::channel::{ApplyCoSignedTxn, ApplySoloTxn};
 use crate::{
-    chain_watcher::{Interest, TransactionWithInfo},
+    chain_watcher::TransactionWithInfo,
     channel::{
-        access_local, channel_event_stream::ChannelEventStream, AccessingResource, ApplyPendingTxn,
-        CancelPendingTxn, Channel, ChannelEvent, CollectProposalWithSigs, Execute, ForceTravel,
-        GetPendingTxn, GrantProposal,
+        access_local, channel_event_stream::ChannelEventStream, AccessingResource,
+        ApplyCoSignedTxn, ApplyPendingTxn, ApplySoloTxn, CancelPendingTxn, Channel, ChannelEvent,
+        CollectProposalWithSigs, Execute, ForceTravel, GetPendingTxn, GrantProposal,
     },
     channel_state_view::ChannelStateView,
     utils::contract::{
         challenge_channel_action, close_channel_action, parse_channel_event, resolve_channel_action,
     },
     wallet::{
-        execute_transaction, submit_transaction, txn_expiration, watch_transaction, GAS_UNIT_PRICE,
+        execute_transaction, submit_transaction, txn_expiration, GAS_UNIT_PRICE,
         MAX_GAS_AMOUNT_OFFCHAIN, MAX_GAS_AMOUNT_ONCHAIN,
     },
 };
@@ -24,7 +23,7 @@ use coerce_rt::actor::{
     message::{Handler, Message},
     Actor, ActorRef,
 };
-use futures::{channel::oneshot, SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt};
 use libra_crypto::{
     ed25519::{Ed25519PublicKey, Ed25519Signature},
     hash::CryptoHash,
@@ -45,8 +44,7 @@ use libra_types::{
     transaction::{
         ChannelTransactionPayload, ChannelTransactionPayloadBody, RawTransaction, ScriptAction,
         SignedTransaction, Transaction, TransactionArgument, TransactionInfo,
-        TransactionListWithProof, TransactionOutput, TransactionPayload, TransactionWithProof,
-        Version,
+        TransactionListWithProof, TransactionOutput, TransactionPayload, Version,
     },
     vm_error::StatusCode,
     write_set::WriteSet,
@@ -221,9 +219,16 @@ impl Handler<CollectProposalWithSigs> for Channel {
 
         // if the output modifies user's channel state, permission need to be granted by user.
         // it cannot be auto-signed.
-        let can_auto_signed = !output
-            .write_set()
-            .contains_channel_resource(&self.account_address);
+        let can_auto_signed = !is_participant_channel_resource_modified(
+            self.witness_data().write_set(),
+            output.write_set(),
+            &self.account_address,
+        );
+
+        debug!(
+            "{}/{} - auto sign({}) channel txn: {:?}",
+            &self.account_address, &self.channel_address, can_auto_signed, &payload_body,
+        );
         if !verified_signatures.contains_key(&self.account_address) && can_auto_signed {
             self.do_grant_proposal(proposal, output, verified_signatures)?;
         } else {
@@ -475,7 +480,6 @@ impl Handler<ApplyCoSignedTxn> for Channel {
         debug_assert!(self.channel_address == channel_txn_payload.channel_address());
         debug_assert!(channel_txn_payload.is_authorized());
 
-        let channel_txn_proposer = channel_txn_payload.proposer();
         let txn_channel_seq_number = channel_txn_payload.witness().channel_sequence_number();
         let local_channel_seq_number = self.channel_sequence_number();
         // compare the new txn's witness sequence number with local sequence_number
@@ -502,7 +506,7 @@ impl Handler<ApplyCoSignedTxn> for Channel {
                         unimplemented!()
                     }
                 }
-                AppliedChannelTxn::Offchain(s) => {
+                AppliedChannelTxn::Offchain(_s) => {
                     if raw_txn.sender() == self.account_address {
                         // FIXME: what happened, why I apply a offchain txn, while still travelled it.
                         unimplemented!()
@@ -547,7 +551,7 @@ impl Handler<ApplyCoSignedTxn> for Channel {
                     channel_resource.event_handle().count(),
                     10,
                 );
-                let mut myself = self.actor_ref(ctx).await;
+                let myself = self.actor_ref(ctx).await;
                 tokio::task::spawn(channel_event_loop(channel_event_stream, myself));
             }
         } else if channel_resource.closed() {
@@ -597,7 +601,6 @@ impl Handler<ApplySoloTxn> for Channel {
         debug_assert!(self.channel_address == channel_txn_payload.channel_address());
         debug_assert!(!channel_txn_payload.is_authorized());
 
-        let channel_txn_proposer = channel_txn_payload.proposer();
         let txn_channel_seq_number = channel_txn_payload.witness().channel_sequence_number();
         let local_channel_seq_number = self.channel_sequence_number();
         // compare the new txn's witness sequence number with local sequence_number
@@ -629,7 +632,7 @@ impl Handler<ApplySoloTxn> for Channel {
                         }
                     }
                 }
-                AppliedChannelTxn::Offchain(s) => {
+                AppliedChannelTxn::Offchain(_s) => {
                     if self.account_address == raw_txn.sender() {
                         // FIXME: why whould I applied an offchain txn, while still submit a outdated solo txn to chain.
                         unimplemented!()
@@ -711,7 +714,7 @@ impl Handler<ChannelLockTimeout> for Channel {
     async fn handle(
         &mut self,
         _message: ChannelLockTimeout,
-        ctx: &mut ActorHandlerContext,
+        _ctx: &mut ActorHandlerContext,
     ) -> <ChannelLockTimeout as Message>::Result {
         let _ = self.solo_txn(close_channel_action(), None).await?;
         Ok(())
@@ -740,12 +743,14 @@ async fn channel_event_loop<A>(
         });
         match result {
             Err(e) => error!("get channel state change error, {}", e),
-            Ok(t) => {
-                if let Err(_e) = actor_ref.send(t).await {
-                    error!("actor {:?} is gone, stop now", &actor_ref);
+            Ok(t) => match actor_ref.send(t).await {
+                Err(_) => {
+                    info!("actor {:?} is gone, stop now", &actor_ref);
                     break;
                 }
-            }
+                Ok(Err(e)) => error!("fail to handle channel stage change event, {:?}", e),
+                Ok(Ok(_)) => {}
+            },
         }
     }
 }
@@ -775,11 +780,7 @@ impl Handler<ChannelStageChange> for Channel {
             self.account_address, self.channel_address, &message
         );
 
-        let ChannelStageChange {
-            stage,
-            version,
-            event_number,
-        } = message;
+        let ChannelStageChange { version, .. } = message;
 
         if version <= self.channel_state.version() {
             info!(
@@ -829,9 +830,9 @@ impl Handler<ChannelStageChange> for Channel {
             };
 
             if is_authorized {
-                self.handle(ApplyCoSignedTxn { channel_txn }, _ctx).await;
+                let _ = self.handle(ApplyCoSignedTxn { channel_txn }, _ctx).await?;
             } else {
-                self.handle(ApplySoloTxn { channel_txn }, _ctx).await;
+                let _ = self.handle(ApplySoloTxn { channel_txn }, _ctx).await?;
             }
         }
 
@@ -1538,29 +1539,28 @@ impl Channel {
     }
 }
 
-pub fn channel_txn_interest(channel_address: AccountAddress) -> Interest {
-    Box::new(move |txn_info| match &txn_info.txn {
-        Transaction::UserTransaction(t) => match t.raw_txn().payload() {
-            TransactionPayload::Channel(cp) => cp.channel_address() == channel_address,
-            _ => false,
-        },
-        _ => false,
-    })
-}
-
-#[allow(dead_code)]
-pub fn channel_txn_oneshot_interest(
-    channel_address: AccountAddress,
-    channel_sequence_number: u64,
-) -> Interest {
-    Box::new(move |txn| match &txn.txn {
-        Transaction::UserTransaction(t) => match t.raw_txn().payload() {
-            TransactionPayload::Channel(cp) => {
-                cp.channel_address() == channel_address
-                    && cp.channel_sequence_number() == channel_sequence_number
-            }
-            _ => false,
-        },
-        _ => false,
-    })
+fn is_participant_channel_resource_modified(
+    old_write_set: &WriteSet,
+    new_write_set: &WriteSet,
+    participant: &AccountAddress,
+) -> bool {
+    let prev_write_set = old_write_set
+        .iter()
+        .map(|p| (&p.0, &p.1))
+        .collect::<BTreeMap<_, _>>();
+    for (ap, op) in new_write_set {
+        let contain_participant_data = ap
+            .data_path()
+            .and_then(|data_path| data_path.participant())
+            .filter(|account| account == participant)
+            .is_some();
+        let modified_in_this_epoch = !prev_write_set
+            .get(ap)
+            .filter(|old_op| **old_op == op)
+            .is_some();
+        if contain_participant_data && modified_in_this_epoch {
+            return true;
+        }
+    }
+    return false;
 }

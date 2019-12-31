@@ -11,7 +11,7 @@ use libra_types::{
     account_config::{account_struct_tag, AccountResource},
 };
 use mock_chain_test_helper::run_with_mock_client;
-use sgchain::star_chain_client::{ChainClient, MockChainClient};
+use sgchain::star_chain_client::ChainClient;
 use sgwallet::{
     chain_state_access::{AccessState, ChainStateAccessor},
     chain_watcher::*,

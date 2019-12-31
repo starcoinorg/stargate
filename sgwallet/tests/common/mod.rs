@@ -1,5 +1,6 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
+#![allow(dead_code)]
 
 use anyhow::Result;
 use libra_crypto::{
@@ -10,9 +11,9 @@ use libra_crypto::{
 use libra_tools::tempdir::TempPath;
 use libra_types::{account_address::AccountAddress, transaction::TransactionArgument};
 use rand::prelude::*;
-use sgchain::star_chain_client::{ChainClient, MockChainClient};
+use sgchain::star_chain_client::ChainClient;
 use sgwallet::wallet::Wallet;
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 use tokio::runtime::Runtime;
 pub fn setup_wallet(
     executor: tokio::runtime::Handle,
@@ -76,7 +77,6 @@ where
     res
 }
 
-#[allow(dead_code)]
 pub async fn send_payment(
     sender_wallet: Arc<Wallet>,
     receiver_wallet: Arc<Wallet>,
@@ -103,7 +103,6 @@ pub async fn send_payment(
     Ok(sender_gas)
 }
 
-#[allow(dead_code)]
 pub async fn receive_payment(
     sender_wallet: Arc<Wallet>,
     receiver_wallet: Arc<Wallet>,

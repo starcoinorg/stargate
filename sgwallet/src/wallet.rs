@@ -3,8 +3,8 @@
 use crate::{
     chain_watcher::{ChainWatcher, ChainWatcherHandle, TransactionWithInfo},
     channel::{
-        ApplyPendingTxn, CancelPendingTxn, Channel, ChannelEvent, ChannelHandle,
-        CollectProposalWithSigs, Execute, ForceTravel, GrantProposal,
+        ApplyCoSignedTxn, ApplyPendingTxn, ApplySoloTxn, CancelPendingTxn, Channel, ChannelEvent,
+        ChannelHandle, CollectProposalWithSigs, Execute, ForceTravel, GrantProposal,
     },
     scripts::*,
 };
@@ -31,9 +31,9 @@ use libra_types::{
     account_config::{coin_struct_tag, AccountResource},
     byte_array::ByteArray,
     channel::{
-        channel_mirror_struct_tag, channel_participant_struct_tag, channel_struct_tag,
-        make_resource, user_channels_struct_tag, ChannelMirrorResource,
-        ChannelParticipantAccountResource, ChannelResource, UserChannelsResource,
+        channel_mirror_struct_tag, channel_struct_tag, make_resource, user_channels_struct_tag,
+        ChannelMirrorResource, ChannelParticipantAccountResource, ChannelResource, LibraResource,
+        UserChannelsResource,
     },
     language_storage::StructTag,
     transaction::{
@@ -60,11 +60,12 @@ use sgtypes::{
     sg_error::SgError,
     signed_channel_transaction::SignedChannelTransaction,
 };
-use std::collections::{BTreeSet, HashMap, HashSet};
-
-use crate::channel::{ApplyCoSignedTxn, ApplySoloTxn};
-use libra_types::channel::LibraResource;
-use std::{path::Path, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    path::Path,
+    sync::Arc,
+    time::Duration,
+};
 use tokio::runtime;
 use vm_runtime::{MoveVM, VMExecutor};
 
@@ -254,8 +255,7 @@ impl Wallet {
     }
 
     pub async fn channel_handle(&self, participant: AccountAddress) -> Result<Arc<ChannelHandle>> {
-        let (channel_address, participants) =
-            generate_channel_address(participant, self.shared.account);
+        let (channel_address, _) = generate_channel_address(participant, self.shared.account);
         let handle = self.get_channel(channel_address).await?;
         Ok(handle)
     }

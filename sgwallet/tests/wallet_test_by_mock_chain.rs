@@ -4,9 +4,9 @@
 use anyhow::Result;
 use libra_types::transaction::TransactionArgument;
 use mock_chain_test_helper::run_with_mock_client;
-use sgchain::star_chain_client::{ChainClient, MockChainClient};
+
 use sgtypes::script_package::ChannelScriptPackage;
-use std::{sync::Arc, time::Duration};
+
 use wallet_test_helper::{
     deploy_custom_module_and_script, test_deploy_custom_module, test_wallet_async,
 };

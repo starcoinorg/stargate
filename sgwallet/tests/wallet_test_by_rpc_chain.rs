@@ -3,8 +3,7 @@ extern crate rusty_fork;
 use common::with_wallet;
 use libra_logger::prelude::*;
 use rpc_chain_test_helper::run_with_rpc_client;
-use sgchain::star_chain_client::{ChainClient, StarChainClient};
-use std::sync::Arc;
+
 use wallet_test_helper::{
     test_channel_event_watcher_async, test_deploy_custom_module, test_wallet_async,
 };

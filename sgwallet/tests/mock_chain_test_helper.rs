@@ -1,8 +1,9 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
+#![allow(dead_code)]
 
 use sgchain::star_chain_client::{ChainClient, MockChainClient};
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 pub fn run_with_mock_client<F, T>(mut f: F) -> T
 where

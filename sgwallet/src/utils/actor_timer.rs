@@ -1,6 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+#![allow(dead_code)]
 use coerce_rt::actor::{
     message::{Handler, Message},
     Actor, ActorRef,

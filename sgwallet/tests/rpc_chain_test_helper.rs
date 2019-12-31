@@ -1,5 +1,7 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
+#![allow(dead_code)]
+
 use libra_logger::prelude::*;
 use sgchain::star_chain_client::{ChainClient, StarChainClient};
 use std::sync::Arc;
