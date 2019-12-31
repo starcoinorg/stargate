@@ -2,18 +2,18 @@ use anyhow::*;
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::lock::Mutex;
 use futures::stream::StreamExt;
+use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_types::account_address::AccountAddress;
 use sgtypes::system_event::Event;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::runtime::Handle;
 
 pub struct Stats {
     executor: Handle,
     inner: Arc<StatsInner>,
-    data_receiver: Option<UnboundedReceiver<(DirectedChannel, u64)>>,
+    data_receiver: Option<UnboundedReceiver<(DirectedChannel, PaymentInfo)>>,
     control_receiver: Option<UnboundedReceiver<Event>>,
     control_sender: UnboundedSender<Event>,
 }
@@ -22,25 +22,48 @@ struct StatsInner {
     user_channel_stats: Mutex<HashMap<DirectedChannel, ChannelStats>>,
 }
 struct ChannelStats {
-    payment_data: Mutex<BTreeMap<u64, u64>>,
+    payment_data: Mutex<HashMap<HashValue, u64>>,
+}
+
+pub enum PayEnum {
+    Paying,
+    Payed,
 }
 
 pub type DirectedChannel = (AccountAddress, AccountAddress);
 
+pub type PaymentInfo = (HashValue, u64, PayEnum);
+
 impl ChannelStats {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
-            payment_data: Mutex::new(BTreeMap::new()),
+            payment_data: Mutex::new(HashMap::new()),
         }
     }
 
-    pub async fn insert(&self, timestamp: u64, amount: u64) {
-        self.payment_data.lock().await.insert(timestamp, amount);
+    async fn insert(&self, amount: u64, hash_value: HashValue) {
+        self.payment_data.lock().await.insert(hash_value, amount);
+    }
+
+    async fn remove(&self, hash_value: HashValue) {
+        self.payment_data.lock().await.remove(&hash_value);
+    }
+
+    async fn sum(&self) -> u64 {
+        let payment_data = self.payment_data.lock().await;
+        let mut result = 0;
+        for (_, amount) in payment_data.iter() {
+            result += amount;
+        }
+        result
     }
 }
 
 impl Stats {
-    pub fn new(executor: Handle, data_receiver: UnboundedReceiver<(DirectedChannel, u64)>) -> Self {
+    pub fn new(
+        executor: Handle,
+        data_receiver: UnboundedReceiver<(DirectedChannel, PaymentInfo)>,
+    ) -> Self {
         let (control_sender, control_receiver) = futures::channel::mpsc::unbounded();
 
         let inner = StatsInner {
@@ -55,8 +78,8 @@ impl Stats {
         }
     }
 
-    pub fn back_pressure(&self) -> Result<()> {
-        Ok(())
+    pub async fn back_pressure(&self, channel: &DirectedChannel) -> Result<u64> {
+        self.inner.payment_pressure(channel).await
     }
 
     pub fn start(&mut self) -> Result<()> {
@@ -81,7 +104,7 @@ impl Stats {
 impl StatsInner {
     async fn start(
         inner: Arc<StatsInner>,
-        mut data_receiver: UnboundedReceiver<(DirectedChannel, u64)>,
+        mut data_receiver: UnboundedReceiver<(DirectedChannel, PaymentInfo)>,
         mut control_receiver: UnboundedReceiver<Event>,
     ) -> Result<()> {
         loop {
@@ -105,17 +128,25 @@ impl StatsInner {
     async fn handle_data_message(
         inner: Arc<StatsInner>,
         channel: DirectedChannel,
-        amount: u64,
+        payment_info: PaymentInfo,
     ) -> Result<()> {
-        match inner.user_channel_stats.lock().await.get(&channel) {
-            Some(channel_stats) => {
-                channel_stats.insert(get_unix_ts(), amount).await;
-            }
-            None => {
-                let channel_stats = ChannelStats::new();
-                channel_stats.insert(get_unix_ts(), amount).await;
-                inner.insert_channel_stats(channel, channel_stats).await;
-            }
+        match payment_info.2 {
+            PayEnum::Paying => match inner.user_channel_stats.lock().await.get(&channel) {
+                Some(channel_stats) => {
+                    channel_stats.insert(payment_info.1, payment_info.0).await;
+                }
+                None => {
+                    let channel_stats = ChannelStats::new();
+                    channel_stats.insert(payment_info.1, payment_info.0).await;
+                    inner.insert_channel_stats(channel, channel_stats).await;
+                }
+            },
+            PayEnum::Payed => match inner.user_channel_stats.lock().await.get(&channel) {
+                Some(channel_stats) => {
+                    channel_stats.remove(payment_info.0).await;
+                }
+                None => {}
+            },
         }
         Ok(())
     }
@@ -123,12 +154,11 @@ impl StatsInner {
     async fn insert_channel_stats(&self, channel: DirectedChannel, stats: ChannelStats) {
         self.user_channel_stats.lock().await.insert(channel, stats);
     }
-}
 
-fn get_unix_ts() -> u64 {
-    let start = SystemTime::now();
-    let since_the_epoch = start
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");
-    since_the_epoch.as_millis() as u64
+    async fn payment_pressure(&self, channel: &DirectedChannel) -> Result<u64> {
+        match self.user_channel_stats.lock().await.get(channel) {
+            Some(channel_stats) => Ok(channel_stats.sum().await),
+            None => Ok(0),
+        }
+    }
 }
