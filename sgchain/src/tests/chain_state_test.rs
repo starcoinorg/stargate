@@ -5,7 +5,6 @@ use libra_logger::prelude::*;
 use std::thread::sleep;
 use std::time::Duration;
 
-#[test]
 fn test_chain_state() {
     ::libra_logger::init_for_e2e_testing();
     let memory_address = "/memory/0";
@@ -31,10 +30,10 @@ fn test_chain_state() {
 
     debug!("conf1:{:?}", conf_1);
     debug!("conf2:{:?}", conf_2);
-    let _handle_1 = setup_environment(&mut conf_1, false);
+    let handle_1 = setup_environment(&mut conf_1, false);
 
     sleep(Duration::from_secs(20));
-    let (runtime_2, network_provider_2, _cs_runtime, _multi_address) =
+    let (runtime_2, network_provider_2, cs_runtime, _multi_address) =
         _setup_chain_state_network_and_environment(
             conf_2
                 .validator_network
@@ -44,8 +43,9 @@ fn test_chain_state() {
         );
     runtime_2.handle().clone().spawn(network_provider_2.start());
 
-    sleep(Duration::from_secs(2 * 60));
-    drop(_handle_1);
-    drop(_cs_runtime);
+    sleep(Duration::from_secs(1 * 60));
+    drop(handle_1);
+    drop(cs_runtime);
     drop(runtime_2);
+    sleep(Duration::from_secs(5));
 }
