@@ -64,6 +64,28 @@ use sgtypes::{
 use std::{collections::BTreeMap, time::Duration};
 use vm::gas_schedule::GasAlgebra;
 
+//impl Channel {
+//    #[allow(dead_code)]
+//    async fn bootstrap(&mut self) -> Result<()> {
+//        let channel_state = self
+//            .chain_client
+//            .get_account_state(self.channel_address, None)?;
+//        let onchain_channel_resource = channel_state
+//            .get_resource::<ChannelResource>(&DataPath::onchain_resource_path(
+//                ChannelResource::struct_tag(),
+//            ))?
+//            .ok_or(format_err!("channel resource should exists"))?;
+//        if onchain_channel_resource.closed() {
+//            bail!("channel is already closed");
+//        } else if onchain_channel_resource.locked() {
+//        } else {
+//            //
+//        }
+//
+//        Ok(())
+//    }
+//}
+//
 #[async_trait]
 impl Actor for Channel {
     async fn started(&mut self, ctx: &mut ActorHandlerContext) {
@@ -126,6 +148,10 @@ impl Handler<Execute> for Channel {
         _ctx: &mut ActorHandlerContext,
     ) -> <Execute as Message>::Result {
         let Execute { channel_op, args } = message;
+        debug!(
+            "{} - execute txn, op: {:?}, args: {:?}",
+            &self.account_address, &channel_op, &args
+        );
         // generate proposal
         let proposal = self.generate_proposal(channel_op, args)?;
 
@@ -154,7 +180,10 @@ impl Handler<CollectProposalWithSigs> for Channel {
     ) -> <CollectProposalWithSigs as Message>::Result {
         let CollectProposalWithSigs { proposal, sigs } = message;
         debug_assert_ne!(self.account_address, sigs.address);
-
+        debug!(
+            "{} - collect proposal signature from {}",
+            &self.account_address, &sigs.address
+        );
         // if found an already applied txn in local storage,
         // we can return directly after check the hash of transaction and signatures.
         if let Some(signed_txn) =
@@ -252,6 +281,11 @@ impl Handler<GrantProposal> for Channel {
             channel_txn_id,
             grant,
         } = message;
+        debug!(
+            "{} grant({}) proposal {}",
+            &self.account_address, grant, &channel_txn_id
+        );
+
         let pending_txn = self.pending_txn();
         ensure!(pending_txn.is_some(), "no pending txn");
         let pending_txn = pending_txn.unwrap();
@@ -292,7 +326,10 @@ impl Handler<CancelPendingTxn> for Channel {
         ctx: &mut ActorHandlerContext,
     ) -> <CancelPendingTxn as Message>::Result {
         let CancelPendingTxn { channel_txn_id } = message;
-
+        debug!(
+            "{} cancel pending proposal {}",
+            &self.account_address, &channel_txn_id
+        );
         let pending_txn = self.pending_txn();
         ensure!(pending_txn.is_some(), "no pending txn");
         let pending_txn = pending_txn.unwrap();
@@ -321,6 +358,7 @@ impl Handler<ApplyPendingTxn> for Channel {
         message: ApplyPendingTxn,
         _ctx: &mut ActorHandlerContext,
     ) -> <ApplyPendingTxn as Message>::Result {
+        debug!("{} apply pending txn", self.account_address);
         let ApplyPendingTxn { proposal } = message;
 
         if let Some(_signed_txn) =
@@ -339,7 +377,6 @@ impl Handler<ApplyPendingTxn> for Channel {
             return Ok(None);
         }
 
-        debug!("user {} apply txn", self.account_address);
         ensure!(self.pending_txn().is_some(), "should have txn to apply");
         let pending_txn = self.pending_txn().unwrap();
         ensure!(
@@ -391,7 +428,7 @@ impl Handler<ForceTravel> for Channel {
         _message: ForceTravel,
         _ctx: &mut ActorHandlerContext,
     ) -> <ForceTravel as Message>::Result {
-        debug!("user {} apply txn", self.account_address);
+        debug!("{} force travel txn", self.account_address);
         ensure!(self.pending_txn().is_some(), "should have txn to apply");
         let pending_txn = self.pending_txn().unwrap();
         ensure!(
@@ -429,6 +466,11 @@ impl Handler<AccessingResource> for Channel {
         _ctx: &mut ActorHandlerContext,
     ) -> <AccessingResource as Message>::Result {
         let AccessingResource { path } = message;
+        debug!(
+            "{} accessing resource {:?}",
+            self.account_address,
+            path.data_path()
+        );
         access_local(self.witness_data().write_set(), &self.channel_state, &path)
             .map(|d| d.map(|o| o.to_vec()))
     }
@@ -441,6 +483,7 @@ impl Handler<GetPendingTxn> for Channel {
         _message: GetPendingTxn,
         _ctx: &mut ActorHandlerContext,
     ) -> <GetPendingTxn as Message>::Result {
+        debug!("{} get pending txn", &self.account_address);
         self.pending_txn()
     }
 }
@@ -459,6 +502,10 @@ impl Handler<ApplyCoSignedTxn> for Channel {
             events,
             ..
         } = message;
+        debug!(
+            "{} apply co-signed txn at version {}",
+            &self.account_address, version
+        );
         let signed_txn = match txn {
             Transaction::UserTransaction(s) => s,
             _ => {
@@ -577,6 +624,10 @@ impl Handler<ApplySoloTxn> for Channel {
             events,
             ..
         } = message;
+        debug!(
+            "{} apply solo txn at version {}",
+            &self.account_address, version
+        );
         let signed_txn = match txn {
             Transaction::UserTransaction(s) => s,
             _ => {

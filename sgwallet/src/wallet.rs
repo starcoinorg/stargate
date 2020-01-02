@@ -704,6 +704,7 @@ impl Wallet {
     ) -> Result<Option<ChannelTransactionRequest>> {
         let pending_txn = self.get_pending_txn(participant).await?;
         let request = pending_txn.and_then(|pending| {
+            // TODO: recheck the condition.
             if pending.is_negotiating() {
                 let (proposal, output, mut signatures) = pending.into();
                 let proposer_sigs = signatures.remove(&proposal.channel_txn.proposer());
