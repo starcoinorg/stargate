@@ -1,28 +1,18 @@
-// Copyright (c) The Starcoin Core Contributors
-// SPDX-License-Identifier: Apache-2.0
-
-use crate::custom_proto::upgrade::{
-    CustomMessage, RegisteredProtocol, RegisteredProtocolEvent, RegisteredProtocolSubstream,
-};
+use super::upgrade::{RegisteredProtocol, RegisteredProtocolEvent, RegisteredProtocolSubstream};
+use bytes::BytesMut;
 use futures::prelude::*;
-use libp2p::core::{
-    protocols_handler::{
-        IntoProtocolsHandler, KeepAlive, ProtocolsHandlerUpgrErr, SubstreamProtocol,
-    },
-    upgrade::{InboundUpgrade, OutboundUpgrade},
-    Endpoint, PeerId, ProtocolsHandler, ProtocolsHandlerEvent,
+use futures03::{compat::Compat, TryFutureExt as _};
+use futures_timer::Delay;
+use libp2p::core::upgrade::{InboundUpgrade, OutboundUpgrade};
+use libp2p::core::{ConnectedPoint, Endpoint, PeerId};
+use libp2p::swarm::{
+    IntoProtocolsHandler, KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent,
+    ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
 use log::{debug, error};
 use smallvec::{smallvec, SmallVec};
-use std::{
-    borrow::Cow,
-    error, fmt, io,
-    marker::PhantomData,
-    mem,
-    time::{Duration, Instant},
-};
-use tokio::io::{AsyncRead, AsyncWrite};
-use tokio_timer::Delay;
+use std::{borrow::Cow, error, fmt, io, marker::PhantomData, mem, time::Duration};
+use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Implements the `IntoProtocolsHandler` trait of libp2p.
 ///
@@ -77,21 +67,21 @@ use tokio_timer::Delay;
 ///
 /// We consider that we are now "closed" if the remote closes all the existing substreams.
 /// Re-opening it can then be performed by closing all active substream and re-opening one.
-pub struct CustomProtoHandlerProto<TMessage, TSubstream> {
+///
+pub struct CustomProtoHandlerProto<TSubstream> {
     /// Configuration for the protocol upgrade to negotiate.
-    protocol: RegisteredProtocol<TMessage>,
+    protocol: RegisteredProtocol,
 
     /// Marker to pin the generic type.
     marker: PhantomData<TSubstream>,
 }
 
-impl<TMessage, TSubstream> CustomProtoHandlerProto<TMessage, TSubstream>
+impl<TSubstream> CustomProtoHandlerProto<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
-    TMessage: CustomMessage,
 {
     /// Builds a new `CustomProtoHandlerProto`.
-    pub fn new(protocol: RegisteredProtocol<TMessage>) -> Self {
+    pub fn new(protocol: RegisteredProtocol) -> Self {
         CustomProtoHandlerProto {
             protocol,
             marker: PhantomData,
@@ -99,20 +89,28 @@ where
     }
 }
 
-impl<TMessage, TSubstream> IntoProtocolsHandler for CustomProtoHandlerProto<TMessage, TSubstream>
+impl<TSubstream> IntoProtocolsHandler for CustomProtoHandlerProto<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
-    TMessage: CustomMessage,
 {
-    type Handler = CustomProtoHandler<TMessage, TSubstream>;
+    type Handler = CustomProtoHandler<TSubstream>;
 
-    fn into_handler(self, remote_peer_id: &PeerId) -> Self::Handler {
+    fn inbound_protocol(&self) -> RegisteredProtocol {
+        self.protocol.clone()
+    }
+
+    fn into_handler(
+        self,
+        remote_peer_id: &PeerId,
+        connected_point: &ConnectedPoint,
+    ) -> Self::Handler {
         CustomProtoHandler {
             protocol: self.protocol,
+            endpoint: connected_point.to_endpoint(),
             remote_peer_id: remote_peer_id.clone(),
             state: ProtocolState::Init {
                 substreams: SmallVec::new(),
-                init_deadline: Delay::new(Instant::now() + Duration::from_secs(5)),
+                init_deadline: Delay::new(Duration::from_secs(5)).compat(),
             },
             events_queue: SmallVec::new(),
         }
@@ -120,51 +118,53 @@ where
 }
 
 /// The actual handler once the connection has been established.
-pub struct CustomProtoHandler<TMessage, TSubstream> {
+pub struct CustomProtoHandler<TSubstream> {
     /// Configuration for the protocol upgrade to negotiate.
-    protocol: RegisteredProtocol<TMessage>,
+    protocol: RegisteredProtocol,
 
     /// State of the communications with the remote.
-    state: ProtocolState<TMessage, TSubstream>,
+    state: ProtocolState<TSubstream>,
 
     /// Identifier of the node we're talking to. Used only for logging purposes and shouldn't have
     /// any influence on the behaviour.
     remote_peer_id: PeerId,
 
+    /// Whether we are the connection dialer or listener. Used to determine who, between the local
+    /// node and the remote node, has priority.
+    endpoint: Endpoint,
+
     /// Queue of events to send to the outside.
     ///
     /// This queue must only ever be modified to insert elements at the back, or remove the first
     /// element.
-    events_queue: SmallVec<
-        [ProtocolsHandlerEvent<RegisteredProtocol<TMessage>, (), CustomProtoHandlerOut<TMessage>>;
-            16],
-    >,
+    events_queue:
+        SmallVec<[ProtocolsHandlerEvent<RegisteredProtocol, (), CustomProtoHandlerOut>; 16]>,
 }
 
 /// State of the handler.
-enum ProtocolState<TMessage, TSubstream> {
+enum ProtocolState<TSubstream> {
     /// Waiting for the behaviour to tell the handler whether it is enabled or disabled.
     Init {
         /// List of substreams opened by the remote but that haven't been processed yet.
-        substreams: SmallVec<[RegisteredProtocolSubstream<TMessage, TSubstream>; 6]>,
+        substreams: SmallVec<[RegisteredProtocolSubstream<TSubstream>; 6]>,
         /// Deadline after which the initialization is abnormally long.
-        init_deadline: Delay,
+        init_deadline: Compat<Delay>,
     },
 
     /// Handler is opening a substream in order to activate itself.
     /// If we are in this state, we haven't sent any `CustomProtocolOpen` yet.
     Opening {
         /// Deadline after which the opening is abnormally long.
-        deadline: Delay,
+        deadline: Compat<Delay>,
     },
 
     /// Normal operating mode. Contains the substreams that are open.
     /// If we are in this state, we have sent a `CustomProtocolOpen` message to the outside.
     Normal {
         /// The substreams where bidirectional communications happen.
-        substreams: SmallVec<[RegisteredProtocolSubstream<TMessage, TSubstream>; 4]>,
+        substreams: SmallVec<[RegisteredProtocolSubstream<TSubstream>; 4]>,
         /// Contains substreams which are being shut down.
-        shutdown: SmallVec<[RegisteredProtocolSubstream<TMessage, TSubstream>; 4]>,
+        shutdown: SmallVec<[RegisteredProtocolSubstream<TSubstream>; 4]>,
     },
 
     /// We are disabled. Contains substreams that are being closed.
@@ -172,7 +172,7 @@ enum ProtocolState<TMessage, TSubstream> {
     /// outside or we have never sent any `CustomProtocolOpen` in the first place.
     Disabled {
         /// List of substreams to shut down.
-        shutdown: SmallVec<[RegisteredProtocolSubstream<TMessage, TSubstream>; 6]>,
+        shutdown: SmallVec<[RegisteredProtocolSubstream<TSubstream>; 6]>,
 
         /// If true, we should reactivate the handler after all the substreams in `shutdown` have
         /// been closed.
@@ -187,16 +187,15 @@ enum ProtocolState<TMessage, TSubstream> {
     KillAsap,
 
     /// We sometimes temporarily switch to this state during processing. If we are in this state
-    /// at the beginning of a method, that means something bad happend in the source code.
+    /// at the beginning of a method, that means something bad happened in the source code.
     Poisoned,
 }
 
 /// Event that can be received by a `CustomProtoHandler`.
 #[derive(Debug)]
-pub enum CustomProtoHandlerIn<TMessage> {
-    /// The node should start using custom protocols. Contains whether we are the dialer or the
-    /// listener of the connection.
-    Enable(Endpoint),
+pub enum CustomProtoHandlerIn {
+    /// The node should start using custom protocols.
+    Enable,
 
     /// The node should stop using custom protocols.
     Disable,
@@ -204,13 +203,13 @@ pub enum CustomProtoHandlerIn<TMessage> {
     /// Sends a message through a custom protocol substream.
     SendCustomMessage {
         /// The message to send.
-        message: TMessage,
+        message: Vec<u8>,
     },
 }
 
 /// Event that can be emitted by a `CustomProtoHandler`.
 #[derive(Debug)]
-pub enum CustomProtoHandlerOut<TMessage> {
+pub enum CustomProtoHandlerOut {
     /// Opened a custom protocol with the remote.
     CustomProtocolOpen {
         /// Version of the protocol that has been opened.
@@ -226,14 +225,14 @@ pub enum CustomProtoHandlerOut<TMessage> {
     /// Receives a message on a custom protocol substream.
     CustomMessage {
         /// Message that has been received.
-        message: TMessage,
+        message: BytesMut,
     },
 
     /// A substream to the remote is clogged. The send buffer is very large, and we should print
     /// a diagnostic message and/or avoid sending more data.
     Clogged {
         /// Copy of the messages that are within the buffer, for further diagnostic.
-        messages: Vec<TMessage>,
+        messages: Vec<Vec<u8>>,
     },
 
     /// An error has happened on the protocol level with this node.
@@ -245,13 +244,12 @@ pub enum CustomProtoHandlerOut<TMessage> {
     },
 }
 
-impl<TMessage, TSubstream> CustomProtoHandler<TMessage, TSubstream>
+impl<TSubstream> CustomProtoHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
-    TMessage: CustomMessage,
 {
     /// Enables the handler.
-    fn enable(&mut self, endpoint: Endpoint) {
+    fn enable(&mut self) {
         self.state = match mem::replace(&mut self.state, ProtocolState::Poisoned) {
             ProtocolState::Poisoned => {
                 error!(target: "sub-libp2p", "Handler with {:?} is in poisoned state",
@@ -264,7 +262,7 @@ where
                 ..
             } => {
                 if incoming.is_empty() {
-                    if let Endpoint::Dialer = endpoint {
+                    if let Endpoint::Dialer = self.endpoint {
                         self.events_queue
                             .push(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                                 protocol: SubstreamProtocol::new(self.protocol.clone()),
@@ -272,7 +270,7 @@ where
                             });
                     }
                     ProtocolState::Opening {
-                        deadline: Delay::new(Instant::now() + Duration::from_secs(60)),
+                        deadline: Delay::new(Duration::from_secs(60)).compat(),
                     }
                 } else {
                     let event = CustomProtoHandlerOut::CustomProtocolOpen {
@@ -341,9 +339,7 @@ where
     #[must_use]
     fn poll_state(
         &mut self,
-    ) -> Option<
-        ProtocolsHandlerEvent<RegisteredProtocol<TMessage>, (), CustomProtoHandlerOut<TMessage>>,
-    > {
+    ) -> Option<ProtocolsHandlerEvent<RegisteredProtocol, (), CustomProtoHandlerOut>> {
         match mem::replace(&mut self.state, ProtocolState::Poisoned) {
             ProtocolState::Poisoned => {
                 error!(target: "sub-libp2p", "Handler with {:?} is in poisoned state",
@@ -358,8 +354,8 @@ where
             } => {
                 match init_deadline.poll() {
                     Ok(Async::Ready(())) => {
-                        init_deadline.reset(Instant::now() + Duration::from_secs(60));
-                        debug!(target: "sub-libp2p", "Handler initialization process is too long \
+                        init_deadline = Delay::new(Duration::from_secs(60)).compat();
+                        error!(target: "sub-libp2p", "Handler initialization process is too long \
 							with {:?}", self.remote_peer_id)
                     }
                     Ok(Async::NotReady) => {}
@@ -375,7 +371,7 @@ where
 
             ProtocolState::Opening { mut deadline } => match deadline.poll() {
                 Ok(Async::Ready(())) => {
-                    deadline.reset(Instant::now() + Duration::from_secs(60));
+                    deadline = Delay::new(Duration::from_secs(60)).compat();
                     let event = CustomProtoHandlerOut::ProtocolError {
                         is_severe: true,
                         error: "Timeout when opening protocol".to_string().into(),
@@ -389,7 +385,7 @@ where
                 }
                 Err(_) => {
                     error!(target: "sub-libp2p", "Tokio timer has errored");
-                    deadline.reset(Instant::now() + Duration::from_secs(60));
+                    deadline = Delay::new(Duration::from_secs(60)).compat();
                     self.state = ProtocolState::Opening { deadline };
                     None
                 }
@@ -452,8 +448,7 @@ where
                     }
                 }
 
-                // This code is reached is none if and only if none of the substreams are in a ready
-                // state.
+                // This code is reached is none if and only if none of the substreams are in a ready state.
                 self.state = ProtocolState::Normal {
                     substreams,
                     shutdown,
@@ -470,7 +465,7 @@ where
                 // after all the substreams are closed.
                 if reenable && shutdown.is_empty() {
                     self.state = ProtocolState::Opening {
-                        deadline: Delay::new(Instant::now() + Duration::from_secs(60)),
+                        deadline: Delay::new(Duration::from_secs(60)).compat(),
                     };
                     Some(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(self.protocol.clone()),
@@ -487,10 +482,7 @@ where
     }
 
     /// Called by `inject_fully_negotiated_inbound` and `inject_fully_negotiated_outbound`.
-    fn inject_fully_negotiated(
-        &mut self,
-        mut substream: RegisteredProtocolSubstream<TMessage, TSubstream>,
-    ) {
+    fn inject_fully_negotiated(&mut self, mut substream: RegisteredProtocolSubstream<TSubstream>) {
         self.state = match mem::replace(&mut self.state, ProtocolState::Poisoned) {
             ProtocolState::Poisoned => {
                 error!(target: "sub-libp2p", "Handler with {:?} is in poisoned state",
@@ -549,7 +541,7 @@ where
     }
 
     /// Sends a message to the remote.
-    fn send_message(&mut self, message: TMessage) {
+    fn send_message(&mut self, message: Vec<u8>) {
         match self.state {
             ProtocolState::Normal {
                 ref mut substreams, ..
@@ -561,17 +553,16 @@ where
     }
 }
 
-impl<TMessage, TSubstream> ProtocolsHandler for CustomProtoHandler<TMessage, TSubstream>
+impl<TSubstream> ProtocolsHandler for CustomProtoHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
-    TMessage: CustomMessage,
 {
-    type InEvent = CustomProtoHandlerIn<TMessage>;
-    type OutEvent = CustomProtoHandlerOut<TMessage>;
+    type InEvent = CustomProtoHandlerIn;
+    type OutEvent = CustomProtoHandlerOut;
     type Substream = TSubstream;
     type Error = ConnectionKillError;
-    type InboundProtocol = RegisteredProtocol<TMessage>;
-    type OutboundProtocol = RegisteredProtocol<TMessage>;
+    type InboundProtocol = RegisteredProtocol;
+    type OutboundProtocol = RegisteredProtocol;
     type OutboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
@@ -593,10 +584,10 @@ where
         self.inject_fully_negotiated(proto);
     }
 
-    fn inject_event(&mut self, message: CustomProtoHandlerIn<TMessage>) {
+    fn inject_event(&mut self, message: CustomProtoHandlerIn) {
         match message {
             CustomProtoHandlerIn::Disable => self.disable(),
-            CustomProtoHandlerIn::Enable(endpoint) => self.enable(endpoint),
+            CustomProtoHandlerIn::Enable => self.enable(),
             CustomProtoHandlerIn::SendCustomMessage { message } => self.send_message(message),
         }
     }
@@ -653,7 +644,7 @@ where
     }
 }
 
-impl<TMessage, TSubstream> fmt::Debug for CustomProtoHandler<TMessage, TSubstream>
+impl<TSubstream> fmt::Debug for CustomProtoHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
@@ -664,13 +655,10 @@ where
 
 /// Given a list of substreams, tries to shut them down. The substreams that have been successfully
 /// shut down are removed from the list.
-fn shutdown_list<TMessage, TSubstream>(
-    list: &mut SmallVec<
-        impl smallvec::Array<Item = RegisteredProtocolSubstream<TMessage, TSubstream>>,
-    >,
+fn shutdown_list<TSubstream>(
+    list: &mut SmallVec<impl smallvec::Array<Item = RegisteredProtocolSubstream<TSubstream>>>,
 ) where
     TSubstream: AsyncRead + AsyncWrite,
-    TMessage: CustomMessage,
 {
     'outer: for n in (0..list.len()).rev() {
         let mut substream = list.swap_remove(n);
