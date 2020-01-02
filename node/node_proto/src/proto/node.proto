@@ -1,5 +1,4 @@
 syntax = "proto3";
-option go_package = "starcoin/node";
 package node;
 
 import "script_package.proto";
