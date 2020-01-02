@@ -3,18 +3,16 @@
 
 mod behaviour;
 mod config;
-mod custom_proto;
+mod debug_info;
+mod discovery;
+mod legacy_proto;
 mod service_task;
 mod transport;
-
-pub use crate::{
-    behaviour::Severity,
-    config::{NetworkConfiguration, NodeKeyConfig, NonReservedPeerMode, Secret, *},
-    custom_proto::{CustomMessage, RegisteredProtocol},
-    service_task::{start_service, Service, ServiceEvent},
-};
-use libp2p::core::nodes::ConnectedPoint;
-pub use libp2p::{build_multiaddr, core::PublicKey, identity, multiaddr, Multiaddr, PeerId};
+mod utils;
+pub use crate::config::{NetworkConfiguration, NodeKeyConfig, NonReservedPeerMode, Secret, *};
+use libp2p::core::ConnectedPoint;
+pub use libp2p::core::{identity, multiaddr, Multiaddr, PeerId, PublicKey};
+pub use libp2p::multiaddr as build_multiaddr;
 use serde::Serialize;
 use std::{
     collections::{HashMap, HashSet},
@@ -22,6 +20,15 @@ use std::{
     time::Duration,
 };
 
+pub trait DiscoveryNetBehaviour {
+    /// Notify the protocol that we have learned about the existence of nodes.
+    ///
+    /// Can (or most likely will) be called multiple times with the same `PeerId`s.
+    ///
+    /// Also note that there is no notification for expired nodes. The implementer must add a TTL
+    /// system, or remove nodes that will fail to reach.
+    fn add_discovered_nodes(&mut self, nodes: impl Iterator<Item = PeerId>);
+}
 /// Name of a protocol, transmitted on the wire. Should be unique for each chain.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProtocolId(smallvec::SmallVec<[u8; 6]>);
@@ -150,7 +157,7 @@ pub enum NetworkStatePeerEndpoint {
     /// We are listening.
     Listening {
         /// Address we're listening on that received the connection.
-        listen_addr: Multiaddr,
+        local_addr: Multiaddr,
         /// Address data is sent back to.
         send_back_addr: Multiaddr,
     },
@@ -161,10 +168,10 @@ impl From<ConnectedPoint> for NetworkStatePeerEndpoint {
         match endpoint {
             ConnectedPoint::Dialer { address } => NetworkStatePeerEndpoint::Dialing(address),
             ConnectedPoint::Listener {
-                listen_addr,
+                local_addr,
                 send_back_addr,
             } => NetworkStatePeerEndpoint::Listening {
-                listen_addr,
+                local_addr,
                 send_back_addr,
             },
         }

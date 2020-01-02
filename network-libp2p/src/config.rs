@@ -4,11 +4,12 @@
 //! Libp2p network configuration.
 
 use libp2p::{
-    identity::{ed25519, secp256k1, Keypair},
+    core::Multiaddr,
+    identity::{ed25519, Keypair},
     multiaddr::Protocol,
-    Multiaddr,
+    wasm_ext,
 };
-
+use std::fmt;
 use std::{
     error::Error,
     fs,
@@ -17,6 +18,7 @@ use std::{
     net::Ipv4Addr,
     path::{Path, PathBuf},
 };
+use zeroize::Zeroize;
 
 /// Network service configuration.
 #[derive(Clone)]
@@ -45,9 +47,36 @@ pub struct NetworkConfiguration {
     pub client_version: String,
     /// Name of the node. Sent over the wire for debugging purposes.
     pub node_name: String,
-    /// If true, the network will use mDNS to discover other libp2p nodes on the local network
-    /// and connect to them if they support the same chain.
-    pub enable_mdns: bool,
+
+    pub transport: TransportConfig,
+}
+
+/// Configuration for the transport layer.
+#[derive(Clone, Debug)]
+pub enum TransportConfig {
+    /// Normal transport mode.
+    Normal {
+        /// If true, the network will use mDNS to discover other libp2p nodes on the local network
+        /// and connect to them if they support the same chain.
+        enable_mdns: bool,
+
+        /// If true, allow connecting to private IPv4 addresses (as defined in
+        /// [RFC1918](https://tools.ietf.org/html/rfc1918)), unless the address has been passed in
+        /// [`NetworkConfiguration::reserved_nodes`] or [`NetworkConfiguration::boot_nodes`].
+        allow_private_ipv4: bool,
+
+        /// Optional external implementation of a libp2p transport. Used in WASM contexts where we
+        /// need some binding between the networking provided by the operating system or environment
+        /// and libp2p.
+        ///
+        /// This parameter exists whatever the target platform is, but it is expected to be set to
+        /// `Some` only when compiling for WASM.
+        wasm_external_transport: Option<wasm_ext::ExtTransport>,
+    },
+
+    /// Only allow connections within the same process.
+    /// Only addresses of the form `/memory/...` will be supported.
+    MemoryOnly,
 }
 
 impl Default for NetworkConfiguration {
@@ -65,7 +94,11 @@ impl Default for NetworkConfiguration {
             non_reserved_mode: NonReservedPeerMode::Accept,
             client_version: "unknown".into(),
             node_name: "unknown".into(),
-            enable_mdns: false,
+            transport: TransportConfig::Normal {
+                enable_mdns: false,
+                allow_private_ipv4: true,
+                wasm_external_transport: None,
+            },
         }
     }
 }
@@ -110,16 +143,11 @@ impl NonReservedPeerMode {
 /// The configuration of a node's secret key, describing the type of key
 /// and how it is obtained. A node's identity keypair is the result of
 /// the evaluation of the node key configuration.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum NodeKeyConfig {
-    /// A Secp256k1 secret key configuration.
-    Secp256k1(Secret<secp256k1::SecretKey>),
     /// A Ed25519 secret key configuration.
     Ed25519(Secret<ed25519::SecretKey>),
 }
-
-/// The options for obtaining a Secp256k1 secret key.
-pub type Secp256k1Secret = Secret<secp256k1::SecretKey>;
 
 /// The options for obtaining a Ed25519 secret key.
 pub type Ed25519Secret = Secret<ed25519::SecretKey>;
@@ -133,11 +161,20 @@ pub enum Secret<K> {
     /// it is created with a newly generated secret key `K`. The format
     /// of the file is determined by `K`:
     ///
-    ///   * `secp256k1::SecretKey`: An unencoded 32 bytes Secp256k1 secret key.
     ///   * `ed25519::SecretKey`: An unencoded 32 bytes Ed25519 secret key.
     File(PathBuf),
     /// Always generate a new secret key `K`.
     New,
+}
+
+impl<K> fmt::Debug for Secret<K> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Secret::Input(_) => f.debug_tuple("Secret::Input").finish(),
+            Secret::File(path) => f.debug_tuple("Secret::File").field(path).finish(),
+            Secret::New => f.debug_tuple("Secret::New").finish(),
+        }
+    }
 }
 
 impl NodeKeyConfig {
@@ -145,27 +182,15 @@ impl NodeKeyConfig {
     ///
     ///  * If the secret is configured as input, the corresponding keypair is returned.
     ///
-    ///  * If the secret is configured as a file, it is read from that file, if it exists. Otherwise
-    ///    a new secret is generated and stored. In either case, the keypair obtained from the
-    ///    secret is returned.
+    ///  * If the secret is configured as a file, it is read from that file, if it exists.
+    ///    Otherwise a new secret is generated and stored. In either case, the
+    ///    keypair obtained from the secret is returned.
     ///
-    ///  * If the secret is configured to be new, it is generated and the corresponding keypair is
-    ///    returned.
+    ///  * If the secret is configured to be new, it is generated and the corresponding
+    ///    keypair is returned.
     pub fn into_keypair(self) -> io::Result<Keypair> {
         use NodeKeyConfig::*;
         match self {
-            Secp256k1(Secret::New) => Ok(Keypair::generate_secp256k1()),
-
-            Secp256k1(Secret::Input(k)) => Ok(Keypair::Secp256k1(k.into())),
-
-            Secp256k1(Secret::File(f)) => get_secret(
-                f,
-                |mut b| secp256k1::SecretKey::from_bytes(&mut b),
-                secp256k1::SecretKey::generate,
-            )
-            .map(secp256k1::Keypair::from)
-            .map(Keypair::Secp256k1),
-
             Ed25519(Secret::New) => Ok(Keypair::generate_ed25519()),
 
             Ed25519(Secret::Input(k)) => Ok(Keypair::Ed25519(k.into())),
@@ -174,6 +199,7 @@ impl NodeKeyConfig {
                 f,
                 |mut b| ed25519::SecretKey::from_bytes(&mut b),
                 ed25519::SecretKey::generate,
+                |b| b.as_ref().to_vec(),
             )
             .map(ed25519::Keypair::from)
             .map(Keypair::Ed25519),
@@ -184,13 +210,13 @@ impl NodeKeyConfig {
 /// Load a secret key from a file, if it exists, or generate a
 /// new secret key and write it to that file. In either case,
 /// the secret key is returned.
-fn get_secret<P, F, G, E, K>(file: P, parse: F, generate: G) -> io::Result<K>
+fn get_secret<P, F, G, E, W, K>(file: P, parse: F, generate: G, serialize: W) -> io::Result<K>
 where
     P: AsRef<Path>,
     F: for<'r> FnOnce(&'r mut [u8]) -> Result<K, E>,
     G: FnOnce() -> K,
     E: Error + Send + Sync + 'static,
-    K: AsRef<[u8]>,
+    W: Fn(&K) -> Vec<u8>,
 {
     std::fs::read(&file)
         .and_then(|mut sk_bytes| {
@@ -200,7 +226,9 @@ where
             if e.kind() == io::ErrorKind::NotFound {
                 file.as_ref().parent().map_or(Ok(()), fs::create_dir_all)?;
                 let sk = generate();
-                write_secret_file(file, sk.as_ref())?;
+                let mut sk_vec = serialize(&sk);
+                write_secret_file(file, &sk_vec)?;
+                sk_vec.zeroize();
                 Ok(sk)
             } else {
                 Err(e)
@@ -246,19 +274,23 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempdir::TempDir;
+    use tempfile::TempDir;
+
+    fn tempdir_with_prefix(prefix: &str) -> TempDir {
+        tempfile::Builder::new().prefix(prefix).tempdir().unwrap()
+    }
 
     fn secret_bytes(kp: &Keypair) -> Vec<u8> {
         match kp {
             Keypair::Ed25519(p) => p.secret().as_ref().iter().cloned().collect(),
-            Keypair::Secp256k1(p) => p.secret().as_ref().iter().cloned().collect(),
+            Keypair::Secp256k1(p) => p.secret().to_bytes().to_vec(),
             _ => panic!("Unexpected keypair."),
         }
     }
 
     #[test]
     fn test_secret_file() {
-        let tmp = TempDir::new("x").unwrap();
+        let tmp = tempdir_with_prefix("x");
         std::fs::remove_dir(tmp.path()).unwrap(); // should be recreated
         let file = tmp.path().join("x").to_path_buf();
         let kp1 = NodeKeyConfig::Ed25519(Secret::File(file.clone()))
@@ -272,11 +304,11 @@ mod tests {
 
     #[test]
     fn test_secret_input() {
-        let sk = secp256k1::SecretKey::generate();
-        let kp1 = NodeKeyConfig::Secp256k1(Secret::Input(sk.clone()))
+        let sk = ed25519::SecretKey::generate();
+        let kp1 = NodeKeyConfig::Ed25519(Secret::Input(sk.clone()))
             .into_keypair()
             .unwrap();
-        let kp2 = NodeKeyConfig::Secp256k1(Secret::Input(sk))
+        let kp2 = NodeKeyConfig::Ed25519(Secret::Input(sk))
             .into_keypair()
             .unwrap();
         assert!(secret_bytes(&kp1) == secret_bytes(&kp2));
