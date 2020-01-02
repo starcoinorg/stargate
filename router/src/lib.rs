@@ -253,13 +253,14 @@ impl RouterInner {
 
     async fn find_path(&self, paths: HashSet<Vec<Vertex>>) -> Result<Vec<BalanceQueryResponse>> {
         let mut balance_map = HashMap::new();
-        let mut min_pressure = std::u64::MAX;
+        let mut min_pressure = std::i128::MAX;
         for path in paths.into_iter() {
             let balances = self.vertexes_to_balance_list(path).await?;
-            let mut pressure: u64 = 0;
+            let mut pressure: i128 = 0;
             for balance in balances.iter() {
-                pressure = pressure + balance.total_pay_amount + balance.remote_balance
-                    - balance.local_balance;
+                pressure =
+                    pressure + balance.total_pay_amount as i128 + balance.remote_balance as i128
+                        - balance.local_balance as i128;
             }
             balance_map.insert(pressure, balances);
             if pressure < min_pressure {
