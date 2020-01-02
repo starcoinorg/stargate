@@ -20,7 +20,7 @@ use libra_crypto::{
 use libra_logger::prelude::*;
 use libra_tools::tempdir::TempPath;
 use libra_types::account_address::AccountAddress;
-use path_finder::SeedManager;
+use path_finder::{PathStore, SeedManager};
 use seed_generator::{generate_random_u128, SValueGenerator};
 
 use rand::prelude::*;
@@ -44,7 +44,7 @@ use sgtypes::message::{
 };
 use sgtypes::s_value::SValue;
 use stats::{DirectedChannel, PaymentInfo, Stats};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use async_trait::async_trait;
@@ -247,13 +247,14 @@ struct AntRouterInner {
     default_future_timeout: AtomicU64,
     executor: Handle,
     stats_mgr: Arc<Stats>,
+    path_store: PathStore,
 }
 
 enum RouterCommand {
     FindPath {
         start: AccountAddress,
         end: AccountAddress,
-        responder: futures::channel::oneshot::Sender<Vec<BalanceQueryResponse>>,
+        responder: futures::channel::oneshot::Sender<Result<Vec<BalanceQueryResponse>>>,
     },
 }
 
@@ -278,6 +279,7 @@ impl AntRouter {
             default_future_timeout: AtomicU64::new(default_future_timeout),
             executor: executor.clone(),
             stats_mgr: stats_mgr.clone(),
+            path_store: PathStore::new(),
         };
         Self {
             executor,
@@ -335,7 +337,7 @@ impl Router for AntRouter {
                 responder: resp_sender,
             })?;
 
-        Ok(resp_receiver.await?)
+        resp_receiver.await?
     }
 
     fn stats(&self, channel: DirectedChannel, payment_info: PaymentInfo) -> Result<()> {
@@ -417,7 +419,7 @@ impl AntRouterInner {
         &self,
         start: AccountAddress,
         end: AccountAddress,
-        responder: futures::channel::oneshot::Sender<Vec<BalanceQueryResponse>>,
+        responder: futures::channel::oneshot::Sender<Result<Vec<BalanceQueryResponse>>>,
     ) -> Result<()> {
         let sender_seed = generate_random_u128();
         let message = ExchangeSeedMessageRequest::new(sender_seed);
@@ -445,35 +447,59 @@ impl AntRouterInner {
 
                 self.send_ant_query_message(s, start.clone(), vec![])
                     .await?;
-                let (tx, rx) = futures::channel::mpsc::channel(1);
-                let message_future = MessageFuture::new(rx);
+
+                Delay::new(Duration::from_millis(
+                    self.default_future_timeout.load(Ordering::Relaxed),
+                ))
+                .await;
+
                 let r = s_generator.get_r();
-                self.message_processor
-                    .add_future(r.clone(), tx.clone())
-                    .await;
-                self.future_timeout(r, self.default_future_timeout.load(Ordering::Relaxed));
-
-                let response = message_future.await?;
-
-                match response {
-                    RouterNetworkMessage::AntFinalMessage(resp) => {
-                        respond_with(responder, self.format_response_list(resp, start, end));
+                let paths = self.path_store.take_path(&r).await;
+                match paths {
+                    Some(resp) => {
+                        respond_with(responder, self.find_path_by_pressure(resp, start, end));
                     }
-                    _ => {
-                        respond_with(responder, vec![]);
+                    None => {
+                        respond_with(responder, Err(anyhow!("no path found")));
                         warn!("no path found");
                         return Ok(());
                     }
                 }
             }
             _ => {
-                respond_with(responder, vec![]);
+                respond_with(responder, Err(anyhow!("no path found")));
                 warn!("no path found");
                 return Ok(());
             }
         }
 
         Ok(())
+    }
+
+    fn find_path_by_pressure(
+        &self,
+        paths: Vec<AntFinalMessage>,
+        start: AccountAddress,
+        end: AccountAddress,
+    ) -> Result<Vec<BalanceQueryResponse>> {
+        let mut balance_map = HashMap::new();
+        let mut min_pressure = std::u64::MAX;
+        for path in paths.into_iter() {
+            let balances = self.format_response_list(path, start, end);
+            let mut pressure: u64 = 0;
+            for balance in balances.iter() {
+                pressure = pressure + balance.total_pay_amount + balance.remote_balance
+                    - balance.local_balance;
+            }
+            balance_map.insert(pressure, balances);
+            if pressure < min_pressure {
+                min_pressure = pressure;
+            }
+        }
+        match balance_map.remove(&min_pressure) {
+            Some(t) => Ok(t),
+            None => bail!("no path find"),
+        }
     }
 
     fn format_response_list(
@@ -541,12 +567,7 @@ impl AntRouterInner {
     }
 
     async fn handle_ant_final_message(&self, response: AntFinalMessage) -> Result<()> {
-        self.message_processor
-            .send_response(
-                response.r_value,
-                RouterNetworkMessage::AntFinalMessage(response),
-            )
-            .await?;
+        self.path_store.add_path(response.r_value, response).await?;
         Ok(())
     }
 
