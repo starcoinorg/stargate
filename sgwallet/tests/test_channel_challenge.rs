@@ -5,6 +5,8 @@ mod common;
 mod mock_chain_test_helper;
 mod rpc_chain_test_helper;
 
+#[macro_use]
+extern crate rusty_fork;
 use anyhow::Result;
 use coerce_rt::actor::context::{ActorContext, ActorStatus};
 use libra_crypto::HashValue;
@@ -23,6 +25,7 @@ use sgwallet::{
 };
 use std::{sync::Arc, time::Duration};
 
+rusty_fork_test! {
 #[test]
 fn run_test_channel_lock_and_then_resolve() {
     if let Err(e) = run_with_rpc_client(|chain_client| {
@@ -54,6 +57,7 @@ fn run_test_channel_lock_and_then_timeout() {
     }) {
         panic!("error, {}", e);
     }
+}
 }
 
 async fn test_channel_lock_and_resolve(sender: Arc<Wallet>, receiver: Arc<Wallet>) -> Result<()> {
