@@ -92,10 +92,6 @@ impl ChannelTransaction {
         self.version
     }
 
-    pub fn action(&self) -> ScriptAction {
-        unimplemented!()
-    }
-
     pub fn operator(&self) -> &ChannelOp {
         &self.operator
     }
