@@ -5,7 +5,6 @@ use libra_logger::prelude::*;
 use std::thread::sleep;
 use std::time::Duration;
 
-#[test]
 fn test_chain_state() {
     ::libra_logger::init_for_e2e_testing();
     let memory_address = "/memory/0";
