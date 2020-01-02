@@ -80,7 +80,7 @@ impl MixRouter {
             network_sender.clone(),
             ant_network_receiver,
             wallet.clone(),
-            default_future_timeout,
+            default_future_timeout / 2,
             stats_mgr.clone(),
         );
 
