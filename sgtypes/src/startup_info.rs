@@ -7,6 +7,5 @@ use libra_crypto::HashValue;
 pub struct StartupInfo {
     pub ledger_info: LedgerInfo,
     pub latest_version: u64,
-    pub account_state_root_hash: HashValue,
     pub ledger_frozen_subtree_hashes: Vec<HashValue>,
 }

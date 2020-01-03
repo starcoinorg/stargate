@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::node::Node;
-use anyhow::Result;
+use anyhow::{bail, Result};
 use libra_crypto::{
     ed25519::Ed25519PrivateKey,
     hash::{CryptoHash, CryptoHasher, TestOnlyHasher},
@@ -85,6 +85,7 @@ fn node_test_all() -> Result<()> {
 
     let f = async move {
         let fund_amount = 1000000;
+        let mut expected_channel_seq_number_12 = 0u64;
         let _result = node2
             .open_channel_async(addr1, fund_amount, fund_amount)
             .await
@@ -93,7 +94,10 @@ fn node_test_all() -> Result<()> {
             .await
             .unwrap();
 
-        _wait_channel_idle(node1.clone(), node2.clone()).await?;
+        expected_channel_seq_number_12 += 1;
+        wait_channel_sequence_number(node1.clone(), node2.clone(), expected_channel_seq_number_12)
+            .await?;
+
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount
@@ -104,6 +108,8 @@ fn node_test_all() -> Result<()> {
             fund_amount
         );
 
+        let mut expected_channel_seq_number_23 = 0u64;
+
         let _result = node2
             .open_channel_async(addr3, fund_amount, fund_amount)
             .await
@@ -111,8 +117,9 @@ fn node_test_all() -> Result<()> {
             .compat()
             .await
             .unwrap();
-
-        _wait_channel_idle(node2.clone(), node3.clone()).await?;
+        expected_channel_seq_number_23 += 1;
+        wait_channel_sequence_number(node2.clone(), node3.clone(), expected_channel_seq_number_23)
+            .await?;
         assert_eq!(
             node2.channel_balance_async(addr3).await.unwrap(),
             fund_amount
@@ -130,8 +137,9 @@ fn node_test_all() -> Result<()> {
             .compat()
             .await
             .unwrap();
-
-        _wait_channel_idle(node1.clone(), node2.clone()).await?;
+        expected_channel_seq_number_12 += 1;
+        wait_channel_sequence_number(node1.clone(), node2.clone(), expected_channel_seq_number_12)
+            .await?;
 
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
@@ -154,7 +162,9 @@ fn node_test_all() -> Result<()> {
             .unwrap();
 
         info!("sender is {}", addr2);
-        _wait_channel_idle(node1.clone(), node2.clone()).await?;
+        expected_channel_seq_number_12 += 2;
+        wait_channel_sequence_number(node1.clone(), node2.clone(), expected_channel_seq_number_12)
+            .await?;
 
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
@@ -173,8 +183,9 @@ fn node_test_all() -> Result<()> {
             .await
             .unwrap();
         debug!("txn:{:#?}", offchain_txn);
-
-        _wait_channel_idle(node1.clone(), node2.clone()).await?;
+        expected_channel_seq_number_12 += 1;
+        wait_channel_sequence_number(node1.clone(), node2.clone(), expected_channel_seq_number_12)
+            .await?;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount - transfer_amount * 2 + deposit_amount
@@ -192,11 +203,13 @@ fn node_test_all() -> Result<()> {
             .compat()
             .await
             .unwrap();
-        _wait_channel_idle(node3.clone(), node2.clone()).await?;
-        _wait_channel_idle(node2.clone(), node1.clone()).await?;
-        _delay(Duration::from_millis(1000)).await;
-        _wait_channel_idle(node2.clone(), node1.clone()).await?;
-        _wait_channel_idle(node3.clone(), node2.clone()).await?;
+
+        expected_channel_seq_number_12 += 2;
+        expected_channel_seq_number_23 += 2;
+        wait_channel_sequence_number(node2.clone(), node1.clone(), expected_channel_seq_number_12)
+            .await?;
+        wait_channel_sequence_number(node3.clone(), node2.clone(), expected_channel_seq_number_23)
+            .await?;
 
         assert_eq!(
             node3.channel_balance_async(addr2).await.unwrap(),
@@ -223,7 +236,9 @@ fn node_test_all() -> Result<()> {
             .compat()
             .await
             .unwrap();
-        _wait_channel_idle(node2.clone(), node1.clone()).await?;
+        expected_channel_seq_number_12 += 1;
+        wait_channel_sequence_number(node2.clone(), node1.clone(), expected_channel_seq_number_12)
+            .await?;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount - transfer_amount * 3 - wd_amount + deposit_amount
@@ -329,7 +344,7 @@ fn node_test_four_hop() -> Result<()> {
 
     let f = async move {
         let fund_amount = 1000000;
-
+        let mut expected_channel_seq_number_12 = 0u64;
         let _result = node2
             .open_channel_async(addr1, fund_amount, fund_amount)
             .await
@@ -337,8 +352,9 @@ fn node_test_four_hop() -> Result<()> {
             .compat()
             .await
             .unwrap();
-
-        _wait_channel_idle(node1.clone(), node2.clone()).await?;
+        expected_channel_seq_number_12 += 1;
+        wait_channel_sequence_number(node1.clone(), node2.clone(), expected_channel_seq_number_12)
+            .await?;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount
@@ -348,6 +364,7 @@ fn node_test_four_hop() -> Result<()> {
             fund_amount
         );
 
+        let mut expected_channel_seq_number_23 = 0u64;
         let _result = node3
             .open_channel_async(addr2, fund_amount, fund_amount)
             .await
@@ -355,7 +372,9 @@ fn node_test_four_hop() -> Result<()> {
             .compat()
             .await
             .unwrap();
-        _wait_channel_idle(node2.clone(), node3.clone()).await?;
+        expected_channel_seq_number_23 += 1;
+        wait_channel_sequence_number(node2.clone(), node3.clone(), expected_channel_seq_number_23)
+            .await?;
 
         assert_eq!(
             node3.channel_balance_async(addr2).await.unwrap(),
@@ -366,6 +385,7 @@ fn node_test_four_hop() -> Result<()> {
             fund_amount
         );
 
+        let mut expected_channel_seq_number_34 = 0u64;
         let _result = node4
             .open_channel_async(addr3, fund_amount, fund_amount)
             .await
@@ -373,7 +393,9 @@ fn node_test_four_hop() -> Result<()> {
             .compat()
             .await
             .unwrap();
-        _wait_channel_idle(node3.clone(), node4.clone()).await?;
+        expected_channel_seq_number_34 += 1;
+        wait_channel_sequence_number(node3.clone(), node4.clone(), expected_channel_seq_number_34)
+            .await?;
 
         assert_eq!(
             node4.channel_balance_async(addr3).await.unwrap(),
@@ -397,19 +419,15 @@ fn node_test_four_hop() -> Result<()> {
             .await
             .unwrap();
 
-        _wait_channel_idle(node4.clone(), node3.clone()).await?;
-        _delay(Duration::from_millis(1000)).await;
-        _wait_channel_idle(node3.clone(), node2.clone()).await?;
-        _delay(Duration::from_millis(1000)).await;
-        _wait_channel_idle(node2.clone(), node1.clone()).await?;
-        _delay(Duration::from_millis(1000)).await;
-
-        _wait_channel_idle(node2.clone(), node1.clone()).await?;
-        _delay(Duration::from_millis(1000)).await;
-        _wait_channel_idle(node3.clone(), node2.clone()).await?;
-        _delay(Duration::from_millis(1000)).await;
-        _wait_channel_idle(node4.clone(), node3.clone()).await?;
-        _delay(Duration::from_millis(1000)).await;
+        expected_channel_seq_number_34 += 2;
+        expected_channel_seq_number_23 += 2;
+        expected_channel_seq_number_12 += 2;
+        wait_channel_sequence_number(node4.clone(), node3.clone(), expected_channel_seq_number_34)
+            .await?;
+        wait_channel_sequence_number(node3.clone(), node2.clone(), expected_channel_seq_number_23)
+            .await?;
+        wait_channel_sequence_number(node2.clone(), node1.clone(), expected_channel_seq_number_12)
+            .await?;
 
         assert_eq!(
             node4.channel_balance_async(addr3).await.unwrap(),
@@ -445,7 +463,10 @@ fn node_test_four_hop() -> Result<()> {
             .unwrap();
         debug!("txn:{:#?}", offchain_txn);
 
-        _wait_channel_idle(node1.clone(), node2.clone()).await?;
+        expected_channel_seq_number_23 += 1;
+        wait_channel_sequence_number(node3.clone(), node2.clone(), expected_channel_seq_number_23)
+            .await?;
+
         assert_eq!(
             node2.channel_balance_async(addr3).await.unwrap(),
             fund_amount + transfer_amount * 5
@@ -557,7 +578,9 @@ fn node_test_approve() -> Result<()> {
             .compat()
             .await
             .unwrap();
-        _wait_channel_idle(node1.clone(), node2.clone()).await?;
+        let expected_channel_seq_number_12 = 1u64;
+        wait_channel_sequence_number(node1.clone(), node2.clone(), expected_channel_seq_number_12)
+            .await?;
         assert_eq!(
             node2.channel_balance_async(addr1).await.unwrap(),
             fund_amount
@@ -678,17 +701,43 @@ async fn _delay(duration: Duration) {
     delay_for(duration).await;
 }
 
-/// wait until the channel between node1 and node2 is idle
-async fn _wait_channel_idle(node1: Arc<Node>, node2: Arc<Node>) -> Result<()> {
+/// wait until the channel seq number between node1 and node2 is what we wanted
+async fn wait_channel_sequence_number(
+    node1: Arc<Node>,
+    node2: Arc<Node>,
+    channel_sequence_number: u64,
+    //    max_timeout_in_sec: u64,
+) -> Result<()> {
     let wallet1 = node1.wallet();
     let wallet2 = node2.wallet();
     let address1 = wallet1.account();
     let address2 = wallet2.account();
-    while wallet1.get_pending_txn_request(address2).await?.is_some() {
-        _delay(Duration::from_millis(500)).await
+    let max_timeout_in_sec = 5u64;
+
+    let mut wait_times = 0u64;
+    while wallet1.channel_sequence_number(address2).await? < channel_sequence_number {
+        if wait_times >= max_timeout_in_sec {
+            bail!(
+                "{} wait channel seq number {} for too long",
+                &address1,
+                channel_sequence_number
+            );
+        }
+        delay_for(Duration::from_millis(1000)).await;
+        wait_times += 1;
     }
-    while wallet2.get_pending_txn_request(address1).await?.is_some() {
-        _delay(Duration::from_millis(500)).await
+
+    let mut wait_times = 0u64;
+    while wallet2.channel_sequence_number(address1).await? < channel_sequence_number {
+        if wait_times >= max_timeout_in_sec {
+            bail!(
+                "{} wait channel seq number {} for too long",
+                &address2,
+                channel_sequence_number
+            );
+        }
+        delay_for(Duration::from_millis(1000)).await;
+        wait_times += 1;
     }
     Ok(())
 }

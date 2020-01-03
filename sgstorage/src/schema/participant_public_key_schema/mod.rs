@@ -23,7 +23,7 @@ use schemadb::{
 define_schema!(
     ParticipantPublicKeySchema,
     AccountAddress,
-    Ed25519PublicKey,
+    Option<Ed25519PublicKey>,
     PARTICIPANT_PUBLIC_KEY_CF_NAME
 );
 
@@ -37,7 +37,7 @@ impl KeyCodec<ParticipantPublicKeySchema> for AccountAddress {
     }
 }
 
-impl ValueCodec<ParticipantPublicKeySchema> for Ed25519PublicKey {
+impl ValueCodec<ParticipantPublicKeySchema> for Option<Ed25519PublicKey> {
     fn encode_value(&self) -> Result<Vec<u8>> {
         lcs::to_bytes(self).map_err(Into::into)
     }

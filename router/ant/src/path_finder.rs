@@ -5,9 +5,11 @@ use futures::lock::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use sgtypes::message::BalanceQueryResponse;
+use sgtypes::message::{AntFinalMessage, BalanceQueryResponse};
 use sgtypes::s_value::SValue;
 
+use anyhow::Result;
+use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 
 #[derive(Clone)]
@@ -50,5 +52,42 @@ impl SeedManager {
         info!("insert key {},value {:?}", key, value);
         self.seed_hash_map.lock().await.insert(key, value);
         None
+    }
+}
+
+pub struct PathStore {
+    seed_hash_map: Mutex<HashMap<HashValue, Vec<AntFinalMessage>>>,
+}
+
+impl PathStore {
+    pub fn new() -> Self {
+        Self {
+            seed_hash_map: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub async fn add_path(&self, r: HashValue, path: AntFinalMessage) -> Result<()> {
+        let has_key = self.seed_hash_map.lock().await.contains_key(&r);
+
+        if !has_key {
+            let mut path_set = Vec::new();
+            path_set.push(path);
+            self.seed_hash_map.lock().await.insert(r, path_set);
+        } else {
+            let mut vec = self
+                .seed_hash_map
+                .lock()
+                .await
+                .remove(&r)
+                .expect("should have");
+            vec.push(path);
+            self.seed_hash_map.lock().await.insert(r, vec);
+        }
+
+        Ok(())
+    }
+
+    pub async fn take_path(&self, r: &HashValue) -> Option<Vec<AntFinalMessage>> {
+        self.seed_hash_map.lock().await.remove(&r)
     }
 }

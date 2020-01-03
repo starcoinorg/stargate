@@ -13,7 +13,7 @@ use libra_crypto::{
 use libra_crypto_derive::CryptoHasher;
 use libra_prost_ext::MessageExt;
 use libra_types::account_address::AccountAddress;
-use libra_types::transaction::{TransactionArgument, Version};
+use libra_types::transaction::{ScriptAction, TransactionArgument, Version};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;

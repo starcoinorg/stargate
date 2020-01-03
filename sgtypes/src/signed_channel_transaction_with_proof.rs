@@ -1,5 +1,6 @@
+use crate::applied_channel_txn::AppliedChannelTxn;
 use crate::proof::signed_channel_transaction_proof::SignedChannelTransactionProof;
-use crate::signed_channel_transaction::SignedChannelTransaction;
+
 use anyhow::{ensure, Result};
 use libra_types::account_address::AccountAddress;
 use libra_types::contract_event::ContractEvent;
@@ -9,7 +10,7 @@ use libra_types::transaction::Version;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SignedChannelTransactionWithProof {
     pub version: Version,
-    pub signed_transaction: SignedChannelTransaction,
+    pub signed_transaction: AppliedChannelTxn,
     pub events: Option<Vec<ContractEvent>>,
     pub proof: SignedChannelTransactionProof,
 }
@@ -28,7 +29,7 @@ impl SignedChannelTransactionWithProof {
         _ledger_info: &LedgerInfo,
         version: Version,
         proposer: AccountAddress,
-        sequence_number: u64,
+        _sequence_number: u64,
         channel_sequence_number: u64,
     ) -> Result<()> {
         ensure!(
@@ -38,21 +39,21 @@ impl SignedChannelTransactionWithProof {
             version,
         );
         ensure!(
-            self.signed_transaction.raw_tx.proposer() == proposer,
+            self.signed_transaction.proposer() == proposer,
             "Sender ({}) not expected ({}).",
-            self.signed_transaction.raw_tx.proposer(),
+            self.signed_transaction.proposer(),
             proposer,
         );
+        //        ensure!(
+        //            self.signed_transaction.sequence_number() == sequence_number,
+        //            "Sequence number ({}) not expected ({}).",
+        //            self.signed_transaction.sequence_number(),
+        //            sequence_number,
+        //        );
         ensure!(
-            self.signed_transaction.raw_tx.sequence_number() == sequence_number,
-            "Sequence number ({}) not expected ({}).",
-            self.signed_transaction.raw_tx.sequence_number(),
-            sequence_number,
-        );
-        ensure!(
-            self.signed_transaction.raw_tx.channel_sequence_number() == channel_sequence_number,
+            self.signed_transaction.channel_sequence_number() == channel_sequence_number,
             "Channel sequence number ({}) not expected ({}).",
-            self.signed_transaction.raw_tx.channel_sequence_number(),
+            self.signed_transaction.channel_sequence_number(),
             channel_sequence_number,
         );
 

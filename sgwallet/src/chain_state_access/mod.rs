@@ -1,21 +1,22 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 #![allow(dead_code)]
-use anyhow::{anyhow, Result};
+use anyhow::{format_err, Result};
 use async_trait::async_trait;
-use coerce_rt::actor::context::{ActorContext, ActorHandlerContext};
-use coerce_rt::actor::message::{Handler, Message};
-use coerce_rt::actor::Actor;
+use coerce_rt::actor::{
+    context::ActorHandlerContext,
+    message::{Handler, Message},
+    Actor,
+};
 use futures::channel::oneshot;
 use libra_logger::prelude::*;
-use libra_types::access_path::DataPath;
-use libra_types::account_address::AccountAddress;
-use libra_types::transaction::Version;
+use libra_types::{access_path::DataPath, account_address::AccountAddress, transaction::Version};
 use sgchain::star_chain_client::ChainClient;
 use sgtypes::account_state::AccountState;
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    sync::Arc,
+};
 
 pub struct AccessState {
     pub version: Option<Version>,
@@ -162,7 +163,8 @@ impl Handler<AccessState> for ChainStateAccessor {
                 } else {
                     let (cancel_tx, cancel_rx) = oneshot::channel();
                     let my_actor_id = ctx.actor_id().clone();
-                    let mut myself = ActorContext::current_context()
+                    let mut myself = ctx
+                        .actor_context_mut()
                         .get_actor::<Self>(my_actor_id.clone())
                         .await
                         .unwrap();
@@ -233,7 +235,7 @@ impl Handler<RemoteAccessResult> for ChainStateAccessor {
                                 .expect("cache should contain this");
                             Ok(s)
                         }
-                        Err(_e) => Err(anyhow!("fail to get remote data")),
+                        Err(_e) => Err(format_err!("fail to get remote data")),
                     };
                     if let Err(_) = sender.send(to_send) {
                         warn!("receiver is already dropped");

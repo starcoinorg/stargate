@@ -1,6 +1,6 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
-
+#![allow(dead_code)]
 use super::common::{open_channel, receive_payment, send_payment};
 use anyhow::Result;
 use libra_crypto::HashValue;

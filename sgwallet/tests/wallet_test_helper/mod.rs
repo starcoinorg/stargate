@@ -1,23 +1,23 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
+#![allow(dead_code)]
 
 use super::common;
 use anyhow::{bail, Result};
 use futures::TryStreamExt;
 use libra_logger::prelude::*;
-use libra_types::access_path::AccessPath;
-use libra_types::account_address::AccountAddress;
-use libra_types::channel::ChannelEvent;
+use libra_types::{
+    access_path::AccessPath, account_address::AccountAddress, channel::ChannelEvent,
+};
 use sgchain::{client_state_view::ClientStateView, star_chain_client::ChainClient};
 use sgcompiler::{Compiler, StateViewModuleLoader};
 use sgtypes::script_package::ChannelScriptPackage;
-use sgwallet::wallet::Wallet;
-use sgwallet::{get_channel_events, ChannelChangeEvent};
-use std::time::Duration;
+use sgwallet::{get_channel_events, wallet::Wallet, ChannelChangeEvent};
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
     thread::sleep,
+    time::Duration,
 };
 
 //fn faucet_sync(client: Arc<dyn ChainClient>, receiver: AccountAddress, amount: u64) -> Result<()> {
@@ -177,8 +177,9 @@ pub async fn test_wallet_async(
     .await?;
 
     let channel_seq_number = sender_wallet.channel_sequence_number(receiver).await?;
-    let txn = sender_wallet.get_txn_by_channel_sequence_number(receiver, channel_seq_number - 1)?;
-    assert_eq!(sender, txn.raw_tx.proposer());
+    let txn = sender_wallet
+        .get_applied_txn_by_channel_sequence_number(receiver, channel_seq_number - 1)?;
+    assert_eq!(sender, txn.proposer());
 
     let sender_channel_balance = sender_wallet.channel_balance(receiver).await?;
     assert_eq!(

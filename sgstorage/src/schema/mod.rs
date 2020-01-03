@@ -19,7 +19,7 @@ use schemadb::ColumnFamilyName;
 pub const JELLYFISH_MERKLE_NODE_CF_NAME: ColumnFamilyName = "jellyfish_merkle_node";
 pub const STALE_NODE_INDEX_CF_NAME: ColumnFamilyName = "stale_node_index";
 pub const TRANSACTION_BY_ACCOUNT_CF_NAME: ColumnFamilyName = "transaction_by_account";
-pub const SIGNED_CHANNEL_TRANSACTION_CF_NAME: ColumnFamilyName = "signed_channel_transaction";
+pub const APPLIED_CHANNEL_TRANSACTION_CF_NAME: ColumnFamilyName = "applied_channel_transaction";
 pub const CHANNEL_TRANSACTION_ACCUMULATOR_CF_NAME: ColumnFamilyName =
     "channel_transaction_accumulator";
 pub const CHANNEL_TRANSACTION_INFO_CF_NAME: ColumnFamilyName = "channel_transaction_info";
