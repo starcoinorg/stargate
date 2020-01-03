@@ -48,7 +48,7 @@ impl<TSubstream> Behaviour<TSubstream> {
         peerset: sc_peerset::Peerset,
     ) -> Self {
         //todo: set versions
-        let versions = vec![0u8];
+        let versions = "/stargate/0.1".as_bytes();
         //todo: set protocol id
         let custom_protocols = CustomProto::new(protocol, &versions, peerset);
         Behaviour {

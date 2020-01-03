@@ -61,7 +61,7 @@ pub fn build_network_service(
 }
 
 fn build_libp2p_service(cfg: NetworkConfiguration) -> Result<Arc<Mutex<Libp2pService>>, io::Error> {
-    let protocol = network_libp2p::ProtocolId::from("protocol id not set".as_bytes());
+    let protocol = network_libp2p::ProtocolId::from("stargate".as_bytes());
     match start_service(protocol, cfg) {
         Ok((srv, _)) => Ok(Arc::new(Mutex::new(srv))),
         Err(err) => Err(err.into()),
