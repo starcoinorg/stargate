@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::wallet_utils::WalletLibrary;
 use ant::{AntRouter, MixRouter};
-use anyhow::{Error, Result};
+use anyhow::Result;
 use futures_01::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
@@ -66,19 +66,10 @@ fn load_from_keyfile(
     wallet_library.get_keypair(child_num).unwrap()
 }
 
-fn gen_node(
-    rt: &mut Runtime,
-    executor: Handle,
+fn create_wallet(
     keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
     wallet_config: &WalletConfig,
-    network_service: NetworkService,
-    sender: UnboundedSender<NetworkMessage>,
-    receiver: UnboundedReceiver<NetworkMessage>,
-    close_tx: futures_01::sync::oneshot::Sender<()>,
-    timeout: u64,
-    auto_approve: bool,
-    router_type: &String,
-) -> Result<Node> {
+) -> Result<Wallet> {
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
     let client = StarChainClient::new(
         &wallet_config.chain_address,
@@ -88,28 +79,42 @@ fn gen_node(
     let client = Arc::new(client);
 
     info!("account addr is {:?}", hex::encode(account_address));
-    let mut wallet = Wallet::new_with_client(
+    Wallet::new_with_client(
         account_address,
         keypair.clone(),
         client.clone(),
         &wallet_config.store_dir,
     )
-    .unwrap();
+}
 
-    wallet.start(&executor).unwrap();
+async fn start_wallet(wallet: Wallet) -> Result<WalletHandle> {
+    let wallet = wallet.start().await?;
+    let enabled: bool = wallet.is_channel_feature_enabled().await?;
+    if !enabled {
+        info!(
+            "channel feature is not enabled for account {}, try to enable it",
+            wallet.account()
+        );
+        wallet.enable_channel().await?;
+    }
+    Ok(wallet)
+}
 
-    let f = async {
-        let enabled: bool = wallet.is_channel_feature_enabled().await?;
-        if !enabled {
-            wallet.enable_channel().await?;
-        }
-        Ok::<_, Error>(())
-    };
-    rt.block_on(f)?;
-
-    info!("account resource is {:?}", wallet.account_resource());
-
+fn gen_node(
+    executor: Handle,
+    wallet: WalletHandle,
+    network_service: NetworkService,
+    sender: UnboundedSender<NetworkMessage>,
+    receiver: UnboundedReceiver<NetworkMessage>,
+    close_tx: futures_01::sync::oneshot::Sender<()>,
+    timeout: u64,
+    auto_approve: bool,
+    router_type: &String,
+) -> Result<Node> {
     let wallet = Arc::new(wallet);
+    info!("account resource is {:?}", wallet.account_resource());
+    let client = wallet.get_chain_client();
+
     let (tx_node, rx_router) = futures::channel::mpsc::unbounded();
     let (tx_router, rx_node) = futures::channel::mpsc::unbounded();
 
@@ -182,11 +187,11 @@ fn main() {
     let (network_service, tx, rx, close_tx) =
         build_network_service(&swarm.config.net_config, keypair.clone());
 
+    let wallet = create_wallet(keypair.clone(), &swarm.config.wallet).unwrap();
+    let wallet = rt.block_on(start_wallet(wallet)).unwrap();
     let mut node = gen_node(
-        &mut rt,
         executor.clone(),
-        keypair,
-        &swarm.config.wallet,
+        wallet,
         network_service,
         tx,
         rx,

@@ -780,7 +780,7 @@ dependencies = [
 [[package]]
 name = "coerce-rt"
 version = "0.1.2-pre"
-source = "git+https://github.com/starcoinorg/Coerce-rs.git?branch=stargate#11d840966648d3b0080de2b99b005d9079ccb825"
+source = "git+https://github.com/starcoinorg/Coerce-rs.git?branch=stargate#807a9798538f9c79f8c5a2dbc1c97c4243941c85"
 dependencies = [
  "async-trait 0.1.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
