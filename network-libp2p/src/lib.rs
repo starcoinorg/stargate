@@ -9,10 +9,16 @@ pub use libp2p::{
     multiaddr as build_multiaddr,
 };
 pub use service_task::{start_service, Service, ServiceEvent};
+
+#[allow(dead_code)]
 mod behaviour;
+#[allow(dead_code)]
 mod config;
+#[allow(dead_code)]
 mod debug_info;
+#[allow(dead_code)]
 mod discovery;
+#[allow(dead_code)]
 mod legacy_proto;
 mod service_task;
 mod transport;

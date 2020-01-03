@@ -11,7 +11,7 @@ byteorder = "1.3"
 bytes = "0.4"
 fnv = "1.0"
 futures = "0.1"
-libp2p = { version = "0.13.0" }
+libp2p = { git ="https://github.com/starcoinorg/rust-libp2p",tag = "v0.13.1-starcoin"}
 parking_lot = "0.7.1"
 lazy_static = "1.2"
 log = "0.4"

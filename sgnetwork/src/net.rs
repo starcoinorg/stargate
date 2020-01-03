@@ -11,7 +11,6 @@ use libra_crypto::{
 };
 
 use crate::message::{Message, NetworkMessage};
-use bytes::BytesMut;
 use futures::{
     future,
     stream::{self, Stream},
