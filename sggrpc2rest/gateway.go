@@ -49,7 +49,8 @@ func run() error {
 
 	// Register gRPC server endpoint
 	// Note: Make sure the gRPC server is running properly and accessible
-	mux := runtime.NewServeMux()
+	//mux := runtime.NewServeMux()
+	mux := runtime.NewServeMux(runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{OrigName: true, EmitDefaults: true}))
 	opts := []grpc.DialOption{grpc.WithInsecure()}
 
 	//RegisterNodeHandlerFromEndpoint
@@ -60,10 +61,10 @@ func run() error {
 	}
 
 	s := &http.Server{
-		Addr:    ":8081",
+		Addr:    ":8080",
 		Handler: allowCORS(mux),
 	}
-	fmt.Println("Starting listening at 8081 ")
+	fmt.Println("Starting listening at 8080 ")
 	if err := s.ListenAndServe(); err != http.ErrServerClosed {
 		glog.Errorf("Failed to listen and serve: %v", err)
 		return err
