@@ -25,6 +25,7 @@ use libra_types::channel::{
     user_channels_struct_tag, ChannelMirrorResource, ChannelParticipantAccountResource,
     ChannelResource, UserChannelsResource,
 };
+use libra_types::libra_resource::make_resource;
 use libra_types::transaction::Transaction;
 use libra_types::{
     access_path::DataPath,
@@ -54,7 +55,6 @@ use sgtypes::{
     script_package::{ChannelScriptPackage, ScriptCode},
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::convert::TryFrom;
 use std::path::Path;
 use std::{sync::Arc, time::Duration};
 use tokio::runtime;
@@ -853,7 +853,8 @@ impl Inner {
         {
             self.channel_enabled = true;
             let user_channels: UserChannelsResource =
-                TryFrom::try_from(blob.as_slice()).expect("parse user channels should work");
+                make_resource::<UserChannelsResource>(blob.as_slice())
+                    .expect("parse user channels should work");
             if let Err(e) = self.refresh_channels(user_channels, account_state.version()) {
                 error!("fail to start all channels, err: {:?}", e);
                 return ();
