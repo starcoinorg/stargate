@@ -21,7 +21,7 @@ use libra_types::{
 use rpc_chain_test_helper::run_with_rpc_client;
 use sgwallet::{
     chain_watcher::{ChainWatcher, Interest, TransactionWithInfo},
-    wallet::Wallet,
+    wallet::WalletHandle,
 };
 use std::{sync::Arc, time::Duration};
 
@@ -60,7 +60,10 @@ fn run_test_channel_lock_and_then_timeout() {
 }
 }
 
-async fn test_channel_lock_and_resolve(sender: Arc<Wallet>, receiver: Arc<Wallet>) -> Result<()> {
+async fn test_channel_lock_and_resolve(
+    sender: Arc<WalletHandle>,
+    receiver: Arc<WalletHandle>,
+) -> Result<()> {
     let _sender_init_balance = sender.balance()?;
     let _receiver_init_balance = receiver.balance()?;
     let _gas = common::open_channel(sender.clone(), receiver.clone(), 10000, 10000).await?;
@@ -140,7 +143,10 @@ async fn test_channel_lock_and_resolve(sender: Arc<Wallet>, receiver: Arc<Wallet
     Ok(())
 }
 
-async fn test_channel_lock_and_challenge(sender: Arc<Wallet>, receiver: Arc<Wallet>) -> Result<()> {
+async fn test_channel_lock_and_challenge(
+    sender: Arc<WalletHandle>,
+    receiver: Arc<WalletHandle>,
+) -> Result<()> {
     let _sender_init_balance = sender.balance()?;
     let _receiver_init_balance = receiver.balance()?;
     let _gas = common::open_channel(sender.clone(), receiver.clone(), 10000, 10000).await?;
@@ -207,7 +213,10 @@ async fn test_channel_lock_and_challenge(sender: Arc<Wallet>, receiver: Arc<Wall
     Ok(())
 }
 
-async fn test_channel_lock_and_timeout(sender: Arc<Wallet>, receiver: Arc<Wallet>) -> Result<()> {
+async fn test_channel_lock_and_timeout(
+    sender: Arc<WalletHandle>,
+    receiver: Arc<WalletHandle>,
+) -> Result<()> {
     let _sender_init_balance = sender.balance()?;
     let _receiver_init_balance = receiver.balance()?;
     let _gas = common::open_channel(sender.clone(), receiver.clone(), 10000, 10000).await?;

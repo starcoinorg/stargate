@@ -38,7 +38,7 @@ fn node_test_all() -> Result<()> {
     );
 
     let (mut node1, addr1) = gen_node(
-        &mut rt,
+        rt.block_on(setup_wallet(client.clone(), 10_000_000))?,
         executor.clone(),
         &network_config1,
         client.clone(),
@@ -55,7 +55,7 @@ fn node_test_all() -> Result<()> {
     );
 
     let (mut node2, addr2) = gen_node(
-        &mut rt,
+        rt.block_on(setup_wallet(client.clone(), 10_000_000))?,
         executor.clone(),
         &network_config2,
         client.clone(),
@@ -68,7 +68,7 @@ fn node_test_all() -> Result<()> {
         vec![seed.clone()],
     );
     let (mut node3, addr3) = gen_node(
-        &mut rt,
+        rt.block_on(setup_wallet(client.clone(), 10_000_000))?,
         executor.clone(),
         &network_config3,
         client.clone(),
@@ -282,7 +282,7 @@ fn node_test_four_hop() -> Result<()> {
     let client = Arc::new(mock_chain_service);
     let network_config1 = create_node_network_config("/ip4/127.0.0.1/tcp/5000".to_string(), vec![]);
     let (mut node1, addr1) = gen_node(
-        &mut rt,
+        rt.block_on(setup_wallet(client.clone(), 10_000_000))?,
         executor.clone(),
         &network_config1,
         client.clone(),
@@ -299,7 +299,7 @@ fn node_test_four_hop() -> Result<()> {
     );
 
     let (mut node2, addr2) = gen_node(
-        &mut rt,
+        rt.block_on(setup_wallet(client.clone(), 10_000_000))?,
         executor.clone(),
         &network_config2,
         client.clone(),
@@ -312,7 +312,7 @@ fn node_test_four_hop() -> Result<()> {
         vec![seed.clone()],
     );
     let (mut node3, addr3) = gen_node(
-        &mut rt,
+        rt.block_on(setup_wallet(client.clone(), 10_000_000))?,
         executor.clone(),
         &network_config3,
         client.clone(),
@@ -325,7 +325,7 @@ fn node_test_four_hop() -> Result<()> {
         vec![seed.clone()],
     );
     let (mut node4, addr4) = gen_node(
-        &mut rt,
+        rt.block_on(setup_wallet(client.clone(), 10_000_000))?,
         executor.clone(),
         &network_config4,
         client.clone(),
@@ -531,7 +531,7 @@ fn node_test_approve() -> Result<()> {
     );
 
     let (mut node1, addr1) = gen_node(
-        &mut rt,
+        rt.block_on(setup_wallet(client.clone(), 10_000_000))?,
         executor.clone(),
         &network_config1,
         client.clone(),
@@ -548,7 +548,7 @@ fn node_test_approve() -> Result<()> {
         vec![seed],
     );
     let (mut node2, addr2) = gen_node(
-        &mut rt,
+        rt.block_on(setup_wallet(client.clone(), 10_000_000))?,
         executor.clone(),
         &network_config2,
         client.clone(),
@@ -625,7 +625,7 @@ fn node_test_reject() -> Result<()> {
     );
 
     let (mut node1, addr1) = gen_node(
-        &mut rt,
+        rt.block_on(setup_wallet(client.clone(), 10_000_000))?,
         executor.clone(),
         &network_config1,
         client.clone(),
@@ -642,7 +642,7 @@ fn node_test_reject() -> Result<()> {
         vec![seed],
     );
     let (mut node2, addr2) = gen_node(
-        &mut rt,
+        rt.block_on(setup_wallet(client.clone(), 10_000_000))?,
         executor.clone(),
         &network_config2,
         client.clone(),
@@ -702,6 +702,7 @@ async fn _delay(duration: Duration) {
 }
 
 /// wait until the channel seq number between node1 and node2 is what we wanted
+#[allow(dead_code)]
 async fn wait_channel_sequence_number(
     node1: Arc<Node>,
     node2: Arc<Node>,

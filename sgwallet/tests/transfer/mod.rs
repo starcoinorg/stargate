@@ -4,10 +4,13 @@
 use super::common::{open_channel, receive_payment, send_payment};
 use anyhow::Result;
 use libra_crypto::HashValue;
-use sgwallet::wallet::Wallet;
+use sgwallet::wallet::WalletHandle;
 use std::sync::Arc;
 
-pub async fn transfer_htlc(sender_wallet: Arc<Wallet>, receiver_wallet: Arc<Wallet>) -> Result<()> {
+pub async fn transfer_htlc(
+    sender_wallet: Arc<WalletHandle>,
+    receiver_wallet: Arc<WalletHandle>,
+) -> Result<()> {
     let fund_amount = 10000;
     open_channel(
         sender_wallet.clone(),
