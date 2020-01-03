@@ -18,10 +18,6 @@ pub struct ChannelTransactionInfo {
     /// the root hash of Merkle Accumulator storing all write op emitted during this transaction.
     write_set_root_hash: HashValue,
 
-    /// The root hash of Sparse Merkle Tree describing the world state at the end of this
-    /// transaction.
-    state_root_hash: HashValue,
-
     /// The root hash of Merkle Accumulator storing all events emitted during this transaction.
     event_root_hash: HashValue,
 
@@ -42,7 +38,6 @@ impl ChannelTransactionInfo {
     pub fn new(
         signed_transaction_hash: HashValue,
         write_set_root_hash: HashValue,
-        state_root_hash: HashValue,
         event_root_hash: HashValue,
         major_status: StatusCode,
         travel: bool,
@@ -51,7 +46,6 @@ impl ChannelTransactionInfo {
         ChannelTransactionInfo {
             signed_transaction_hash,
             write_set_root_hash,
-            state_root_hash,
             event_root_hash,
             major_status,
             travel,
@@ -62,12 +56,6 @@ impl ChannelTransactionInfo {
     /// Returns the hash of this transaction.
     pub fn signed_transaction_hash(&self) -> HashValue {
         self.signed_transaction_hash
-    }
-
-    /// Returns root hash of Sparse Merkle Tree describing the world state at the end of this
-    /// transaction.
-    pub fn state_root_hash(&self) -> HashValue {
-        self.state_root_hash
     }
 
     /// the root hash of Merkle Accumulator storing all write op emitted during this transaction.

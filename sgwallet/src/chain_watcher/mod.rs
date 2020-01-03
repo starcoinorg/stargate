@@ -1,27 +1,36 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::bail;
-use anyhow::Result;
-use futures::channel::mpsc;
-use futures::channel::oneshot;
-use futures::{FutureExt, SinkExt, StreamExt};
+use anyhow::{bail, format_err, Result};
+use futures::{
+    channel::{mpsc, oneshot},
+    SinkExt, StreamExt,
+};
 use libra_logger::prelude::*;
 use sgchain::star_chain_client::ChainClient;
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 mod txn_stream;
-use super::utils::{call, cast, respond_with, Msg};
+use async_trait::async_trait;
+use coerce_rt::{
+    actor,
+    actor::{
+        context::{ActorContext, ActorHandlerContext},
+        message::Message,
+        ActorRef,
+    },
+};
 use std::time::Duration;
 use tokio::time::interval;
 pub use txn_stream::TransactionWithInfo;
-use txn_stream::TxnStream;
 
-pub type Interest = Box<dyn Fn(&TransactionWithInfo) -> bool + Send>;
+pub type Interest = Box<dyn Fn(&TransactionWithInfo) -> bool + Send + Sync>;
 
+#[derive(Clone)]
 pub struct ChainWatcherHandle {
-    mail_sender: mpsc::Sender<InnerMsg>,
-    shutdown_tx: Option<oneshot::Sender<()>>,
+    actor_ref: ActorRef<ChainWatcher>,
 }
 
 impl ChainWatcherHandle {
@@ -32,17 +41,21 @@ impl ChainWatcherHandle {
         interest: Interest,
     ) -> Result<oneshot::Receiver<TransactionWithInfo>> {
         let (tx, rx) = oneshot::channel();
-        call(
-            self.mail_sender.clone(),
-            Request::AddInterest {
+        let succ = self
+            .actor_ref
+            .clone()
+            .send(AddInterest {
                 tag,
                 interest,
                 sink: Trans::Oneshot(tx),
-            },
-        )
-        .await?;
-
-        Ok(rx)
+            })
+            .await
+            .map_err(|_| format_err!("task is already stopped"))?;
+        if succ {
+            Ok(rx)
+        } else {
+            bail!("an interest with same tag already exists");
+        }
     }
 
     /// add interest on txn stream
@@ -52,16 +65,18 @@ impl ChainWatcherHandle {
         interest: Interest,
     ) -> Result<mpsc::Receiver<TransactionWithInfo>> {
         let (tx, rx) = mpsc::channel(1024);
-        let resp = call(
-            self.mail_sender.clone(),
-            Request::AddInterest {
+
+        let succ = self
+            .actor_ref
+            .clone()
+            .send(AddInterest {
                 tag,
                 interest,
                 sink: Trans::Mpsc(tx),
-            },
-        )
-        .await?;
-        let Response::AddInterestResp(succ) = resp;
+            })
+            .await
+            .map_err(|_| format_err!("task is already stopped"))?;
+
         if succ {
             Ok(rx)
         } else {
@@ -69,122 +84,161 @@ impl ChainWatcherHandle {
         }
     }
 
-    pub fn remove_interest(&self, tag: Vec<u8>) -> Result<()> {
-        cast(self.mail_sender.clone(), Request::RemoveInterest { tag })
-    }
-
-    pub fn stop(&mut self) {
-        // if send return err, it means receiver already dropped.
-        if let Some(tx) = self.shutdown_tx.take() {
-            if let Err(_) = tx.send(()) {
-                warn!("receiver end of shutdown is already dropped");
-            }
+    pub async fn remove_interest(&self, tag: Vec<u8>) -> Result<()> {
+        match self.actor_ref.clone().notify(RemoveInterest { tag }).await {
+            Err(_e) => Err(format_err!("task is already stopped")),
+            Ok(_) => Ok(()),
         }
     }
-}
 
-impl Drop for ChainWatcherHandle {
-    fn drop(&mut self) {
-        self.stop();
+    pub async fn stop(mut self) {
+        let _ = self.actor_ref.stop().await;
     }
 }
 
-enum Request {
-    AddInterest {
-        tag: Vec<u8>,
-        interest: Interest,
-        sink: Trans,
-    },
-    RemoveInterest {
-        tag: Vec<u8>,
-    },
+struct AddInterest {
+    tag: Vec<u8>,
+    interest: Interest,
+    sink: Trans,
 }
-#[derive(Debug)]
-enum Response {
-    AddInterestResp(bool),
+impl actor::message::Message for AddInterest {
+    type Result = bool;
 }
 
-type InnerMsg = Msg<Request, Response>;
+struct RemoveInterest {
+    tag: Vec<u8>,
+}
+impl actor::message::Message for RemoveInterest {
+    type Result = ();
+}
+
+struct Cleanup;
+impl actor::message::Message for Cleanup {
+    type Result = ();
+}
+
+struct NewTxn {
+    txn: Result<TransactionWithInfo>,
+}
+impl actor::message::Message for NewTxn {
+    type Result = ();
+}
 
 pub struct ChainWatcher {
     chain_client: Arc<dyn ChainClient>,
     down_streams: HashMap<Vec<u8>, DownStream>,
-    mailbox: mpsc::Receiver<InnerMsg>,
-    mailbox_sender: mpsc::Sender<InnerMsg>,
+    start_version: u64,
+    limit: u64,
 }
-
 impl ChainWatcher {
-    pub fn new(chain_client: Arc<dyn ChainClient>) -> Self {
-        let (tx, rx) = mpsc::channel(1024);
+    pub fn new(chain_client: Arc<dyn ChainClient>, start_version: u64, limit: u64) -> Self {
         Self {
             chain_client,
             down_streams: HashMap::new(),
-            mailbox: rx,
-            mailbox_sender: tx,
+            start_version,
+            limit,
         }
     }
 
-    pub fn start(
-        self,
-        executor: tokio::runtime::Handle,
-        start_version: u64,
-        limit: u64,
-    ) -> Result<ChainWatcherHandle> {
-        let (shutdown_tx, shutdown_rx) = oneshot::channel();
-        let handle = ChainWatcherHandle {
-            mail_sender: self.mailbox_sender.clone(),
-            shutdown_tx: Some(shutdown_tx),
-        };
-        let txn_stream = txn_stream::TxnStream::new_from_chain_client(
+    pub async fn start(self, mut context: ActorContext) -> Result<ChainWatcherHandle> {
+        let actor_ref = context.new_actor(self).await?;
+        Ok(ChainWatcherHandle { actor_ref })
+    }
+}
+
+#[async_trait]
+impl actor::Actor for ChainWatcher {
+    async fn started(&mut self, ctx: &mut ActorHandlerContext) {
+        // TODO: spawn txn stream
+        let my_actor_id = ctx.actor_id().clone();
+        let mut myself = ctx
+            .actor_context_mut()
+            .get_actor::<Self>(my_actor_id.clone())
+            .await
+            .unwrap();
+        let mut myself_clone = myself.clone();
+
+        let mut cleanup_interval = interval(Duration::from_secs(2)).fuse();
+        tokio::task::spawn(async move {
+            while let Some(_) = cleanup_interval.next().await {
+                if let Err(_e) = myself.notify(Cleanup).await {
+                    info!("parent task is gone, stop now");
+                    break;
+                }
+            }
+        });
+        let mut txn_stream = txn_stream::TxnStream::new_from_chain_client(
             self.chain_client.clone(),
-            start_version,
-            limit,
+            self.start_version,
+            self.limit,
         );
 
-        executor.spawn(self.inner_start(txn_stream, shutdown_rx));
-        Ok(handle)
+        tokio::task::spawn(async move {
+            while let Some(txn) = txn_stream.next().await {
+                if let Err(_e) = myself_clone.send(NewTxn { txn }).await {
+                    info!("parent task is gone, stop now");
+                    break;
+                }
+            }
+        });
+
+        info!("chain watcher started, id: {}", ctx.actor_id());
+    }
+
+    async fn stopped(&mut self, ctx: &mut ActorHandlerContext) {
+        info!("chain watcher stopped, id : {}", ctx.actor_id());
+    }
+}
+
+#[async_trait]
+impl actor::message::Handler<AddInterest> for ChainWatcher {
+    async fn handle(
+        &mut self,
+        message: AddInterest,
+        _ctx: &mut ActorHandlerContext,
+    ) -> <AddInterest as Message>::Result {
+        let AddInterest {
+            tag,
+            interest,
+            sink,
+        } = message;
+        self.add_interest(tag, interest, sink)
+    }
+}
+#[async_trait]
+impl actor::message::Handler<RemoveInterest> for ChainWatcher {
+    async fn handle(
+        &mut self,
+        message: RemoveInterest,
+        _ctx: &mut ActorHandlerContext,
+    ) -> <RemoveInterest as Message>::Result {
+        let RemoveInterest { tag } = message;
+        self.remove_interest(&tag);
+    }
+}
+#[async_trait]
+impl actor::message::Handler<Cleanup> for ChainWatcher {
+    async fn handle(
+        &mut self,
+        _message: Cleanup,
+        _ctx: &mut ActorHandlerContext,
+    ) -> <Cleanup as Message>::Result {
+        self.down_streams.retain(|_, v| !v.is_closed());
+    }
+}
+#[async_trait]
+impl actor::message::Handler<NewTxn> for ChainWatcher {
+    async fn handle(
+        &mut self,
+        message: NewTxn,
+        _ctx: &mut ActorHandlerContext,
+    ) -> <NewTxn as Message>::Result {
+        let NewTxn { txn } = message;
+        self.handle_txn(txn).await;
     }
 }
 
 impl ChainWatcher {
-    async fn inner_start(mut self, txn_stream: TxnStream, shutdown_rx: oneshot::Receiver<()>) {
-        let mut fused_txn_stream = txn_stream.fuse();
-        let mut fused_shutdown_rx = shutdown_rx.fuse();
-        let mut cleanup_interval = interval(Duration::from_secs(2)).fuse();
-        loop {
-            futures::select! {
-                maybe_msg = self.mailbox.next() => {
-                   if let Some(msg) = maybe_msg {
-                       self.handle_msg(msg).await;
-                   }
-                }
-                maybe_txn = fused_txn_stream.next() => {
-                    if let Some(txn) = maybe_txn {
-                        self.handle_txn(txn).await;
-                    }
-                }
-                maybe_interval = cleanup_interval.next() => {
-                    if let Some(_) = maybe_interval {
-                        self.handle_cleanup_interval().await;
-                    }
-                }
-                _ = fused_shutdown_rx => {
-                    break;
-                }
-            }
-        }
-
-        info!("chain watcher terminated");
-    }
-
-    /// Drop down streams that is already closed periodicly.
-    async fn handle_cleanup_interval(&mut self) {
-        self.down_streams.retain(|_, v| match v.sink {
-            Trans::Oneshot(ref s) => !s.is_canceled(),
-            Trans::Mpsc(ref s) => !s.is_closed(),
-        });
-    }
-
     async fn handle_txn(&mut self, txn: Result<TransactionWithInfo>) {
         match txn {
             Err(e) => error!("fail to get txn from chain, e: {:#?}", e),
@@ -231,36 +285,6 @@ impl ChainWatcher {
                     self.down_streams.insert(tag, down_stream);
                 }
             }
-        }
-    }
-
-    async fn handle_msg(&mut self, msg: InnerMsg) {
-        match msg {
-            Msg::Call { msg, tx } => self.handle_call(msg, tx).await,
-            Msg::Cast { msg } => self.handle_cast(msg).await,
-        }
-    }
-    async fn handle_call(&mut self, msg: Request, responder: oneshot::Sender<Response>) {
-        let resp = match msg {
-            Request::AddInterest {
-                tag,
-                interest,
-                sink,
-            } => {
-                let success = self.add_interest(tag, interest, sink);
-                Response::AddInterestResp(success)
-            }
-            _ => unreachable!(),
-        };
-        respond_with(responder, resp);
-    }
-
-    async fn handle_cast(&mut self, msg: Request) {
-        match msg {
-            Request::RemoveInterest { tag } => {
-                self.remove_interest(&tag);
-            }
-            _ => unreachable!(),
         }
     }
 

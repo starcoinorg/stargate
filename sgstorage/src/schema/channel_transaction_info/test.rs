@@ -13,7 +13,6 @@ fn test_encode_decode() {
         HashValue::random(),
         HashValue::random(),
         HashValue::random(),
-        HashValue::random(),
         StatusCode::EXECUTED,
         false,
         0,
