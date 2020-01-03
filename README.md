@@ -2,7 +2,7 @@
 
 ---
 
-![](https://github.com/starcoinorg/stargate/workflows/Build%20and%20Test/badge.svg?event=schedule)
+![](https://github.com/starcoinorg/stargate/workflows/Build%20and%20Test/badge.svg?branch=master)
 ![](https://github.com/starcoinorg/stargate/workflows/Security%20audit/badge.svg)
 [![License](https://img.shields.io/badge/license-Apache-green.svg)](LICENSE)
 
