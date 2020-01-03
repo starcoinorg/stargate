@@ -1001,9 +1001,7 @@ where
                             timer_deadline,
                         };
                     }
-                    _ => {
-                        error!(target: "sg-libp2p", "State mismatch in the custom protos handler")
-                    }
+                    _ => error!(target: "sg-libp2p", "State mismatch in the custom protos handler"),
                 }
             }
 
