@@ -123,13 +123,6 @@ impl MixRouter {
         Ok(())
     }
 
-    pub async fn shutdown(&self) -> Result<()> {
-        self.table_router.shutdown().await?;
-        self.ant_router.shutdown().await?;
-        self.control_sender.unbounded_send(Event::SHUTDOWN)?;
-        Ok(())
-    }
-
     async fn start_network(
         mut network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
         table_network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
@@ -226,6 +219,13 @@ impl Router for MixRouter {
         self.stats_mgr.stats(channel, payment_info)?;
         Ok(())
     }
+
+    async fn shutdown(&self) -> Result<()> {
+        self.table_router.shutdown().await?;
+        self.ant_router.shutdown().await?;
+        self.control_sender.unbounded_send(Event::SHUTDOWN)?;
+        Ok(())
+    }
 }
 
 pub struct AntRouter {
@@ -314,11 +314,6 @@ impl AntRouter {
         ));
         Ok(())
     }
-
-    pub async fn shutdown(&self) -> Result<()> {
-        self.control_sender.unbounded_send(Event::SHUTDOWN)?;
-        Ok(())
-    }
 }
 
 #[async_trait]
@@ -342,6 +337,11 @@ impl Router for AntRouter {
 
     fn stats(&self, channel: DirectedChannel, payment_info: PaymentInfo) -> Result<()> {
         self.stats_mgr.stats(channel, payment_info)?;
+        Ok(())
+    }
+
+    async fn shutdown(&self) -> Result<()> {
+        self.control_sender.unbounded_send(Event::SHUTDOWN)?;
         Ok(())
     }
 }
