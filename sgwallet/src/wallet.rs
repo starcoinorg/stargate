@@ -116,7 +116,9 @@ impl WalletHandle {
     pub fn account(&self) -> AccountAddress {
         self.shared.account
     }
-
+    pub fn keypair(&self) -> Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>> {
+        self.shared.keypair.clone()
+    }
     pub fn client(&self) -> &dyn ChainClient {
         self.shared.client.as_ref()
     }

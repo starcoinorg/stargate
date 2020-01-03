@@ -24,7 +24,7 @@ use sgtypes::{
     message::*,
     system_event::Event,
 };
-use sgwallet::{utils::*, wallet::Wallet};
+use sgwallet::{utils::*, wallet::WalletHandle};
 
 use crate::message_processor::{MessageFuture, MessageProcessor};
 
@@ -56,12 +56,12 @@ pub struct Node {
     network_service_close_tx: Option<oneshot::Sender<()>>,
     router_message_receiver:
         Option<futures::channel::mpsc::UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>>,
-    wallet: Arc<Wallet>,
+    wallet: Arc<WalletHandle>,
     invoice_mgr: InvoiceManager,
 }
 
 struct NodeInner {
-    wallet: Arc<Wallet>,
+    wallet: Arc<WalletHandle>,
     executor: Handle,
     sender: UnboundedSender<NetworkMessage>,
     message_processor: MessageProcessor<u64>,
@@ -77,7 +77,7 @@ struct NodeInner {
 impl Node {
     pub fn new(
         executor: Handle,
-        wallet: Arc<Wallet>,
+        wallet: Arc<WalletHandle>,
         network_service: NetworkService,
         sender: UnboundedSender<NetworkMessage>,
         receiver: UnboundedReceiver<NetworkMessage>,
@@ -701,7 +701,7 @@ impl Node {
 }
 
 impl Node {
-    pub fn wallet(&self) -> Arc<Wallet> {
+    pub fn wallet(&self) -> Arc<WalletHandle> {
         self.wallet.clone()
     }
 }
