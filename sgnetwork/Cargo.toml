@@ -7,7 +7,7 @@ publish = false
 edition = "2018"
 
 [dependencies]
-libp2p = { git ="https://github.com/starcoinorg/rust-libp2p",tag = "v0.13.1-starcoin"}
+libp2p = { git ="https://github.com/starcoinorg/rust-libp2p",branch = "starcoin"}
 tokio = { version = "0.1" }
 futures = "0.1"
 sg_config = { path = "../sgconfig" }
