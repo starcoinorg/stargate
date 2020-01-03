@@ -4,7 +4,7 @@
 //! The `Protocol` struct uses `LegacyProto` in order to open substreams with the rest of the
 //! network, then performs the Substrate protocol handling on top.
 
-pub use self::behaviour::{LegacyProto, LegacyProtoOut};
+pub use behaviour::{LegacyProto, LegacyProtoOut};
 mod behaviour;
 mod handler;
 mod tests;

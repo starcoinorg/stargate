@@ -39,6 +39,7 @@ pub struct Behaviour<TSubstream> {
 impl<TSubstream> Behaviour<TSubstream> {
     /// Builds a new `Behaviour`.
     pub fn new(
+        protocol: impl Into<ProtocolId>,
         user_agent: String,
         local_public_key: PublicKey,
         known_addresses: Vec<(PeerId, Multiaddr)>,
@@ -49,7 +50,6 @@ impl<TSubstream> Behaviour<TSubstream> {
         //todo: set versions
         let versions = vec![0u8];
         //todo: set protocol id
-        let protocol = ProtocolId::from("protocol_id".as_ref());
         let custom_protocols = CustomProto::new(protocol, &versions, peerset);
         Behaviour {
             custom_protocols,

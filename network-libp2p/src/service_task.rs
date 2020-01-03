@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::behaviour::BehaviourOut::Event;
+use crate::config::{NonReservedPeerMode, TransportConfig};
 use crate::{
     behaviour::{Behaviour, BehaviourOut},
     parse_str_addr, transport, NetworkConfiguration, NetworkState, NetworkStateNotConnectedPeer,
-    NetworkStatePeer, NonReservedPeerMode, TransportConfig,
+    NetworkStatePeer, ProtocolId,
 };
 use bytes::BytesMut;
 use fnv::FnvHashMap;
@@ -26,6 +27,7 @@ use std::{fs, io, io::Error as IoError, path::Path, sync::Arc, time::Duration};
 ///
 /// Returns a stream that must be polled regularly in order for the networking to function.
 pub fn start_service(
+    protocol: impl Into<ProtocolId>,
     config: NetworkConfiguration,
 ) -> Result<(Service, sc_peerset::PeersetHandle), IoError> {
     if let Some(ref path) = config.net_config_path {
@@ -77,6 +79,7 @@ pub fn start_service(
     let (mut swarm, bandwidth) = {
         let user_agent = format!("{} ({})", config.client_version, config.node_name);
         let behaviour = Behaviour::new(
+            protocol,
             user_agent,
             local_public,
             known_addresses,

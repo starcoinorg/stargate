@@ -1,6 +1,14 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+pub use config::{NetworkConfiguration, NodeKeyConfig, Secret};
+pub use libp2p::{
+    core::{
+        ConnectedPoint, {identity, multiaddr, Multiaddr, PeerId, PublicKey},
+    },
+    multiaddr as build_multiaddr,
+};
+pub use service_task::{start_service, Service, ServiceEvent};
 mod behaviour;
 mod config;
 mod debug_info;
@@ -9,10 +17,7 @@ mod legacy_proto;
 mod service_task;
 mod transport;
 mod utils;
-pub use crate::config::{NetworkConfiguration, NodeKeyConfig, NonReservedPeerMode, Secret, *};
-use libp2p::core::ConnectedPoint;
-pub use libp2p::core::{identity, multiaddr, Multiaddr, PeerId, PublicKey};
-pub use libp2p::multiaddr as build_multiaddr;
+
 use serde::Serialize;
 use std::{
     collections::{HashMap, HashSet},
@@ -20,7 +25,7 @@ use std::{
     time::Duration,
 };
 
-pub trait DiscoveryNetBehaviour {
+trait DiscoveryNetBehaviour {
     /// Notify the protocol that we have learned about the existence of nodes.
     ///
     /// Can (or most likely will) be called multiple times with the same `PeerId`s.
@@ -29,6 +34,7 @@ pub trait DiscoveryNetBehaviour {
     /// system, or remove nodes that will fail to reach.
     fn add_discovered_nodes(&mut self, nodes: impl Iterator<Item = PeerId>);
 }
+
 /// Name of a protocol, transmitted on the wire. Should be unique for each chain.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProtocolId(smallvec::SmallVec<[u8; 6]>);
