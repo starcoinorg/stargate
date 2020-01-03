@@ -1,3 +1,6 @@
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::upgrade::{RegisteredProtocol, RegisteredProtocolEvent, RegisteredProtocolSubstream};
 use bytes::BytesMut;
 use futures::prelude::*;
@@ -19,7 +22,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// Every time a connection with a remote starts, an instance of this struct is created and
 /// sent to a background task dedicated to this connection. Once the connection is established,
 /// it is turned into a `CustomProtoHandler`. It then handles all communications that are specific
-/// to Substrate on that single connection.
+/// on that single connection.
 ///
 /// Note that there can be multiple instance of this struct simultaneously for same peer. However
 /// if that happens, only one main instance can communicate with the outer layers of the code. In
@@ -54,9 +57,6 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// When the handler is created, it is initially in the `Init` state and waits for either a
 /// `Disable` or an `Enable` message from the outer layer. At any time, the outer layer is free to
 /// toggle the handler between the disabled and enabled states.
-///
-/// When the handler switches to "enabled", it opens a substream and negotiates the protocol named
-/// `/substrate/xxx`, where `xxx` is chosen by the user and depends on the chain.
 ///
 /// For backwards compatibility reasons, when we switch to "enabled" for the first time (while we
 /// are still in "init" mode) and we are the connection listener, we don't open a substream.
@@ -252,7 +252,7 @@ where
     fn enable(&mut self) {
         self.state = match mem::replace(&mut self.state, ProtocolState::Poisoned) {
             ProtocolState::Poisoned => {
-                error!(target: "sub-libp2p", "Handler with {:?} is in poisoned state",
+                error!(target: "sg-libp2p", "Handler with {:?} is in poisoned state",
 					self.remote_peer_id);
                 ProtocolState::Poisoned
             }
@@ -298,7 +298,7 @@ where
     fn disable(&mut self) {
         self.state = match mem::replace(&mut self.state, ProtocolState::Poisoned) {
             ProtocolState::Poisoned => {
-                error!(target: "sub-libp2p", "Handler with {:?} is in poisoned state",
+                error!(target: "sg-libp2p", "Handler with {:?} is in poisoned state",
 					self.remote_peer_id);
                 ProtocolState::Poisoned
             }
@@ -342,7 +342,7 @@ where
     ) -> Option<ProtocolsHandlerEvent<RegisteredProtocol, (), CustomProtoHandlerOut>> {
         match mem::replace(&mut self.state, ProtocolState::Poisoned) {
             ProtocolState::Poisoned => {
-                error!(target: "sub-libp2p", "Handler with {:?} is in poisoned state",
+                error!(target: "sg-libp2p", "Handler with {:?} is in poisoned state",
 					self.remote_peer_id);
                 self.state = ProtocolState::Poisoned;
                 None
@@ -355,11 +355,11 @@ where
                 match init_deadline.poll() {
                     Ok(Async::Ready(())) => {
                         init_deadline = Delay::new(Duration::from_secs(60)).compat();
-                        error!(target: "sub-libp2p", "Handler initialization process is too long \
+                        error!(target: "sg-libp2p", "Handler initialization process is too long \
 							with {:?}", self.remote_peer_id)
                     }
                     Ok(Async::NotReady) => {}
-                    Err(_) => error!(target: "sub-libp2p", "Tokio timer has errored"),
+                    Err(_) => error!(target: "sg-libp2p", "Tokio timer has errored"),
                 }
 
                 self.state = ProtocolState::Init {
@@ -384,7 +384,7 @@ where
                     None
                 }
                 Err(_) => {
-                    error!(target: "sub-libp2p", "Tokio timer has errored");
+                    error!(target: "sg-libp2p", "Tokio timer has errored");
                     deadline = Delay::new(Duration::from_secs(60)).compat();
                     self.state = ProtocolState::Opening { deadline };
                     None
@@ -442,7 +442,7 @@ where
                                 };
                                 return Some(ProtocolsHandlerEvent::Custom(event));
                             } else {
-                                debug!(target: "sub-libp2p", "Error on extra substream: {:?}", err);
+                                debug!(target: "sg-libp2p", "Error on extra substream: {:?}", err);
                             }
                         }
                     }
@@ -485,7 +485,7 @@ where
     fn inject_fully_negotiated(&mut self, mut substream: RegisteredProtocolSubstream<TSubstream>) {
         self.state = match mem::replace(&mut self.state, ProtocolState::Poisoned) {
             ProtocolState::Poisoned => {
-                error!(target: "sub-libp2p", "Handler with {:?} is in poisoned state",
+                error!(target: "sg-libp2p", "Handler with {:?} is in poisoned state",
 					self.remote_peer_id);
                 ProtocolState::Poisoned
             }
@@ -495,7 +495,7 @@ where
                 init_deadline,
             } => {
                 if substream.endpoint() == Endpoint::Dialer {
-                    error!(target: "sub-libp2p", "Opened dialing substream with {:?} before \
+                    error!(target: "sg-libp2p", "Opened dialing substream with {:?} before \
 						initialization", self.remote_peer_id);
                 }
                 substreams.push(substream);
@@ -547,7 +547,7 @@ where
                 ref mut substreams, ..
             } => substreams[0].send_message(message),
 
-            _ => debug!(target: "sub-libp2p", "Tried to send message over closed protocol \
+            _ => debug!(target: "sg-libp2p", "Tried to send message over closed protocol \
 				with {:?}", self.remote_peer_id),
         }
     }

@@ -1,14 +1,14 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::custom_proto::{CustomProto, CustomProtoOut};
 use crate::debug_info::DebugInfoBehaviour;
 use crate::discovery::{DiscoveryBehaviour, DiscoveryOut};
-use crate::legacy_proto::{LegacyProto as CustomProto, LegacyProtoOut as CustomProtoOut};
 use crate::DiscoveryNetBehaviour;
 use crate::{debug_info, ProtocolId};
 use bytes::BytesMut;
 use futures::prelude::*;
-use log::{debug, warn};
+use log::debug;
 
 use libp2p::{
     core::{
@@ -246,11 +246,8 @@ impl<TSubstream> NetworkBehaviourEventProcess<debug_info::DebugInfoEvent>
 {
     fn inject_event(&mut self, event: debug_info::DebugInfoEvent) {
         let debug_info::DebugInfoEvent::Identified { peer_id, mut info } = event;
-        if !info.protocol_version.contains("substrate") {
-            warn!(target: "sub-libp2p", "Connected to a non-Substrate node: {:?}", info);
-        }
         if info.listen_addrs.len() > 30 {
-            debug!(target: "sub-libp2p", "Node {:?} has reported more than 30 addresses; \
+            debug!(target: "sg-libp2p", "Node {:?} has reported more than 30 addresses; \
                 it is identified by {:?} and {:?}", peer_id, info.protocol_version,
                    info.agent_version
             );

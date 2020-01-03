@@ -1,3 +1,6 @@
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::ProtocolId;
 use bytes::{Bytes, BytesMut};
 use futures::{future, prelude::*, stream};
@@ -29,7 +32,7 @@ impl RegisteredProtocol {
     /// passed inside the `RegisteredProtocolOutput`.
     pub fn new(protocol: impl Into<ProtocolId>, versions: &[u8]) -> Self {
         let protocol = protocol.into();
-        let mut base_name = Bytes::from_static(b"/substrate/");
+        let mut base_name = Bytes::from_static(b"/stargate/");
         base_name.extend_from_slice(protocol.as_bytes());
         base_name.extend_from_slice(b"/");
 
