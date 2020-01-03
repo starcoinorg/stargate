@@ -45,6 +45,8 @@ pub trait Router: Send + Sync {
     ) -> Result<Vec<BalanceQueryResponse>>;
 
     fn stats(&self, channel: DirectedChannel, payment_info: PaymentInfo) -> Result<()>;
+
+    async fn shutdown(&self) -> Result<()>;
 }
 
 pub struct TableRouter {
@@ -123,11 +125,6 @@ impl TableRouter {
         result
     }
 
-    pub async fn shutdown(&self) -> Result<()> {
-        self.control_sender.unbounded_send(Event::SHUTDOWN)?;
-        Ok(())
-    }
-
     pub fn start(&mut self) -> Result<()> {
         let inner = self.inner.take().expect("should have inner");
         let network_receiver = self
@@ -167,6 +164,11 @@ impl Router for TableRouter {
 
     fn stats(&self, channel: DirectedChannel, payment_info: PaymentInfo) -> Result<()> {
         self.stats_mgr.stats(channel, payment_info)?;
+        Ok(())
+    }
+
+    async fn shutdown(&self) -> Result<()> {
+        self.control_sender.unbounded_send(Event::SHUTDOWN)?;
         Ok(())
     }
 }
