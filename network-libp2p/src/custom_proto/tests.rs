@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-use crate::legacy_proto::{LegacyProto, LegacyProtoOut};
+use crate::custom_proto::{CustomProto, CustomProtoOut};
 use futures::{future, prelude::*, try_ready};
 use libp2p::core::nodes::Substream;
 use libp2p::core::{muxing::StreamMuxerBox, transport::boxed::Boxed, ConnectedPoint};
@@ -74,7 +74,7 @@ fn build_nodes() -> (
         });
 
         let behaviour = CustomProtoWithAddr {
-            inner: LegacyProto::new(&b"test"[..], &[1], peerset),
+            inner: CustomProto::new(&b"test"[..], &[1], peerset),
             addrs: addrs
                 .iter()
                 .enumerate()
@@ -106,12 +106,12 @@ fn build_nodes() -> (
 
 /// Wraps around the `CustomBehaviour` network behaviour, and adds hardcoded node addresses to it.
 struct CustomProtoWithAddr {
-    inner: LegacyProto<Substream<StreamMuxerBox>>,
+    inner: CustomProto<Substream<StreamMuxerBox>>,
     addrs: Vec<(PeerId, Multiaddr)>,
 }
 
 impl std::ops::Deref for CustomProtoWithAddr {
-    type Target = LegacyProto<Substream<StreamMuxerBox>>;
+    type Target = CustomProto<Substream<StreamMuxerBox>>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -126,8 +126,8 @@ impl std::ops::DerefMut for CustomProtoWithAddr {
 
 impl NetworkBehaviour for CustomProtoWithAddr {
     type ProtocolsHandler =
-        <LegacyProto<Substream<StreamMuxerBox>> as NetworkBehaviour>::ProtocolsHandler;
-    type OutEvent = <LegacyProto<Substream<StreamMuxerBox>> as NetworkBehaviour>::OutEvent;
+        <CustomProto<Substream<StreamMuxerBox>> as NetworkBehaviour>::ProtocolsHandler;
+    type OutEvent = <CustomProto<Substream<StreamMuxerBox>> as NetworkBehaviour>::OutEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         self.inner.new_handler()
@@ -221,7 +221,7 @@ fn two_nodes_transfer_lots_of_packets() {
     let fut1 = future::poll_fn(move || -> io::Result<_> {
         loop {
             match try_ready!(service1.poll()) {
-                Some(LegacyProtoOut::CustomProtocolOpen { peer_id, .. }) => {
+                Some(CustomProtoOut::CustomProtocolOpen { peer_id, .. }) => {
                     for n in 0..NUM_PACKETS {
                         service1.send_packet(&peer_id, vec![(n % 256) as u8]);
                     }
@@ -235,8 +235,8 @@ fn two_nodes_transfer_lots_of_packets() {
     let fut2 = future::poll_fn(move || -> io::Result<_> {
         loop {
             match try_ready!(service2.poll()) {
-                Some(LegacyProtoOut::CustomProtocolOpen { .. }) => {}
-                Some(LegacyProtoOut::CustomMessage { message, .. }) => {
+                Some(CustomProtoOut::CustomProtocolOpen { .. }) => {}
+                Some(CustomProtoOut::CustomMessage { message, .. }) => {
                     assert_eq!(message.len(), 1);
                     packet_counter += 1;
                     if packet_counter == NUM_PACKETS {
@@ -278,7 +278,7 @@ fn basic_two_nodes_requests_in_parallel() {
     let fut1 = future::poll_fn(move || -> io::Result<_> {
         loop {
             match try_ready!(service1.poll()) {
-                Some(LegacyProtoOut::CustomProtocolOpen { peer_id, .. }) => {
+                Some(CustomProtoOut::CustomProtocolOpen { peer_id, .. }) => {
                     for msg in to_send.drain(..) {
                         service1.send_packet(&peer_id, msg);
                     }
@@ -291,8 +291,8 @@ fn basic_two_nodes_requests_in_parallel() {
     let fut2 = future::poll_fn(move || -> io::Result<_> {
         loop {
             match try_ready!(service2.poll()) {
-                Some(LegacyProtoOut::CustomProtocolOpen { .. }) => {}
-                Some(LegacyProtoOut::CustomMessage { message, .. }) => {
+                Some(CustomProtoOut::CustomProtocolOpen { .. }) => {}
+                Some(CustomProtoOut::CustomMessage { message, .. }) => {
                     let pos = to_receive
                         .iter()
                         .position(|m| *m == message.to_vec())
@@ -342,7 +342,7 @@ fn reconnect_after_disconnect() {
                 let mut service1_not_ready = false;
 
                 match service1.poll().unwrap() {
-                    Async::Ready(Some(LegacyProtoOut::CustomProtocolOpen { .. })) => {
+                    Async::Ready(Some(CustomProtoOut::CustomProtocolOpen { .. })) => {
                         match service1_state {
                             ServiceState::NotConnected => {
                                 service1_state = ServiceState::FirstConnec;
@@ -356,7 +356,7 @@ fn reconnect_after_disconnect() {
                             ServiceState::FirstConnec | ServiceState::ConnectedAgain => panic!(),
                         }
                     }
-                    Async::Ready(Some(LegacyProtoOut::CustomProtocolClosed { .. })) => {
+                    Async::Ready(Some(CustomProtoOut::CustomProtocolClosed { .. })) => {
                         match service1_state {
                             ServiceState::FirstConnec => {
                                 service1_state = ServiceState::Disconnected
@@ -371,7 +371,7 @@ fn reconnect_after_disconnect() {
                 }
 
                 match service2.poll().unwrap() {
-                    Async::Ready(Some(LegacyProtoOut::CustomProtocolOpen { .. })) => {
+                    Async::Ready(Some(CustomProtoOut::CustomProtocolOpen { .. })) => {
                         match service2_state {
                             ServiceState::NotConnected => {
                                 service2_state = ServiceState::FirstConnec;
@@ -385,7 +385,7 @@ fn reconnect_after_disconnect() {
                             ServiceState::FirstConnec | ServiceState::ConnectedAgain => panic!(),
                         }
                     }
-                    Async::Ready(Some(LegacyProtoOut::CustomProtocolClosed { .. })) => {
+                    Async::Ready(Some(CustomProtoOut::CustomProtocolClosed { .. })) => {
                         match service2_state {
                             ServiceState::FirstConnec => {
                                 service2_state = ServiceState::Disconnected
