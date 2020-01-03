@@ -5,6 +5,7 @@ use libra_crypto::HashValue;
 use libra_types::{account_address::AccountAddress, transaction::TransactionArgument};
 use sgtypes::{channel_transaction::ChannelOp, htlc::HtlcPayment};
 pub(crate) mod actor_timer;
+pub mod coerce_derive;
 pub(crate) mod contract;
 
 /// check if the `op` is a htlc transfer
