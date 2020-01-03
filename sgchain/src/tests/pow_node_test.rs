@@ -372,6 +372,41 @@ fn test_pow_single_node() {
 }
 
 #[test]
+fn test_pow_block_tree() {
+    ::libra_logger::init_for_e2e_testing();
+    let template = gen_node_config_with_genesis(1, true, true, Some("/memory/0"), false);
+    print_ports(&template);
+    debug!("conf1:{:?}", template);
+    let base_path = template.base.data_dir.clone();
+    let _db_path = template.storage.dir.clone();
+    let mut rng = StdRng::from_seed([0u8; 32]);
+    for _i in 0..2 {
+        let mut conf_1 = NodeConfig::random_with_template(&template, &mut rng);
+        conf_1.set_data_dir(base_path.clone()).unwrap();
+        let _handle_1 = setup_environment(&mut conf_1, false);
+
+        let mut runtime_1 = tokio::runtime::Runtime::new().unwrap();
+        let s = commit_tx(
+            conf_1.admission_control.admission_control_service_port as u32,
+            runtime_1.handle().clone(),
+        );
+
+        runtime_1.block_on(async {
+            check_single_latest_ledger(
+                conf_1.admission_control.admission_control_service_port as u32,
+                s,
+                true,
+            );
+        });
+
+        drop(runtime_1);
+        drop(_handle_1);
+
+        sleep(Duration::from_secs(10));
+    }
+}
+
+#[test]
 fn test_pbft_single_node() {
     ::libra_logger::init_for_e2e_testing();
     let mut config = gen_node_config_with_genesis(1, true, false, None, true);
