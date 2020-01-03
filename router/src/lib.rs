@@ -28,7 +28,7 @@ use sgtypes::system_event::Event;
 use sgwallet::wallet::Wallet;
 use sgwallet::{get_channel_events, ChannelChangeEvent};
 use stats::{DirectedChannel, PaymentInfo, Stats};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::{
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -238,16 +238,39 @@ impl RouterInner {
                 end,
                 responder,
             } => {
-                let result = inner.graph_store.find_path(&start, &end)?;
-                info!("path is {:?}", result);
-                let result = match result {
-                    Some(t) => inner.vertexes_to_balance_list(t).await?,
+                let paths = inner.graph_store.find_all_path(&start, &end, 5)?;
+
+                info!("path is {:?}", paths);
+                let result = match paths {
+                    Some(t) => inner.find_path(t).await?,
                     None => vec![],
                 };
                 respond_with(responder, Ok(result));
             }
         }
         Ok(())
+    }
+
+    async fn find_path(&self, paths: HashSet<Vec<Vertex>>) -> Result<Vec<BalanceQueryResponse>> {
+        let mut balance_map = HashMap::new();
+        let mut min_pressure = std::i128::MAX;
+        for path in paths.into_iter() {
+            let balances = self.vertexes_to_balance_list(path).await?;
+            let mut pressure: i128 = 0;
+            for balance in balances.iter() {
+                pressure =
+                    pressure + balance.total_pay_amount as i128 + balance.remote_balance as i128
+                        - balance.local_balance as i128;
+            }
+            balance_map.insert(pressure, balances);
+            if pressure < min_pressure {
+                min_pressure = pressure;
+            }
+        }
+        match balance_map.remove(&min_pressure) {
+            Some(t) => Ok(t),
+            None => Ok(vec![]),
+        }
     }
 
     async fn vertexes_to_balance_list(

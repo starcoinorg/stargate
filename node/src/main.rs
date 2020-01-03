@@ -133,7 +133,7 @@ fn gen_node(
             tx_router,
             rx_router,
             wallet.clone(),
-            timeout,
+            timeout / 2,
             stats,
         );
         router.start().unwrap();
