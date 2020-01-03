@@ -82,7 +82,7 @@ pub fn gen_node(
             rrx1,
             close_tx,
             auto_approve,
-            5000,
+            10000,
             Box::new(router),
         ),
         account_address,

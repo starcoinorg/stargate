@@ -694,6 +694,10 @@ impl Node {
                     node_inner.shutdown().await;
                     break;
                 }
+                complete => {
+                    warn!("all stream are complete");
+                    break;
+                }
             }
         }
         info!("shutdown command listener");
