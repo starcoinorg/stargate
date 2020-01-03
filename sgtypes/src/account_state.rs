@@ -4,6 +4,7 @@
 use crate::account_resource_ext;
 use anyhow::Result;
 
+use libra_types::libra_resource::{make_resource, LibraResource};
 use libra_types::{
     access_path::DataPath,
     account_config::{account_resource_path, AccountResource},
@@ -11,6 +12,8 @@ use libra_types::{
     proof::SparseMerkleProof,
     transaction::Version,
 };
+use serde::Deserialize;
+use std::ops::{Deref, DerefMut};
 use std::{collections::BTreeMap, convert::TryFrom};
 
 #[derive(Clone, Debug)]
@@ -21,8 +24,7 @@ pub struct AccountState {
 }
 
 impl AccountState {
-    #[allow(dead_code)]
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             version: 0,
             state: BTreeMap::new(),
@@ -64,6 +66,16 @@ impl AccountState {
         self.get(&data_path.to_vec())
     }
 
+    pub fn get_resource<'s, R: LibraResource + Deserialize<'s>>(
+        &'s self,
+        data_path: &DataPath,
+    ) -> Result<Option<R>> {
+        self.state
+            .get(&data_path.to_vec())
+            .map(|b| make_resource::<R>(b))
+            .transpose()
+    }
+
     pub fn get_account_resource(&self) -> Option<AccountResource> {
         self.get(&account_resource_path())
             .and_then(|value| account_resource_ext::from_bytes(&value).ok())
@@ -79,6 +91,31 @@ impl AccountState {
 
     pub fn into_map(self) -> BTreeMap<Vec<u8>, Vec<u8>> {
         self.state
+    }
+}
+impl Deref for AccountState {
+    type Target = BTreeMap<Vec<u8>, Vec<u8>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.state
+    }
+}
+
+impl DerefMut for AccountState {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.state
+    }
+}
+
+impl AsRef<BTreeMap<Vec<u8>, Vec<u8>>> for AccountState {
+    fn as_ref(&self) -> &BTreeMap<Vec<u8>, Vec<u8>> {
+        &self.state
+    }
+}
+
+impl AsMut<BTreeMap<Vec<u8>, Vec<u8>>> for AccountState {
+    fn as_mut(&mut self) -> &mut BTreeMap<Vec<u8>, Vec<u8>> {
+        &mut self.state
     }
 }
 

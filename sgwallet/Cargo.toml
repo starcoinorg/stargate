@@ -7,6 +7,9 @@ publish = false
 edition = "2018"
 
 [dependencies]
+log = "0.4"
+uuid = "0.8"
+serde = {version = "1", default-features = false }
 hex = "0.3.2"
 rand = "0.6.5"
 protobuf = "2.7"
@@ -22,7 +25,7 @@ chrono = { version = "0.4.7", default-features = false }
 itertools = "0.8.0"
 backoff = "0.1.5"
 async-trait = "0.1.13"
-coerce-rt = { git = "https://github.com/lerencao/Coerce-rs.git", branch="master"}
+coerce-rt = { git = "https://github.com/starcoinorg/Coerce-rs.git", branch="stargate"}
 anyhow = "1.0"
 libra-types = { path = "../libra/types" }
 libra-crypto = { path = "../libra/crypto/crypto" }
@@ -46,3 +49,4 @@ sgchain = { path = "../sgchain" }
 [dev-dependencies]
 libra-tools = { path = "../libra/common/tools"}
 rusty-fork = "0.2.1"
+slog-stdlog = "4"

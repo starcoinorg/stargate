@@ -13,7 +13,7 @@ use anyhow::Result;
 use libra_types::{account_address::AccountAddress, transaction::Version};
 use libradb::schema::transaction_by_account::*;
 use schemadb::SchemaBatch;
-use sgtypes::signed_channel_transaction::SignedChannelTransaction;
+use sgtypes::applied_channel_txn::AppliedChannelTxn;
 
 #[derive(Clone)]
 pub struct ChannelTransactionStore<S> {
@@ -48,10 +48,10 @@ where
     }
 
     /// Get signed transaction given `version`
-    pub fn get_transaction(&self, version: Version) -> Result<SignedChannelTransaction> {
+    pub fn get_transaction(&self, version: Version) -> Result<AppliedChannelTxn> {
         let txn = self
             .db
-            .get::<SignedChannelTransactionSchema>(&version)?
+            .get::<AppliedChannelTransactionSchema>(&version)?
             .ok_or_else(|| SgStorageError::NotFound(format!("Txn {}", version)))?;
 
         Ok(txn)
@@ -61,14 +61,14 @@ where
     pub fn put_transaction(
         &self,
         version: Version,
-        transaction: SignedChannelTransaction,
+        transaction: AppliedChannelTxn,
         cs: &mut SchemaBatch,
     ) -> Result<()> {
-        let channel_seq_number = transaction.raw_tx.channel_sequence_number();
-        let proposer = transaction.raw_tx.proposer();
+        let channel_seq_number = transaction.channel_sequence_number();
+        let proposer = transaction.proposer();
         cs.put::<TransactionByAccountSchema>(&(proposer, channel_seq_number), &version)?;
 
-        cs.put::<SignedChannelTransactionSchema>(&version, &transaction)?;
+        cs.put::<AppliedChannelTransactionSchema>(&version, &transaction)?;
 
         Ok(())
     }

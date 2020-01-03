@@ -1,10 +1,16 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
-use crate::chain_watcher::{ChainWatcher, ChainWatcherHandle};
-use crate::channel::{Channel, ChannelEvent, ChannelMsg};
-use crate::{channel::ChannelHandle, scripts::*};
+use crate::{
+    chain_watcher::{ChainWatcher, ChainWatcherHandle},
+    channel::{
+        ApplyCoSignedTxn, ApplyPendingTxn, ApplySoloTxn, CancelPendingTxn, Channel, ChannelEvent,
+        ChannelHandle, CollectProposalWithSigs, Execute, ForceTravel, GrantProposal,
+    },
+    scripts::*,
+};
 use anyhow::{bail, ensure, format_err, Error, Result};
 use chrono::Utc;
+use coerce_rt::actor::context::ActorContext;
 use futures::{
     channel::{mpsc, oneshot},
     SinkExt, StreamExt,
@@ -19,44 +25,48 @@ use libra_crypto::{
 };
 use libra_logger::prelude::*;
 use libra_state_view::StateView;
-use libra_types::byte_array::ByteArray;
-use libra_types::channel::{
-    channel_mirror_struct_tag, channel_participant_struct_tag, channel_struct_tag,
-    user_channels_struct_tag, ChannelMirrorResource, ChannelParticipantAccountResource,
-    ChannelResource, UserChannelsResource,
-};
-use libra_types::libra_resource::make_resource;
-use libra_types::transaction::Transaction;
 use libra_types::{
     access_path::DataPath,
     account_address::AccountAddress,
     account_config::{coin_struct_tag, AccountResource},
+    byte_array::ByteArray,
+    channel::{
+        channel_mirror_struct_tag, channel_struct_tag, user_channels_struct_tag,
+        ChannelMirrorResource, ChannelParticipantAccountResource, ChannelResource,
+        UserChannelsResource,
+    },
     language_storage::StructTag,
+    libra_resource::{make_resource, LibraResource},
     transaction::{
         helpers::{create_signed_payload_txn, TransactionSigner},
-        Module, RawTransaction, SignedTransaction, TransactionArgument, TransactionOutput,
-        TransactionPayload, TransactionStatus, TransactionWithProof,
+        Module, RawTransaction, SignedTransaction, Transaction, TransactionArgument,
+        TransactionOutput, TransactionPayload, TransactionStatus, TransactionWithProof,
     },
     vm_error::*,
 };
 use sgchain::star_chain_client::{ChainClient, StarChainClient};
 use sgconfig::config::WalletConfig;
-use sgstorage::channel_db::ChannelDB;
-use sgstorage::channel_store::ChannelStore;
-use sgstorage::storage::SgStorage;
-use sgtypes::channel::ChannelState;
-use sgtypes::channel_transaction::ChannelTransactionProposal;
-use sgtypes::pending_txn::PendingTransaction;
-use sgtypes::sg_error::SgError;
-use sgtypes::signed_channel_transaction::SignedChannelTransaction;
+use sgstorage::{channel_db::ChannelDB, channel_store::ChannelStore, storage::SgStorage};
 use sgtypes::{
     account_resource_ext,
-    channel_transaction::{ChannelOp, ChannelTransactionRequest, ChannelTransactionResponse},
+    account_state::AccountState,
+    applied_channel_txn::AppliedChannelTxn,
+    channel::ChannelState,
+    channel_transaction::{
+        ChannelOp, ChannelTransactionProposal, ChannelTransactionRequest,
+        ChannelTransactionResponse,
+    },
+    pending_txn::PendingTransaction,
     script_package::{ChannelScriptPackage, ScriptCode},
+    sg_error::SgError,
+    signed_channel_transaction::SignedChannelTransaction,
 };
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::path::Path;
-use std::{sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    path::Path,
+    sync::Arc,
+    time::Duration,
+};
 use tokio::runtime;
 use vm_runtime::{MoveVM, VMExecutor};
 
@@ -76,7 +86,6 @@ pub struct Wallet {
     shared: Shared,
     sgdb: Arc<SgStorage>,
     inner: Option<Inner>,
-    _rt: runtime::Runtime,
 }
 
 impl Wallet {
@@ -102,13 +111,6 @@ impl Wallet {
 
         let script_registry = Arc::new(PackageRegistry::build()?);
 
-        let mut builder = runtime::Builder::new();
-        let runtime = builder
-            .thread_name("wallet-")
-            .threaded_scheduler()
-            .enable_all()
-            .build()?;
-
         let shared = Shared {
             account,
             keypair,
@@ -121,19 +123,19 @@ impl Wallet {
             channel_enabled: false,
             channels: HashMap::new(),
             sgdb: sgdb.clone(),
-            rt_handle: runtime.handle().clone(),
             chain_txn_handle: None,
             mailbox,
             channel_event_sender,
             channel_event_receiver,
             should_stop: false,
+            actor_context: None,
         };
         let wallet = Wallet {
             mailbox_sender: mail_sender.clone(),
             shared,
             sgdb: sgdb.clone(),
             inner: Some(inner),
-            _rt: runtime,
+            //            _rt: runtime,
         };
         Ok(wallet)
     }
@@ -148,13 +150,26 @@ impl Wallet {
         participant_address: AccountAddress,
         channel_seq_number: u64,
     ) -> Result<SignedChannelTransaction> {
-        let (channel_address, _) =
-            generate_channel_address(self.shared.account, participant_address);
+        let txn = self
+            .get_applied_txn_by_channel_sequence_number(participant_address, channel_seq_number)?;
+        match txn {
+            AppliedChannelTxn::Offchain(t) => Ok(t),
+            _ => bail!("txn at {} is a travel txn", channel_seq_number),
+        }
+    }
+
+    pub fn get_applied_txn_by_channel_sequence_number(
+        &self,
+        participant_address: AccountAddress,
+        channel_seq_number: u64,
+    ) -> Result<AppliedChannelTxn> {
+        let (channel_address, ps) = generate_channel_address(self.account(), participant_address);
         let channel_db = ChannelDB::new(channel_address, self.sgdb.clone());
-        let txn = ChannelStore::new(channel_db)
+        let txn = ChannelStore::new(ps, channel_db)?
             .get_transaction_by_channel_seq_number(channel_seq_number, false)?;
         Ok(txn.signed_transaction)
     }
+
     pub fn account(&self) -> AccountAddress {
         self.shared.account
     }
@@ -216,13 +231,11 @@ impl Wallet {
 
         let struct_tag = channel_mirror_struct_tag();
         // channel mirror resource is a shared resource
-        let resp = channel
-            .get_channel_resource(generated_channel_address, struct_tag)
+        let data_path = DataPath::channel_resource_path(generated_channel_address, struct_tag);
+        let mirror = channel
+            .get_channel_resource::<ChannelMirrorResource>(data_path)
             .await?;
 
-        let mirror = resp
-            .map(|blob| ChannelMirrorResource::make_from(blob))
-            .transpose()?;
         Ok(mirror.map(|r| r.channel_sequence_number()).unwrap_or(0))
     }
 
@@ -240,6 +253,12 @@ impl Wallet {
             .await?
             .map(|account| account.balance())
             .unwrap_or(0))
+    }
+
+    pub async fn channel_handle(&self, participant: AccountAddress) -> Result<Arc<ChannelHandle>> {
+        let (channel_address, _) = generate_channel_address(participant, self.shared.account);
+        let handle = self.get_channel(channel_address).await?;
+        Ok(handle)
     }
 
     /// Open channel and deposit default asset.
@@ -436,14 +455,10 @@ impl Wallet {
             self.get_channel(channel_address).await?
         };
 
-        let (tx, rx) = oneshot::channel();
-        let msg = ChannelMsg::Execute {
-            channel_op,
-            args,
-            responder: tx,
-        };
-        channel.send(msg)?;
-        let (proposal, sigs, output) = rx.await??;
+        let (proposal, sigs, output) = channel
+            .channel_ref()
+            .send(Execute { channel_op, args })
+            .await??;
         let request = ChannelTransactionRequest::new(proposal, sigs, output.is_travel_txn());
         Ok(request)
     }
@@ -480,14 +495,15 @@ impl Wallet {
         };
 
         let (proposal, sigs, _) = txn_request.clone().into();
-        let (tx, rx) = oneshot::channel();
-        let msg = ChannelMsg::CollectProposalWithSigs {
-            proposal: proposal.clone(),
-            sigs,
-            responder: tx,
-        };
-        channel.send(msg)?;
-        let sig_opt = rx.await??;
+
+        let sig_opt = channel
+            .channel_ref()
+            .send(CollectProposalWithSigs {
+                proposal: proposal.clone(),
+                sigs,
+            })
+            .await??;
+
         Ok(sig_opt.map(|s| ChannelTransactionResponse::new(proposal, s)))
     }
 
@@ -538,14 +554,14 @@ impl Wallet {
             None => bail!("no pending txn to grant"),
         };
 
-        let (tx, rx) = oneshot::channel();
-        let msg = ChannelMsg::GrantProposal {
-            channel_txn_id: request_id,
-            grant,
-            responder: tx,
-        };
-        channel.send(msg)?;
-        let resp = rx.await??;
+        let resp = channel
+            .channel_ref()
+            .send(GrantProposal {
+                channel_txn_id: request_id,
+                grant,
+            })
+            .await??;
+
         Ok(resp.map(|s| ChannelTransactionResponse::new(proposal, s)))
     }
 
@@ -560,13 +576,13 @@ impl Wallet {
 
         let channel = self.get_channel(generated_channel_address).await?;
 
-        let (tx, rx) = oneshot::channel();
-        let msg = ChannelMsg::CancelPendingTxn {
-            channel_txn_id: request_id,
-            responder: tx,
-        };
-        channel.send(msg)?;
-        let _resp = rx.await??;
+        let _resp = channel
+            .channel_ref()
+            .send(CancelPendingTxn {
+                channel_txn_id: request_id,
+            })
+            .await??;
+
         Ok(())
     }
 
@@ -580,16 +596,39 @@ impl Wallet {
 
         let channel = self.get_channel(generated_channel_address).await?;
 
-        let (tx, rx) = oneshot::channel();
         let (proposal, sigs) = txn_response.clone().into();
-        let msg = ChannelMsg::CollectProposalWithSigs {
-            proposal,
-            sigs,
-            responder: tx,
-        };
-        channel.send(msg)?;
-        let _ = rx.await??; // the result is not need.
+        let _ = channel
+            .channel_ref()
+            .send(CollectProposalWithSigs { proposal, sigs })
+            .await??;
         Ok(())
+    }
+
+    pub async fn force_travel_txn(&self, participant: AccountAddress) -> Result<u64> {
+        let (generated_channel_address, _participants) =
+            generate_channel_address(participant, self.shared.account);
+
+        let channel = self.get_channel(generated_channel_address).await?;
+        let (txn_sender, seq_number) = channel.channel_ref().send(ForceTravel).await??;
+
+        let TransactionWithProof {
+            version,
+            transaction,
+            events,
+            proof,
+        } = watch_transaction(self.shared.client.clone(), txn_sender, seq_number).await?;
+        let gas = channel
+            .channel_ref()
+            .send(ApplySoloTxn {
+                version,
+                txn: transaction,
+                txn_info: proof.transaction_info().clone(),
+                events: events.unwrap_or_default(),
+            })
+            .await
+            .map_err(|_| format_err!("channel actor gone"))
+            .and_then(|r| r)?;
+        Ok(gas)
     }
 
     pub async fn apply_txn(
@@ -603,14 +642,35 @@ impl Wallet {
         let channel = self.get_channel(generated_channel_address).await?;
 
         let (proposal, _) = txn_response.clone().into();
-        let (tx, rx) = oneshot::channel();
-        let msg = ChannelMsg::ApplyPendingTxn {
-            proposal,
-            responder: tx,
-        };
-        channel.send(msg)?;
 
-        let gas = rx.await??;
+        let option_watch = channel
+            .channel_ref()
+            .send(ApplyPendingTxn { proposal })
+            .await??;
+        if option_watch.is_none() {
+            return Ok(0);
+        }
+        let (txn_sender, seq_number) = option_watch.unwrap();
+
+        let TransactionWithProof {
+            version,
+            transaction,
+            events,
+            proof,
+        } = watch_transaction(self.shared.client.clone(), txn_sender, seq_number).await?;
+
+        let gas = channel
+            .channel_ref()
+            .send(ApplyCoSignedTxn {
+                version,
+                txn: transaction,
+                txn_info: proof.transaction_info().clone(),
+                events: events.unwrap_or_default(),
+            })
+            .await
+            .map_err(|_| format_err!("channel actor gone"))
+            .and_then(|r| r)?;
+
         Ok(gas)
     }
 
@@ -620,24 +680,19 @@ impl Wallet {
         participant: AccountAddress,
     ) -> Result<Option<ChannelTransactionProposal>> {
         let pending_txn = self.get_pending_txn(participant).await?;
-        let proposal = pending_txn.and_then(|pending| match pending {
-            PendingTransaction::WaitForSig {
-                proposal,
-                mut signatures,
-                ..
-            } => {
-                if proposal.channel_txn.proposer() == self.shared.account {
-                    None
+        let proposal = pending_txn.and_then(|pending| {
+            if pending.is_negotiating() {
+                let (proposal, _, signatures) = pending.into();
+                if !signatures.contains_key(&self.shared.account)
+                    && proposal.channel_txn.proposer() != self.shared.account
+                {
+                    Some(proposal)
                 } else {
-                    let _user_sigs = signatures.remove(&self.shared.account);
-                    if signatures.contains_key(&self.shared.account) {
-                        None
-                    } else {
-                        Some(proposal)
-                    }
+                    None
                 }
+            } else {
+                None
             }
-            PendingTransaction::WaitForApply { .. } => None,
         });
         Ok(proposal)
     }
@@ -648,24 +703,24 @@ impl Wallet {
         participant: AccountAddress,
     ) -> Result<Option<ChannelTransactionRequest>> {
         let pending_txn = self.get_pending_txn(participant).await?;
-        let request = pending_txn.and_then(|pending| match pending {
-            PendingTransaction::WaitForSig {
-                proposal,
-                mut signatures,
-                output,
-            } => {
+        let request = pending_txn.and_then(|pending| {
+            // TODO: recheck the condition.
+            if pending.is_negotiating() {
+                let (proposal, output, mut signatures) = pending.into();
                 let proposer_sigs = signatures.remove(&proposal.channel_txn.proposer());
-                debug_assert!(proposer_sigs.is_some());
+                if proposal.channel_txn.proposer() == self.shared.account {
+                    debug_assert!(proposer_sigs.is_some());
+                }
 
                 Some(ChannelTransactionRequest::new(
                     proposal.clone(),
                     proposer_sigs.unwrap(),
                     output.is_travel_txn(),
                 ))
+            } else {
+                None
             }
-            _ => None,
         });
-
         Ok(request)
     }
 
@@ -747,10 +802,15 @@ impl Wallet {
             generate_channel_address(participant, self.shared.account);
         let channel = self.get_channel(generated_channel_address).await?;
 
-        let struct_tag = channel_participant_struct_tag();
-        let resp = channel.get_channel_resource(address, struct_tag).await?;
-        resp.map(|blob| ChannelParticipantAccountResource::make_from(blob))
-            .transpose()
+        let data_path = DataPath::channel_resource_path(
+            address,
+            ChannelParticipantAccountResource::struct_tag(),
+        );
+        let resp = channel
+            .get_channel_resource::<ChannelParticipantAccountResource>(data_path)
+            .await?;
+
+        Ok(resp)
     }
 
     pub async fn stop(&self) -> Result<()> {
@@ -821,16 +881,20 @@ pub struct Inner {
     channel_enabled: bool,
     channels: HashMap<AccountAddress, Arc<ChannelHandle>>,
     sgdb: Arc<SgStorage>,
-    rt_handle: runtime::Handle,
+    //    rt_handle: runtime::Handle,
     chain_txn_handle: Option<ChainWatcherHandle>,
     mailbox: mpsc::Receiver<WalletCmd>,
     channel_event_receiver: mpsc::Receiver<ChannelEvent>,
     channel_event_sender: mpsc::Sender<ChannelEvent>,
     should_stop: bool,
+    actor_context: Option<ActorContext>,
 }
 
 impl Inner {
     async fn start(mut self) {
+        let actor_context = ActorContext::new();
+        self.actor_context = Some(actor_context.clone());
+
         let account_state = self
             .inner
             .client
@@ -842,9 +906,12 @@ impl Inner {
         let account_state = account_state.unwrap();
 
         // start chain txn watcher
-        let chain_txn_watcher = ChainWatcher::new(self.inner.client.clone());
+        // TODO: what version should we start to watch on.
+        let chain_txn_watcher =
+            ChainWatcher::new(self.inner.client.clone(), account_state.version(), 16);
         let chain_txn_handle = chain_txn_watcher
-            .start(self.rt_handle.clone(), account_state.version(), 16)
+            .start(actor_context)
+            .await
             .expect("start chain watcher should ok");
         self.chain_txn_handle = Some(chain_txn_handle);
 
@@ -853,9 +920,11 @@ impl Inner {
         {
             self.channel_enabled = true;
             let user_channels: UserChannelsResource =
-                make_resource::<UserChannelsResource>(blob.as_slice())
-                    .expect("parse user channels should work");
-            if let Err(e) = self.refresh_channels(user_channels, account_state.version()) {
+                make_resource(blob.as_slice()).expect("parse user channels should work");
+            if let Err(e) = self
+                .refresh_channels(user_channels, account_state.version())
+                .await
+            {
                 error!("fail to start all channels, err: {:?}", e);
                 return ();
             }
@@ -884,6 +953,9 @@ impl Inner {
                 break;
             }
         }
+        if let Some(h) = self.chain_txn_handle.take() {
+            h.stop().await;
+        }
         crit!("wallet {} task stopped", self.inner.account);
     }
 
@@ -908,7 +980,8 @@ impl Inner {
                 participants,
                 responder,
             } => {
-                self.spawn_new_channel(channel_address, participants);
+                self.spawn_channel(channel_address, participants, AccountState::new())
+                    .await;
                 let channel = self.get_channel(&channel_address);
                 respond_with(responder, channel);
             }
@@ -953,6 +1026,11 @@ impl Inner {
                 respond_with(responder, Ok(()));
             }
             WalletCmd::Stop { responder } => {
+                for (a, c) in self.channels.iter() {
+                    if let Err(e) = c.stop().await {
+                        error!("stop channel {} error: {}", a, e);
+                    }
+                }
                 self.channels.clear();
                 self.should_stop = true;
                 respond_with(responder, Ok(()));
@@ -960,7 +1038,7 @@ impl Inner {
         }
     }
 
-    fn refresh_channels(
+    async fn refresh_channels(
         &mut self,
         user_channels: UserChannelsResource,
         version: u64,
@@ -988,20 +1066,14 @@ impl Inner {
                 .map(Clone::clone)
                 .collect::<BTreeSet<_>>();
 
-            let state_blobs = channel_account_state.into_map();
-            let mut channel_state = BTreeMap::new();
-            for (path, value) in state_blobs.into_iter() {
-                match DataPath::from(&path).unwrap() {
-                    DataPath::ChannelResource { .. } => {
-                        channel_state.insert(path, value);
-                    }
-                    _ => {}
-                }
-            }
-            channel_states.insert(channel_address.clone(), (participants, channel_state));
+            channel_states.insert(
+                channel_address.clone(),
+                (participants, channel_account_state),
+            );
         }
         for (channel_address, (participants, channel_state)) in channel_states.into_iter() {
-            self.spawn_channel(channel_address, participants, channel_state);
+            self.spawn_channel(channel_address, participants, channel_state)
+                .await;
         }
         Ok(())
     }
@@ -1036,7 +1108,7 @@ impl Inner {
             .into_inner();
         let _ = submit_transaction(self.inner.client.as_ref(), signed_txn).await?;
         let proof =
-            watch_transaction(self.inner.client.as_ref(), self.inner.account, seq_number).await?;
+            watch_transaction(self.inner.client.clone(), self.inner.account, seq_number).await?;
         self.channel_enabled = true;
         Ok(proof.proof.transaction_info().gas_used())
     }
@@ -1058,7 +1130,7 @@ impl Inner {
         let address = txn.sender();
         let seq_number = txn.sequence_number();
         submit_transaction(self.inner.client.as_ref(), txn).await?;
-        watch_transaction(self.inner.client.as_ref(), address, seq_number).await
+        watch_transaction(self.inner.client.clone(), address, seq_number).await
     }
 
     /// TODO: use async version of cient
@@ -1084,36 +1156,28 @@ impl Inner {
         self.channels.contains_key(channel_address)
     }
 
-    fn spawn_new_channel(
+    async fn spawn_channel(
         &mut self,
         channel_address: AccountAddress,
         participants: BTreeSet<AccountAddress>,
+        channel_account_state: AccountState,
     ) {
-        self.spawn_channel(channel_address, participants, BTreeMap::new());
-    }
-
-    fn spawn_channel(
-        &mut self,
-        channel_address: AccountAddress,
-        participants: BTreeSet<AccountAddress>,
-        participants_states: BTreeMap<Vec<u8>, Vec<u8>>,
-    ) {
-        let (channel_msg_sender, channel_msg_receiver) = mpsc::channel(1000);
-
         let channel = Channel::load(
             channel_address,
             self.inner.account,
             participants,
-            ChannelState::new(channel_address, participants_states),
+            ChannelState::new(channel_address, channel_account_state),
             self.get_channel_db(channel_address),
-            channel_msg_sender,
-            channel_msg_receiver,
+            self.chain_txn_handle.as_ref().unwrap().clone(),
             self.channel_event_sender.clone(),
             self.inner.keypair.clone(),
             self.inner.script_registry.clone(),
             self.inner.client.clone(),
         );
-        let channel_handle = channel.start(self.rt_handle.clone());
+
+        let channel_handle = channel
+            .start(self.actor_context.as_ref().unwrap().clone())
+            .await;
 
         // TODO: should wait signal of channel saying it's started
         self.channels
@@ -1164,7 +1228,6 @@ pub(crate) fn execute_transaction(
     transaction: SignedTransaction,
 ) -> Result<TransactionOutput> {
     let tx_hash = transaction.raw_txn().hash();
-    debug!("execute txn {}: {:#?}", &tx_hash, transaction.raw_txn());
     let output = MoveVM::execute_block(
         vec![Transaction::UserTransaction(transaction)],
         &VM_CONFIG,
@@ -1172,7 +1235,7 @@ pub(crate) fn execute_transaction(
     )?
     .pop()
     .expect("at least return 1 output.");
-    debug!("txn:{} output: {}", tx_hash, output);
+    debug!("offchain execute txn:{} output: {}", tx_hash, output);
     match output.status() {
         TransactionStatus::Discard(vm_status) => {
             bail!("transaction execute fail for: {:#?}", vm_status)
@@ -1198,7 +1261,7 @@ pub async fn submit_transaction(
 }
 
 pub async fn watch_transaction(
-    client: &dyn ChainClient,
+    client: Arc<dyn ChainClient>,
     sender: AccountAddress,
     seq_number: u64,
 ) -> Result<TransactionWithProof> {

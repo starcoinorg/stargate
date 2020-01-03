@@ -1,15 +1,17 @@
 #[macro_use]
 extern crate rusty_fork;
-use crate::wallet_test_helper::{
-    test_channel_event_watcher_async, test_deploy_custom_module, test_wallet_async,
-};
 use common::with_wallet;
 use libra_logger::prelude::*;
-use sgchain::star_chain_client::{ChainClient, StarChainClient};
-use std::sync::Arc;
-pub mod common;
+use rpc_chain_test_helper::run_with_rpc_client;
+
+use wallet_test_helper::{
+    test_channel_event_watcher_async, test_deploy_custom_module, test_wallet_async,
+};
+
+mod common;
+mod rpc_chain_test_helper;
 mod transfer;
-pub mod wallet_test_helper;
+mod wallet_test_helper;
 
 rusty_fork_test! {
 
@@ -88,15 +90,4 @@ fn run_test_channel_event_watcher() {
         error!("err: {:#?}", e);
         assert!(false);
     }
-}
-
-fn run_with_rpc_client<F, T>(mut f: F) -> T
-where
-    F: FnMut(Arc<dyn ChainClient>) -> T,
-{
-    let (config, _logger, _handler) = sgchain::main_node::run_node(None, false, true);
-    info!("node is running.");
-    let ac_port = config.admission_control.admission_control_service_port;
-    let rpc_client = StarChainClient::new("127.0.0.1", ac_port as u32);
-    f(Arc::new(rpc_client))
 }

@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, CryptoHasher)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize, CryptoHasher)]
 pub struct SignedChannelTransaction {
     pub raw_tx: ChannelTransaction,
     // use BTree to preserve order.

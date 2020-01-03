@@ -8,14 +8,15 @@ use include_dir::Dir;
 
 use anyhow::{bail, format_err, Result};
 
-use ir_to_bytecode::compiler::compile_script;
-use ir_to_bytecode::parser::ast;
-use ir_to_bytecode::parser::parse_script;
+use ir_to_bytecode::{
+    compiler::compile_script,
+    parser::{ast, parse_script},
+};
 use lazy_static::lazy_static;
 use libra_logger::prelude::*;
-use libra_types::transaction::Script;
 use libra_types::{
     account_address::AccountAddress, account_config::coin_struct_tag, language_storage::StructTag,
+    transaction::Script,
 };
 use sgcompiler::{Compiler, ScriptFile};
 use sgtypes::{
