@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::helper::get_unix_ts;
-use bytes::BytesMut;
 use libra_crypto::{
     hash::{CryptoHash, CryptoHasher, TestOnlyHasher},
     HashValue,
