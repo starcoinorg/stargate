@@ -10,6 +10,8 @@ pub fn run_with_rpc_client<F, T>(mut f: F) -> T
 where
     F: FnMut(Arc<dyn ChainClient>) -> T,
 {
+    libra_logger::try_init_for_testing();
+    let _ = slog_stdlog::init();
     let (config, _logger, _handler) = sgchain::main_node::run_node(None, false, true);
     info!("node is running.");
     let ac_port = config.admission_control.admission_control_service_port;

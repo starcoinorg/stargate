@@ -3,8 +3,8 @@
 
 use crate::{chain_watcher::ChainWatcherHandle, scripts::PackageRegistry, tx_applier::TxApplier};
 use anyhow::{bail, Result};
-use coerce_rt::actor::{context::ActorContext, message::Message};
-use futures::channel::mpsc;
+use coerce_rt::actor::{context::ActorContext, message::Message, ActorRef};
+
 use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
@@ -29,6 +29,7 @@ use std::{collections::BTreeSet, sync::Arc};
 mod channel;
 mod channel_event_stream;
 mod channel_handle;
+use crate::wallet::Wallet;
 pub use channel_handle::ChannelHandle;
 use libra_types::{
     contract_event::ContractEvent,
@@ -48,7 +49,8 @@ pub struct Channel {
     tx_applier: TxApplier,
 
     // event produced by the channel
-    channel_event_sender: mpsc::Sender<ChannelEvent>,
+    channel_event_sender: ActorRef<Wallet>,
+
     // watch onchain channel txn of this channel
     chain_txn_watcher: ChainWatcherHandle,
 }
@@ -61,7 +63,7 @@ impl Channel {
         channel_state: ChannelState,
         db: ChannelDB,
         chain_txn_watcher: ChainWatcherHandle,
-        channel_event_sender: mpsc::Sender<ChannelEvent>,
+        supervisor_ref: ActorRef<Wallet>,
         keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
         script_registry: Arc<PackageRegistry>,
         chain_client: Arc<dyn ChainClient>,
@@ -78,7 +80,7 @@ impl Channel {
             script_registry: script_registry.clone(),
             chain_client: chain_client.clone(),
             tx_applier: TxApplier::new(store.clone()),
-            channel_event_sender,
+            channel_event_sender: supervisor_ref,
             chain_txn_watcher,
         };
         inner

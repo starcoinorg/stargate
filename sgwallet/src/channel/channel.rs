@@ -1,5 +1,6 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
+use crate::wallet::ChannelNotifyEvent;
 use crate::{
     channel::{
         access_local, channel_event_stream::ChannelEventStream, AccessingResource,
@@ -22,7 +23,7 @@ use coerce_rt::actor::{
     message::{Handler, Message},
     Actor, ActorRef,
 };
-use futures::{SinkExt, StreamExt};
+use futures::StreamExt;
 use libra_crypto::{
     ed25519::{Ed25519PublicKey, Ed25519Signature},
     hash::CryptoHash,
@@ -127,8 +128,10 @@ impl Actor for Channel {
     async fn stopped(&mut self, _ctx: &mut ActorHandlerContext) {
         if let Err(e) = self
             .channel_event_sender
-            .send(ChannelEvent::Stopped {
-                channel_address: self.channel_address,
+            .notify(ChannelNotifyEvent {
+                channel_event: ChannelEvent::Stopped {
+                    channel_address: self.channel_address,
+                },
             })
             .await
         {
