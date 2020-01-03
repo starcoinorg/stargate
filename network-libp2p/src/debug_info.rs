@@ -1,18 +1,5 @@
-// Copyright 2019 Parity Technologies (UK) Ltd.
-// This file is part of Substrate.
-
-// Substrate is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-
-// Substrate is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-
-// You should have received a copy of the GNU General Public License
-// along with Substrate.  If not, see <http://www.gnu.org/licenses/>.
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
 
 use crate::utils::interval;
 use fnv::FnvHashMap;
@@ -65,7 +52,7 @@ impl<TSubstream> DebugInfoBehaviour<TSubstream> {
     /// Builds a new `DebugInfoBehaviour`.
     pub fn new(user_agent: String, local_public_key: PublicKey) -> Self {
         let identify = {
-            let proto_version = "/substrate/1.0".to_string();
+            let proto_version = "/stargate/0.1".to_string();
             Identify::new(proto_version, user_agent, local_public_key.clone())
         };
 
@@ -89,11 +76,11 @@ impl<TSubstream> DebugInfoBehaviour<TSubstream> {
     /// Inserts a ping time in the cache. Has no effect if we don't have any entry for that node,
     /// which shouldn't happen.
     fn handle_ping_report(&mut self, peer_id: &PeerId, ping_time: Duration) {
-        trace!(target: "sub-libp2p", "Ping time with {:?}: {:?}", peer_id, ping_time);
+        trace!(target: "sg-libp2p", "Ping time with {:?}: {:?}", peer_id, ping_time);
         if let Some(entry) = self.nodes_info.get_mut(peer_id) {
             entry.latest_ping = Some(ping_time);
         } else {
-            error!(target: "sub-libp2p",
+            error!(target: "sg-libp2p",
 				"Received ping from node we're not connected to {:?}", peer_id);
         }
     }
@@ -101,11 +88,11 @@ impl<TSubstream> DebugInfoBehaviour<TSubstream> {
     /// Inserts an identify record in the cache. Has no effect if we don't have any entry for that
     /// node, which shouldn't happen.
     fn handle_identify_report(&mut self, peer_id: &PeerId, info: &IdentifyInfo) {
-        trace!(target: "sub-libp2p", "Identified {:?} => {:?}", peer_id, info);
+        trace!(target: "sg-libp2p", "Identified {:?} => {:?}", peer_id, info);
         if let Some(entry) = self.nodes_info.get_mut(peer_id) {
             entry.client_version = Some(info.agent_version.clone());
         } else {
-            error!(target: "sub-libp2p",
+            error!(target: "sg-libp2p",
 				"Received pong from node we're not connected to {:?}", peer_id);
         }
     }
@@ -203,7 +190,7 @@ where
         if let Some(entry) = self.nodes_info.get_mut(peer_id) {
             entry.info_expire = Some(Instant::now() + CACHE_EXPIRE);
         } else {
-            error!(target: "sub-libp2p",
+            error!(target: "sg-libp2p",
 				"Disconnected from node we were not connected to {:?}", peer_id);
         }
     }
@@ -236,7 +223,7 @@ where
         if let Some(entry) = self.nodes_info.get_mut(&peer_id) {
             entry.endpoint = new_endpoint;
         } else {
-            error!(target: "sub-libp2p",
+            error!(target: "sg-libp2p",
 				"Disconnected from node we were not connected to {:?}", peer_id);
         }
     }
@@ -321,7 +308,7 @@ where
                         return Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
                     }
                     IdentifyEvent::Error { peer_id, error } => {
-                        debug!(target: "sub-libp2p", "Identification with peer {:?} failed => {}", peer_id, error)
+                        debug!(target: "sg-libp2p", "Identification with peer {:?} failed => {}", peer_id, error)
                     }
                     IdentifyEvent::Sent { .. } => {}
                 },

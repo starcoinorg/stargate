@@ -1,25 +1,8 @@
-// Copyright 2019 Parity Technologies (UK) Ltd.
-// This file is part of Substrate.
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
 
-// Substrate is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-
-// Substrate is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-
-// You should have received a copy of the GNU General Public License
-// along with Substrate.  If not, see <http://www.gnu.org/licenses/>.
-
-//! Discovery mechanisms of Substrate.
-//!
 //! The `DiscoveryBehaviour` struct implements the `NetworkBehaviour` trait of libp2p and is
 //! responsible for discovering other nodes that are part of the network.
-//!
-//! Substrate uses the following mechanisms in order to discover nodes that are part of the network:
 //!
 //! - Bootstrap nodes. These are hard-coded node identities and addresses passed in the constructor
 //! of the `DiscoveryBehaviour`. You can also call `add_known_address` later to add an entry.
@@ -101,7 +84,7 @@ impl<TSubstream> DiscoveryBehaviour<TSubstream> {
     ) -> Self {
         if enable_mdns {
             #[cfg(target_os = "unknown")]
-            warn!(target: "sub-libp2p", "mDNS is not available on this platform");
+            warn!(target: "sg-libp2p", "mDNS is not available on this platform");
         }
 
         let local_id = local_public_key.clone().into_peer_id();
@@ -125,7 +108,7 @@ impl<TSubstream> DiscoveryBehaviour<TSubstream> {
                 match Mdns::new() {
                     Ok(mdns) => Some(mdns).into(),
                     Err(err) => {
-                        warn!(target: "sub-libp2p", "Failed to initialize mDNS: {:?}", err);
+                        warn!(target: "sg-libp2p", "Failed to initialize mDNS: {:?}", err);
                         None.into()
                     }
                 }
@@ -247,13 +230,13 @@ where
             list.extend(list_to_filter);
         }
 
-        trace!(target: "sub-libp2p", "Addresses of {:?} are {:?}", peer_id, list);
+        trace!(target: "sg-libp2p", "Addresses of {:?} are {:?}", peer_id, list);
         if list.is_empty() {
             if self.kademlia.kbuckets_entries().any(|p| p == peer_id) {
-                debug!(target: "sub-libp2p", "Requested dialing to {:?} (peer in k-buckets), \
+                debug!(target: "sg-libp2p", "Requested dialing to {:?} (peer in k-buckets), \
 					and no address was found", peer_id);
             } else {
-                debug!(target: "sub-libp2p", "Requested dialing to {:?} (peer not in k-buckets), \
+                debug!(target: "sg-libp2p", "Requested dialing to {:?} (peer not in k-buckets), \
 					and no address was found", peer_id);
             }
         }
@@ -286,11 +269,11 @@ where
         let new_addr = addr
             .clone()
             .with(Protocol::P2p(self.local_peer_id.clone().into()));
-        info!(target: "sub-libp2p", "Discovered new external address for our node: {}", new_addr);
+        info!(target: "sg-libp2p", "Discovered new external address for our node: {}", new_addr);
     }
 
     fn inject_expired_listen_addr(&mut self, addr: &Multiaddr) {
-        info!(target: "sub-libp2p", "No longer listening on {}", addr);
+        info!(target: "sg-libp2p", "No longer listening on {}", addr);
     }
 
     fn poll(
@@ -314,7 +297,7 @@ where
                 Ok(Async::NotReady) => break,
                 Ok(Async::Ready(_)) => {
                     let random_peer_id = PeerId::random();
-                    debug!(target: "sub-libp2p", "Libp2p <= Starting random Kademlia request for \
+                    debug!(target: "sg-libp2p", "Libp2p <= Starting random Kademlia request for \
 						{:?}", random_peer_id);
 
                     self.kademlia.get_closest_peers(random_peer_id);
@@ -326,7 +309,7 @@ where
                         cmp::min(self.duration_to_next_kad * 2, Duration::from_secs(60));
                 }
                 Err(err) => {
-                    warn!(target: "sub-libp2p", "Kademlia query timer errored: {:?}", err);
+                    warn!(target: "sg-libp2p", "Kademlia query timer errored: {:?}", err);
                     break;
                 }
             }
@@ -347,16 +330,16 @@ where
                     }
                     KademliaEvent::GetClosestPeersResult(res) => match res {
                         Err(GetClosestPeersError::Timeout { key, peers }) => {
-                            debug!(target: "sub-libp2p",
+                            debug!(target: "sg-libp2p",
                                    "Libp2p => Query for {:?} timed out with {} results",
                                    &key, peers.len());
                         }
                         Ok(ok) => {
-                            trace!(target: "sub-libp2p",
+                            trace!(target: "sg-libp2p",
                                    "Libp2p => Query for {:?} yielded {:?} results",
                                    &ok.key, ok.peers.len());
                             if ok.peers.is_empty() && self.num_connections != 0 {
-                                debug!(target: "sub-libp2p", "Libp2p => Random Kademlia query has yielded empty \
+                                debug!(target: "sg-libp2p", "Libp2p => Random Kademlia query has yielded empty \
 										results");
                             }
                         }
@@ -381,10 +364,10 @@ where
                         return Async::Ready(NetworkBehaviourAction::GenerateEvent(ev));
                     }
                     KademliaEvent::RepublishRecordResult(res) => match res {
-                        Ok(ok) => debug!(target: "sub-libp2p",
+                        Ok(ok) => debug!(target: "sg-libp2p",
                                          "Libp2p => Record republished: {:?}",
                                          ok.key),
-                        Err(e) => warn!(target: "sub-libp2p",
+                        Err(e) => warn!(target: "sg-libp2p",
                                         "Libp2p => Republishing of record {:?} failed with: {:?}",
                                         e.key(), e),
                     },
@@ -392,7 +375,7 @@ where
                         // We are not interested in these events at the moment.
                     }
                     // We never start any other type of query.
-                    e => warn!(target: "sub-libp2p", "Libp2p => Unhandled Kademlia event: {:?}", e),
+                    e => warn!(target: "sg-libp2p", "Libp2p => Unhandled Kademlia event: {:?}", e),
                 },
                 Async::Ready(NetworkBehaviourAction::DialAddress { address }) => {
                     return Async::Ready(NetworkBehaviourAction::DialAddress { address });

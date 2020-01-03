@@ -46,7 +46,7 @@ pub fn start_service(
                 bootnodes.push(peer_id.clone());
                 known_addresses.push((peer_id, addr));
             }
-            Err(_) => warn!(target: "sub-libp2p", "Not a valid bootnode address: {}", bootnode),
+            Err(_) => warn!(target: "sg-libp2p", "Not a valid bootnode address: {}", bootnode),
         }
     }
 
@@ -56,7 +56,7 @@ pub fn start_service(
             reserved_nodes.push(peer_id.clone());
             known_addresses.push((peer_id, addr));
         } else {
-            warn!(target: "sub-libp2p", "Not a valid reserved node address: {}", reserved);
+            warn!(target: "sg-libp2p", "Not a valid reserved node address: {}", reserved);
         }
     }
 
@@ -73,7 +73,7 @@ pub fn start_service(
     let local_identity = config.node_key.clone().into_keypair()?;
     let local_public = local_identity.public();
     let local_peer_id = local_public.clone().into_peer_id();
-    info!(target: "sub-libp2p", "Local node identity is: {}", local_peer_id.to_base58());
+    info!(target: "sg-libp2p", "Local node identity is: {}", local_peer_id.to_base58());
 
     // Build the swarm.
     let (mut swarm, bandwidth) = {
@@ -114,7 +114,7 @@ pub fn start_service(
     // Listen on multiaddresses.
     for addr in &config.listen_addresses {
         if let Err(err) = Swarm::listen_on(&mut swarm, addr.clone()) {
-            warn!(target: "sub-libp2p", "Can't listen on {} because: {:?}", addr, err)
+            warn!(target: "sg-libp2p", "Can't listen on {} because: {:?}", addr, err)
         }
     }
 
@@ -327,7 +327,7 @@ impl Service {
     /// Corresponding closing events will be generated once the closing actually happens.
     pub fn drop_node(&mut self, peer_id: &PeerId) {
         if let Some(info) = self.nodes_info.get(peer_id) {
-            debug!(target: "sub-libp2p", "Dropping {:?} on purpose ({:?}, {:?})",
+            debug!(target: "sg-libp2p", "Dropping {:?} on purpose ({:?}, {:?})",
                    peer_id, info.endpoint, info.client_version);
             self.swarm.drop_node(peer_id);
         }

@@ -1,25 +1,10 @@
-// Copyright 2019 Parity Technologies (UK) Ltd.
-// This file is part of Substrate.
+// Copyright (c) The Starcoin Core Contributors
+// SPDX-License-Identifier: Apache-2.0
 
-// Substrate is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-
-// Substrate is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-
-// You should have received a copy of the GNU General Public License
-// along with Substrate.  If not, see <http://www.gnu.org/licenses/>.
-
-use std::time::Duration;
-use futures03::{FutureExt, Stream, StreamExt, stream::unfold};
+use futures03::{stream::unfold, FutureExt, Stream, StreamExt};
 use futures_timer::Delay;
+use std::time::Duration;
 
-pub fn interval(duration: Duration) -> impl Stream<Item=()> + Unpin {
-	unfold((), move |_| {
-		Delay::new(duration).map(|_| Some(((), ())))
-	}).map(drop)
+pub fn interval(duration: Duration) -> impl Stream<Item = ()> + Unpin {
+    unfold((), move |_| Delay::new(duration).map(|_| Some(((), ())))).map(drop)
 }

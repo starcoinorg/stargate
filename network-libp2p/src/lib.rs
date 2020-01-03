@@ -15,11 +15,11 @@ mod behaviour;
 #[allow(dead_code)]
 mod config;
 #[allow(dead_code)]
+mod custom_proto;
+#[allow(dead_code)]
 mod debug_info;
 #[allow(dead_code)]
 mod discovery;
-#[allow(dead_code)]
-mod legacy_proto;
 mod service_task;
 mod transport;
 mod utils;
@@ -144,10 +144,10 @@ pub struct NetworkStatePeer {
     pub version_string: Option<String>,
     /// Latest ping duration with this node.
     pub latest_ping_time: Option<Duration>,
-    /// If true, the peer is "enabled", which means that we try to open Substrate-related protocols
+    /// If true, the peer is "enabled", which means that we try to open stargate related protocols
     /// with this peer. If false, we stick to Kademlia and/or other network-only protocols.
     pub enabled: bool,
-    /// If true, the peer is "open", which means that we have a Substrate-related protocol
+    /// If true, the peer is "open", which means that we have a stargate related protocol
     /// with this peer.
     pub open: bool,
     /// List of addresses known for this node.
