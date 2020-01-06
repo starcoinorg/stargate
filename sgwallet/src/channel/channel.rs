@@ -1005,15 +1005,9 @@ impl Channel {
 
         let time_lock = lock_by.time_lock;
 
-        let watch_tag = {
-            let mut t = self.channel_address().to_vec();
-            t.extend("lock".as_bytes());
-            t
-        };
-
         let mut timeout_receiver = self
             .chain_txn_watcher
-            .add_interest(watch_tag, Box::new(move |txn| txn.block_height > time_lock))
+            .add_interest(Box::new(move |txn| txn.block_height > time_lock))
             .await?;
         let mut self_ref = self.actor_ref(ctx).await;
 
