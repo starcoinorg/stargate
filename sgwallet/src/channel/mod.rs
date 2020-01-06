@@ -35,10 +35,6 @@ mod channel_handle;
 mod channel_stm;
 
 pub struct Channel {
-    channel_address: AccountAddress,
-    account_address: AccountAddress,
-    // participant contains self address, use btree to preserve address order.
-    participant_addresses: BTreeSet<AccountAddress>,
     store: ChannelStore<ChannelDB>,
     chain_client: Arc<dyn ChainClient>,
     tx_applier: TxApplier,
@@ -78,9 +74,6 @@ impl Channel {
             chain_client.clone(),
         );
         let inner = Self {
-            channel_address,
-            account_address,
-            participant_addresses: participant_addresses.clone(),
             store: store.clone(),
             chain_client: chain_client.clone(),
             tx_applier: TxApplier::new(store.clone()),
@@ -92,9 +85,9 @@ impl Channel {
     }
 
     pub async fn start(self, mut context: ActorContext) -> ChannelHandle {
-        let channel_address = self.channel_address;
-        let account_address = self.account_address;
-        let participant_addresses = self.participant_addresses.clone();
+        let channel_address = self.channel_address().clone();
+        let account_address = self.account_address().clone();
+        let participant_addresses = self.participant_addresses().clone();
 
         let actor_ref = context
             .new_actor(self)
@@ -107,6 +100,16 @@ impl Channel {
             participant_addresses,
             actor_ref,
         )
+    }
+
+    pub fn channel_address(&self) -> &AccountAddress {
+        &self.stm.channel_address
+    }
+    pub fn account_address(&self) -> &AccountAddress {
+        &self.stm.account_address
+    }
+    pub fn participant_addresses(&self) -> &BTreeSet<AccountAddress> {
+        &self.stm.participant_addresses
     }
 }
 

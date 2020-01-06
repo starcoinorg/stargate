@@ -55,10 +55,10 @@ use vm::gas_schedule::GasAlgebra;
 /// test the sender/receiver logic separately.
 /// Also, STM make more clear that what data is needed to make progress on channel state.   
 pub struct ChannelStm {
-    channel_address: AccountAddress,
-    account_address: AccountAddress,
+    pub(crate) channel_address: AccountAddress,
+    pub(crate) account_address: AccountAddress,
     // participant contains self address, use btree to preserve address order.
-    participant_addresses: BTreeSet<AccountAddress>,
+    pub(crate) participant_addresses: BTreeSet<AccountAddress>,
     participant_keys: BTreeMap<AccountAddress, Ed25519PublicKey>,
     channel_state: ChannelState,
     witness: Witness,
@@ -173,28 +173,6 @@ impl ChannelStm {
         self.participant_keys.append(&mut participant_keys);
     }
 
-    //    fn check_applied(
-    //        &self,
-    //        channel_sequence_number: u64,
-    //    ) -> Result<Option<(SignedChannelTransactionWithProof)>> {
-    //        if let Some(info) = self.store.get_startup_info()? {
-    //            if channel_sequence_number > info.latest_version {
-    //                Ok(None)
-    //            } else {
-    //                let signed_channel_txn_with_proof = self
-    //                    .store
-    //                    .get_transaction_by_channel_seq_number(channel_sequence_number, false)?;
-    //                debug_assert_eq!(
-    //                    signed_channel_txn_with_proof.version,
-    //                    channel_sequence_number
-    //                );
-    //                Ok(Some(signed_channel_txn_with_proof))
-    //            }
-    //        } else {
-    //            Ok(None)
-    //        }
-    //    }
-    //
     pub fn handle_new_proposal(
         &self,
         pending_txn: &mut Option<PendingTransaction>,

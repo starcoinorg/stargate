@@ -99,7 +99,7 @@ impl Actor for Channel {
         if let Some(c) = start_number {
             let channel_event_stream = ChannelEventStream::new_from_chain_client(
                 self.chain_client.clone(),
-                self.channel_address,
+                self.channel_address().clone(),
                 c,
                 10,
             );
@@ -112,17 +112,18 @@ impl Actor for Channel {
             .channel_event_sender
             .notify(ChannelNotifyEvent {
                 channel_event: ChannelEvent::Stopped {
-                    channel_address: self.channel_address,
+                    channel_address: self.channel_address().clone(),
                 },
             })
             .await
         {
             error!(
                 "channel[{:?}]: fail to emit stopped event, error: {:?}",
-                &self.channel_address, e
+                &self.channel_address(),
+                e
             );
         }
-        crit!("channel {} task terminated", self.channel_address);
+        crit!("channel {} task terminated", self.channel_address());
     }
 }
 #[async_trait]
@@ -164,10 +165,11 @@ impl Handler<CollectProposalWithSigs> for Channel {
         _ctx: &mut ActorHandlerContext,
     ) -> <CollectProposalWithSigs as Message>::Result {
         let CollectProposalWithSigs { proposal, sigs } = message;
-        debug_assert_ne!(self.account_address, sigs.address);
+        debug_assert_ne!(self.account_address(), &sigs.address);
         debug!(
             "{} - collect proposal signature from {}",
-            &self.account_address, &sigs.address
+            &self.account_address(),
+            &sigs.address
         );
         // if found an already applied txn in local storage,
         // we can return directly after check the hash of transaction and signatures.
@@ -185,7 +187,7 @@ impl Handler<CollectProposalWithSigs> for Channel {
 
                     let signature = t
                         .signatures
-                        .remove(&self.account_address)
+                        .remove(&self.account_address())
                         .expect("applied txn should have user signature");
                     return Ok(Some(signature));
                 }
@@ -203,7 +205,8 @@ impl Handler<CollectProposalWithSigs> for Channel {
         if self.stm.can_auto_sign_pending_proposal(&pending_txn)? {
             debug!(
                 "{}/{} - auto sign channel txn",
-                &self.account_address, &self.channel_address
+                &self.account_address(),
+                &self.channel_address()
             );
 
             let my_signature = self
@@ -216,7 +219,7 @@ impl Handler<CollectProposalWithSigs> for Channel {
 
         self.save_pending_txn(pending_txn.clone())?;
 
-        let user_sigs = pending_txn.get_signature(&self.account_address);
+        let user_sigs = pending_txn.get_signature(&self.account_address());
         Ok(user_sigs)
     }
 }
@@ -231,7 +234,8 @@ impl Handler<GrantProposal> for Channel {
         let GrantProposal { channel_txn_id } = message;
         debug!(
             "{} grant proposal {}",
-            &self.account_address, &channel_txn_id
+            &self.account_address(),
+            &channel_txn_id
         );
         let pending_txn = self.pending_txn();
         ensure!(pending_txn.is_some(), "no pending txn");
@@ -297,7 +301,7 @@ impl Handler<ApplyPendingTxn> for Channel {
         _message: ApplyPendingTxn,
         _ctx: &mut ActorHandlerContext,
     ) -> <ApplyPendingTxn as Message>::Result {
-        debug!("{} apply pending txn", self.account_address);
+        debug!("{} apply pending txn", self.account_address());
 
         let pending_txn = self.pending_txn();
         ensure!(pending_txn.is_some(), "should have txn to apply");
@@ -319,7 +323,7 @@ impl Handler<ApplyPendingTxn> for Channel {
             }
             ProposalLifecycle::Traveling => {
                 let channel_txn = &pending_txn.proposal().channel_txn;
-                if self.account_address == channel_txn.proposer() {
+                if self.account_address() == &channel_txn.proposer() {
                     let signed_txn = self.stm.build_channel_transaction_payload(&pending_txn)?;
                     submit_transaction(self.chain_client.as_ref(), signed_txn).await?;
                 }
@@ -344,7 +348,7 @@ impl Handler<AccessingResource> for Channel {
         let AccessingResource { path } = message;
         debug!(
             "{} accessing resource {:?}",
-            self.account_address,
+            self.account_address(),
             path.data_path()
         );
         access_local(
@@ -363,7 +367,7 @@ impl Handler<GetPendingTxn> for Channel {
         _message: GetPendingTxn,
         _ctx: &mut ActorHandlerContext,
     ) -> <GetPendingTxn as Message>::Result {
-        debug!("{} get pending txn", &self.account_address);
+        debug!("{} get pending txn", &self.account_address());
         self.pending_txn()
     }
 }
@@ -384,7 +388,8 @@ impl Handler<ApplyCoSignedTxn> for Channel {
         } = message;
         debug!(
             "{} apply co-signed txn at version {}",
-            &self.account_address, version
+            &self.account_address(),
+            version
         );
         let signed_txn = match txn {
             Transaction::UserTransaction(s) => s,
@@ -400,8 +405,8 @@ impl Handler<ApplyCoSignedTxn> for Channel {
             _ => bail!("should be channel txn"),
         };
 
-        debug_assert!(self.participant_addresses.contains(&txn_sender));
-        debug_assert!(self.channel_address == channel_txn_payload.channel_address());
+        debug_assert!(self.participant_addresses().contains(&txn_sender));
+        debug_assert!(self.channel_address() == &channel_txn_payload.channel_address());
         debug_assert!(channel_txn_payload.is_authorized());
 
         let txn_channel_seq_number = channel_txn_payload.witness().channel_sequence_number();
@@ -431,7 +436,7 @@ impl Handler<ApplyCoSignedTxn> for Channel {
                     }
                 }
                 AppliedChannelTxn::Offchain(_s) => {
-                    if raw_txn.sender() == self.account_address {
+                    if &raw_txn.sender() == self.account_address() {
                         // FIXME: what happened, why I apply a offchain txn, while still travelled it.
                         unimplemented!()
                     } else {
@@ -461,18 +466,19 @@ impl Handler<ApplyCoSignedTxn> for Channel {
             // nothing to do. everything is good now.
             debug!(
                 "{}/{} - channel resource seq number: {}",
-                self.account_address,
-                self.channel_address,
+                self.account_address(),
+                self.channel_address(),
                 channel_resource.channel_sequence_number()
             );
             if channel_resource.channel_sequence_number() == 1 {
                 debug!(
                     "{}/{} - just open channel, start watch channel event",
-                    self.account_address, self.channel_address
+                    self.account_address(),
+                    self.channel_address()
                 );
                 let channel_event_stream = ChannelEventStream::new_from_chain_client(
                     self.chain_client.clone(),
-                    self.channel_address,
+                    self.channel_address().clone(),
                     channel_resource.event_handle().count(),
                     10,
                 );
@@ -482,7 +488,8 @@ impl Handler<ApplyCoSignedTxn> for Channel {
         } else if channel_resource.closed() {
             debug!(
                 "{}/{} - applied a action which close channel",
-                self.account_address, self.channel_address,
+                self.account_address(),
+                self.channel_address(),
             );
             ctx.set_status(ActorStatus::Stopping);
         }
@@ -507,7 +514,8 @@ impl Handler<ApplySoloTxn> for Channel {
         } = message;
         debug!(
             "{} apply solo txn at version {}",
-            &self.account_address, version
+            &self.account_address(),
+            version
         );
         let signed_txn = match txn {
             Transaction::UserTransaction(s) => s,
@@ -523,8 +531,8 @@ impl Handler<ApplySoloTxn> for Channel {
             _ => bail!("should be channel txn"),
         };
 
-        debug_assert!(self.participant_addresses.contains(&txn_sender));
-        debug_assert!(self.channel_address == channel_txn_payload.channel_address());
+        debug_assert!(self.participant_addresses().contains(&txn_sender));
+        debug_assert!(self.channel_address() == &channel_txn_payload.channel_address());
         debug_assert!(!channel_txn_payload.is_authorized());
 
         let txn_channel_seq_number = channel_txn_payload.witness().channel_sequence_number();
@@ -548,7 +556,7 @@ impl Handler<ApplySoloTxn> for Channel {
                     if s.raw_txn().hash() == raw_txn.hash() {
                         return Ok(applied_txn.proof.transaction_info().gas_used());
                     } else {
-                        if self.account_address == raw_txn.sender() {
+                        if self.account_address() == &raw_txn.sender() {
                             // FIXME: why would I applied a txn which is different the travel txn which sent by myself.
                             unimplemented!()
                         } else {
@@ -559,14 +567,15 @@ impl Handler<ApplySoloTxn> for Channel {
                     }
                 }
                 AppliedChannelTxn::Offchain(_s) => {
-                    if self.account_address == raw_txn.sender() {
+                    if self.account_address() == &raw_txn.sender() {
                         // FIXME: why whould I applied an offchain txn, while still submit a outdated solo txn to chain.
                         unimplemented!()
                     } else {
                         // dual submits a stale txn, I need to challenge him
                         debug!(
                             "{}/{} - unauthorized channel txn, going challenge dual",
-                            self.account_address, self.channel_address,
+                            self.account_address(),
+                            self.channel_address(),
                         );
                         // so I submit a challenge to chain.
                         let _ = self
@@ -599,21 +608,23 @@ impl Handler<ApplySoloTxn> for Channel {
         if channel_resource.locked() {
             debug!(
                 "{}/{} - applied a action which lock channel",
-                self.account_address, self.channel_address,
+                self.account_address(),
+                self.channel_address(),
             );
-            if self.account_address == txn_sender {
+            if self.account_address() == &txn_sender {
                 // I lock the channel, wait sender to resolve
                 // TODO: move the timeout check into a timer
                 let time_lock = self.stm.channel_lock_by_resource().unwrap().time_lock;
                 debug!(
                     "{}/{} - the solo txn I submitted applied locally, wait receiver timeout, time_lock: {}",
-                    self.account_address, self.channel_address, time_lock
+                    self.account_address(), self.channel_address(), time_lock
                 );
                 self.watch_channel_lock_timeout(ctx).await?;
             } else {
                 debug!(
                     "{}/{} - receiver a txn which lock channel, going to resolve it",
-                    self.account_address, self.channel_address,
+                    self.account_address(),
+                    self.channel_address(),
                 );
 
                 // drop the receiver, as I don't need wait the result
@@ -633,15 +644,16 @@ impl Handler<ApplySoloTxn> for Channel {
             // no matter who close ths channel, the channel is done. we just live with it.
             debug!(
                 "{}/{} - applied a action which close channel",
-                self.account_address, self.channel_address,
+                self.account_address(),
+                self.channel_address(),
             );
             ctx.set_status(ActorStatus::Stopping);
         } else {
             // nothing to do. everything is good now.
             debug!(
                 "{}/{} - channel resolved now, channel sequence number: {}",
-                self.account_address,
-                self.channel_address,
+                self.account_address(),
+                self.channel_address(),
                 channel_resource.channel_sequence_number()
             );
         }
@@ -670,12 +682,15 @@ impl Handler<ChannelLockTimeout> for Channel {
         } = message;
         debug!(
             "{}/{} - channel lock timeout-ed, block_height: {}, time_lock: {}, close channel now!",
-            self.account_address, self.channel_address, block_height, time_lock
+            self.account_address(),
+            self.channel_address(),
+            block_height,
+            time_lock
         );
 
         let ps = {
-            let mut ps = self.participant_addresses.clone();
-            ps.remove(&self.account_address);
+            let mut ps = self.participant_addresses().clone();
+            ps.remove(&self.account_address());
             ps.into_iter()
                 .next()
                 .expect("should contain at least 1 participants")
@@ -754,7 +769,9 @@ impl Handler<ChannelStageChange> for Channel {
     ) -> <ChannelStageChange as Message>::Result {
         debug!(
             "{}/{} - receiver channel stage change event: {:?}",
-            self.account_address, self.channel_address, &message
+            self.account_address(),
+            self.channel_address(),
+            &message
         );
 
         let ChannelStageChange { version, .. } = message;
@@ -762,8 +779,8 @@ impl Handler<ChannelStageChange> for Channel {
         if version <= self.stm.channel_state().version() {
             info!(
                 "{}/{}, outdated channel event, version: {}, local version: {}, ignore it",
-                &self.account_address,
-                &self.channel_address,
+                &self.account_address(),
+                &self.channel_address(),
                 version,
                 self.stm.channel_state().version()
             );
@@ -799,7 +816,7 @@ impl Handler<ChannelStageChange> for Channel {
         if let TransactionPayload::Channel(cp) = raw_txn.payload() {
             let is_authorized = cp.is_authorized();
             // only watch unauthorized txn sent by participant
-            if !is_authorized && self.account_address != raw_txn.sender() {
+            if !is_authorized && self.account_address() != &raw_txn.sender() {
                 let _ = self
                     .handle(
                         ApplySoloTxn {
@@ -883,14 +900,14 @@ impl Channel {
         };
         let channel_address_state = self
             .chain_client
-            .get_account_state(self.channel_address, Some(version))?;
+            .get_account_state(self.channel_address().clone(), Some(version))?;
         // NOTICE: apply after we fetch channel state
         self.tx_applier.apply(txn_to_commit)?;
 
         // update stm
         self.stm.advance_state(
             Some(ChannelState::new(
-                self.channel_address,
+                self.channel_address().clone(),
                 channel_address_state,
             )),
             self.store.get_latest_witness().unwrap_or_default(),
@@ -989,7 +1006,7 @@ impl Channel {
         let time_lock = lock_by.time_lock;
 
         let watch_tag = {
-            let mut t = self.channel_address.to_vec();
+            let mut t = self.channel_address().to_vec();
             t.extend("lock".as_bytes());
             t
         };
