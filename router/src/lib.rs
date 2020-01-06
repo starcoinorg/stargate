@@ -25,7 +25,7 @@ use sgchain::star_chain_client::ChainClient;
 use sgchain::star_chain_client::{faucet_async_2, MockChainClient};
 use sgtypes::message::{BalanceQueryRequest, BalanceQueryResponse, RouterNetworkMessage};
 use sgtypes::system_event::Event;
-use sgwallet::wallet::Wallet;
+use sgwallet::wallet::{Wallet, WalletHandle};
 use sgwallet::{get_channel_events, ChannelChangeEvent};
 use stats::{DirectedChannel, PaymentInfo, Stats};
 use std::collections::{HashMap, HashSet};
@@ -34,7 +34,6 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::runtime::Handle;
-use tokio::runtime::Runtime;
 
 #[async_trait]
 pub trait Router: Send + Sync {
@@ -45,6 +44,8 @@ pub trait Router: Send + Sync {
     ) -> Result<Vec<BalanceQueryResponse>>;
 
     fn stats(&self, channel: DirectedChannel, payment_info: PaymentInfo) -> Result<()>;
+
+    async fn shutdown(&self) -> Result<()>;
 }
 
 pub struct TableRouter {
@@ -62,7 +63,7 @@ pub struct TableRouter {
 struct RouterInner {
     graph_store: GraphStore,
     network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
-    wallet: Arc<Wallet>,
+    wallet: Arc<WalletHandle>,
     message_processor: MessageProcessor<RouterNetworkMessage>,
     stats_mgr: Arc<Stats>,
 }
@@ -79,7 +80,7 @@ impl TableRouter {
     pub fn new(
         chain_client: Arc<dyn ChainClient>,
         executor: Handle,
-        wallet: Arc<Wallet>,
+        wallet: Arc<WalletHandle>,
         network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
         network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
         stats_mgr: Arc<Stats>,
@@ -123,11 +124,6 @@ impl TableRouter {
         result
     }
 
-    pub async fn shutdown(&self) -> Result<()> {
-        self.control_sender.unbounded_send(Event::SHUTDOWN)?;
-        Ok(())
-    }
-
     pub fn start(&mut self) -> Result<()> {
         let inner = self.inner.take().expect("should have inner");
         let network_receiver = self
@@ -167,6 +163,11 @@ impl Router for TableRouter {
 
     fn stats(&self, channel: DirectedChannel, payment_info: PaymentInfo) -> Result<()> {
         self.stats_mgr.stats(channel, payment_info)?;
+        Ok(())
+    }
+
+    async fn shutdown(&self) -> Result<()> {
+        self.control_sender.unbounded_send(Event::SHUTDOWN)?;
         Ok(())
     }
 }
@@ -477,6 +478,7 @@ fn router_test() {
     use libra_logger::prelude::*;
     use sgchain::star_chain_client::MockChainClient;
     use std::sync::Arc;
+    use tokio::runtime::Runtime;
 
     libra_logger::init_for_e2e_testing();
     let mut rt = Runtime::new().unwrap();
@@ -485,11 +487,11 @@ fn router_test() {
     let (mock_chain_service, _handle) = MockChainClient::new();
     let client = Arc::new(mock_chain_service);
 
-    let (wallet1, addr1, keypair1) = _gen_wallet(executor.clone(), client.clone()).unwrap();
-    let (wallet2, addr2, keypair2) = _gen_wallet(executor.clone(), client.clone()).unwrap();
-    let (wallet3, _addr3, keypair3) = _gen_wallet(executor.clone(), client.clone()).unwrap();
-    let (wallet4, addr4, keypair4) = _gen_wallet(executor.clone(), client.clone()).unwrap();
-    let (wallet5, addr5, keypair5) = _gen_wallet(executor.clone(), client.clone()).unwrap();
+    let (wallet1, addr1, keypair1) = rt.block_on(_gen_wallet(client.clone())).unwrap();
+    let (wallet2, addr2, keypair2) = rt.block_on(_gen_wallet(client.clone())).unwrap();
+    let (wallet3, _addr3, keypair3) = rt.block_on(_gen_wallet(client.clone())).unwrap();
+    let (wallet4, addr4, keypair4) = rt.block_on(_gen_wallet(client.clone())).unwrap();
+    let (wallet5, addr5, keypair5) = rt.block_on(_gen_wallet(client.clone())).unwrap();
 
     let _wallet1 = wallet1.clone();
     let _wallet2 = wallet2.clone();
@@ -662,11 +664,11 @@ fn router_test() {
     debug!("here");
 }
 
-fn _gen_wallet(
-    executor: Handle,
+#[allow(dead_code)]
+async fn _gen_wallet(
     client: Arc<MockChainClient>,
 ) -> Result<(
-    Arc<Wallet>,
+    Arc<WalletHandle>,
     AccountAddress,
     Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
 )> {
@@ -674,24 +676,16 @@ fn _gen_wallet(
     let mut rng: StdRng = SeedableRng::seed_from_u64(_get_unix_ts()); //SeedableRng::from_seed([0; 32]);
     let keypair = Arc::new(KeyPair::generate_for_testing(&mut rng));
     let account_address = AccountAddress::from_public_key(&keypair.public_key);
-    let mut rt = Runtime::new().expect("faucet runtime err.");
-    let f = async {
-        faucet_async_2(client.as_ref().clone(), account_address, amount)
-            .await
-            .unwrap();
-    };
-    rt.block_on(f);
+
+    faucet_async_2(client.as_ref().clone(), account_address, amount)
+        .await
+        .unwrap();
     let store_path = TempPath::new();
-    let mut wallet =
+    let wallet =
         Wallet::new_with_client(account_address, keypair.clone(), client, store_path.path())
             .unwrap();
-    wallet.start(&executor).unwrap();
-
-    let f = async {
-        wallet.enable_channel().await.unwrap();
-    };
-    rt.block_on(f);
-
+    let wallet = wallet.start().await.unwrap();
+    wallet.enable_channel().await.unwrap();
     Ok((Arc::new(wallet), account_address, keypair))
 }
 
@@ -700,8 +694,8 @@ async fn _delay(duration: Duration) {
 }
 
 async fn _open_channel(
-    sender_wallet: Arc<Wallet>,
-    receiver_wallet: Arc<Wallet>,
+    sender_wallet: Arc<WalletHandle>,
+    receiver_wallet: Arc<WalletHandle>,
     sender_amount: u64,
     receiver_amount: u64,
 ) -> Result<u64> {

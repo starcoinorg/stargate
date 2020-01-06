@@ -12,61 +12,44 @@ use libra_tools::tempdir::TempPath;
 use libra_types::{account_address::AccountAddress, transaction::TransactionArgument};
 use rand::prelude::*;
 use sgchain::star_chain_client::ChainClient;
-use sgwallet::wallet::Wallet;
+use sgwallet::wallet::{Wallet, WalletHandle};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
-pub fn setup_wallet(
-    executor: tokio::runtime::Handle,
-    client: Arc<dyn ChainClient>,
-    init_balance: u64,
-) -> Result<Wallet> {
+
+pub async fn setup_wallet(client: Arc<dyn ChainClient>, init_balance: u64) -> Result<WalletHandle> {
     let mut seed_rng = rand::rngs::OsRng::new().expect("can't access OsRng");
     let seed_buf: [u8; 32] = seed_rng.gen();
     let mut rng0: StdRng = SeedableRng::from_seed(seed_buf);
     let account_keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>> =
         Arc::new(KeyPair::generate_for_testing(&mut rng0));
-
     let account = AccountAddress::from_public_key(&account_keypair.public_key);
-    let mut rt = Runtime::new().expect("faucet runtime err.");
-    let f = {
-        let c = client.clone();
-        async move { c.faucet(account, init_balance).await }
-    };
-    rt.block_on(f)?;
 
+    client.faucet(account, init_balance).await?;
     // enable channel for wallet
-    let mut wallet =
+    let wallet =
         Wallet::new_with_client(account, account_keypair, client.clone(), TempPath::new())?;
-    wallet.start(&executor)?;
-    //    let wallet = Arc::new(wallet);
-    let f = {
-        let wallet = &wallet;
-        async move { wallet.enable_channel().await }
-    };
-    let gas = rt.block_on(f)?;
-    let f = {
-        let c = client.clone();
-        async move { c.faucet(account, gas).await }
-    };
-    rt.block_on(f)?;
+    let handle = wallet.start().await?;
+    let gas_used = handle.enable_channel().await?;
+    handle.get_chain_client().faucet(account, gas_used).await?;
 
-    let wallet_balance = wallet.balance()?;
+    let wallet_balance = handle.balance()?;
     assert_eq!(
         init_balance, wallet_balance,
         "not equal, balance: {:?}",
         wallet_balance
     );
-    Ok(wallet)
+    Ok(handle)
 }
 
 pub fn with_wallet<T, F>(chain_client: Arc<dyn ChainClient>, f: F) -> Result<T>
 where
-    F: Fn(&mut Runtime, Arc<Wallet>, Arc<Wallet>) -> Result<T>,
+    F: Fn(&mut Runtime, Arc<WalletHandle>, Arc<WalletHandle>) -> Result<T>,
 {
     let init_amount = 10_000_000;
     let mut rt = Runtime::new()?;
-    let sender_wallet = setup_wallet(rt.handle().clone(), chain_client.clone(), init_amount)?;
-    let receiver_wallet = setup_wallet(rt.handle().clone(), chain_client.clone(), init_amount)?;
+
+    let sender_wallet = rt.block_on(setup_wallet(chain_client.clone(), init_amount))?;
+    let receiver_wallet = rt.block_on(setup_wallet(chain_client.clone(), init_amount))?;
     let sender_wallet = Arc::new(sender_wallet);
     let receiver_wallet = Arc::new(receiver_wallet);
 
@@ -78,8 +61,8 @@ where
 }
 
 pub async fn send_payment(
-    sender_wallet: Arc<Wallet>,
-    receiver_wallet: Arc<Wallet>,
+    sender_wallet: Arc<WalletHandle>,
+    receiver_wallet: Arc<WalletHandle>,
     amount: u64,
     hash_lock: Vec<u8>,
     timeout: u64,
@@ -104,8 +87,8 @@ pub async fn send_payment(
 }
 
 pub async fn receive_payment(
-    sender_wallet: Arc<Wallet>,
-    receiver_wallet: Arc<Wallet>,
+    sender_wallet: Arc<WalletHandle>,
+    receiver_wallet: Arc<WalletHandle>,
     preimage: Vec<u8>,
 ) -> Result<u64> {
     let sender = sender_wallet.account();
@@ -128,8 +111,8 @@ pub async fn receive_payment(
 }
 
 pub async fn open_channel(
-    sender_wallet: Arc<Wallet>,
-    receiver_wallet: Arc<Wallet>,
+    sender_wallet: Arc<WalletHandle>,
+    receiver_wallet: Arc<WalletHandle>,
     sender_amount: u64,
     receiver_amount: u64,
 ) -> Result<u64> {
@@ -152,8 +135,8 @@ pub async fn open_channel(
     Ok(sender_gas)
 }
 pub async fn deposit(
-    sender_wallet: Arc<Wallet>,
-    receiver_wallet: Arc<Wallet>,
+    sender_wallet: Arc<WalletHandle>,
+    receiver_wallet: Arc<WalletHandle>,
     sender_deposit_amount: u64,
 ) -> Result<u64> {
     let sender = sender_wallet.account();
@@ -188,8 +171,8 @@ pub async fn deposit(
 }
 
 pub async fn transfer(
-    sender_wallet: Arc<Wallet>,
-    receiver_wallet: Arc<Wallet>,
+    sender_wallet: Arc<WalletHandle>,
+    receiver_wallet: Arc<WalletHandle>,
     transfer_amount: u64,
 ) -> Result<u64> {
     let sender = sender_wallet.account();
@@ -248,8 +231,8 @@ pub async fn transfer(
 }
 
 pub async fn withdraw(
-    sender_wallet: Arc<Wallet>,
-    receiver_wallet: Arc<Wallet>,
+    sender_wallet: Arc<WalletHandle>,
+    receiver_wallet: Arc<WalletHandle>,
     sender_withdraw_amount: u64,
 ) -> Result<u64> {
     let sender = sender_wallet.account();
@@ -284,8 +267,8 @@ pub async fn withdraw(
 }
 
 pub async fn execute_script(
-    sender_wallet: Arc<Wallet>,
-    receiver_wallet: Arc<Wallet>,
+    sender_wallet: Arc<WalletHandle>,
+    receiver_wallet: Arc<WalletHandle>,
     package_name: &'static str,
     script_name: &'static str,
     args: Vec<TransactionArgument>,

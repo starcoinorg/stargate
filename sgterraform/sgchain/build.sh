@@ -8,6 +8,7 @@ shift
 
 LIBRA_DIR="$(cd ./libra && pwd)"
 TF_WORK_DIR="$(cd ./sgterraform/sgchain && pwd)"
+NODE_CONFIG="$(cd ./sgconfig/data/configs && pwd)"
 OUTPUT_DIR="$TF_WORK_DIR/$OUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
@@ -23,6 +24,12 @@ cd "$OUTPUT_DIR/val"
 mv */*.keys.toml .
 mv 0/*.network_peers.config.toml network_peers.config.toml
 mv 0/consensus_peers.config.toml ../consensus_peers.config.toml
+mv 0/*.seed_peers.toml ./seed_peers.config.toml
+sed -i "" 's/ip6\/::1\/tcp\/.*/ip4\/{SEED_IP}\/tcp\/65206\"\]/' ./seed_peers.config.toml
 mv 0/genesis.blob ../
 rm */*.toml */*.blob
 find . -mindepth 1 -type d -print0 | xargs -0 rmdir
+
+# cp node template and tar config
+cp $NODE_CONFIG/node.config.toml .
+tar -czvf config.tar.gz *
