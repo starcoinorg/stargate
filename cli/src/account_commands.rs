@@ -82,14 +82,15 @@ impl Command for AccountCommandState {
         vec!["state", "s"]
     }
     fn get_params_help(&self) -> &'static str {
-        ""
+        "<receiver_account_ref_id>|<receiver_account_address>"
     }
     fn get_description(&self) -> &'static str {
         "get state of account"
     }
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() != 2 {
+        if params.len() < 3 {
             println!("Invalid number of arguments for state");
+            return;
         }
         match client.account_state(params[1]) {
             Ok((version, result, proof)) => match result {
@@ -131,6 +132,10 @@ impl Command for AccountCommandRecoverWallet {
     }
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
         println!(">> Recovering Wallet");
+        if params.len() < 2 {
+            println!("Invalid number of arguments for recovery");
+            return;
+        }
         match client.recover_wallet_accounts(&params) {
             Ok(account_data) => {
                 println!(
@@ -161,6 +166,10 @@ impl Command for AccountCommandWriteRecovery {
     }
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
         println!(">> Saving Libra wallet mnemonic recovery seed to disk");
+        if params.len() < 2 {
+            println!("Invalid number of arguments for write");
+            return;
+        }
         match client.write_recovery(&params) {
             Ok(_) => println!("Saved mnemonic seed to disk"),
             Err(e) => report_error("Error writing mnemonic recovery seed to file", e),
