@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct InvoiceManager {
-    r_hash_map: Arc<Mutex<HashMap<Vec<u8>, (Vec<u8>)>>>,
+    r_hash_map: Arc<Mutex<HashMap<Vec<u8>, Vec<u8>>>>,
     r_hash_previous_hop_map: Arc<Mutex<HashMap<Vec<u8>, AccountAddress>>>,
 }
 
