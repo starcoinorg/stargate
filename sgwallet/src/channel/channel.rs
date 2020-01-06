@@ -324,7 +324,7 @@ impl Handler<ApplyPendingTxn> for Channel {
             ProposalLifecycle::Traveling => {
                 let channel_txn = &pending_txn.proposal().channel_txn;
                 if self.account_address() == &channel_txn.proposer() {
-                    let signed_txn = self.stm.build_channel_transaction_payload(&pending_txn)?;
+                    let signed_txn = self.stm.build_signed_txn(&pending_txn)?;
                     submit_transaction(self.chain_client.as_ref(), signed_txn).await?;
                 }
                 let txn_sender = channel_txn.proposer();

@@ -287,10 +287,7 @@ impl ChannelStm {
         Ok((body, sig))
     }
 
-    pub fn build_channel_transaction_payload(
-        &self,
-        pending_txn: &PendingTransaction,
-    ) -> Result<SignedTransaction> {
+    pub fn build_signed_txn(&self, pending_txn: &PendingTransaction) -> Result<SignedTransaction> {
         let channel_txn = &pending_txn.proposal().channel_txn;
 
         let (payload_body, _payload_signature) =
@@ -651,12 +648,10 @@ impl ChannelStm {
     }
 
     fn channel_view(&self, version: Option<u64>) -> Result<ChannelStateView> {
-        // TODO: reduce clone
-        let latest_writeset = self.witness.clone().into_write_set();
         ChannelStateView::new(
             self.account_address,
             &self.channel_state,
-            latest_writeset,
+            self.witness.write_set(),
             version,
             self.chain_client.as_ref(),
         )
