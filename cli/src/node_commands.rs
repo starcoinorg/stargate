@@ -37,7 +37,7 @@ impl Command for NodeCommandOpenChannel {
     }
 
     fn get_params_help(&self) -> &'static str {
-        "<remote_addr> <local_amount> <remote_amount>"
+        "<remote_addr> <local_amount>"
     }
 
     fn get_description(&self) -> &'static str {
@@ -73,7 +73,7 @@ impl Command for NodeCommandDepositChannel {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 3 {
+        if params.len() < 4 {
             println!("Invalid number of arguments for deposit channel");
             return;
         }
@@ -101,7 +101,7 @@ impl Command for NodeCommandPay {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 3 {
+        if params.len() < 4 {
             println!("Invalid number of arguments for pay");
             return;
         }
@@ -129,8 +129,8 @@ impl Command for NodeCommandWithdrawChannel {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 3 {
-            println!("Invalid number of arguments for withdrawl from channel");
+        if params.len() < 4 {
+            println!("Invalid number of arguments for withdraw from channel");
             return;
         }
 
@@ -157,7 +157,7 @@ impl Command for NodeCommandChannelBalance {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 2 {
+        if params.len() < 3 {
             println!("Invalid number of arguments for get channel balance");
             return;
         }
@@ -185,7 +185,7 @@ impl Command for NodeCommandQueryProposal {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 2 {
+        if params.len() < 3 {
             println!("Invalid number of arguments for get transaction proposal");
             return;
         }
@@ -222,7 +222,7 @@ impl Command for NodeCommandProposal {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 4 {
+        if params.len() < 5 {
             println!("Invalid number of arguments for action transaction proposal");
             return;
         }
@@ -252,7 +252,7 @@ impl Command for NodeCommandAddInvoice {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 2 {
+        if params.len() < 3 {
             println!("Invalid number of arguments for add invoice");
             return;
         }
@@ -282,7 +282,7 @@ impl Command for NodeCommandSendPayment {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 2 {
+        if params.len() < 3 {
             println!("Invalid number of arguments for send payment");
             return;
         }
