@@ -224,9 +224,9 @@ pub async fn transfer(
     let sender_gas_used = sender_wallet
         .apply_txn(receiver, &receiver_transfer_txn)
         .await?;
-    let _ = receiver_wallet
-        .apply_txn(sender, &receiver_transfer_txn)
-        .await?;
+    //    let _ = receiver_wallet
+    //        .apply_txn(sender, &receiver_transfer_txn)
+    //        .await?;
     Ok(sender_gas_used)
 }
 
