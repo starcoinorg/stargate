@@ -12,6 +12,8 @@ cargo build
 ```
 ./target/debug/sgchain 
 ```
+## Run starcoin test net [Option]
+if you want start chain node to connect startcoin test net , [click here](./sgterraform/quickstart.md).
 
 ## Run Cli and Create Account
 
