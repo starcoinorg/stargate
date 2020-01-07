@@ -64,4 +64,4 @@
 		```
 	**注意**：
     	wallet的配置参考config_template目录下面文件
-	 
+	
