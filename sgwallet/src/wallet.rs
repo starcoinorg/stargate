@@ -4,16 +4,18 @@ use crate::{
     chain_watcher::{ChainWatcher, ChainWatcherHandle},
     channel::{
         ApplyCoSignedTxn, ApplyPendingTxn, ApplySoloTxn, CancelPendingTxn, Channel, ChannelEvent,
-        ChannelHandle, CollectProposalWithSigs, Execute, ForceTravel, GrantProposal,
+        ChannelHandle, CollectProposalWithSigs, Execute, GrantProposal,
     },
     scripts::*,
 };
 use anyhow::{bail, ensure, format_err, Error, Result};
 use async_trait::async_trait;
 use chrono::Utc;
-use coerce_rt::actor::context::{ActorContext, ActorHandlerContext, ActorStatus};
-use coerce_rt::actor::message::{Handler, Message};
-use coerce_rt::actor::{Actor, ActorRef};
+use coerce_rt::actor::{
+    context::{ActorContext, ActorHandlerContext, ActorStatus},
+    message::{Handler, Message},
+    Actor, ActorRef,
+};
 use lazy_static::lazy_static;
 use libra_config::config::VMConfig;
 use libra_crypto::{
@@ -489,15 +491,24 @@ impl WalletHandle {
             None => bail!("no pending txn to grant"),
         };
 
+        if !grant {
+            channel
+                .channel_ref()
+                .send(CancelPendingTxn {
+                    channel_txn_id: request_id,
+                })
+                .await??;
+            return Ok(None);
+        }
+
         let resp = channel
             .channel_ref()
             .send(GrantProposal {
                 channel_txn_id: request_id,
-                grant,
             })
             .await??;
 
-        Ok(resp.map(|s| ChannelTransactionResponse::new(proposal, s)))
+        Ok(Some(ChannelTransactionResponse::new(proposal, resp)))
     }
 
     /// After receiver reject the txn, sender should cancel his local pending txn to cleanup state.
@@ -544,7 +555,12 @@ impl WalletHandle {
             generate_channel_address(participant, self.shared.account);
 
         let channel = self.get_channel(generated_channel_address).await?;
-        let (txn_sender, seq_number) = channel.channel_ref().send(ForceTravel).await??;
+
+        let (txn_sender, seq_number) = channel
+            .channel_ref()
+            .send(ApplyPendingTxn)
+            .await??
+            .ok_or(format_err!("already travelling"))?;
 
         let TransactionWithProof {
             version,
@@ -576,12 +592,9 @@ impl WalletHandle {
 
         let channel = self.get_channel(generated_channel_address).await?;
 
-        let (proposal, _) = txn_response.clone().into();
+        let (_proposal, _) = txn_response.clone().into();
 
-        let option_watch = channel
-            .channel_ref()
-            .send(ApplyPendingTxn { proposal })
-            .await??;
+        let option_watch = channel.channel_ref().send(ApplyPendingTxn).await??;
         if option_watch.is_none() {
             return Ok(0);
         }

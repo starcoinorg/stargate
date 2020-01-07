@@ -11,7 +11,7 @@ use sgtypes::channel::ChannelState;
 
 pub struct ChannelStateView<'txn> {
     channel_state: &'txn ChannelState,
-    latest_write_set: WriteSet,
+    latest_write_set: &'txn WriteSet,
     client_state_view: ClientStateView<'txn>,
 }
 
@@ -19,7 +19,7 @@ impl<'txn> ChannelStateView<'txn> {
     pub fn new(
         account_address: AccountAddress,
         channel_state: &'txn ChannelState,
-        latest_write_set: WriteSet,
+        latest_write_set: &'txn WriteSet,
         version: Option<Version>,
         client: &'txn dyn ChainClient,
     ) -> Result<Self> {
@@ -47,7 +47,7 @@ impl<'txn> ChannelStateView<'txn> {
 
     pub fn get_local(&self, access_path: &AccessPath) -> Result<Option<Vec<u8>>> {
         let d =
-            super::channel::access_local(&self.latest_write_set, self.channel_state, access_path)?;
+            super::channel::access_local(self.latest_write_set, self.channel_state, access_path)?;
         Ok(d.map(|t| t.to_vec()))
     }
 }

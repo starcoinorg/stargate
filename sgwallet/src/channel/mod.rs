@@ -5,6 +5,8 @@ use crate::{chain_watcher::ChainWatcherHandle, scripts::PackageRegistry, tx_appl
 use anyhow::{bail, Result};
 use coerce_rt::actor::{context::ActorContext, message::Message, ActorRef};
 
+use crate::{channel::channel_stm::ChannelStm, wallet::Wallet};
+pub use channel_handle::ChannelHandle;
 use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
@@ -13,7 +15,8 @@ use libra_crypto::{
 use libra_types::{
     access_path::AccessPath,
     account_address::AccountAddress,
-    transaction::{TransactionArgument, TransactionOutput},
+    contract_event::ContractEvent,
+    transaction::{Transaction, TransactionArgument, TransactionInfo, TransactionOutput},
     write_set::{WriteOp, WriteSet},
 };
 use sgchain::star_chain_client::ChainClient;
@@ -29,22 +32,10 @@ use std::{collections::BTreeSet, sync::Arc};
 mod channel;
 mod channel_event_stream;
 mod channel_handle;
-use crate::wallet::Wallet;
-pub use channel_handle::ChannelHandle;
-use libra_types::{
-    contract_event::ContractEvent,
-    transaction::{Transaction, TransactionInfo},
-};
+mod channel_stm;
 
 pub struct Channel {
-    channel_address: AccountAddress,
-    account_address: AccountAddress,
-    // participant contains self address, use btree to preserve address order.
-    participant_addresses: BTreeSet<AccountAddress>,
-    channel_state: ChannelState,
     store: ChannelStore<ChannelDB>,
-    keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
-    script_registry: Arc<PackageRegistry>,
     chain_client: Arc<dyn ChainClient>,
     tx_applier: TxApplier,
 
@@ -53,6 +44,7 @@ pub struct Channel {
 
     // watch onchain channel txn of this channel
     chain_txn_watcher: ChainWatcherHandle,
+    stm: ChannelStm,
 }
 impl Channel {
     /// load channel from storage
@@ -70,26 +62,32 @@ impl Channel {
     ) -> Self {
         let store = ChannelStore::new(participant_addresses.clone(), db.clone())
             .unwrap_or_else(|e| panic!("create channel store should be ok, e: {}", e));
+        let stm = ChannelStm::new(
+            channel_address.clone(),
+            account_address.clone(),
+            participant_addresses.clone(),
+            store.get_participant_keys(),
+            channel_state.clone(),
+            store.get_latest_witness().unwrap_or_default(),
+            keypair.clone(),
+            script_registry.clone(),
+            chain_client.clone(),
+        );
         let inner = Self {
-            channel_address,
-            account_address,
-            participant_addresses: participant_addresses.clone(),
-            channel_state,
             store: store.clone(),
-            keypair: keypair.clone(),
-            script_registry: script_registry.clone(),
             chain_client: chain_client.clone(),
             tx_applier: TxApplier::new(store.clone()),
             channel_event_sender: supervisor_ref,
             chain_txn_watcher,
+            stm,
         };
         inner
     }
 
     pub async fn start(self, mut context: ActorContext) -> ChannelHandle {
-        let channel_address = self.channel_address;
-        let account_address = self.account_address;
-        let participant_addresses = self.participant_addresses.clone();
+        let channel_address = self.channel_address().clone();
+        let account_address = self.account_address().clone();
+        let participant_addresses = self.participant_addresses().clone();
 
         let actor_ref = context
             .new_actor(self)
@@ -102,6 +100,16 @@ impl Channel {
             participant_addresses,
             actor_ref,
         )
+    }
+
+    pub fn channel_address(&self) -> &AccountAddress {
+        &self.stm.channel_address
+    }
+    pub fn account_address(&self) -> &AccountAddress {
+        &self.stm.account_address
+    }
+    pub fn participant_addresses(&self) -> &BTreeSet<AccountAddress> {
+        &self.stm.participant_addresses
     }
 }
 
@@ -126,10 +134,9 @@ impl Message for CollectProposalWithSigs {
 }
 pub(crate) struct GrantProposal {
     pub channel_txn_id: HashValue,
-    pub grant: bool,
 }
 impl Message for GrantProposal {
-    type Result = Result<Option<ChannelTransactionSigs>>;
+    type Result = Result<ChannelTransactionSigs>;
 }
 pub(crate) struct CancelPendingTxn {
     pub channel_txn_id: HashValue,
@@ -137,9 +144,7 @@ pub(crate) struct CancelPendingTxn {
 impl Message for CancelPendingTxn {
     type Result = Result<()>;
 }
-pub(crate) struct ApplyPendingTxn {
-    pub proposal: ChannelTransactionProposal,
-}
+pub(crate) struct ApplyPendingTxn;
 /// return a (sender, seq_number) txn to watch if travel.
 impl Message for ApplyPendingTxn {
     type Result = Result<Option<(AccountAddress, u64)>>;
@@ -166,10 +171,6 @@ impl Message for ApplyCoSignedTxn {
     type Result = Result<u64>;
 }
 
-pub(crate) struct ForceTravel;
-impl Message for ForceTravel {
-    type Result = Result<(AccountAddress, u64)>;
-}
 pub(crate) struct GetPendingTxn;
 impl Message for GetPendingTxn {
     type Result = Option<PendingTransaction>;

@@ -8,7 +8,7 @@ use crate::pending_txn_store::PendingTxnStore;
 use crate::schema::participant_public_key_schema::ParticipantPublicKeySchema;
 use crate::schema_db::SchemaDB;
 
-use anyhow::{bail, ensure, Result};
+use anyhow::{ensure, Result};
 use itertools::Itertools;
 use libra_crypto::ed25519::Ed25519PublicKey;
 use libra_crypto::hash::CryptoHash;
@@ -269,12 +269,6 @@ where
         pending_txn: PendingTransaction,
         persist: bool,
     ) -> Result<()> {
-        let cur_pending_txn = self.get_pending_txn();
-        if let Some(cur) = cur_pending_txn {
-            if cur.newer_than(&pending_txn) {
-                bail!("cannot save pending txn, state invalid");
-            }
-        }
         if persist {
             let mut sb = SchemaBatch::new();
             self.pending_txn_store

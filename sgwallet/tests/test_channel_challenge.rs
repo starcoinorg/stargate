@@ -115,10 +115,7 @@ async fn test_channel_lock_and_resolve(
     let channel_address = sender_channel_handle_clone.channel_address().clone();
 
     let channel_txn_receiver = chain_watcher_handle
-        .add_interest_oneshot(
-            sender.account().to_vec(),
-            channel_txn_interest_oneshot(channel_address, 3),
-        )
+        .add_interest_oneshot(channel_txn_interest_oneshot(channel_address, 3))
         .await?;
     let txn_with_info: TransactionWithInfo = channel_txn_receiver.await?;
     let _resolve_txn_version = txn_with_info.version;
@@ -183,10 +180,7 @@ async fn test_channel_lock_and_challenge(
 
     let channel_address = sender_channel_handle.channel_address().clone();
     let channel_txn_receiver = chain_watcher_handle
-        .add_interest_oneshot(
-            sender.account().to_vec(),
-            channel_txn_interest_oneshot(channel_address, 3),
-        )
+        .add_interest_oneshot(channel_txn_interest_oneshot(channel_address, 3))
         .await?;
     let txn_with_info: TransactionWithInfo = channel_txn_receiver.await?;
     let channel_state = sender
@@ -246,10 +240,7 @@ async fn test_channel_lock_and_timeout(
     // wait timeout and close channel
     let channel_address = sender_channel_handle.channel_address().clone();
     let channel_txn_receiver = chain_watcher_handle
-        .add_interest_oneshot(
-            sender.account().to_vec(),
-            channel_txn_interest_oneshot(channel_address, 3),
-        )
+        .add_interest_oneshot(channel_txn_interest_oneshot(channel_address, 3))
         .await?;
     let txn_with_info: TransactionWithInfo = channel_txn_receiver.await?;
     let channel_state = sender

@@ -42,7 +42,7 @@ fn run_test_chain_watcher(chain_client: Arc<dyn ChainClient>) -> Result<()> {
         let mut actor_ref = actor_context.new_actor(chain_state_accessor).await?;
 
         let mut receiver = chain_watcher_handle
-            .add_interest("test".to_string().into_bytes(), Box::new(|_txn| true))
+            .add_interest(Box::new(|_txn| true))
             .await?;
         let account_address = AccountAddress::random();
         chain_client.faucet(account_address, 10000).await?;

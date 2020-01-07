@@ -24,6 +24,9 @@ use coerce_rt::{
 };
 use std::time::Duration;
 use tokio::time::interval;
+
+use uuid::Uuid;
+
 pub use txn_stream::TransactionWithInfo;
 
 pub type Interest = Box<dyn Fn(&TransactionWithInfo) -> bool + Send + Sync>;
@@ -37,7 +40,6 @@ impl ChainWatcherHandle {
     /// add a oneshot interest
     pub async fn add_interest_oneshot(
         &self,
-        tag: Vec<u8>,
         interest: Interest,
     ) -> Result<oneshot::Receiver<TransactionWithInfo>> {
         let (tx, rx) = oneshot::channel();
@@ -45,7 +47,7 @@ impl ChainWatcherHandle {
             .actor_ref
             .clone()
             .send(AddInterest {
-                tag,
+                tag: Uuid::new_v4(),
                 interest,
                 sink: Trans::Oneshot(tx),
             })
@@ -61,7 +63,6 @@ impl ChainWatcherHandle {
     /// add interest on txn stream
     pub async fn add_interest(
         &self,
-        tag: Vec<u8>,
         interest: Interest,
     ) -> Result<mpsc::Receiver<TransactionWithInfo>> {
         let (tx, rx) = mpsc::channel(1024);
@@ -70,7 +71,7 @@ impl ChainWatcherHandle {
             .actor_ref
             .clone()
             .send(AddInterest {
-                tag,
+                tag: Uuid::new_v4(),
                 interest,
                 sink: Trans::Mpsc(tx),
             })
@@ -84,32 +85,18 @@ impl ChainWatcherHandle {
         }
     }
 
-    pub async fn remove_interest(&self, tag: Vec<u8>) -> Result<()> {
-        match self.actor_ref.clone().notify(RemoveInterest { tag }).await {
-            Err(_e) => Err(format_err!("task is already stopped")),
-            Ok(_) => Ok(()),
-        }
-    }
-
     pub async fn stop(mut self) {
         let _ = self.actor_ref.stop().await;
     }
 }
 
 struct AddInterest {
-    tag: Vec<u8>,
+    tag: Uuid,
     interest: Interest,
     sink: Trans,
 }
 impl actor::message::Message for AddInterest {
     type Result = bool;
-}
-
-struct RemoveInterest {
-    tag: Vec<u8>,
-}
-impl actor::message::Message for RemoveInterest {
-    type Result = ();
 }
 
 struct Cleanup;
@@ -126,7 +113,7 @@ impl actor::message::Message for NewTxn {
 
 pub struct ChainWatcher {
     chain_client: Arc<dyn ChainClient>,
-    down_streams: HashMap<Vec<u8>, DownStream>,
+    down_streams: HashMap<Uuid, DownStream>,
     start_version: u64,
     limit: u64,
 }
@@ -205,17 +192,7 @@ impl actor::message::Handler<AddInterest> for ChainWatcher {
         self.add_interest(tag, interest, sink)
     }
 }
-#[async_trait]
-impl actor::message::Handler<RemoveInterest> for ChainWatcher {
-    async fn handle(
-        &mut self,
-        message: RemoveInterest,
-        _ctx: &mut ActorHandlerContext,
-    ) -> <RemoveInterest as Message>::Result {
-        let RemoveInterest { tag } = message;
-        self.remove_interest(&tag);
-    }
-}
+
 #[async_trait]
 impl actor::message::Handler<Cleanup> for ChainWatcher {
     async fn handle(
@@ -288,7 +265,7 @@ impl ChainWatcher {
         }
     }
 
-    fn add_interest(&mut self, tag: Vec<u8>, interest: Interest, sink: Trans) -> bool {
+    fn add_interest(&mut self, tag: Uuid, interest: Interest, sink: Trans) -> bool {
         match self.down_streams.remove(&tag) {
             Some(s) if !s.is_closed() => {
                 self.down_streams.insert(tag, s);
@@ -299,10 +276,6 @@ impl ChainWatcher {
                 true
             }
         }
-    }
-
-    fn remove_interest(&mut self, tag: &Vec<u8>) {
-        self.down_streams.remove(tag);
     }
 }
 
