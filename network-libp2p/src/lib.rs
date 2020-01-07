@@ -1,26 +1,45 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+pub use config::{NetworkConfiguration, NodeKeyConfig, Secret};
+pub use libp2p::{
+    core::{
+        ConnectedPoint, {identity, multiaddr, Multiaddr, PeerId, PublicKey},
+    },
+    multiaddr as build_multiaddr,
+};
+pub use service_task::{start_service, Service, ServiceEvent};
+
+#[allow(dead_code)]
 mod behaviour;
+#[allow(dead_code)]
 mod config;
+#[allow(dead_code)]
 mod custom_proto;
+#[allow(dead_code)]
+mod debug_info;
+#[allow(dead_code)]
+mod discovery;
 mod service_task;
 mod transport;
+mod utils;
 
-pub use crate::{
-    behaviour::Severity,
-    config::{NetworkConfiguration, NodeKeyConfig, NonReservedPeerMode, Secret, *},
-    custom_proto::{CustomMessage, RegisteredProtocol},
-    service_task::{start_service, Service, ServiceEvent},
-};
-use libp2p::core::nodes::ConnectedPoint;
-pub use libp2p::{build_multiaddr, core::PublicKey, identity, multiaddr, Multiaddr, PeerId};
 use serde::Serialize;
 use std::{
     collections::{HashMap, HashSet},
     error, fmt,
     time::Duration,
 };
+
+trait DiscoveryNetBehaviour {
+    /// Notify the protocol that we have learned about the existence of nodes.
+    ///
+    /// Can (or most likely will) be called multiple times with the same `PeerId`s.
+    ///
+    /// Also note that there is no notification for expired nodes. The implementer must add a TTL
+    /// system, or remove nodes that will fail to reach.
+    fn add_discovered_nodes(&mut self, nodes: impl Iterator<Item = PeerId>);
+}
 
 /// Name of a protocol, transmitted on the wire. Should be unique for each chain.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -125,10 +144,10 @@ pub struct NetworkStatePeer {
     pub version_string: Option<String>,
     /// Latest ping duration with this node.
     pub latest_ping_time: Option<Duration>,
-    /// If true, the peer is "enabled", which means that we try to open Substrate-related protocols
+    /// If true, the peer is "enabled", which means that we try to open stargate related protocols
     /// with this peer. If false, we stick to Kademlia and/or other network-only protocols.
     pub enabled: bool,
-    /// If true, the peer is "open", which means that we have a Substrate-related protocol
+    /// If true, the peer is "open", which means that we have a stargate related protocol
     /// with this peer.
     pub open: bool,
     /// List of addresses known for this node.
@@ -150,7 +169,7 @@ pub enum NetworkStatePeerEndpoint {
     /// We are listening.
     Listening {
         /// Address we're listening on that received the connection.
-        listen_addr: Multiaddr,
+        local_addr: Multiaddr,
         /// Address data is sent back to.
         send_back_addr: Multiaddr,
     },
@@ -161,10 +180,10 @@ impl From<ConnectedPoint> for NetworkStatePeerEndpoint {
         match endpoint {
             ConnectedPoint::Dialer { address } => NetworkStatePeerEndpoint::Dialing(address),
             ConnectedPoint::Listener {
-                listen_addr,
+                local_addr,
                 send_back_addr,
             } => NetworkStatePeerEndpoint::Listening {
-                listen_addr,
+                local_addr,
                 send_back_addr,
             },
         }

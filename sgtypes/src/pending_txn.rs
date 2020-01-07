@@ -1,6 +1,6 @@
 use crate::channel_transaction::ChannelTransactionProposal;
 use crate::channel_transaction_sigs::ChannelTransactionSigs;
-use crate::pending_txn::ProposalLifecycle::{Agreed, Applying, Negotiating};
+use crate::pending_txn::ProposalLifecycle::{Agreed, Applying, Negotiating, Traveling};
 use libra_types::account_address::AccountAddress;
 use libra_types::transaction::TransactionOutput;
 use serde::{Deserialize, Serialize};
@@ -20,10 +20,12 @@ pub struct PendingTransaction {
     lifecycle: ProposalLifecycle,
 }
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Serialize, Deserialize)]
-enum ProposalLifecycle {
-    Negotiating = 0,
+pub enum ProposalLifecycle {
+    Created = 0,
+    Negotiating,
     Agreed,
     Applying,
+    Traveling,
     //    Fulfilling,
     //    Fulfilled,
 }
@@ -41,7 +43,15 @@ impl PendingTransaction {
             lifecycle: Negotiating,
         }
     }
-
+    pub fn proposal(&self) -> &ChannelTransactionProposal {
+        &self.proposal
+    }
+    pub fn output(&self) -> &TransactionOutput {
+        &self.output
+    }
+    pub fn signatures(&self) -> &BTreeMap<AccountAddress, ChannelTransactionSigs> {
+        &self.signatures
+    }
     pub fn add_signature(&mut self, sig: ChannelTransactionSigs) {
         if !self.signatures.contains_key(&sig.address) {
             self.signatures.insert(sig.address, sig);
@@ -49,6 +59,18 @@ impl PendingTransaction {
     }
     pub fn set_applying(&mut self) {
         self.lifecycle = Applying;
+    }
+
+    pub fn set_travelling(&mut self) {
+        self.lifecycle = Traveling;
+    }
+
+    pub fn lifecycle(&self) -> ProposalLifecycle {
+        self.lifecycle
+    }
+
+    pub fn set_lifecycle(&mut self, state: ProposalLifecycle) {
+        self.lifecycle = state;
     }
 
     pub fn get_signature(&self, address: &AccountAddress) -> Option<ChannelTransactionSigs> {

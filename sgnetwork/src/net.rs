@@ -33,7 +33,7 @@ use tokio::prelude::task::AtomicTask;
 
 #[derive(Clone)]
 pub struct NetworkService {
-    pub libp2p_service: Arc<Mutex<Libp2pService<Message>>>,
+    pub libp2p_service: Arc<Mutex<Libp2pService>>,
     acks: Arc<Mutex<HashMap<u128, Sender<()>>>>,
 }
 
@@ -60,18 +60,16 @@ pub fn build_network_service(
     NetworkService::new(config)
 }
 
-fn build_libp2p_service(
-    cfg: NetworkConfiguration,
-) -> Result<Arc<Mutex<Libp2pService<Message>>>, io::Error> {
-    let protocol = network_libp2p::RegisteredProtocol::<Message>::new(&b"tst"[..], &[1]);
-    match start_service(cfg, protocol) {
+fn build_libp2p_service(cfg: NetworkConfiguration) -> Result<Arc<Mutex<Libp2pService>>, io::Error> {
+    let protocol = network_libp2p::ProtocolId::from("stargate".as_bytes());
+    match start_service(protocol, cfg) {
         Ok((srv, _)) => Ok(Arc::new(Mutex::new(srv))),
         Err(err) => Err(err.into()),
     }
 }
 
 fn run_network(
-    net_srv: Arc<Mutex<Libp2pService<Message>>>,
+    net_srv: Arc<Mutex<Libp2pService>>,
     acks: Arc<Mutex<HashMap<u128, Sender<()>>>>,
 ) -> (
     mpsc::UnboundedSender<NetworkMessage>,
@@ -107,6 +105,8 @@ fn run_network(
     .for_each(move |event| {
         match event {
             ServiceEvent::CustomMessage { peer_id, message } => {
+                //todo: Error handle
+                let message = Message::from_bytes(message.as_ref()).unwrap();
                 match message {
                     Message::Payload(payload) => {
                         //receive message
@@ -118,9 +118,10 @@ fn run_network(
                         };
                         let _ = _tx.unbounded_send(user_msg);
                         if payload.id != 0 {
-                            ack_sender
-                                .lock()
-                                .send_custom_message(&peer_id, Message::ACK(payload.id));
+                            ack_sender.lock().send_custom_message(
+                                &peer_id,
+                                Message::ACK(payload.id).into_bytes(),
+                            );
                         }
                     }
                     Message::ACK(message_id) => {
@@ -167,7 +168,7 @@ fn run_network(
             let peer_id = convert_account_address_to_peer_id(message.peer_id).unwrap();
             net_srv
                 .lock()
-                .send_custom_message(&peer_id, Message::new_message(message.data));
+                .send_custom_message(&peer_id, Message::new_message(message.data).into_bytes());
             task_notify.notify();
             if net_srv.lock().is_open(&peer_id) == false {
                 error!(
@@ -205,7 +206,7 @@ fn run_network(
 }
 
 fn spawn_network(
-    libp2p_service: Arc<Mutex<Libp2pService<Message>>>,
+    libp2p_service: Arc<Mutex<Libp2pService>>,
     acks: Arc<Mutex<HashMap<u128, Sender<()>>>>,
     close_rx: oneshot::Receiver<()>,
 ) -> (
@@ -284,7 +285,7 @@ impl NetworkService {
 
         self.libp2p_service
             .lock()
-            .send_custom_message(&peer_id, protocol_msg);
+            .send_custom_message(&peer_id, protocol_msg.into_bytes());
         debug!("Send message with ack");
         self.acks.lock().insert(message_id, tx);
         rx

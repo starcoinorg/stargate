@@ -17,15 +17,17 @@ lazy_static! {
     static ref CLOSE_METHOD_NAME: Identifier = Identifier::new("close").unwrap();
 }
 
-fn channel_challenge_name() -> &'static IdentStr {
+pub fn channel_challenge_name() -> &'static IdentStr {
     &*CHALLENGE_METHOD_NAME
 }
-fn channel_resolve_name() -> &'static IdentStr {
+pub fn channel_resolve_name() -> &'static IdentStr {
     &*RESOLVE_METHOD_NAME
 }
-fn channel_close_name() -> &'static IdentStr {
+pub fn channel_close_name() -> &'static IdentStr {
     &*CLOSE_METHOD_NAME
 }
+
+#[allow(dead_code)]
 pub fn resolve_channel_action() -> ScriptAction {
     ScriptAction::new_call(
         ModuleId::new(core_code_address(), account_module_name().into()),
@@ -33,7 +35,7 @@ pub fn resolve_channel_action() -> ScriptAction {
         vec![],
     )
 }
-
+#[allow(dead_code)]
 pub fn challenge_channel_action() -> ScriptAction {
     ScriptAction::new_call(
         ModuleId::new(core_code_address(), account_module_name().into()),
@@ -42,6 +44,7 @@ pub fn challenge_channel_action() -> ScriptAction {
     )
 }
 
+#[allow(dead_code)]
 pub fn close_channel_action(violator: AccountAddress) -> ScriptAction {
     ScriptAction::new_call(
         ModuleId::new(core_code_address(), account_module_name().into()),

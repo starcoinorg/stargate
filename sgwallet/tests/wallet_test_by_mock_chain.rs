@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::Result;
+use libra_logger::prelude::*;
 use libra_types::transaction::TransactionArgument;
 use mock_chain_test_helper::run_with_mock_client;
-
 use sgtypes::script_package::ChannelScriptPackage;
-
 use wallet_test_helper::{
     deploy_custom_module_and_script, test_deploy_custom_module, test_wallet_async,
 };
@@ -22,7 +21,7 @@ fn test_wallet_with_mock_client() {
             rt.block_on(test_wallet_async(sender, receiver))
         })
     }) {
-        println!("err: {:?}", e);
+        error!("err: {:#?}", e);
         assert!(false)
     }
 }

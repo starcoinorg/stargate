@@ -7,9 +7,7 @@ use libra_crypto::{
     HashValue,
 };
 use libra_types::account_address::AccountAddress;
-use network_libp2p::CustomMessage;
 use parity_codec::{Decode, Encode};
-
 #[derive(Clone, Debug)]
 pub struct InnerMessage {
     pub peer_id: AccountAddress,
@@ -38,15 +36,15 @@ pub struct PayloadMsg {
     pub data: Vec<u8>,
 }
 
-impl CustomMessage for Message
+impl Message
 where
     Self: Decode + Encode,
 {
-    fn into_bytes(self) -> Vec<u8> {
+    pub fn into_bytes(self) -> Vec<u8> {
         self.encode()
     }
 
-    fn from_bytes(bytes: &[u8]) -> Result<Self, ()>
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ()>
     where
         Self: Sized,
     {
