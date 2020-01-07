@@ -27,7 +27,7 @@ mv 0/consensus_peers.config.toml ../consensus_peers.config.toml
 mv 0/*.seed_peers.toml ./seed_peers.config.toml
 sed -i "" 's/ip6\/::1\/tcp\/.*/ip4\/{SEED_IP}\/tcp\/65206\"\]/' ./seed_peers.config.toml
 mv 0/genesis.blob ../
-rm */*.toml */*.blob
+rm -rf */*.toml */*.blob
 find . -mindepth 1 -type d -print0 | xargs -0 rmdir
 
 # cp node template and tar config
