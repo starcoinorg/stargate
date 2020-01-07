@@ -14,8 +14,12 @@ impl Command for BlockCommand {
         "Block explorer operations"
     }
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        let commands: Vec<Box<dyn Command>> =
-            vec![Box::new(BlockLatestHeight {}), Box::new(BlockList {})];
+        let commands: Vec<Box<dyn Command>> = vec![
+            Box::new(BlockLatestHeight {}),
+            Box::new(BlockList {}),
+            Box::new(BlockDetail {}),
+            Box::new(BlockDifficulty {}),
+        ];
 
         subcommand_execute(&params[0], commands, client, &params[1..]);
     }
@@ -32,7 +36,7 @@ impl Command for BlockLatestHeight {
         "Query latest height of block chain."
     }
     fn execute(&self, client: &mut SGClientProxy, _params: &[&str]) {
-        println!(">> ");
+        println!(">> Query latest height");
         match client.latest_height() {
             Ok(height) => println!("latest height is : {:?}", height),
             Err(e) => report_error("Error query latest height", e),
@@ -53,13 +57,31 @@ impl Command for BlockList {
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
         println!(">> Query block summary list");
 
-        let block_id = if params.len() > 0 {
-            Some(params[0])
+        let block_id = if params.len() > 1 {
+            Some(params[1])
         } else {
             None
         };
         match client.get_block_summary_list_request(block_id) {
-            Ok(list) => println!("block summary list : {:?}", list),
+            Ok(list) => {
+                for (index, block_summary) in list.blocks.iter().enumerate() {
+                    println!(
+                        "#{} height {} block {} id {:?} parent {} accumulator {:?} \
+                         state {:?} miner {:?} nonce {} target {} algo {}",
+                        index,
+                        block_summary.height,
+                        hex::encode(block_summary.block_id.to_vec()),
+                        block_summary.block_id,
+                        hex::encode(block_summary.parent_id.to_vec()),
+                        block_summary.accumulator_root_hash,
+                        block_summary.state_root_hash,
+                        block_summary.miner,
+                        block_summary.nonce,
+                        block_summary.target,
+                        block_summary.algo,
+                    );
+                }
+            }
             Err(e) => report_error("Error query block list", e),
         }
     }
