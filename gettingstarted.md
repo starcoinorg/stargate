@@ -141,3 +141,6 @@ A game Rock-Paper-Scissors is used to demonstrate the channel contract.
    dev package execute {bob} scripts rps_end_game b"72" b"616263"
    ```
    After the game end,you could check channel balance.Alice lose the game,so balance of her should be origin balance minus 10,balance of bob should be his origin balance plus 10. A detailed description of the contract can be found [here](./demo/RockPaperScissors/README.md).
+
+## trouble shooting
+[click enter](./troubleshooting.md)
