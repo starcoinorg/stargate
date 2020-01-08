@@ -22,7 +22,7 @@ mod test {
         task::spawn(async move {
             for i in 0..12 {
                 let (rx, _tx) = mine_state.mine_block(vec![i; 32]);
-                let proof = rx.recv().await.unwrap();
+                let proof = rx.recv().await.unwrap().expect("proof is none.");
                 let target = proof.target;
                 let algo = proof.algo;
                 debug!("Mined success");

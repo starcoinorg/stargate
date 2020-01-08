@@ -1,6 +1,8 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::block_commands::BlockCommand;
+use crate::txn_commands::TxnCommand;
 use crate::{
     account_commands::AccountCommand, dev_commands::DevCommand, node_commands::NodeCommand,
     sg_client_proxy::SGClientProxy,
@@ -37,6 +39,8 @@ pub fn get_commands() -> (
         Arc::new(AccountCommand {}),
         Arc::new(NodeCommand {}),
         Arc::new(DevCommand {}),
+        Arc::new(TxnCommand {}),
+        Arc::new(BlockCommand {}),
     ];
     let mut alias_to_cmd = HashMap::new();
     for command in &commands {

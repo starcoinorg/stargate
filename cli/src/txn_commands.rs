@@ -14,7 +14,11 @@ impl Command for TxnCommand {
         "Transaction explorer operations"
     }
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        let commands: Vec<Box<dyn Command>> = vec![Box::new(TxnLatestVersion {})];
+        let commands: Vec<Box<dyn Command>> = vec![
+            Box::new(TxnLatestVersion {}),
+            Box::new(QueryTxnByVersion {}),
+            Box::new(TxnList {}),
+        ];
 
         subcommand_execute(&params[0], commands, client, &params[1..]);
     }
