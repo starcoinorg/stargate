@@ -4,6 +4,7 @@ use crate::commands::*;
 use anyhow::{ensure, format_err, Error, Result};
 use grpcio::EnvBuilder;
 use libra_crypto::HashValue;
+use libra_types::explorer::GetBlockByBlockIdResponse;
 use libra_types::transaction::Transaction;
 use libra_types::{
     account_address::{AccountAddress, ADDRESS_LENGTH},
@@ -370,18 +371,19 @@ impl SGClientProxy {
         }
     }
 
-    pub fn block_detail(&self, params: &[&str]) -> Result<GetBlockSummaryListResponse> {
+    pub fn block_detail(&self, params: &[&str]) -> Result<GetBlockByBlockIdResponse> {
         ensure!(
-            params.len() == 1,
+            params.len() == 2,
             "Invalid number of arguments for querying block info."
         );
-        let hash = from_hex_literal(params[0])?;
+
+        let hash = HashValue::try_from(params[1].to_string())?;
         let block_id = BlockId { id: hash };
         let req = BlockRequestItem::BlockIdItem { block_id };
         let resp = self.chain_client.block_explorer(req.into())?;
         let response = BlockResponseItem::try_from(resp)?;
         match response {
-            BlockResponseItem::GetBlockSummaryListResponseItem { resp } => return Ok(resp),
+            BlockResponseItem::GetBlockByBlockIdResponseItem(resp) => return Ok(resp),
             _ => return Err(format_err!("err BlockResponseItem type.")),
         }
     }
@@ -393,7 +395,7 @@ impl SGClientProxy {
     ) -> Result<GetBlockSummaryListResponse> {
         let id = match block_id {
             Some(s) => {
-                let hash = from_hex_literal(s)?;
+                let hash = HashValue::try_from(s.to_string())?;
                 Some(BlockId { id: hash })
             }
             None => None,
@@ -426,9 +428,9 @@ impl SGClientProxy {
     }
 
     pub fn txn_list(&self, params: &[&str]) -> Result<GetTransactionListResponse> {
-        let version = if params.len() > 0 {
+        let version = if params.len() >= 2 {
             Some(TxnVersion {
-                ver: params[0].parse::<u64>()?,
+                ver: params[1].parse::<u64>()?,
             })
         } else {
             None
@@ -448,10 +450,10 @@ impl SGClientProxy {
 
     pub fn txn_by_version(&self, params: &[&str]) -> Result<Transaction> {
         ensure!(
-            params.len() == 1,
+            params.len() == 2,
             "Invalid number of arguments for querying transaction."
         );
-        let version = params[0].parse::<u64>()?;
+        let version = params[1].parse::<u64>()?;
         let req = TxnRequestItem::GetTransactionByVersionRequestItem { version };
         let resp = self.chain_client.txn_explorer(req.into())?;
         let response = TxnResponseItem::try_from(resp)?;
