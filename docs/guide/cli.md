@@ -70,7 +70,7 @@ account recover <key_file_path>
 Open channel with remote participant ,if remote participant in p2p network.
 
 ```
-node open channel <remote_addr> <local_amount>
+node oc <remote_addr> <local_amount>
 ```
 
 #### Deposit
@@ -78,7 +78,7 @@ node open channel <remote_addr> <local_amount>
 Deposit to channel.
 
 ```
-node deposit <remote_addr> <local_amount>
+node d <remote_addr> <local_amount>
 ```
 
 #### Pay on channel
@@ -86,7 +86,7 @@ node deposit <remote_addr> <local_amount>
 Pay to participant have direct channel.
 
 ```
-node pay <remote_addr> <amount>
+node p <remote_addr> <amount>
 ```
 
 #### Withdral
@@ -94,7 +94,7 @@ node pay <remote_addr> <amount>
 Withdral money from channel.
 
 ```
-node withdraw <remote_addr> <amount>
+node wd <remote_addr> <amount>
 ```
 
 #### Channel Balance
@@ -102,20 +102,20 @@ node withdraw <remote_addr> <amount>
 Query user balance for one channel.
 
 ```
-node channel balance <remote_addr>
+node cb <remote_addr>
 ```
 
 #### Add Invoice
 
 Add invoice for receiver want to receive money by hash time lock payment.
 ```
-node add invoice
+node ai <amount>
 ```
 
 #### Send Payment
 
 Send hash time lock payment to receiver.
 ```
-node send payment <encoded_invoice>
+node sp <encoded_invoice>
 ```
 
