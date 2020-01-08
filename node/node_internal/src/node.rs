@@ -12,8 +12,8 @@ use anyhow::{bail, ensure, Error, Result};
 use libra_crypto::HashValue;
 
 use libra_logger::prelude::*;
+use libra_types::transaction::TransactionArgument;
 use libra_types::{account_address::AccountAddress, account_config::AccountResource};
-use libra_types::transaction::{TransactionArgument};
 use network::{NetworkMessage, NetworkService};
 use node_proto::{
     DeployModuleResponse, DepositResponse, EmptyResponse, ExecuteScriptResponse,
@@ -1322,9 +1322,14 @@ impl NodeInner {
         transaction_args: Vec<TransactionArgument>,
         responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
     ) {
-         match self
+        match self
             .wallet
-            .execute_script(receiver_address, &package_name, &script_name, transaction_args)
+            .execute_script(
+                receiver_address,
+                &package_name,
+                &script_name,
+                transaction_args,
+            )
             .await
         {
             Ok(script_transaction) => {

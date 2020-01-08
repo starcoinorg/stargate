@@ -1,8 +1,8 @@
 use crate::message_processor::MessageFuture;
 use anyhow::Result;
 use futures::channel::oneshot;
+use libra_types::transaction::TransactionArgument;
 use libra_types::{account_address::AccountAddress, account_config::AccountResource};
-use libra_types::transaction::{TransactionArgument};
 use sgtypes::script_package::ChannelScriptPackage;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 
