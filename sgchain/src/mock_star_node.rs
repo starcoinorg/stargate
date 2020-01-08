@@ -69,7 +69,7 @@ where
     let block_storage_client = make_block_storage_client(
         config.consensus.consensus_rpc_address.as_str(),
         config.consensus.consensus_rpc_port,
-        Some(100_000_000),
+        None,
     );
     let handle = AdmissionControlService::new(
         upstream_proxy_sender,
