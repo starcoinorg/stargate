@@ -11,4 +11,7 @@ require (
 	golang.org/x/text v0.3.2 // indirect
 	google.golang.org/genproto v0.0.0-20191009194640-548a555dbc03
 	google.golang.org/grpc v1.24.0
+	libra v0.0.0-00010101000000-000000000000
 )
+
+replace libra => ./libra
