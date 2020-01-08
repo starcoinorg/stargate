@@ -88,7 +88,7 @@ impl Command for AccountCommandState {
         "get state of account"
     }
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 3 {
+        if params.len() < 2 {
             println!("Invalid number of arguments for state");
             return;
         }
@@ -132,7 +132,7 @@ impl Command for AccountCommandRecoverWallet {
     }
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
         println!(">> Recovering Wallet");
-        if params.len() < 2 {
+        if params.len() < 1 {
             println!("Invalid number of arguments for recovery");
             return;
         }
@@ -166,7 +166,7 @@ impl Command for AccountCommandWriteRecovery {
     }
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
         println!(">> Saving Libra wallet mnemonic recovery seed to disk");
-        if params.len() < 2 {
+        if params.len() < 1 {
             println!("Invalid number of arguments for write");
             return;
         }
