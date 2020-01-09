@@ -81,13 +81,13 @@ impl SGClientProxy {
         _is_blocking: bool,
     ) -> Result<OpenChannelResponse> {
         ensure!(
-            space_delim_strings.len() == 4,
+            space_delim_strings.len() == 3,
             "Invalid number of arguments for open channel"
         );
         let response = self.node_client.open_channel(OpenChannelRequest {
             remote_addr: AccountAddress::from_hex_literal(space_delim_strings[1])?,
             local_amount: space_delim_strings[2].parse::<u64>()?,
-            remote_amount: space_delim_strings[3].parse::<u64>()?,
+            remote_amount: 0,
         })?;
         Ok(response)
     }

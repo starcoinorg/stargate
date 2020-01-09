@@ -33,7 +33,7 @@ pub struct NodeCommandOpenChannel {}
 
 impl Command for NodeCommandOpenChannel {
     fn get_aliases(&self) -> Vec<&'static str> {
-        vec!["open channel ", "oc"]
+        vec!["open_channel ", "oc"]
     }
 
     fn get_params_help(&self) -> &'static str {
@@ -45,7 +45,7 @@ impl Command for NodeCommandOpenChannel {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 4 {
+        if params.len() < 3 {
             println!("Invalid number of arguments for open channel");
             return;
         }
@@ -73,7 +73,7 @@ impl Command for NodeCommandDepositChannel {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 4 {
+        if params.len() < 3 {
             println!("Invalid number of arguments for deposit channel");
             return;
         }
@@ -101,7 +101,7 @@ impl Command for NodeCommandPay {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 4 {
+        if params.len() < 3 {
             println!("Invalid number of arguments for pay");
             return;
         }
@@ -129,7 +129,7 @@ impl Command for NodeCommandWithdrawChannel {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 4 {
+        if params.len() < 3 {
             println!("Invalid number of arguments for withdraw from channel");
             return;
         }
@@ -145,7 +145,7 @@ pub struct NodeCommandChannelBalance {}
 
 impl Command for NodeCommandChannelBalance {
     fn get_aliases(&self) -> Vec<&'static str> {
-        vec!["channel balance ", "cb"]
+        vec!["channel_balance ", "cb"]
     }
 
     fn get_params_help(&self) -> &'static str {
@@ -157,7 +157,7 @@ impl Command for NodeCommandChannelBalance {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 3 {
+        if params.len() < 2 {
             println!("Invalid number of arguments for get channel balance");
             return;
         }
@@ -173,7 +173,7 @@ pub struct NodeCommandQueryProposal {}
 
 impl Command for NodeCommandQueryProposal {
     fn get_aliases(&self) -> Vec<&'static str> {
-        vec!["transaction proposal ", "tp"]
+        vec!["transaction_proposal ", "tp"]
     }
 
     fn get_params_help(&self) -> &'static str {
@@ -185,7 +185,7 @@ impl Command for NodeCommandQueryProposal {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 3 {
+        if params.len() < 2 {
             println!("Invalid number of arguments for get transaction proposal");
             return;
         }
@@ -210,7 +210,7 @@ pub struct NodeCommandProposal {}
 
 impl Command for NodeCommandProposal {
     fn get_aliases(&self) -> Vec<&'static str> {
-        vec!["transaction proposal action", "tpa"]
+        vec!["transaction_proposal_action", "tpa"]
     }
 
     fn get_params_help(&self) -> &'static str {
@@ -222,7 +222,7 @@ impl Command for NodeCommandProposal {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 5 {
+        if params.len() < 4 {
             println!("Invalid number of arguments for action transaction proposal");
             return;
         }
@@ -240,7 +240,7 @@ pub struct NodeCommandAddInvoice {}
 
 impl Command for NodeCommandAddInvoice {
     fn get_aliases(&self) -> Vec<&'static str> {
-        vec!["add invoice", "ai"]
+        vec!["add_invoice", "ai"]
     }
 
     fn get_params_help(&self) -> &'static str {
@@ -252,7 +252,7 @@ impl Command for NodeCommandAddInvoice {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 3 {
+        if params.len() < 2 {
             println!("Invalid number of arguments for add invoice");
             return;
         }
@@ -270,7 +270,7 @@ pub struct NodeCommandSendPayment {}
 
 impl Command for NodeCommandSendPayment {
     fn get_aliases(&self) -> Vec<&'static str> {
-        vec!["send payment", "sp"]
+        vec!["send_payment", "sp"]
     }
 
     fn get_params_help(&self) -> &'static str {
@@ -282,7 +282,7 @@ impl Command for NodeCommandSendPayment {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 3 {
+        if params.len() < 2 {
             println!("Invalid number of arguments for send payment");
             return;
         }
