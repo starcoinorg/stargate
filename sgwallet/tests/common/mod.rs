@@ -8,11 +8,13 @@ use libra_crypto::{
     test_utils::KeyPair,
     Uniform,
 };
+use libra_logger::prelude::*;
 use libra_tools::tempdir::TempPath;
 use libra_types::{account_address::AccountAddress, transaction::TransactionArgument};
 use rand::prelude::*;
 use sgchain::star_chain_client::ChainClient;
 use sgwallet::wallet::{Wallet, WalletHandle};
+use std::future::Future;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 
@@ -23,7 +25,6 @@ pub async fn setup_wallet(client: Arc<dyn ChainClient>, init_balance: u64) -> Re
     let account_keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>> =
         Arc::new(KeyPair::generate_for_testing(&mut rng0));
     let account = AccountAddress::from_public_key(&account_keypair.public_key);
-
     client.faucet(account, init_balance).await?;
     // enable channel for wallet
     let wallet =
@@ -39,6 +40,24 @@ pub async fn setup_wallet(client: Arc<dyn ChainClient>, init_balance: u64) -> Re
         wallet_balance
     );
     Ok(handle)
+}
+
+pub async fn with_init_wallet_async<T, F>(
+    chain_client: Arc<dyn ChainClient>,
+    f: impl Fn(Arc<WalletHandle>, Arc<WalletHandle>) -> F,
+) -> Result<T>
+where
+    F: Future<Output = Result<T>>,
+{
+    let init_amount = 10_000_000;
+    let sender_wallet = setup_wallet(chain_client.clone(), init_amount).await?;
+    let receiver_wallet = setup_wallet(chain_client.clone(), init_amount).await?;
+    let sender_wallet = Arc::new(sender_wallet);
+    let receiver_wallet = Arc::new(receiver_wallet);
+    let res = f(sender_wallet.clone(), receiver_wallet.clone()).await;
+    sender_wallet.stop().await?;
+    receiver_wallet.stop().await?;
+    res
 }
 
 pub fn with_wallet<T, F>(chain_client: Arc<dyn ChainClient>, f: F) -> Result<T>

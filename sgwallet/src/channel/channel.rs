@@ -205,8 +205,9 @@ impl Handler<Execute> for Channel {
     async fn handle(
         &mut self,
         message: Execute,
-        _ctx: &mut ActorHandlerContext,
+        ctx: &mut ActorHandlerContext,
     ) -> <Execute as Message>::Result {
+        trace!("{} handle {:?}", ctx.actor_id(), &message);
         let Execute { channel_op, args } = message;
         let proposal = self.stm.generate_proposal(channel_op, args)?;
         let mut pending_txn = self.pending_txn();
@@ -345,6 +346,7 @@ impl Handler<CancelPendingTxn> for Channel {
         message: CancelPendingTxn,
         ctx: &mut ActorHandlerContext,
     ) -> <CancelPendingTxn as Message>::Result {
+        trace!("{} handle {:?}", ctx.actor_id(), &message);
         let CancelPendingTxn { channel_txn_id } = message;
 
         let pending_txn = self.pending_txn();
@@ -372,10 +374,10 @@ impl Handler<CancelPendingTxn> for Channel {
 impl Handler<ApplyPendingTxn> for Channel {
     async fn handle(
         &mut self,
-        _message: ApplyPendingTxn,
-        _ctx: &mut ActorHandlerContext,
+        message: ApplyPendingTxn,
+        ctx: &mut ActorHandlerContext,
     ) -> <ApplyPendingTxn as Message>::Result {
-        debug!("{} apply pending txn", self.account_address());
+        trace!("{} handle {:?}", ctx.actor_id(), &message);
 
         let pending_txn = self.pending_txn();
         ensure!(pending_txn.is_some(), "should have txn to apply");
@@ -446,6 +448,7 @@ impl Handler<GetPendingTxn> for Channel {
     }
 }
 
+#[derive(Debug)]
 struct ApplyTravelTxn {
     pub txn: Transaction,
     pub txn_info: TransactionInfo,
@@ -464,6 +467,8 @@ impl Handler<ApplyTravelTxn> for Channel {
         message: ApplyTravelTxn,
         ctx: &mut ActorHandlerContext,
     ) -> <ApplyTravelTxn as Message>::Result {
+        trace!("{} handle {:?}", ctx.actor_id(), &message);
+
         let ApplyTravelTxn {
             txn,
             txn_info,
@@ -514,6 +519,8 @@ impl Handler<ApplyCoSignedTxn> for Channel {
         message: ApplyCoSignedTxn,
         ctx: &mut ActorHandlerContext,
     ) -> <ApplyCoSignedTxn as Message>::Result {
+        trace!("{} handle {:?}", ctx.actor_id(), &message);
+
         let ApplyCoSignedTxn {
             txn,
             txn_info,
@@ -640,6 +647,8 @@ impl Handler<ApplySoloTxn> for Channel {
         message: ApplySoloTxn,
         ctx: &mut ActorHandlerContext,
     ) -> <ApplySoloTxn as Message>::Result {
+        trace!("{} handle {:?}", ctx.actor_id(), &message);
+
         let ApplySoloTxn {
             txn,
             txn_info,
@@ -797,6 +806,7 @@ impl Handler<ApplySoloTxn> for Channel {
     }
 }
 
+#[derive(Debug)]
 struct ChannelLockTimeout {
     pub block_height: u64,
     pub time_lock: u64,
@@ -811,6 +821,7 @@ impl Handler<ChannelLockTimeout> for Channel {
         message: ChannelLockTimeout,
         ctx: &mut ActorHandlerContext,
     ) -> <ChannelLockTimeout as Message>::Result {
+        trace!("{} handle {:?}", ctx.actor_id(), &message);
         let ChannelLockTimeout {
             block_height,
             time_lock,

@@ -8,6 +8,7 @@ mod rpc_chain_test_helper;
 use anyhow::Error;
 use anyhow::Result;
 use coerce_rt::actor::context::{ActorContext, ActorStatus};
+use common::setup_wallet;
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_types::{
@@ -18,6 +19,7 @@ use libra_types::{
     transaction::{Transaction, TransactionPayload},
 };
 use rpc_chain_test_helper::run_with_rpc_client;
+use sgchain::star_chain_client::ChainClient;
 use sgwallet::{
     chain_watcher::{ChainWatcher, Interest, TransactionWithInfo},
     wallet::WalletHandle,
@@ -27,22 +29,66 @@ use std::{sync::Arc, time::Duration};
 #[test]
 fn run_test_channel_lock_and_then_resolve() {
     if let Err(e) = run_with_rpc_client(|chain_client| {
-        common::with_wallet(chain_client.clone(), |rt, sender, receiver| {
-            rt.block_on(test_channel_lock_and_resolve(sender, receiver))
-        })?;
-        common::with_wallet(chain_client.clone(), |rt, sender, receiver| {
-            rt.block_on(test_channel_lock_and_challenge(sender, receiver))
-        })?;
-        common::with_wallet(chain_client.clone(), |rt, sender, receiver| {
-            rt.block_on(test_channel_lock_and_timeout(sender, receiver))
-        })?;
-        common::with_wallet(chain_client.clone(), |rt, sender, receiver| {
-            rt.block_on(test_channel_restart(sender, receiver))
-        })?;
-        Ok::<_, Error>(())
+        let mut rt = tokio::runtime::Runtime::new()?;
+        rt.block_on(test_all(chain_client))
     }) {
         panic!("error, {}", e);
     }
+}
+
+/// One function to rule them all.
+async fn test_all(chain_client: Arc<dyn ChainClient>) -> Result<()> {
+    let init_amount = 10_000_000;
+
+    let sender_wallet = Arc::new(setup_wallet(chain_client.clone(), init_amount).await?);
+    let receiver_wallet = Arc::new(setup_wallet(chain_client.clone(), init_amount).await?);
+    let h1 = tokio::task::spawn(async move {
+        test_channel_restart(sender_wallet.clone(), receiver_wallet.clone()).await?;
+        sender_wallet.stop().await?;
+        receiver_wallet.stop().await?;
+        debug!("h1 stopped");
+        Ok::<_, Error>(())
+    });
+
+    let sender_wallet = Arc::new(setup_wallet(chain_client.clone(), init_amount).await?);
+    let receiver_wallet = Arc::new(setup_wallet(chain_client.clone(), init_amount).await?);
+    let h2 = tokio::task::spawn(async move {
+        test_channel_lock_and_challenge(sender_wallet.clone(), receiver_wallet.clone()).await?;
+        sender_wallet.stop().await?;
+        receiver_wallet.stop().await?;
+        debug!("h2 stopped");
+
+        Ok::<_, Error>(())
+    });
+
+    let sender_wallet = Arc::new(setup_wallet(chain_client.clone(), init_amount).await?);
+    let receiver_wallet = Arc::new(setup_wallet(chain_client.clone(), init_amount).await?);
+    let h3 = tokio::task::spawn(async move {
+        test_channel_lock_and_resolve(sender_wallet.clone(), receiver_wallet.clone()).await?;
+        sender_wallet.stop().await?;
+        receiver_wallet.stop().await?;
+        debug!("h3 stopped");
+
+        Ok::<_, Error>(())
+    });
+
+    let sender_wallet = Arc::new(setup_wallet(chain_client.clone(), init_amount).await?);
+    let receiver_wallet = Arc::new(setup_wallet(chain_client.clone(), init_amount).await?);
+    let h4 = tokio::task::spawn(async move {
+        test_channel_lock_and_timeout(sender_wallet.clone(), receiver_wallet.clone()).await?;
+        sender_wallet.stop().await?;
+        receiver_wallet.stop().await?;
+        debug!("h4 stopped");
+
+        Ok::<_, Error>(())
+    });
+
+    h1.await??;
+    h2.await??;
+    h3.await??;
+    h4.await??;
+    debug!("all stopped");
+    Ok(())
 }
 
 async fn test_channel_restart(
@@ -74,7 +120,7 @@ async fn test_channel_restart(
     // and restart
     receiver.start_channel(sender_address).await?;
     assert_eq!(2, receiver.channel_sequence_number(sender_address).await?);
-    join_handle.await?;
+    join_handle.await??;
     Ok(())
 }
 
@@ -103,26 +149,6 @@ async fn test_channel_lock_and_resolve(
 
     let sender_channel_handle_clone = sender_channel_handle.clone();
     let receiver_channel_handle_clone = receiver_channel_handle.clone();
-
-    tokio::task::spawn(async move {
-        loop {
-            tokio::time::delay_for(Duration::from_secs(2)).await;
-            let sender_channel_resource = sender_channel_handle
-                .get_channel_resource::<ChannelResource>(DataPath::onchain_resource_path(
-                    ChannelResource::struct_tag(),
-                ))
-                .await
-                .unwrap();
-            let receiver_channel_resource = receiver_channel_handle
-                .get_channel_resource::<ChannelResource>(DataPath::onchain_resource_path(
-                    ChannelResource::struct_tag(),
-                ))
-                .await
-                .unwrap();
-            info!("sender channel_resource: {:?}", sender_channel_resource);
-            info!("receiver channel_resource: {:?}", receiver_channel_resource);
-        }
-    });
 
     let chain_watcher = ChainWatcher::new(sender.get_chain_client(), 0, 10);
     let actor_context = ActorContext::new();

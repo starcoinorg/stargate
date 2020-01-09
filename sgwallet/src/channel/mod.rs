@@ -115,6 +115,7 @@ impl Channel {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct Execute {
     pub channel_op: ChannelOp,
     pub args: Vec<TransactionArgument>,
@@ -126,6 +127,7 @@ impl Message for Execute {
         TransactionOutput,
     )>;
 }
+#[derive(Debug)]
 pub(crate) struct CollectProposalWithSigs {
     pub proposal: ChannelTransactionProposal,
     /// the sigs maybe proposer's, or other participant's.
@@ -134,24 +136,29 @@ pub(crate) struct CollectProposalWithSigs {
 impl Message for CollectProposalWithSigs {
     type Result = Result<Option<ChannelTransactionSigs>>;
 }
+#[derive(Debug)]
 pub(crate) struct GrantProposal {
     pub channel_txn_id: HashValue,
 }
 impl Message for GrantProposal {
     type Result = Result<ChannelTransactionSigs>;
 }
+
+#[derive(Debug)]
 pub(crate) struct CancelPendingTxn {
     pub channel_txn_id: HashValue,
 }
 impl Message for CancelPendingTxn {
     type Result = Result<()>;
 }
+#[derive(Debug)]
 pub(crate) struct ApplyPendingTxn;
 /// return a (sender, seq_number) txn to watch if travel.
 impl Message for ApplyPendingTxn {
     type Result = Result<Option<(AccountAddress, u64)>>;
 }
 
+#[derive(Debug)]
 pub(crate) struct ApplySoloTxn {
     pub txn: Transaction,
     pub txn_info: TransactionInfo,
@@ -163,6 +170,7 @@ impl Message for ApplySoloTxn {
     type Result = Result<u64>;
 }
 
+#[derive(Debug)]
 pub(crate) struct ApplyCoSignedTxn {
     pub txn: Transaction,
     pub txn_info: TransactionInfo,
@@ -173,11 +181,13 @@ impl Message for ApplyCoSignedTxn {
     type Result = Result<u64>;
 }
 
+#[derive(Debug)]
 pub(crate) struct GetPendingTxn;
 impl Message for GetPendingTxn {
     type Result = Option<PendingTransaction>;
 }
 
+#[derive(Debug)]
 pub(crate) struct AccessingResource {
     pub path: AccessPath,
 }

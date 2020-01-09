@@ -84,6 +84,7 @@ pub struct WalletHandle {
     actor_ref: ActorRef<Wallet>,
     shared: Shared,
     sgdb: Arc<SgStorage>,
+    actor_context: ActorContext,
 }
 
 impl WalletHandle {
@@ -723,6 +724,7 @@ impl WalletHandle {
         if let Err(_) = self.actor_ref.clone().stop().await {
             warn!("actor {:?} already stopped", &self.actor_ref);
         }
+        self.actor_context.terminate().await;
         Ok(())
     }
 
@@ -822,6 +824,7 @@ impl Wallet {
             actor_ref,
             shared,
             sgdb,
+            actor_context,
         })
     }
 }
@@ -835,7 +838,8 @@ impl Actor for Wallet {
             .get_account_state(self.inner.account, None);
         if let Err(e) = account_state {
             error!("fail to get account state from chain, e: {}", e);
-            return ();
+            ctx.set_status(ActorStatus::Stopping);
+            return;
         }
         let account_state = account_state.unwrap();
 
@@ -859,6 +863,7 @@ impl Actor for Wallet {
                 if let Err(e) = self.spawn_channel(channel_address.clone(), None, ctx).await {
                     error!("fail to start channel {}, {}", channel_address, e);
                     ctx.set_status(ActorStatus::Stopping);
+                    break;
                 }
             }
         } else {
