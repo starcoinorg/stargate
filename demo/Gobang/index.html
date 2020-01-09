@@ -82,6 +82,7 @@
 	</body>
 	<script src="js/game.js" type="text/javascript" charset="utf-8"></script>
 	<script src="js/jquery-2.2.4.min.js" type="text/javascript" charset="utf-8"></script>
+	<script src="js/base64js.min.js" type="text/javascript" charset="utf-8"></script>
 	<script type="text/javascript">
 		var gb = null;
 		var infoboj = document.getElementsByClassName("info")[0];
@@ -98,17 +99,24 @@
 		var pl2addr = null;
 		var joinTxnIdValue = null;
 
+		function formatAddr(addr) {
+			if (addr.startsWith("0x")) {
+				return addr.substring(2);
+			}
+			return addr;
+		}
+
 		document.getElementById("openComputer").disabled = true;
 
 		document.getElementById("newgame").addEventListener("click", function() {
 		    srv = document.getElementById("srvAddrInput").value;
-		    pl2addr = document.getElementById("plname2Input").value;
-			sendTxnNew(srv, pl2addr);
+			pl2addr = document.getElementById("plname2Input").value;
+			sendTxnNew(srv, formatAddr(pl2addr));
 		});
 		document.getElementById("joingame").addEventListener("click", function() {
 		    srv = document.getElementById("srvAddrInput").value;
 		    pl2addr = document.getElementById("plname2Input").value;
-			sendTxnJoin(srv, pl2addr);
+			sendTxnJoin(srv, formatAddr(pl2addr));
 		});
 		document.getElementById("startgame").addEventListener("click", function() {
 			startGame(false);
@@ -154,7 +162,7 @@
 					playBImg: "img/playB.png",
 					playerBIsComputer:openComputer.checked,
 					srvAddr: srvAddrInput.value,
-					ply2Addr: plname2Input.value,
+					ply2Addr: formatAddr(plname2Input.value),
 					isWaiting: wait,
 					joinTxnId: joinTxnIdValue
 				};
@@ -239,7 +247,7 @@
 		function endGame() {
 			srv = document.getElementById("srvAddrInput").value;
 			pl2addr = document.getElementById("plname2Input").value;
-			sendTxnEnd(srv, pl2addr);
+			sendTxnEnd(srv, formatAddr(pl2addr));
 		}
 
 		function restartGame() {
@@ -251,14 +259,37 @@
 			document.getElementById("plname2Input").value = plyer2addr;
 		}
 
+		function Str2Bytes(str) {
+			var pos = 0;
+			var len = str.length;
+			if (len % 2 != 0) {
+				return null;
+			}
+			len /= 2;
+			var hexA = new Array();
+			for (var i = 0; i < len; i++) {
+				var s = str.substr(pos, 2);
+				var v = parseInt(s, 16);
+				hexA.push(v);
+				pos += 2;
+			}
+			return hexA;
+		}
 
 		function sendTxnNew(server, receiver) {
-			var testURL = server.concat("/exec");
+			var testURL = server.concat("/node/execute_script");
+			var hexReceiver = Str2Bytes(receiver);
+			var arg1 = {
+				arg_type: "ADDRESS", 
+				arg_value: hexReceiver
+			};
+			var argsVec = new Array();
+			argsVec.push(arg1);
 			var para = {
-				address: receiver,
+				remote_addr: hexReceiver,
 				package_name: "scripts",
 				script_name: "new",
-				args: ""
+				args: argsVec
 			};
 			$.ajax({
 				url: testURL,
@@ -268,32 +299,34 @@
 				crossDomain: true,
 				success: function(data){
 					console.log(data);
-					var txn_exe_success = data.status;
-					if (txn_exe_success) {
-						// 'new()' succeed, waiting for receiver to 'join'
-						document.getElementById("newgame").value = "等待对手加入..";
-						query = setInterval(function(){ queryTxnJoin(server, receiver, data.channel_sequence_number) }, 3000);
-					} else {
+					// 'new()' succeed, waiting for receiver to 'join'
+					document.getElementById("newgame").value = "等待对手加入..";
+					query = setInterval(function(){ queryTxnJoin(server, receiver, data.channel_sequence_number) }, 3000);
+				},
+				error: function(err){
+					var errCode = err.responseJSON.code;
+					if (errCode == 2) {
 						// 'new()' failed, you are the player2, 'join' the game
-						document.getElementById("newgame").value = "对手已开始";
+						console.log("合约执行失败："+err);
+	                    document.getElementById("newgame").value = "对手已开始";
 						setTimeout(function(){
 							document.getElementById("newgame").style.display = "none";
 							document.getElementById("joingame").style.display = "block";
 						}, 1500);
+					} else {
+						console.log("请求失败："+err);
 					}
-				},
-				error: function(err){
-					console.log("请求失败："+err);
 				}
 			});
 		}
 
 		// query receiver's txn 'join'
 		function queryTxnJoin(server, receiver, last_id) {
-			var testURL = server.concat("/query");
+			var testURL = server.concat("/node/query");
+			var hexReceiver = Str2Bytes(receiver);
 			var para = {
-				address: receiver,
-				channel_sequence_number: last_id
+				participant_address: hexReceiver,
+				channel_seq_number: last_id
 			};
 			$.ajax({
 				url: testURL,
@@ -303,16 +336,14 @@
 				crossDomain: true,
 				success: function(data){
 					//parse txn data, if script name is 'join' then start game.
-					if (data.status) {
-						pkg = data.txn.raw_tx.operator.Execute.package_name;
-						script = data.txn.raw_tx.operator.Execute.script_name;
+					pkg = data.raw_tx.operator.package_name;
+					script = data.raw_tx.operator.script_name;
 
-						if (pkg == "scripts" && script == "join") {
-							document.getElementById("newgame").style.display = "none";
-							//document.getElementById("startgame").style.display = "block";
-							clearInterval(query);
-							startGame(false);
-						}
+					if (pkg == "scripts" && script == "join") {
+						document.getElementById("newgame").style.display = "none";
+						//document.getElementById("startgame").style.display = "block";
+						clearInterval(query);
+						startGame(false);
 					}
 					console.log(data);
 				},
@@ -323,12 +354,12 @@
 		}
 
 		function sendTxnJoin(server, receiver) {
-			var testURL = server.concat("/exec");
+			var testURL = server.concat("/node/execute_script");
+			var hexReceiver = Str2Bytes(receiver);
 			var para = {
-				address: receiver,
+				remote_addr: hexReceiver,
 				package_name: "scripts",
-				script_name: "join",
-				args: ""
+				script_name: "join"
 			};
 			$.ajax({
 				url: testURL,
@@ -338,33 +369,29 @@
 				crossDomain: true,
 				success: function(data){
 					console.log(data);
-					var txn_exe_success = data.status;
-					if (txn_exe_success) {
-						// 'new()' succeed, waiting for receiver to 'join'
-						joinTxnIdValue = data.channel_sequence_number;
-						document.getElementById("joingame").style.display = "none";
-						startGame(true);
-					} else {
-						// failed
-						endGame();
-						document.getElementById("newgame").value = "连接失败，重试";
-						document.getElementById("newgame").style.display = "block";
-						document.getElementById("joingame").style.display = "none";
-					}
+					// 'new()' succeed, waiting for receiver to 'join'
+					joinTxnIdValue = data.channel_sequence_number;
+					document.getElementById("joingame").style.display = "none";
+					startGame(true);
 				},
 				error: function(err){
 					console.log("请求失败："+err);
+					// failed
+					endGame();
+					document.getElementById("newgame").value = "连接失败，重试";
+					document.getElementById("newgame").style.display = "block";
+					document.getElementById("joingame").style.display = "none";
 				}
 			});
 		}
 
 		function sendTxnEnd(server, receiver) {
-			var testURL = server.concat("/exec");
+			var testURL = server.concat("/node/execute_script");
+			var hexReceiver = Str2Bytes(receiver);
 			var para = {
-				address: receiver,
+				remote_addr: hexReceiver,
 				package_name: "scripts",
-				script_name: "end",
-				args: ""
+				script_name: "end"
 			};
 			$.ajax({
 				url: testURL,

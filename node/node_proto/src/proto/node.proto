@@ -1,5 +1,4 @@
 syntax = "proto3";
-
 package node;
 
 import "script_package.proto";
@@ -168,7 +167,7 @@ message ExecuteScriptRequest {
     bytes remote_addr = 1;
     string package_name = 2;
     string script_name = 3;
-    repeated bytes args = 4;
+    repeated types.TransactionArgument args = 4;
 }
 
 message ExecuteScriptResponse {

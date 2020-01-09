@@ -12,6 +12,7 @@ use anyhow::{bail, ensure, Error, Result};
 use libra_crypto::HashValue;
 
 use libra_logger::prelude::*;
+use libra_types::transaction::TransactionArgument;
 use libra_types::{account_address::AccountAddress, account_config::AccountResource};
 use network::{NetworkMessage, NetworkService};
 use node_proto::{
@@ -507,7 +508,7 @@ impl Node {
         receiver_address: AccountAddress,
         package_name: String,
         script_name: String,
-        transaction_args: Vec<Vec<u8>>,
+        transaction_args: Vec<TransactionArgument>,
     ) -> Result<futures::channel::oneshot::Receiver<Result<ExecuteScriptResponse>>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
         let (responder, receiver) = futures::channel::oneshot::channel();
@@ -1318,23 +1319,17 @@ impl NodeInner {
         receiver_address: AccountAddress,
         package_name: String,
         script_name: String,
-        transaction_args: Vec<Vec<u8>>,
+        transaction_args: Vec<TransactionArgument>,
         responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
     ) {
-        let mut trans_args = Vec::new();
-        for arg in transaction_args {
-            match lcs::from_bytes(arg.as_slice()) {
-                Ok(transaction_arg) => trans_args.push(transaction_arg),
-                Err(e) => {
-                    respond_with(responder, Err(e.into()));
-                    return;
-                }
-            }
-        }
-
         match self
             .wallet
-            .execute_script(receiver_address, &package_name, &script_name, trans_args)
+            .execute_script(
+                receiver_address,
+                &package_name,
+                &script_name,
+                transaction_args,
+            )
             .await
         {
             Ok(script_transaction) => {
