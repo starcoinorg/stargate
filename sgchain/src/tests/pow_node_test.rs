@@ -5,7 +5,7 @@ use admission_control_service::runtime::AdmissionControlRuntime;
 use anyhow::Result;
 use async_std::task;
 use consensus::consensus_provider::make_pow_consensus_provider;
-use consensus::MineClient;
+use consensus::{MineClient, MinerConfig};
 use futures::channel::oneshot::{channel, Sender};
 use futures::{future, StreamExt};
 use grpc_helpers::ServerHandle;
@@ -115,7 +115,9 @@ pub fn setup_environment(node_config: &mut NodeConfig, rollback_flag: bool) -> L
     crash_handler::setup_panic_handler();
     let miner_rpc_addr = node_config.consensus.miner_rpc_address.clone();
     task::spawn(async move {
-        let mine_client = MineClient::new(miner_rpc_addr);
+        let mut miner_config = MinerConfig::default();
+        miner_config.miner_server_addr = miner_rpc_addr;
+        let mine_client = MineClient::new(miner_config);
         mine_client.start().await
     });
     let mut instant = Instant::now();
