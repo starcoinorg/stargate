@@ -7,7 +7,11 @@ import "transaction.proto";
 import "channel_transaction.proto";
 import "google/api/annotations.proto";
 
+/**
+ * Service for Stargate second layer node.
+ */
 service Node {
+    /// Interface used to open channel with others.
     rpc OpenChannel (OpenChannelRequest) returns (OpenChannelResponse) {
         option (google.api.http) = {
            post: "/node/open_channel"
@@ -15,6 +19,7 @@ service Node {
         };
     }
 
+    /// Pay to receiver by stargate channel.
     rpc Pay (PayRequest) returns (PayResponse) {
         option (google.api.http) = {
            post: "/node/pay"
@@ -22,6 +27,7 @@ service Node {
         };
     }
 
+    /// Deposit money from chain to existed channel.
     rpc Deposit (DepositRequest) returns (DepositResponse) {
         option (google.api.http) = {
            post: "/node/deposit"
@@ -29,6 +35,7 @@ service Node {
         };
     }
 
+    /// Withdraw money from channel to existed chain.
     rpc Withdraw (WithdrawRequest) returns (WithdrawResponse) {
         option (google.api.http) = {
            post: "/node/withdraw"
@@ -36,6 +43,7 @@ service Node {
         };
     }
 
+    /// Query channel balance .
     rpc ChannelBalance (ChannelBalanceRequest) returns (ChannelBalanceResponse) {
         option (google.api.http) = {
            post: "/node/channel_balance"
@@ -43,6 +51,7 @@ service Node {
         };
     }
 
+    /// Install package to stargate second layer node.
     rpc InstallChannelScriptPackage (InstallChannelScriptPackageRequest) returns (InstallChannelScriptPackageResponse) {
         option (google.api.http) = {
            post: "/node/install_channel_script_package"
@@ -50,6 +59,7 @@ service Node {
         };
     }
 
+    /// Deploy module to stargate second layer node.
     rpc DeployModule (DeployModuleRequest) returns (DeployModuleResponse) {
         option (google.api.http) = {
            post: "/node/deploy_module"
@@ -57,12 +67,15 @@ service Node {
         };
     }
 
+    /// Execute installed script .
     rpc ExecuteScript (ExecuteScriptRequest) returns (ExecuteScriptResponse) {
         option (google.api.http) = {
            post: "/node/execute_script"
            body: "*"
         };
     }
+
+    /// Query transaction status.
     rpc QueryTransaction (QueryTransactionQuest) returns (sgtypes.SignedChannelTransaction) {
         option (google.api.http) = {
                post: "/node/query"
@@ -70,12 +83,14 @@ service Node {
             };
     }
 
+    /// Query pending transaction proposal.
     rpc GetChannelTransactionProposal (ChannelBalanceRequest) returns (GetChannelTransactionProposalResponse) {
         option (google.api.http) = {
            get: "/node/channel_transaction_proposal"
         };
     }
 
+    /// Approve/Reject pending transaction proposal.
     rpc ChannelTransactionProposal (ChannelTransactionProposalRequest) returns (EmptyResponse) {
         option (google.api.http) = {
            post: "/node/channel_transaction_proposal"
@@ -83,6 +98,7 @@ service Node {
         };
     }
 
+    /// Add invoice by given amount.
     rpc AddInvoice (AddInvoiceRequest) returns (AddInvoiceResponse) {
         option (google.api.http) = {
            post: "/node/invoice/add"
@@ -90,6 +106,7 @@ service Node {
         };
     }
 
+    /// Send payment by given encoded invoice via htlc .
     rpc SendPayment (PaymentRequest) returns (EmptyResponse) {
         option (google.api.http) = {
            get: "/node/payment/send"
@@ -98,15 +115,19 @@ service Node {
 
 }
 
+
 message QueryTransactionQuest {
-     bytes participant_address = 1;
-     uint64 channel_seq_number = 2;
+     bytes participant_address = 1;/// participant address of channel.
+     uint64 channel_seq_number = 2;/// channel sequence number of transaction.
 }
 
+/**
+ * Request for open channel.
+ */
 message OpenChannelRequest {
-    bytes remote_addr = 1;
-    uint64 local_amount = 2;
-    uint64 remote_amount = 3;
+    bytes remote_addr = 1;/// the address of participant which you want to open channel with.
+    uint64 local_amount = 2;/// the money you want to deposit to channel when it opened.
+    uint64 remote_amount = 3;/// the money you want participant to deposit to channel when it opened,now is zero.
 }
 
 message OpenChannelResponse {
@@ -114,8 +135,8 @@ message OpenChannelResponse {
 }
 
 message DepositRequest {
-    bytes remote_addr = 1;
-    uint64 local_amount = 2;
+    bytes remote_addr = 1;/// the participant address of channel.
+    uint64 local_amount = 2;/// the money you want to deposit to channel when it opened.
 }
 
 message DepositResponse {
@@ -123,8 +144,8 @@ message DepositResponse {
 }
 
 message WithdrawRequest {
-    bytes remote_addr = 1;
-    uint64 local_amount = 2;
+    bytes remote_addr = 1;/// the participant address of channel.
+    uint64 local_amount = 2;/// the money you want to withdraw from channel .
 }
 
 message WithdrawResponse {
@@ -132,8 +153,8 @@ message WithdrawResponse {
 }
 
 message PayRequest {
-    bytes remote_addr = 1;
-    uint64 amount = 2;
+    bytes remote_addr = 1;/// the participant address of channel.
+    uint64 amount = 2;/// the money you want to pay by channel .
 }
 
 message PayResponse {
@@ -141,11 +162,11 @@ message PayResponse {
 }
 
 message ChannelBalanceRequest {
-    bytes remote_addr = 1;
+    bytes remote_addr = 1;/// the participant address of channel.
 }
 
 message ChannelBalanceResponse {
-    uint64 balance = 1;
+    uint64 balance = 1;/// the balance of yourself on the channel.
 }
 
 message InstallChannelScriptPackageRequest {
@@ -190,13 +211,13 @@ message EmptyResponse{
 }
 
 message AddInvoiceRequest{
-    uint64 amount = 1;
+    uint64 amount = 1;/// amount of money which you want to receive.
 }
 
 message AddInvoiceResponse{
-    string encoded_invoice = 1;
+    string encoded_invoice = 1;/// encoded invoice in string which contain key information about invoice
 }
 
 message PaymentRequest{
-    string encoded_invoice = 1;
+    string encoded_invoice = 1;/// encoded invoice in string which contain key information about invoice
 }
