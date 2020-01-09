@@ -1,34 +1,65 @@
-
 module TheFive {
-    import 0x0.ChannelAccount;
+    import 0x0.ChannelUtil;
     import 0x0.Vector;
+    import 0x0.LibraSystem;
 
     resource T {
         grid: Vector.T<Vector.T<bool>>,  // 22x22, include borders
-        is_my_turn: bool,
+    }
+
+    resource Shared {
+        whose_turn: address,  // Alternate between black and white
+        height: u64,
+        status: u64,  // 0 newed, 1 joined, 2 closed
     }
 
     resource Score {
         total: u64,
     }
 
-    public new(): u64 {
+    status(): u64 {
+        let s_ref: &Self.Shared;
+        let status_ref: &u64;
+
+        s_ref = ChannelUtil.borrow_from_shared<Self.Shared>();
+        status_ref = &copy(s_ref).status;
+        return *copy(status_ref);
+    }
+
+    public new(receiver: address): u64 {
         let t: Self.T;
         let grid: Vector.T<Vector.T<bool>>;
+        let s: Self.Shared;
+        let whose_turn: address;
         let row: Vector.T<bool>;
         let x: u64;
         let y: u64;
         let is_black: bool;
         let t1: Self.Score;
+        let sender: address;
+        let status: u64;
 
-        if (!exist_sender_channel<Score>()) {
+        sender = get_txn_sender();
+        if (!ChannelUtil.exist_channel_participant<Self.Score>(copy(sender))) {
             t1 = Score {
                 total: 0,
             };
-            move_to_sender_channel<Score>(move(t1));
+            ChannelUtil.move_to_participant<Self.Score>(copy(sender),move(t1));
         }
 
-        is_black = !exist_receiver_channel<T>(); // first come first play
+        if (ChannelUtil.exist_channel_shared<Self.Shared>()) {
+            status = Self.status();
+            if (copy(status) == 2) { //closed
+                Self.clean_grid();
+                Self.clean_shared();
+                is_black = true;
+            } else {
+                is_black = false;
+            }
+        } else {
+            is_black = true;
+        }
+
         if (move(is_black)) {
             grid = Vector.empty<Vector.T<bool>>();
             y = 0;
@@ -46,15 +77,20 @@ module TheFive {
 
             t = T {
                 grid: move(grid),
-                is_my_turn: true,
             };
-            move_to_sender_channel<T>(move(t));
+            ChannelUtil.move_to_participant<Self.T>(copy(sender), move(t));
+
+            s = Shared {
+                whose_turn: copy(sender),
+                height: LibraSystem.get_current_block_height(),
+                status: 0,
+            };
+            ChannelUtil.move_to_shared<Self.Shared>(move(s));
 
             return 0;
         } else {
             return 1;
         }
-
     }
 
     public join(): u64 {
@@ -64,37 +100,63 @@ module TheFive {
         let x: u64;
         let y: u64;
         let t1: Self.Score;
+        let sender: address;
+        let status: u64;
+        let s_ref: &mut Self.Shared;
+        let status_ref: &mut u64;
+        let is_black: bool;
 
-        if (!exist_sender_channel<Score>()) {
+        sender = get_txn_sender();
+        if (!ChannelUtil.exist_channel_participant<Self.Score>(copy(sender))) {
             t1 = Score {
                 total: 0,
             };
-            move_to_sender_channel<Score>(move(t1));
+            ChannelUtil.move_to_participant<Self.Score>(copy(sender), move(t1));
         }
 
-        grid = Vector.empty<Vector.T<bool>>();
-        y = 0;
-        while (copy(y) < 22) {
-            row = Vector.empty<bool>();
-            x = 0;
-            while (copy(x) < 22) {
-                Vector.push_back<bool>(&mut row, false);
-                x = copy(x) + 1;
+        if (ChannelUtil.exist_channel_shared<Self.Shared>()) {
+            status = Self.status();
+            if (copy(status) == 0) { //newed
+                Self.clean_grid();
+                is_black = false;
+            } else {
+                is_black = true;
+            }
+        } else {
+            is_black = true;
+        }
+
+        if (!move(is_black)) {
+            grid = Vector.empty<Vector.T<bool>>();
+            y = 0;
+            while (copy(y) < 22) {
+                row = Vector.empty<bool>();
+                x = 0;
+                while (copy(x) < 22) {
+                    Vector.push_back<bool>(&mut row, false);
+                    x = copy(x) + 1;
+                }
+
+                Vector.push_back<Vector.T<bool>>(&mut grid, move(row));
+                y = copy(y) + 1;
             }
 
-            Vector.push_back<Vector.T<bool>>(&mut grid, move(row));
-            y = copy(y) + 1;
-        }
+            t = T {
+                grid: move(grid),
+            };
+            ChannelUtil.move_to_participant<Self.T>(copy(sender), move(t));
 
-        t = T {
-            grid: move(grid),
-            is_my_turn: false,
-        };
-        move_to_sender_channel<T>(move(t));
-        return 0;
+            s_ref = ChannelUtil.borrow_from_shared_mut<Self.Shared>();
+            status_ref = &mut copy(s_ref).status;
+            *copy(status_ref) = 1; //joined
+
+            return 0;
+        } else {
+            return 1;
+        }
     }
 
-    is_blank_internal(t_ref: &mut Self.T, x: u64, y: u64): bool {
+    is_blank_internal(t_ref: &Self.T, x: u64, y: u64): bool {
         let grid_ref: &Vector.T<Vector.T<bool>>;
         let row_ref: &Vector.T<bool>;
         let value_ref: &bool;
@@ -106,65 +168,69 @@ module TheFive {
         return !*copy(value_ref);
     }
 
-    is_blank(x: u64, y: u64): bool {
-        let t_ref_sender: &mut Self.T;
-        let t_ref_receiver: &mut Self.T;
+    is_blank(x: u64, y: u64, receiver: address): bool {
+        let t_ref_sender: &Self.T;
+        let t_ref_receiver: &Self.T;
         let is_blank_1: bool;
         let is_blank_2: bool;
+        let sender: address;
 
+        sender = get_txn_sender();
         if ((copy(x) < 1) || (copy(x) > 20) || (copy(y) < 1) || (copy(y) > 20)) {
             return false;
         }
 
-        t_ref_sender = borrow_sender_channel<T>();
+        t_ref_sender = ChannelUtil.borrow_from_participant<Self.T>(copy(sender));
         is_blank_1 = Self.is_blank_internal(move(t_ref_sender), copy(x), copy(y));
 
-        t_ref_receiver = borrow_receiver_channel<T>();
+        t_ref_receiver = ChannelUtil.borrow_from_participant<Self.T>(copy(receiver));
         is_blank_2 = Self.is_blank_internal(move(t_ref_receiver), copy(x), copy(y));
 
         return move(is_blank_1) && move(is_blank_2);
     }
 
-    let_receiver_play() {
-        let t_ref: &mut Self.T;
-        let is_my_turn_ref: &mut bool;
+    let_receiver_play(receiver: address) {
+        let s_ref: &mut Self.Shared;
+        let whose_turn: &mut address;
 
-        t_ref = borrow_receiver_channel<T>();
-        is_my_turn_ref = &mut copy(t_ref).is_my_turn;
-        *copy(is_my_turn_ref) = true;
+        s_ref = ChannelUtil.borrow_from_shared_mut<Self.Shared>();
+        whose_turn = &mut copy(s_ref).whose_turn;
+        *copy(whose_turn) = move(receiver);
 
         return;
     }
 
 
-    set_value(x: u64, y: u64) {
+    set_value(x: u64, y: u64, receiver: address) {
         let t_ref: &mut Self.T;
         let grid_ref: &mut Vector.T<Vector.T<bool>>;
         let row_ref: &mut Vector.T<bool>;
         let value_ref: &mut bool;
         let is_my_turn_ref: &mut bool;
+        let sender: address;
 
-        t_ref = borrow_sender_channel<T>();
+        sender = get_txn_sender();
+        t_ref = ChannelUtil.borrow_from_participant_mut<Self.T>(copy(sender));
         grid_ref = &mut copy(t_ref).grid;
         row_ref = Vector.borrow_mut<Vector.T<bool>>(move(grid_ref), move(y));
         value_ref = Vector.borrow_mut<bool>(move(row_ref), move(x));
         *copy(value_ref) = true;
 
-        is_my_turn_ref = &mut copy(t_ref).is_my_turn;
-        *copy(is_my_turn_ref) = false;
-        Self.let_receiver_play();
+        Self.let_receiver_play(copy(receiver));
 
         return;
     }
 
     public is_my_turn(): bool {
-        let t_ref_sender: &mut Self.T;
-        let is_my_turn_ref: &bool;
+        let s_ref: &Self.Shared;
+        let whose_turn: &address;
+        let sender: address;
 
-        t_ref_sender = borrow_sender_channel<T>();
-        is_my_turn_ref = &copy(t_ref_sender).is_my_turn;
+        sender = get_txn_sender();
+        s_ref = ChannelUtil.borrow_from_shared<Self.Shared>();
+        whose_turn = &copy(s_ref).whose_turn;
 
-        if (*copy(is_my_turn_ref)) {
+        if (*copy(whose_turn) == copy(sender)) {
             return true;
         } else {
             return false;
@@ -293,8 +359,10 @@ module TheFive {
         let t_ref: &mut Self.T;
         let result: bool;
         let direction: u64;
+        let sender: address;
 
-        t_ref = borrow_sender_channel<T>();
+        sender = get_txn_sender();
+        t_ref = ChannelUtil.borrow_from_participant_mut<Self.T>(copy(sender));
         direction = 0;
         while (copy(direction) < 4) {
             result = Self.logic(copy(t_ref), copy(x), copy(y), copy(direction));
@@ -309,38 +377,77 @@ module TheFive {
 
     unwrap_T(t: Self.T) {
         let grid: Vector.T<Vector.T<bool>>;
-        let is_my_turn: bool;
 
-        T { grid, is_my_turn } = move(t);
+        T { grid } = move(t);
         return;
     }
+
+    unwrap_Shared(s: Self.Shared) {
+        let whose_turn: address;
+        let height: u64;
+        let status: u64;
+
+        Shared { whose_turn, height, status } = move(s);
+        return;
+    }
+
+    clean_grid() {
+        let t: Self.T;
+        let sender: address;
+
+        sender = get_txn_sender();
+        if (ChannelUtil.exist_channel_participant<Self.T>(copy(sender))) {
+            t = ChannelUtil.move_from_participant<Self.T>(copy(sender));
+            Self.unwrap_T(move(t));
+        }
+        return;
+    }
+
+    clean_shared() {
+        let s: Self.Shared;
+
+        if (ChannelUtil.exist_channel_shared<Self.Shared>()) {
+            s = ChannelUtil.move_from_shared<Self.Shared>();
+            Self.unwrap_Shared(move(s));
+        }
+        return;
+    }
+
+    public end_game() {
+        let s_ref: &mut Self.Shared;
+        let status: &mut u64;
+
+        s_ref = ChannelUtil.borrow_from_shared_mut<Self.Shared>();
+        status = &mut copy(s_ref).status;
+        *copy(status) = 2;
+
+        Self.update_score();
+        return;
+    }
+
 
     update_score() {
         let score_ref: &mut Self.Score;
         let total_ref: &mut u64;
+        let sender: address;
 
-        score_ref = borrow_sender_channel<Score>();
+        sender = get_txn_sender();
+        score_ref = ChannelUtil.borrow_from_participant_mut<Self.Score>(copy(sender));
         total_ref = &mut copy(score_ref).total;
         *copy(total_ref) = *copy(total_ref) + 1;
         return;
     }
 
-    public end_game() {
-        let t1: Self.T;
-        let t2: Self.T;
-
-        t1 = move_from_sender_channel<T>();
-        t2 = move_from_receiver_channel<T>();
-        Self.unwrap_T(move(t1));
-        Self.unwrap_T(move(t2));
-
-        return;
-    }
-
-    public play(canvas_x: u64, canvas_y: u64): u64 {
+    public play(receiver: address, canvas_x: u64, canvas_y: u64): u64 {
         let win: bool;
         let x: u64;
         let y: u64;
+        let status: u64;
+
+        status = Self.status();
+        if (copy(status) != 1) {
+            return 3;
+        }
 
         if (!Self.is_my_turn()) {
             return 1;
@@ -348,16 +455,16 @@ module TheFive {
 
         x = move(canvas_x) + 1;
         y = move(canvas_y) + 1;
-        if (!Self.is_blank(copy(x), copy(y))) {
+        if (!Self.is_blank(copy(x), copy(y), copy(receiver))) {
             return 2;
         }
 
-        Self.set_value(copy(x), copy(y));
+        Self.set_value(copy(x), copy(y), copy(receiver));
         win = Self.is_five(move(x), move(y));
 
         if (move(win)) {
+            //Self.end_game(copy(receiver));
             Self.end_game();
-            Self.update_score();
         }
         return 0;
     }
@@ -365,8 +472,10 @@ module TheFive {
     public get_score(): u64 {
         let score_ref: &mut Self.Score;
         let total_ref: &mut u64;
+        let sender: address;
 
-        score_ref = borrow_sender_channel<Score>();
+        sender = get_txn_sender();
+        score_ref = ChannelUtil.borrow_from_participant_mut<Self.Score>(copy(sender));
         total_ref = &mut copy(score_ref).total;
         return *copy(total_ref);
     }
@@ -374,10 +483,29 @@ module TheFive {
     public clean_score() {
         let score: Self.Score;
         let total: u64;
+        let sender: address;
 
-        score = move_from_sender_channel<Score>();
+        sender = get_txn_sender();
+        score = ChannelUtil.move_from_participant<Self.Score>(copy(sender));
         Score { total } = move(score);
         return;
     }
 
+    public timeout(receiver: address) {
+        let s_ref: &Self.Shared;
+        let sender: address;
+        let height_ref: &u64;
+        let current_height: u64;
+
+        assert(!Self.is_my_turn(), 101);
+        sender = get_txn_sender();
+        s_ref = ChannelUtil.borrow_from_shared<Self.Shared>();
+        height_ref = &copy(s_ref).height;
+        current_height = LibraSystem.get_current_block_height();
+        assert(move(current_height) > *copy(height_ref), 102);
+
+        //Self.end_game(copy(receiver));
+        Self.end_game();
+        return;
+    }
 }
