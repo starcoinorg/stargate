@@ -1,4 +1,3 @@
-import 0x0.ChannelAccount;
 import {{starlab}}.TheFive;
 
 main(){

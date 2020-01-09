@@ -1,8 +1,8 @@
 use crate::message_processor::MessageFuture;
 use anyhow::Result;
 use futures::channel::oneshot;
+use libra_types::transaction::TransactionArgument;
 use libra_types::{account_address::AccountAddress, account_config::AccountResource};
-
 use sgtypes::script_package::ChannelScriptPackage;
 use sgtypes::signed_channel_transaction::SignedChannelTransaction;
 
@@ -14,7 +14,7 @@ pub enum NodeMessage {
         receiver_address: AccountAddress,
         package_name: String,
         script_name: String,
-        transaction_args: Vec<Vec<u8>>,
+        transaction_args: Vec<TransactionArgument>,
         responder: oneshot::Sender<Result<MessageFuture<u64>>>,
     },
     Install {

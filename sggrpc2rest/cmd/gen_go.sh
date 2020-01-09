@@ -1,5 +1,5 @@
 #!/bin/sh
-cd ../proto
+cd ./proto
 echo "generate node pb..."
 protoc -I. -I./types -I./sgtypes \
            -I$GOPATH/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis \
@@ -40,7 +40,7 @@ do
 
     protoc -I. \
            -I$GOPATH/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis \
-           --go_out=plugins=grpc,paths=source_relative:../../types \
+           --go_out=plugins=grpc,paths=source_relative:../../libra/types \
            ${file}
 done
 

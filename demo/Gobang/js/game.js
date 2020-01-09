@@ -647,15 +647,45 @@
 			}
 
 		}
-        function sendTxnPlay(server, addr, x, y) {
 
-            var testURL = server.concat("/exec");
-            var para = {
-                address: addr,
-                package_name: "scripts",
-                script_name: "play",
-                args: x.toString() + "," + y.toString()
-            };
+		function encodeU64(x) {
+			var hexA = new Array();
+			hexA.push(x);
+			hexA.push(0);
+			hexA.push(0);
+			hexA.push(0);
+			hexA.push(0);
+			hexA.push(0);
+			hexA.push(0);
+			hexA.push(0);
+			return hexA;
+		}
+
+        function sendTxnPlay(server, addr, x, y) {
+			var testURL = server.concat("/node/execute_script");
+			var hexReceiver = Str2Bytes(addr);
+			var arg1 = {
+				arg_type: "ADDRESS",
+				arg_value: hexReceiver
+			};
+			var arg2 = {
+				arg_type: "U64",
+				arg_value: encodeU64(x)
+			};
+			var arg3 = {
+				arg_type: "U64",
+				arg_value: encodeU64(y)
+			};
+			var argsVec = new Array();
+			argsVec.push(arg1);
+			argsVec.push(arg2);
+			argsVec.push(arg3);
+			var para = {
+				remote_addr: hexReceiver,
+				package_name: "scripts",
+				script_name: "play",
+				args: argsVec
+			};
             $.ajax({
                 url: testURL,
                 type: 'Post',
@@ -664,26 +694,28 @@
                 crossDomain: true,
                 success: function(data){
                     console.log(data);
-                    var txn_exe_success = data.status;
-                    if (txn_exe_success) {
-                        my.queryPlay = setInterval(function(){ queryTxnPlay(server, addr, data.channel_sequence_number) }, 3000);
-                    } else {
-                        var str = "游戏异常终止！";
-                        alert(str);
-                        location.reload();
-                    }
+                    my.queryPlay = setInterval(function(){ queryTxnPlay(server, addr, data.channel_sequence_number) }, 3000);
                 },
                 error: function(err){
-                    console.log("请求失败："+err);
+					console.log("请求失败："+err);
+					var str = "游戏异常终止！";
+					alert(str);
+					location.reload();
                 }
             });
 
-        }
+		}
+		function decodeU64(base64Input) {
+			var bytes;
+			bytes = base64js.toByteArray(base64Input);
+			return bytes[0];
+		}
         function queryTxnPlay(server, receiver, last_id) {
-			var testURL = server.concat("/query");
+			var testURL = server.concat("/node/query");
+			var hexReceiver = Str2Bytes(receiver);
 			var para = {
-				address: receiver,
-				channel_sequence_number: last_id
+				participant_address: hexReceiver,
+				channel_seq_number: last_id
 			};
 			$.ajax({
 				url: testURL,
@@ -692,29 +724,25 @@
 				dataType: "json",
 				crossDomain: true,
 				success: function(data){
-					//parse txn data, if script name is 'join' then start game.
-					if (data.status) {
-                        pkg = data.txn.raw_tx.operator.Execute.package_name;
-                        script = data.txn.raw_tx.operator.Execute.script_name;
+					//parse txn data, if script name is 'play' then play
+					pkg = data.raw_tx.operator.package_name;
+					script = data.raw_tx.operator.script_name;
 
-                        if (pkg == "scripts" && script == "play") {
-                            args0 = data.txn.raw_tx.args[0].U64;
-                            args1 = data.txn.raw_tx.args[1].U64;
-                            clearInterval(my.queryPlay);
-                            self.Opt.isWaiting = false;
-                            logic({
-                                I: args0,
-                                J: args1
-                            }, true);
-                            console.log(data);
-                        } else if (pkg == "scripts" && (script == "end" || script == "new")) {
-                            var str = "游戏异常终止！";
-                            alert(str);
-                            location.reload();
-                        }
+					if (pkg == "scripts" && script == "play") {
+						args0 = decodeU64(data.raw_tx.args[1].arg_value);
+						args1 = decodeU64(data.raw_tx.args[2].arg_value);
+						clearInterval(my.queryPlay);
+						self.Opt.isWaiting = false;
+						logic({
+							I: args0,
+							J: args1
+						}, true);
+						console.log(data);
+					} else if (pkg == "scripts" && (script == "end" || script == "new")) {
+						var str = "游戏异常终止！";
+						alert(str);
+						location.reload();
 					}
-
-					console.log(data);
 				},
 				error: function(err){
 					console.log("请求失败了："+err)
@@ -723,12 +751,12 @@
 		}
 
 		function sendTxnEnd(server, receiver) {
-			var testURL = server.concat("/exec");
+			var testURL = server.concat("/node/execute_script");
+			var hexReceiver = Str2Bytes(receiver);
 			var para = {
-				address: receiver,
+				remote_addr: hexReceiver,
 				package_name: "scripts",
-				script_name: "end",
-				args: ""
+				script_name: "end"
 			};
 			$.ajax({
 				url: testURL,
@@ -738,11 +766,6 @@
 				crossDomain: true,
 				success: function(data){
 					console.log(data);
-					var txn_exe_success = data.status;
-					if (txn_exe_success) {
-					} else {
-						// failed
-					}
 				},
 				error: function(err){
 					console.log("请求失败："+err);

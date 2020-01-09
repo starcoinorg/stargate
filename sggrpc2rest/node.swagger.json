@@ -1,0 +1,851 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "node.proto",
+    "version": "version not set"
+  },
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/node/channel_balance": {
+      "post": {
+        "operationId": "ChannelBalance",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/nodeChannelBalanceResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/nodeChannelBalanceRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Node"
+        ]
+      }
+    },
+    "/node/channel_transaction_proposal": {
+      "get": {
+        "operationId": "GetChannelTransactionProposal",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/nodeGetChannelTransactionProposalResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "remote_addr",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "byte"
+          }
+        ],
+        "tags": [
+          "Node"
+        ]
+      },
+      "post": {
+        "operationId": "ChannelTransactionProposal",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/nodeEmptyResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/nodeChannelTransactionProposalRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Node"
+        ]
+      }
+    },
+    "/node/deploy_module": {
+      "post": {
+        "operationId": "DeployModule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/nodeDeployModuleResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/nodeDeployModuleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Node"
+        ]
+      }
+    },
+    "/node/deposit": {
+      "post": {
+        "operationId": "Deposit",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/nodeDepositResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/nodeDepositRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Node"
+        ]
+      }
+    },
+    "/node/execute_script": {
+      "post": {
+        "operationId": "ExecuteScript",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/nodeExecuteScriptResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/nodeExecuteScriptRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Node"
+        ]
+      }
+    },
+    "/node/install_channel_script_package": {
+      "post": {
+        "operationId": "InstallChannelScriptPackage",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/nodeInstallChannelScriptPackageResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/nodeInstallChannelScriptPackageRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Node"
+        ]
+      }
+    },
+    "/node/invoice/add": {
+      "post": {
+        "operationId": "AddInvoice",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/nodeAddInvoiceResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/nodeAddInvoiceRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Node"
+        ]
+      }
+    },
+    "/node/open_channel": {
+      "post": {
+        "operationId": "OpenChannel",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/nodeOpenChannelResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/nodeOpenChannelRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Node"
+        ]
+      }
+    },
+    "/node/pay": {
+      "post": {
+        "operationId": "Pay",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/nodePayResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/nodePayRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Node"
+        ]
+      }
+    },
+    "/node/payment/send": {
+      "get": {
+        "operationId": "SendPayment",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/nodeEmptyResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "encoded_invoice",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Node"
+        ]
+      }
+    },
+    "/node/query": {
+      "post": {
+        "operationId": "QueryTransaction",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/sgtypesSignedChannelTransaction"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/nodeQueryTransactionQuest"
+            }
+          }
+        ],
+        "tags": [
+          "Node"
+        ]
+      }
+    },
+    "/node/withdraw": {
+      "post": {
+        "operationId": "Withdraw",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/nodeWithdrawResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/nodeWithdrawRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Node"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "TransactionArgumentArgType": {
+      "type": "string",
+      "enum": [
+        "U64",
+        "ADDRESS",
+        "STRING",
+        "BYTE_ARRAY"
+      ],
+      "default": "U64"
+    },
+    "nodeAddInvoiceRequest": {
+      "type": "object",
+      "properties": {
+        "amount": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "nodeAddInvoiceResponse": {
+      "type": "object",
+      "properties": {
+        "encoded_invoice": {
+          "type": "string"
+        }
+      }
+    },
+    "nodeChannelBalanceRequest": {
+      "type": "object",
+      "properties": {
+        "remote_addr": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "nodeChannelBalanceResponse": {
+      "type": "object",
+      "properties": {
+        "balance": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "nodeChannelTransactionProposalRequest": {
+      "type": "object",
+      "properties": {
+        "participant_address": {
+          "type": "string",
+          "format": "byte"
+        },
+        "transaction_hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "approve": {
+          "type": "boolean",
+          "format": "boolean"
+        }
+      }
+    },
+    "nodeDeployModuleRequest": {
+      "type": "object",
+      "properties": {
+        "module_bytes": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "nodeDeployModuleResponse": {
+      "type": "object",
+      "properties": {
+        "transaction_with_proof": {
+          "$ref": "#/definitions/typesTransactionWithProof"
+        }
+      }
+    },
+    "nodeDepositRequest": {
+      "type": "object",
+      "properties": {
+        "remote_addr": {
+          "type": "string",
+          "format": "byte"
+        },
+        "local_amount": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "nodeDepositResponse": {
+      "type": "object"
+    },
+    "nodeEmptyResponse": {
+      "type": "object"
+    },
+    "nodeExecuteScriptRequest": {
+      "type": "object",
+      "properties": {
+        "remote_addr": {
+          "type": "string",
+          "format": "byte"
+        },
+        "package_name": {
+          "type": "string"
+        },
+        "script_name": {
+          "type": "string"
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/typesTransactionArgument"
+          }
+        }
+      }
+    },
+    "nodeExecuteScriptResponse": {
+      "type": "object",
+      "properties": {
+        "channel_sequence_number": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "nodeGetChannelTransactionProposalResponse": {
+      "type": "object",
+      "properties": {
+        "channel_transaction": {
+          "$ref": "#/definitions/sgtypesChannelTransaction"
+        }
+      }
+    },
+    "nodeInstallChannelScriptPackageRequest": {
+      "type": "object",
+      "properties": {
+        "channel_script_package": {
+          "$ref": "#/definitions/sgtypesChannelScriptPackage"
+        }
+      }
+    },
+    "nodeInstallChannelScriptPackageResponse": {
+      "type": "object"
+    },
+    "nodeOpenChannelRequest": {
+      "type": "object",
+      "properties": {
+        "remote_addr": {
+          "type": "string",
+          "format": "byte"
+        },
+        "local_amount": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "remote_amount": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "nodeOpenChannelResponse": {
+      "type": "object"
+    },
+    "nodePayRequest": {
+      "type": "object",
+      "properties": {
+        "remote_addr": {
+          "type": "string",
+          "format": "byte"
+        },
+        "amount": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "nodePayResponse": {
+      "type": "object"
+    },
+    "nodeQueryTransactionQuest": {
+      "type": "object",
+      "properties": {
+        "participant_address": {
+          "type": "string",
+          "format": "byte"
+        },
+        "channel_seq_number": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "nodeWithdrawRequest": {
+      "type": "object",
+      "properties": {
+        "remote_addr": {
+          "type": "string",
+          "format": "byte"
+        },
+        "local_amount": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "nodeWithdrawResponse": {
+      "type": "object"
+    },
+    "sgtypesChannelOp": {
+      "type": "object",
+      "properties": {
+        "op_type": {
+          "$ref": "#/definitions/sgtypesChannelOpType"
+        },
+        "package_name": {
+          "type": "string",
+          "description": "The op package name. Empty if `type` is Open/Close."
+        },
+        "script_name": {
+          "type": "string",
+          "description": "The op script name. Empty if `type` is Open/Close."
+        },
+        "module_address": {
+          "type": "string",
+          "format": "byte",
+          "title": "used when op_type is ChannelOp.Action"
+        },
+        "module_name": {
+          "type": "string"
+        },
+        "function_name": {
+          "type": "string"
+        }
+      }
+    },
+    "sgtypesChannelOpType": {
+      "type": "string",
+      "enum": [
+        "Open",
+        "Execute",
+        "Action",
+        "Close"
+      ],
+      "default": "Open"
+    },
+    "sgtypesChannelScriptPackage": {
+      "type": "object",
+      "properties": {
+        "package_name": {
+          "type": "string"
+        },
+        "scripts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/sgtypesScriptCode"
+          }
+        }
+      }
+    },
+    "sgtypesChannelTransaction": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "channel_address": {
+          "type": "string",
+          "format": "byte"
+        },
+        "channel_sequence_number": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "operator": {
+          "$ref": "#/definitions/sgtypesChannelOp"
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/typesTransactionArgument"
+          }
+        },
+        "proposer": {
+          "type": "string",
+          "format": "byte"
+        },
+        "sequence_number": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "expiration_time": {
+          "type": "string",
+          "format": "uint64"
+        }
+      }
+    },
+    "sgtypesChannelTransactionSigs": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string",
+          "format": "byte"
+        },
+        "public_key": {
+          "type": "string",
+          "format": "byte"
+        },
+        "channel_payload_signature": {
+          "type": "string",
+          "format": "byte"
+        },
+        "witness_data_hash": {
+          "type": "string",
+          "format": "byte"
+        },
+        "witness_data_signature": {
+          "type": "string",
+          "format": "byte"
+        },
+        "travel_output_witness_signature": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "sgtypesScriptCode": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "source_code": {
+          "type": "string"
+        },
+        "byte_code": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "sgtypesSignedChannelTransaction": {
+      "type": "object",
+      "properties": {
+        "raw_tx": {
+          "$ref": "#/definitions/sgtypesChannelTransaction"
+        },
+        "signers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "byte"
+          }
+        },
+        "signatures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/sgtypesChannelTransactionSigs"
+          }
+        }
+      }
+    },
+    "typesAccumulatorProof": {
+      "type": "object",
+      "properties": {
+        "siblings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "byte"
+          },
+          "description": "The siblings. The ones near the leaf are at the beginning of the list. The\nplaceholder nodes are represented by empty byte arrays, other nodes should\nbe exactly 32-bytes long."
+        }
+      }
+    },
+    "typesEvent": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "format": "byte"
+        },
+        "sequence_number": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "event_data": {
+          "type": "string",
+          "format": "byte"
+        },
+        "type_tag": {
+          "type": "string",
+          "format": "byte"
+        }
+      },
+      "title": "An event emitted from a smart contract"
+    },
+    "typesEventsList": {
+      "type": "object",
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/typesEvent"
+          }
+        }
+      },
+      "description": "A list of events."
+    },
+    "typesTransaction": {
+      "type": "object",
+      "properties": {
+        "transaction": {
+          "type": "string",
+          "format": "byte"
+        }
+      },
+      "description": "A generic structure that represents a transaction, covering all possible\nvariants."
+    },
+    "typesTransactionArgument": {
+      "type": "object",
+      "properties": {
+        "arg_type": {
+          "$ref": "#/definitions/TransactionArgumentArgType"
+        },
+        "arg_value": {
+          "type": "string",
+          "format": "byte"
+        }
+      },
+      "title": "An argument to the transaction if the transaction takes arguments"
+    },
+    "typesTransactionInfo": {
+      "type": "object",
+      "properties": {
+        "transaction_hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "Hash of the transaction that is stored."
+        },
+        "state_root_hash": {
+          "type": "string",
+          "format": "byte",
+          "title": "The root hash of Sparse Merkle Tree describing the world state at the end\nof this transaction"
+        },
+        "event_root_hash": {
+          "type": "string",
+          "format": "byte",
+          "description": "The root hash of Merkle Accumulator storing all events emitted during this\ntransaction."
+        },
+        "gas_used": {
+          "type": "string",
+          "format": "uint64",
+          "description": "The amount of gas used by this transaction."
+        },
+        "major_status": {
+          "type": "string",
+          "format": "uint64",
+          "description": "The major status of executing this transaction."
+        }
+      },
+      "title": "`TransactionInfo` is the object we store in the transaction accumulator. It\nconsists of the transaction as well as the execution result of this\ntransaction. This are later returned to the client so that a client can\nvalidate the tree"
+    },
+    "typesTransactionProof": {
+      "type": "object",
+      "properties": {
+        "ledger_info_to_transaction_info_proof": {
+          "$ref": "#/definitions/typesAccumulatorProof"
+        },
+        "transaction_info": {
+          "$ref": "#/definitions/typesTransactionInfo"
+        }
+      },
+      "description": "The complete proof used to authenticate a transaction."
+    },
+    "typesTransactionWithProof": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "format": "uint64",
+          "description": "The version of the returned signed transaction."
+        },
+        "transaction": {
+          "$ref": "#/definitions/typesTransaction",
+          "description": "The transaction itself."
+        },
+        "proof": {
+          "$ref": "#/definitions/typesTransactionProof",
+          "description": "The proof authenticating the transaction."
+        },
+        "events": {
+          "$ref": "#/definitions/typesEventsList",
+          "description": "The events yielded by executing the transaction, if requested."
+        }
+      }
+    }
+  }
+}

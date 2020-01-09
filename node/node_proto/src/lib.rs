@@ -7,7 +7,7 @@
 use anyhow::{format_err, Error, Result};
 use libra_crypto::HashValue;
 use libra_types::account_address::AccountAddress;
-use libra_types::transaction::TransactionWithProof;
+use libra_types::transaction::{TransactionArgument, TransactionWithProof};
 use sgtypes::channel_transaction::ChannelTransaction;
 use sgtypes::script_package::ChannelScriptPackage;
 use std::convert::{TryFrom, TryInto};
@@ -441,7 +441,7 @@ pub struct ExecuteScriptRequest {
     pub remote_addr: AccountAddress,
     pub package_name: String,
     pub script_name: String,
-    pub args: Vec<Vec<u8>>,
+    pub args: Vec<TransactionArgument>,
 }
 
 impl ExecuteScriptRequest {
@@ -449,7 +449,7 @@ impl ExecuteScriptRequest {
         remote_addr: AccountAddress,
         package_name: String,
         script_name: String,
-        args: Vec<Vec<u8>>,
+        args: Vec<TransactionArgument>,
     ) -> Self {
         Self {
             remote_addr,
@@ -468,7 +468,11 @@ impl TryFrom<crate::proto::node::ExecuteScriptRequest> for ExecuteScriptRequest 
             remote_addr: value.remote_addr.try_into()?,
             package_name: value.package_name,
             script_name: value.script_name,
-            args: value.args.to_vec(),
+            args: value
+                .args
+                .into_iter()
+                .map(TransactionArgument::try_from)
+                .collect::<Result<Vec<_>>>()?,
         })
     }
 }
@@ -479,7 +483,7 @@ impl From<ExecuteScriptRequest> for crate::proto::node::ExecuteScriptRequest {
             remote_addr: value.remote_addr.into(),
             package_name: value.package_name,
             script_name: value.script_name,
-            args: value.args,
+            args: value.args.into_iter().map(Into::into).collect(),
         }
     }
 }

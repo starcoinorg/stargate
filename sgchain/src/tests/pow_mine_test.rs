@@ -3,7 +3,7 @@ mod test {
     use async_std::task;
     use consensus::mine_state::{DummyBlockIndex, MineStateManager};
 
-    use consensus::{setup_minerproxy_service, MineClient, MineState};
+    use consensus::{setup_minerproxy_service, MineClient, MineState, MinerConfig};
     use futures::{channel::oneshot, compat::Future01CompatExt};
     use libra_logger::prelude::*;
 
@@ -34,7 +34,8 @@ mod test {
         });
         task::spawn(async move {
             debug!("Start mine client");
-            let mine_client = MineClient::new("127.0.0.1:4251".to_string());
+            let miner_config = MinerConfig::default();
+            let mine_client = MineClient::new(miner_config);
             mine_client.start().await;
         });
         task::block_on(async move {
