@@ -51,8 +51,7 @@ impl Channel {
     pub fn load(
         channel_address: AccountAddress,
         account_address: AccountAddress,
-        participant_addresses: BTreeSet<AccountAddress>,
-        channel_state: ChannelState,
+        initial_participant_addresses: Option<BTreeSet<AccountAddress>>,
         db: ChannelDB,
         chain_txn_watcher: ChainWatcherHandle,
         supervisor_ref: ActorRef<Wallet>,
@@ -60,15 +59,17 @@ impl Channel {
         script_registry: Arc<PackageRegistry>,
         chain_client: Arc<dyn ChainClient>,
     ) -> Self {
-        let store = ChannelStore::new(participant_addresses.clone(), db.clone())
-            .unwrap_or_else(|e| panic!("create channel store should be ok, e: {}", e));
+        let store = ChannelStore::new(
+            initial_participant_addresses.unwrap_or_default(),
+            db.clone(),
+        )
+        .unwrap_or_else(|e| panic!("create channel store should be ok, e: {}", e));
+        let ps = store.participant_addresses();
+        debug_assert!(!ps.is_empty());
         let stm = ChannelStm::new(
             channel_address.clone(),
             account_address.clone(),
-            participant_addresses.clone(),
-            store.get_participant_keys(),
-            channel_state.clone(),
-            store.get_latest_witness().unwrap_or_default(),
+            ps,
             keypair.clone(),
             script_registry.clone(),
             chain_client.clone(),
@@ -84,7 +85,8 @@ impl Channel {
         inner
     }
 
-    pub async fn start(self, mut context: ActorContext) -> ChannelHandle {
+    pub async fn start(mut self, mut context: ActorContext) -> Result<ChannelHandle> {
+        self.bootstrap().await?;
         let channel_address = self.channel_address().clone();
         let account_address = self.account_address().clone();
         let participant_addresses = self.participant_addresses().clone();
@@ -94,12 +96,12 @@ impl Channel {
             .await
             .expect("actor context is closed");
 
-        ChannelHandle::new(
+        Ok(ChannelHandle::new(
             channel_address,
             account_address,
             participant_addresses,
             actor_ref,
-        )
+        ))
     }
 
     pub fn channel_address(&self) -> &AccountAddress {

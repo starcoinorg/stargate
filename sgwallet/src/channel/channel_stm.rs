@@ -73,10 +73,6 @@ impl ChannelStm {
         channel_address: AccountAddress,
         account_address: AccountAddress,
         participant_addresses: BTreeSet<AccountAddress>,
-        participant_keys: BTreeMap<AccountAddress, Ed25519PublicKey>,
-        channel_state: ChannelState,
-        witness: Witness,
-
         keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
         script_registry: Arc<PackageRegistry>,
         chain_client: Arc<dyn ChainClient>,
@@ -85,12 +81,13 @@ impl ChannelStm {
             channel_address,
             account_address,
             participant_addresses,
-            participant_keys,
-            channel_state,
-            witness,
             keypair,
             script_registry,
             chain_client,
+
+            channel_state: ChannelState::empty(channel_address),
+            witness: Witness::default(),
+            participant_keys: BTreeMap::new(),
         }
     }
     fn get_local<T>(&self, access_path: &AccessPath) -> Result<Option<T>>
