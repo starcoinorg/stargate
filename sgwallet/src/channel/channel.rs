@@ -134,6 +134,22 @@ impl Actor for Channel {
         // check pending state
         if let Some(pending_proposal) = self.pending_txn() {
             match pending_proposal.lifecycle() {
+                ProposalLifecycle::Agreed => match self.handle(ApplyPendingTxn, ctx).await {
+                    Err(e) => {
+                        error!("fail to handle travelling pending txn, {}", e);
+                        ctx.set_status(ActorStatus::Stopping);
+                    }
+                    Ok(Some((txn_sender, seq_number))) => {
+                        if let Err(e) = self
+                            .watch_and_apply_travel_txn(txn_sender, seq_number, ctx)
+                            .await
+                        {
+                            error!("fail to handle travelling pending txn, {}", e);
+                            ctx.set_status(ActorStatus::Stopping);
+                        }
+                    }
+                    _ => {}
+                },
                 ProposalLifecycle::Traveling => {
                     let txn_sender = pending_proposal.proposal().channel_txn.proposer();
                     let seq_number = pending_proposal.proposal().channel_txn.sequence_number();
@@ -457,7 +473,7 @@ impl Handler<ApplyTravelTxn> for Channel {
         } = message;
         let gas_used = txn_info.gas_used();
         let is_solo = match txn.as_signed_user_txn()?.payload() {
-            TransactionPayload::Channel(ctp) => ctp.is_authorized(),
+            TransactionPayload::Channel(ctp) => !ctp.is_authorized(),
             _ => bail!("invalid channel travel txn"),
         };
         if is_solo {

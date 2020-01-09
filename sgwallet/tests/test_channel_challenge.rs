@@ -5,8 +5,7 @@ mod common;
 mod mock_chain_test_helper;
 mod rpc_chain_test_helper;
 
-#[macro_use]
-extern crate rusty_fork;
+use anyhow::Error;
 use anyhow::Result;
 use coerce_rt::actor::context::{ActorContext, ActorStatus};
 use libra_crypto::HashValue;
@@ -25,47 +24,64 @@ use sgwallet::{
 };
 use std::{sync::Arc, time::Duration};
 
-rusty_fork_test! {
 #[test]
 fn run_test_channel_lock_and_then_resolve() {
     if let Err(e) = run_with_rpc_client(|chain_client| {
         common::with_wallet(chain_client.clone(), |rt, sender, receiver| {
             rt.block_on(test_channel_lock_and_resolve(sender, receiver))
-        })
-    }) {
-        panic!("error, {}", e);
-    }
-}
-
-#[test]
-fn run_test_channel_lock_and_then_chanllenge() {
-    if let Err(e) = run_with_rpc_client(|chain_client| {
-        common::with_wallet(chain_client, |rt, sender, receiver| {
+        })?;
+        common::with_wallet(chain_client.clone(), |rt, sender, receiver| {
             rt.block_on(test_channel_lock_and_challenge(sender, receiver))
-        })
+        })?;
+        common::with_wallet(chain_client.clone(), |rt, sender, receiver| {
+            rt.block_on(test_channel_lock_and_timeout(sender, receiver))
+        })?;
+        common::with_wallet(chain_client.clone(), |rt, sender, receiver| {
+            rt.block_on(test_channel_restart(sender, receiver))
+        })?;
+        Ok::<_, Error>(())
     }) {
         panic!("error, {}", e);
     }
 }
 
-#[test]
-fn run_test_channel_lock_and_then_timeout() {
-    if let Err(e) = run_with_rpc_client(|chain_client| {
-        common::with_wallet(chain_client, |rt, sender, receiver| {
-            rt.block_on(test_channel_lock_and_timeout(sender, receiver))
-        })
-    }) {
-        panic!("error, {}", e);
-    }
-}
+async fn test_channel_restart(
+    sender: Arc<WalletHandle>,
+    receiver: Arc<WalletHandle>,
+) -> Result<()> {
+    let sender_address = sender.account();
+    let receiver_address = receiver.account();
+
+    let _gas = common::open_channel(sender.clone(), receiver.clone(), 10000, 10000).await?;
+    assert_eq!(1, sender.channel_sequence_number(receiver.account()).await?);
+    assert_eq!(1, receiver.channel_sequence_number(sender.account()).await?);
+    let request = sender.withdraw(receiver.account(), 100).await?;
+    let resp = receiver.verify_txn(sender.account(), &request).await?;
+    debug_assert!(resp.is_some());
+    let resp = resp.unwrap();
+
+    // now stop the recever channel
+    receiver.stop_channel(sender.account()).await?;
+
+    // make sender apply
+    let join_handle = tokio::task::spawn(async move {
+        sender.verify_txn_response(receiver_address, &resp).await?;
+        sender.apply_txn(receiver_address, &resp).await?;
+        assert_eq!(2, sender.channel_sequence_number(receiver_address).await?);
+        Ok::<_, Error>(())
+    });
+
+    // and restart
+    receiver.start_channel(sender_address).await?;
+    assert_eq!(2, receiver.channel_sequence_number(sender_address).await?);
+    join_handle.await?;
+    Ok(())
 }
 
 async fn test_channel_lock_and_resolve(
     sender: Arc<WalletHandle>,
     receiver: Arc<WalletHandle>,
 ) -> Result<()> {
-    let _sender_init_balance = sender.balance()?;
-    let _receiver_init_balance = receiver.balance()?;
     let _gas = common::open_channel(sender.clone(), receiver.clone(), 10000, 10000).await?;
     assert_eq!(1, sender.channel_sequence_number(receiver.account()).await?);
     assert_eq!(1, receiver.channel_sequence_number(sender.account()).await?);

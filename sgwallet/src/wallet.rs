@@ -705,6 +705,20 @@ impl WalletHandle {
         self.actor_ref.clone().send(GetAllChannels).await?
     }
 
+    pub async fn stop_channel(&self, participant: AccountAddress) -> Result<()> {
+        self.actor_ref
+            .clone()
+            .send(StopChannel { participant })
+            .await??;
+        Ok(())
+    }
+
+    pub async fn start_channel(&self, participant: AccountAddress) -> Result<()> {
+        let (channel_address, ps) = generate_channel_address(participant, self.shared.account);
+        let _ = self.spawn_new_channel(channel_address, ps).await?;
+        Ok(())
+    }
+
     pub async fn stop(&self) -> Result<()> {
         if let Err(_) = self.actor_ref.clone().stop().await {
             warn!("actor {:?} already stopped", &self.actor_ref);
