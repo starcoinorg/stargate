@@ -1,9 +1,7 @@
 version: '3'
 services:
   wallet_node:
-    build:
-      context: .
-      dockerfile: docker/node/node.Dockerfile
+    image: docker.pkg.github.com/starcoinorg/stargate/node:latest
     ports:
     - "9000:9000"
     volumes:
