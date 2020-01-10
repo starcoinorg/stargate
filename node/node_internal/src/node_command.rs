@@ -15,6 +15,7 @@ pub enum NodeMessage {
         package_name: String,
         script_name: String,
         transaction_args: Vec<TransactionArgument>,
+        force_execute: bool,
         responder: oneshot::Sender<Result<MessageFuture<u64>>>,
     },
     Install {

@@ -92,7 +92,7 @@ impl Command for DevCommandExecuteInstalledScript {
     }
 
     fn get_params_help(&self) -> &'static str {
-        "remote_address package_name script_name args..."
+        "remote_address package_name script_name force_execute args..."
     }
 
     fn get_description(&self) -> &'static str {
@@ -100,7 +100,7 @@ impl Command for DevCommandExecuteInstalledScript {
     }
 
     fn execute(&self, client: &mut SGClientProxy, params: &[&str]) {
-        if params.len() < 3 {
+        if params.len() < 4 {
             println!("Invalid number of arguments for compilation");
             return;
         }

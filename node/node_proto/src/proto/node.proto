@@ -189,6 +189,7 @@ message ExecuteScriptRequest {
     string package_name = 2;
     string script_name = 3;
     repeated types.TransactionArgument args = 4;
+    bool force_execute = 5;
 }
 
 message ExecuteScriptResponse {

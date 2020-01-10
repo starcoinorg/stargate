@@ -210,8 +210,9 @@ impl SGClientProxy {
         let remote_addr = AccountAddress::from_hex_literal(space_delim_strings[1])?;
         let package_name = space_delim_strings[2];
         let script_name = space_delim_strings[3];
+        let force_execute = bool::from_str(space_delim_strings[4])?;
 
-        let arguments: Vec<_> = space_delim_strings[4..]
+        let arguments: Vec<_> = space_delim_strings[5..]
             .iter()
             .filter_map(|arg| {
                 let arg = parse_as_transaction_argument(arg).ok().unwrap();
@@ -224,6 +225,7 @@ impl SGClientProxy {
             package_name.to_string(),
             script_name.to_string(),
             arguments,
+            force_execute,
         );
         let _response = self.node_client.execute_script(execute_request)?;
         Ok(())

@@ -172,6 +172,7 @@ impl node_proto::proto::node::Node for NodeService {
                     request.remote_addr,
                     request.package_name,
                     request.script_name,
+                    request.force_execute,
                     request.args,
                 )
                 .await
