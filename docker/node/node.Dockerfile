@@ -9,6 +9,7 @@ FROM toolchain as builder
 # docker build --build-arg https_proxy=http://fwdproxy:8080 --build-arg http_proxy=http://fwdproxy:8080
 ENV RUST_BACKTRACE "1"
 
+RUN apt-get update; apt-get install -y clang
 WORKDIR /starcoin
 COPY . /starcoin
 RUN cargo build -p node && cd target/debug && rm -r build deps incremental
