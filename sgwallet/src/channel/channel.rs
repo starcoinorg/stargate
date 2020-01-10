@@ -32,8 +32,8 @@ use libra_types::{
     },
     write_set::WriteSet,
 };
-use sgtypes::account_state::AccountState;
 use sgtypes::{
+    account_state::AccountState,
     applied_channel_txn::AppliedChannelTxn,
     channel::ChannelState,
     channel_transaction::{ChannelOp, ChannelTransaction},

@@ -5,8 +5,7 @@ mod common;
 mod mock_chain_test_helper;
 mod rpc_chain_test_helper;
 
-use anyhow::Error;
-use anyhow::Result;
+use anyhow::{Error, Result};
 use coerce_rt::actor::context::{ActorContext, ActorStatus};
 use common::setup_wallet;
 use libra_crypto::HashValue;

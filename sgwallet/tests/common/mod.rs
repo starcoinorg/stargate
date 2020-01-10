@@ -8,14 +8,13 @@ use libra_crypto::{
     test_utils::KeyPair,
     Uniform,
 };
-use libra_logger::prelude::*;
+
 use libra_tools::tempdir::TempPath;
 use libra_types::{account_address::AccountAddress, transaction::TransactionArgument};
 use rand::prelude::*;
 use sgchain::star_chain_client::ChainClient;
 use sgwallet::wallet::{Wallet, WalletHandle};
-use std::future::Future;
-use std::sync::Arc;
+use std::{future::Future, sync::Arc};
 use tokio::runtime::Runtime;
 
 pub async fn setup_wallet(client: Arc<dyn ChainClient>, init_balance: u64) -> Result<WalletHandle> {
