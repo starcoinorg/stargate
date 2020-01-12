@@ -31,7 +31,7 @@ fn run_test_channel_lock_and_then_resolve() {
         let mut rt = tokio::runtime::Runtime::new()?;
         rt.block_on(test_all(chain_client))
     }) {
-        panic!("error, {}", e);
+        panic!("error, {:?}", e);
     }
 }
 
@@ -45,7 +45,7 @@ async fn test_all(chain_client: Arc<dyn ChainClient>) -> Result<()> {
         test_channel_restart(sender_wallet.clone(), receiver_wallet.clone()).await?;
         sender_wallet.stop().await?;
         receiver_wallet.stop().await?;
-        debug!("h1 stopped");
+        info!("h1 stopped");
         Ok::<_, Error>(())
     });
 
@@ -55,7 +55,7 @@ async fn test_all(chain_client: Arc<dyn ChainClient>) -> Result<()> {
         test_channel_lock_and_challenge(sender_wallet.clone(), receiver_wallet.clone()).await?;
         sender_wallet.stop().await?;
         receiver_wallet.stop().await?;
-        debug!("h2 stopped");
+        info!("h2 stopped");
 
         Ok::<_, Error>(())
     });
@@ -66,7 +66,7 @@ async fn test_all(chain_client: Arc<dyn ChainClient>) -> Result<()> {
         test_channel_lock_and_resolve(sender_wallet.clone(), receiver_wallet.clone()).await?;
         sender_wallet.stop().await?;
         receiver_wallet.stop().await?;
-        debug!("h3 stopped");
+        info!("h3 stopped");
 
         Ok::<_, Error>(())
     });
@@ -77,7 +77,7 @@ async fn test_all(chain_client: Arc<dyn ChainClient>) -> Result<()> {
         test_channel_lock_and_timeout(sender_wallet.clone(), receiver_wallet.clone()).await?;
         sender_wallet.stop().await?;
         receiver_wallet.stop().await?;
-        debug!("h4 stopped");
+        info!("h4 stopped");
 
         Ok::<_, Error>(())
     });
@@ -86,7 +86,7 @@ async fn test_all(chain_client: Arc<dyn ChainClient>) -> Result<()> {
     h2.await??;
     h3.await??;
     h4.await??;
-    debug!("all stopped");
+    info!("all stopped");
     Ok(())
 }
 
