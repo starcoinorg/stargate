@@ -277,7 +277,11 @@ impl Handler<CollectProposalWithSigs> for Channel {
         self.stm
             .handle_proposal_signature(&mut pending_txn, txn_hash, sigs)?;
 
-        if self.stm.can_auto_sign_pending_proposal(&pending_txn)? {
+        if !pending_txn
+            .signatures()
+            .contains_key(self.account_address())
+            && self.stm.can_auto_sign_pending_proposal(&pending_txn)?
+        {
             debug!(
                 "{}/{} - auto sign channel txn",
                 &self.account_address(),

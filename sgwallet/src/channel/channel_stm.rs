@@ -227,9 +227,7 @@ impl ChannelStm {
         );
 
         if pending_txn.get_signature(&sigs.address).is_none() {
-            let (payload_body, _) =
-                self.build_and_sign_channel_txn_payload_body(&proposal.channel_txn)?;
-            self.verify_txn_sigs(&payload_body, pending_txn.output(), &sigs)?;
+            self.verify_txn_sigs(&pending_txn, &sigs)?;
             pending_txn.add_signature(sigs);
 
             match proposal_lifecycle {
@@ -601,15 +599,18 @@ impl ChannelStm {
 
     fn verify_txn_sigs(
         &self,
-        payload_body: &ChannelTransactionPayloadBody,
-        output: &TransactionOutput,
+        pending_txn: &PendingTransaction,
         channel_txn_sigs: &ChannelTransactionSigs,
     ) -> Result<()> {
+        let (payload_body, _) =
+            self.build_and_sign_channel_txn_payload_body(&pending_txn.proposal().channel_txn)?;
+
         channel_txn_sigs.public_key.verify_signature(
-            &CryptoHash::hash(payload_body),
+            &CryptoHash::hash(&payload_body),
             &channel_txn_sigs.channel_payload_signature,
         )?;
 
+        let output = pending_txn.output();
         let ws = if output.is_travel_txn() {
             WriteSet::default()
         } else {
@@ -619,7 +620,9 @@ impl ChannelStm {
 
         ensure!(
             &CryptoHash::hash(&witness_data) == &channel_txn_sigs.witness_data_hash,
-            "witness hash mismatched"
+            "next witness hash mismatched, local is {:?}, proposal: {:?}",
+            &witness_data,
+            &pending_txn.proposal()
         );
         channel_txn_sigs.public_key.verify_signature(
             &channel_txn_sigs.witness_data_hash,
