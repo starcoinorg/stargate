@@ -20,7 +20,7 @@ FROM debian:buster As prod
 
 RUN mkdir -p /opt/starcoin/bin /opt/starcoin/etc
 COPY --from=builder /starcoin/target/debug/node /opt/starcoin/bin
-RUN cd /opt/starcoin/etc &&  echo "$NODE_CONFIG" > node.toml && echo "$KEYS_CONFIG" > key
+#RUN cd /opt/starcoin/etc &&  echo "$NODE_CONFIG" > node.toml && echo "$KEYS_CONFIG" > key
 
 ENTRYPOINT ["/opt/starcoin/bin/node"]
 CMD ["-c", "/opt/starcoin/etc", "-f", "/opt/starcoin/etc/key", "-n", "0"]
