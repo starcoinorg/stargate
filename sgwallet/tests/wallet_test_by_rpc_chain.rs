@@ -17,10 +17,10 @@ mod wallet_test_helper;
 fn wallet_test_by_rpc_chain() {
     if let Err(e) = run_with_rpc_client(|chain_client| {
         let mut rt = tokio::runtime::Runtime::new()?;
-        rt.block_on(test_all_parallel(chain_client))
-        //        rt.block_on(test_all_sequential(chain_client))
+        //        rt.block_on(test_all_parallel(chain_client))
+        rt.block_on(test_all_sequential(chain_client))
     }) {
-        panic!("error, {}", e);
+        panic!("error, {:?}", dbg!(e));
     }
 }
 
