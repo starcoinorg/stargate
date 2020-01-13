@@ -385,6 +385,15 @@ where
             .clone()
     }
 
+    pub fn participant_addresses(&self) -> BTreeSet<AccountAddress> {
+        self.participant_keys
+            .read()
+            .unwrap()
+            .keys()
+            .map(Clone::clone)
+            .collect::<BTreeSet<_>>()
+    }
+
     pub fn get_participant_keys(&self) -> BTreeMap<AccountAddress, Ed25519PublicKey> {
         self.participant_keys
             .read()

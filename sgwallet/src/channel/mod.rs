@@ -51,8 +51,7 @@ impl Channel {
     pub fn load(
         channel_address: AccountAddress,
         account_address: AccountAddress,
-        participant_addresses: BTreeSet<AccountAddress>,
-        channel_state: ChannelState,
+        initial_participant_addresses: Option<BTreeSet<AccountAddress>>,
         db: ChannelDB,
         chain_txn_watcher: ChainWatcherHandle,
         supervisor_ref: ActorRef<Wallet>,
@@ -60,15 +59,17 @@ impl Channel {
         script_registry: Arc<PackageRegistry>,
         chain_client: Arc<dyn ChainClient>,
     ) -> Self {
-        let store = ChannelStore::new(participant_addresses.clone(), db.clone())
-            .unwrap_or_else(|e| panic!("create channel store should be ok, e: {}", e));
+        let store = ChannelStore::new(
+            initial_participant_addresses.unwrap_or_default(),
+            db.clone(),
+        )
+        .unwrap_or_else(|e| panic!("create channel store should be ok, e: {}", e));
+        let ps = store.participant_addresses();
+        debug_assert!(!ps.is_empty());
         let stm = ChannelStm::new(
             channel_address.clone(),
             account_address.clone(),
-            participant_addresses.clone(),
-            store.get_participant_keys(),
-            channel_state.clone(),
-            store.get_latest_witness().unwrap_or_default(),
+            ps,
             keypair.clone(),
             script_registry.clone(),
             chain_client.clone(),
@@ -84,7 +85,8 @@ impl Channel {
         inner
     }
 
-    pub async fn start(self, mut context: ActorContext) -> ChannelHandle {
+    pub async fn start(mut self, mut context: ActorContext) -> Result<ChannelHandle> {
+        self.bootstrap().await?;
         let channel_address = self.channel_address().clone();
         let account_address = self.account_address().clone();
         let participant_addresses = self.participant_addresses().clone();
@@ -94,12 +96,12 @@ impl Channel {
             .await
             .expect("actor context is closed");
 
-        ChannelHandle::new(
+        Ok(ChannelHandle::new(
             channel_address,
             account_address,
             participant_addresses,
             actor_ref,
-        )
+        ))
     }
 
     pub fn channel_address(&self) -> &AccountAddress {
@@ -113,6 +115,7 @@ impl Channel {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct Execute {
     pub channel_op: ChannelOp,
     pub args: Vec<TransactionArgument>,
@@ -124,6 +127,7 @@ impl Message for Execute {
         TransactionOutput,
     )>;
 }
+#[derive(Debug)]
 pub(crate) struct CollectProposalWithSigs {
     pub proposal: ChannelTransactionProposal,
     /// the sigs maybe proposer's, or other participant's.
@@ -132,24 +136,29 @@ pub(crate) struct CollectProposalWithSigs {
 impl Message for CollectProposalWithSigs {
     type Result = Result<Option<ChannelTransactionSigs>>;
 }
+#[derive(Debug)]
 pub(crate) struct GrantProposal {
     pub channel_txn_id: HashValue,
 }
 impl Message for GrantProposal {
     type Result = Result<ChannelTransactionSigs>;
 }
+
+#[derive(Debug)]
 pub(crate) struct CancelPendingTxn {
     pub channel_txn_id: HashValue,
 }
 impl Message for CancelPendingTxn {
     type Result = Result<()>;
 }
+#[derive(Debug)]
 pub(crate) struct ApplyPendingTxn;
 /// return a (sender, seq_number) txn to watch if travel.
 impl Message for ApplyPendingTxn {
     type Result = Result<Option<(AccountAddress, u64)>>;
 }
 
+#[derive(Debug)]
 pub(crate) struct ApplySoloTxn {
     pub txn: Transaction,
     pub txn_info: TransactionInfo,
@@ -161,6 +170,7 @@ impl Message for ApplySoloTxn {
     type Result = Result<u64>;
 }
 
+#[derive(Debug)]
 pub(crate) struct ApplyCoSignedTxn {
     pub txn: Transaction,
     pub txn_info: TransactionInfo,
@@ -171,11 +181,13 @@ impl Message for ApplyCoSignedTxn {
     type Result = Result<u64>;
 }
 
+#[derive(Debug)]
 pub(crate) struct GetPendingTxn;
 impl Message for GetPendingTxn {
     type Result = Option<PendingTransaction>;
 }
 
+#[derive(Debug)]
 pub(crate) struct AccessingResource {
     pub path: AccessPath,
 }

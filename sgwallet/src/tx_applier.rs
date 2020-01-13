@@ -107,7 +107,7 @@ impl TxApplier {
 
         debug_assert!(new_txn_accumulator.num_leaves() == channel_seq_number + 1);
         let new_epoch = if travel {
-            self.applied_trees.epoch + 1
+            channel_seq_number // use travel channel_seq_number as sync point
         } else {
             self.applied_trees.epoch
         };
