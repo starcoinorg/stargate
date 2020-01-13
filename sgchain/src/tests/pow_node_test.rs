@@ -472,7 +472,7 @@ fn test_coin_base() {
     let consensus_address = conf_1.consensus.consensus_keypair.consensus_address();
     let _handle_1 = setup_environment(&mut conf_1, false);
 
-    sleep(Duration::from_secs(60));
+    sleep(Duration::from_secs(120));
 
     let client = StarChainClient::new(
         "127.0.0.1",

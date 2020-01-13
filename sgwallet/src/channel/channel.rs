@@ -33,6 +33,7 @@ use libra_types::{
     write_set::WriteSet,
 };
 use sgtypes::{
+    account_state::AccountState,
     applied_channel_txn::AppliedChannelTxn,
     channel::ChannelState,
     channel_transaction::{ChannelOp, ChannelTransaction},
@@ -44,51 +45,123 @@ use sgtypes::{
 };
 use std::collections::BTreeMap;
 
-//impl Channel {
-//    #[allow(dead_code)]
-//    async fn bootstrap(&mut self) -> Result<()> {
-//        let channel_state = self
-//            .chain_client
-//            .get_account_state(self.channel_address, None)?;
-//        let onchain_channel_resource = channel_state
-//            .get_resource::<ChannelResource>(&DataPath::onchain_resource_path(
-//                ChannelResource::struct_tag(),
-//            ))?
-//            .ok_or(format_err!("channel resource should exists"))?;
-//        if onchain_channel_resource.closed() {
-//            bail!("channel is already closed");
-//        } else if onchain_channel_resource.locked() {
-//        } else {
-//            //
-//        }
-//
-//        Ok(())
-//    }
-//}
-//
+/// Sync with layer1
+/// First, get current state of channel in layer1,
+/// - if it's closed, layer2 should admit the truth, no matter he's ok with it or not.
+/// - if it's locked, layer2 should check it's locked by participant, if yes, resolve/challenge it.
+/// - if it's opened, check the channel sequence number(remote version) in layer1 with local channel seq number(local version).
+///   - if the remote version is equal to the last travel txn's version, it's ok.
+
+impl Channel {
+    pub(crate) async fn bootstrap(&mut self) -> Result<()> {
+        // read last sync point and get the channel state under that txn version.
+        if let Some(startup_info) = self.store.get_startup_info()? {
+            let last_sync_point = startup_info.ledger_info.epoch();
+            let applied_txn = self
+                .store
+                .get_transaction_by_channel_seq_number(last_sync_point, false)?;
+            assert!(applied_txn.signed_transaction.travel());
+            match &applied_txn.signed_transaction {
+                AppliedChannelTxn::Offchain(_) => {
+                    bail!("invalid state");
+                }
+                AppliedChannelTxn::Travel(txn) => {
+                    let sender = txn.sender();
+                    let seq_number = txn.sequence_number();
+                    let (txn_with_proof, _account_state_proof) = self
+                        .chain_client
+                        .get_transaction_by_seq_num_async(sender, seq_number)
+                        .await?;
+                    debug_assert!(txn_with_proof.is_some());
+                    let txn_with_proof = txn_with_proof.unwrap();
+                    let (version, blob, proof) = self
+                        .chain_client
+                        .get_account_state_by_version(
+                            self.channel_address().clone(),
+                            txn_with_proof.version,
+                        )
+                        .await?;
+                    let blob = blob.ok_or(format_err!("channel state should exists"))?;
+                    let channel_state =
+                        AccountState::from_account_state_blob(version, blob, proof)?;
+
+                    self.stm.advance_state(
+                        Some(ChannelState::new(
+                            self.channel_address().clone(),
+                            channel_state,
+                        )),
+                        self.store.get_latest_witness().unwrap_or_default(),
+                        self.store.get_participant_keys(),
+                    );
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn watch_and_apply_travel_txn(
+        &mut self,
+        txn_sender: AccountAddress,
+        seq_number: u64,
+        ctx: &mut ActorHandlerContext,
+    ) -> Result<()> {
+        let TransactionWithProof {
+            version,
+            transaction,
+            events,
+            proof,
+        } = watch_transaction(self.chain_client.clone(), txn_sender, seq_number).await?;
+
+        self.handle(
+            ApplyTravelTxn {
+                txn: transaction,
+                txn_info: proof.transaction_info().clone(),
+                events: events.unwrap_or_default(),
+                version,
+            },
+            ctx,
+        )
+        .await?;
+
+        Ok(())
+    }
+}
+
 #[async_trait]
 impl Actor for Channel {
     async fn started(&mut self, ctx: &mut ActorHandlerContext) {
-        let to_be_apply = {
-            let pending_proposal = self.pending_txn();
-            if let Some(pending_proposal) = pending_proposal {
-                if pending_proposal.consensus_reached() {
-                    let (proposal, _output, _) = pending_proposal.into();
-                    //        debug_assert!(output.is_travel_txn(), "only travel txn is persisted");
-                    Some(proposal)
-                } else {
-                    None
+        // check pending state
+        if let Some(pending_proposal) = self.pending_txn() {
+            match pending_proposal.lifecycle() {
+                ProposalLifecycle::Agreed => match self.handle(ApplyPendingTxn, ctx).await {
+                    Err(e) => {
+                        error!("fail to handle travelling pending txn, {}", e);
+                        ctx.set_status(ActorStatus::Stopping);
+                    }
+                    Ok(Some((txn_sender, seq_number))) => {
+                        if let Err(e) = self
+                            .watch_and_apply_travel_txn(txn_sender, seq_number, ctx)
+                            .await
+                        {
+                            error!("fail to handle travelling pending txn, {}", e);
+                            ctx.set_status(ActorStatus::Stopping);
+                        }
+                    }
+                    _ => {}
+                },
+                ProposalLifecycle::Traveling => {
+                    let txn_sender = pending_proposal.proposal().channel_txn.proposer();
+                    let seq_number = pending_proposal.proposal().channel_txn.sequence_number();
+                    if let Err(e) = self
+                        .watch_and_apply_travel_txn(txn_sender, seq_number, ctx)
+                        .await
+                    {
+                        error!("fail to handle travelling pending txn, {}", e);
+                        ctx.set_status(ActorStatus::Stopping);
+                    }
                 }
-            } else {
-                None
-            }
-        };
-
-        let mut myself = self.actor_ref(ctx).await;
-
-        if let Some(_) = to_be_apply {
-            if let Err(_) = myself.notify(ApplyPendingTxn).await {
-                panic!("should not happen");
+                _ => {}
             }
         }
 
@@ -103,7 +176,8 @@ impl Actor for Channel {
                 c,
                 10,
             );
-            tokio::task::spawn(channel_event_loop(channel_event_stream, myself.clone()));
+            let myself = Self::actor_ref(ctx).await;
+            tokio::task::spawn(channel_event_loop(channel_event_stream, myself));
         }
     }
 
@@ -131,8 +205,9 @@ impl Handler<Execute> for Channel {
     async fn handle(
         &mut self,
         message: Execute,
-        _ctx: &mut ActorHandlerContext,
+        ctx: &mut ActorHandlerContext,
     ) -> <Execute as Message>::Result {
+        trace!("{} handle {:?}", ctx.actor_id(), &message);
         let Execute { channel_op, args } = message;
         let proposal = self.stm.generate_proposal(channel_op, args)?;
         let mut pending_txn = self.pending_txn();
@@ -202,7 +277,11 @@ impl Handler<CollectProposalWithSigs> for Channel {
         self.stm
             .handle_proposal_signature(&mut pending_txn, txn_hash, sigs)?;
 
-        if self.stm.can_auto_sign_pending_proposal(&pending_txn)? {
+        if !pending_txn
+            .signatures()
+            .contains_key(self.account_address())
+            && self.stm.can_auto_sign_pending_proposal(&pending_txn)?
+        {
             debug!(
                 "{}/{} - auto sign channel txn",
                 &self.account_address(),
@@ -271,6 +350,7 @@ impl Handler<CancelPendingTxn> for Channel {
         message: CancelPendingTxn,
         ctx: &mut ActorHandlerContext,
     ) -> <CancelPendingTxn as Message>::Result {
+        trace!("{} handle {:?}", ctx.actor_id(), &message);
         let CancelPendingTxn { channel_txn_id } = message;
 
         let pending_txn = self.pending_txn();
@@ -298,10 +378,10 @@ impl Handler<CancelPendingTxn> for Channel {
 impl Handler<ApplyPendingTxn> for Channel {
     async fn handle(
         &mut self,
-        _message: ApplyPendingTxn,
-        _ctx: &mut ActorHandlerContext,
+        message: ApplyPendingTxn,
+        ctx: &mut ActorHandlerContext,
     ) -> <ApplyPendingTxn as Message>::Result {
-        debug!("{} apply pending txn", self.account_address());
+        trace!("{} handle {:?}", ctx.actor_id(), &message);
 
         let pending_txn = self.pending_txn();
         ensure!(pending_txn.is_some(), "should have txn to apply");
@@ -372,6 +452,70 @@ impl Handler<GetPendingTxn> for Channel {
     }
 }
 
+#[derive(Debug)]
+struct ApplyTravelTxn {
+    pub txn: Transaction,
+    pub txn_info: TransactionInfo,
+    pub version: u64,
+    pub events: Vec<ContractEvent>,
+}
+
+impl Message for ApplyTravelTxn {
+    type Result = Result<()>;
+}
+
+#[async_trait]
+impl Handler<ApplyTravelTxn> for Channel {
+    async fn handle(
+        &mut self,
+        message: ApplyTravelTxn,
+        ctx: &mut ActorHandlerContext,
+    ) -> <ApplyTravelTxn as Message>::Result {
+        trace!("{} handle {:?}", ctx.actor_id(), &message);
+
+        let ApplyTravelTxn {
+            txn,
+            txn_info,
+            version,
+            events,
+            ..
+        } = message;
+        let gas_used = txn_info.gas_used();
+        let is_solo = match txn.as_signed_user_txn()?.payload() {
+            TransactionPayload::Channel(ctp) => !ctp.is_authorized(),
+            _ => bail!("invalid channel travel txn"),
+        };
+        if is_solo {
+            let _ = self
+                .handle(
+                    ApplySoloTxn {
+                        txn,
+                        txn_info,
+                        version,
+                        events,
+                    },
+                    ctx,
+                )
+                .await?;
+        } else {
+            let _ = self
+                .handle(
+                    ApplyCoSignedTxn {
+                        txn,
+                        txn_info,
+                        version,
+                        events,
+                    },
+                    ctx,
+                )
+                .await?;
+        }
+        debug!("channel travel txn gas used: {}", gas_used);
+
+        Ok(())
+    }
+}
+
 #[async_trait]
 impl Handler<ApplyCoSignedTxn> for Channel {
     async fn handle(
@@ -379,6 +523,8 @@ impl Handler<ApplyCoSignedTxn> for Channel {
         message: ApplyCoSignedTxn,
         ctx: &mut ActorHandlerContext,
     ) -> <ApplyCoSignedTxn as Message>::Result {
+        trace!("{} handle {:?}", ctx.actor_id(), &message);
+
         let ApplyCoSignedTxn {
             txn,
             txn_info,
@@ -482,7 +628,7 @@ impl Handler<ApplyCoSignedTxn> for Channel {
                     channel_resource.event_handle().count(),
                     10,
                 );
-                let myself = self.actor_ref(ctx).await;
+                let myself = Self::actor_ref(ctx).await;
                 tokio::task::spawn(channel_event_loop(channel_event_stream, myself));
             }
         } else if channel_resource.closed() {
@@ -505,6 +651,8 @@ impl Handler<ApplySoloTxn> for Channel {
         message: ApplySoloTxn,
         ctx: &mut ActorHandlerContext,
     ) -> <ApplySoloTxn as Message>::Result {
+        trace!("{} handle {:?}", ctx.actor_id(), &message);
+
         let ApplySoloTxn {
             txn,
             txn_info,
@@ -662,6 +810,7 @@ impl Handler<ApplySoloTxn> for Channel {
     }
 }
 
+#[derive(Debug)]
 struct ChannelLockTimeout {
     pub block_height: u64,
     pub time_lock: u64,
@@ -676,6 +825,7 @@ impl Handler<ChannelLockTimeout> for Channel {
         message: ChannelLockTimeout,
         ctx: &mut ActorHandlerContext,
     ) -> <ChannelLockTimeout as Message>::Result {
+        trace!("{} handle {:?}", ctx.actor_id(), &message);
         let ChannelLockTimeout {
             block_height,
             time_lock,
@@ -862,7 +1012,7 @@ impl Channel {
             events,
             proof,
         } = watch_transaction(self.chain_client.clone(), sender, seq_number).await?;
-        let mut actor_ref = self.actor_ref(ctx).await;
+        let mut actor_ref = Self::actor_ref(ctx).await;
         tokio::task::spawn(async move {
             let result = actor_ref
                 .send(ApplySoloTxn {
@@ -988,7 +1138,7 @@ impl Channel {
     }
 
     /// helper method to get self actor ref from `ctx`
-    async fn actor_ref(&self, ctx: &mut ActorHandlerContext) -> ActorRef<Self> {
+    async fn actor_ref(ctx: &mut ActorHandlerContext) -> ActorRef<Self> {
         let self_id = ctx.actor_id().clone();
         let self_ref = ctx
             .actor_context_mut()
@@ -1009,7 +1159,7 @@ impl Channel {
             .chain_txn_watcher
             .add_interest(Box::new(move |txn| txn.block_height > time_lock))
             .await?;
-        let mut self_ref = self.actor_ref(ctx).await;
+        let mut self_ref = Self::actor_ref(ctx).await;
 
         tokio::task::spawn(async move {
             while let Some(txn_info) = timeout_receiver.next().await {
