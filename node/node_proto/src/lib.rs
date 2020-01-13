@@ -441,8 +441,8 @@ pub struct ExecuteScriptRequest {
     pub remote_addr: AccountAddress,
     pub package_name: String,
     pub script_name: String,
-    pub args: Vec<TransactionArgument>,
     pub force_execute: bool,
+    pub args: Vec<TransactionArgument>,
 }
 
 impl ExecuteScriptRequest {
@@ -450,15 +450,15 @@ impl ExecuteScriptRequest {
         remote_addr: AccountAddress,
         package_name: String,
         script_name: String,
-        args: Vec<TransactionArgument>,
         force_execute: bool,
+        args: Vec<TransactionArgument>,
     ) -> Self {
         Self {
             remote_addr,
             package_name,
             script_name,
-            args,
             force_execute,
+            args,
         }
     }
 }

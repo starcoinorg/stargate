@@ -224,8 +224,8 @@ impl SGClientProxy {
             remote_addr,
             package_name.to_string(),
             script_name.to_string(),
-            arguments,
             force_execute,
+            arguments,
         );
         let _response = self.node_client.execute_script(execute_request)?;
         Ok(())

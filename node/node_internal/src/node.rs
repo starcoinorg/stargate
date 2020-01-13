@@ -519,8 +519,8 @@ impl Node {
             receiver_address,
             package_name,
             script_name,
-            transaction_args,
             force_execute,
+            transaction_args,
             responder,
         })?;
 
@@ -791,8 +791,8 @@ impl NodeInner {
                 receiver_address,
                 package_name,
                 script_name,
-                transaction_args,
                 force_execute,
+                transaction_args,
                 responder,
             } => {
                 node_inner
@@ -800,8 +800,8 @@ impl NodeInner {
                         receiver_address,
                         package_name,
                         script_name,
-                        transaction_args,
                         force_execute,
+                        transaction_args,
                         responder,
                     )
                     .await;
@@ -1324,8 +1324,8 @@ impl NodeInner {
         receiver_address: AccountAddress,
         package_name: String,
         script_name: String,
-        transaction_args: Vec<TransactionArgument>,
         force_execute: bool,
+        transaction_args: Vec<TransactionArgument>,
         responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
     ) {
         match self
