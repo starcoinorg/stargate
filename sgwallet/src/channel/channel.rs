@@ -687,6 +687,10 @@ impl Handler<ChannelLockTimeout> for Channel {
             block_height,
             time_lock
         );
+        if self.stm.channel_lock_by_resource().is_none() {
+            info!("channel {} already resolved", self.channel_address());
+            return Ok(());
+        }
 
         let ps = {
             let mut ps = self.participant_addresses().clone();
