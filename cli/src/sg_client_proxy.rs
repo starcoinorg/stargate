@@ -4,20 +4,17 @@ use crate::commands::*;
 use anyhow::{ensure, format_err, Error, Result};
 use grpcio::EnvBuilder;
 use libra_crypto::HashValue;
-use libra_types::explorer::GetBlockByBlockIdResponse;
-use libra_types::transaction::Transaction;
 use libra_types::{
     account_address::{AccountAddress, ADDRESS_LENGTH},
     explorer::{
-        BlockId, BlockRequestItem, BlockResponseItem, GetBlockSummaryListRequest,
-        GetBlockSummaryListResponse, GetTransactionListRequest, GetTransactionListResponse,
-        TxnRequestItem, TxnResponseItem, Version as TxnVersion,
+        BlockId, BlockRequestItem, BlockResponseItem, GetBlockByBlockIdResponse,
+        GetBlockSummaryListRequest, GetBlockSummaryListResponse, GetTransactionListRequest,
+        GetTransactionListResponse, TxnRequestItem, TxnResponseItem, Version as TxnVersion,
     },
     proof::SparseMerkleProof,
-    transaction::{parse_as_transaction_argument, Version},
+    transaction::{parse_as_transaction_argument, Transaction, Version},
 };
-use libra_wallet::key_factory::ChildNumber;
-use libra_wallet::wallet_library::WalletLibrary;
+use libra_wallet::{key_factory::ChildNumber, wallet_library::WalletLibrary};
 use node_client::NodeClient;
 use node_proto::{
     AddInvoiceRequest, AddInvoiceResponse, ChannelBalanceRequest, ChannelBalanceResponse,
@@ -26,14 +23,12 @@ use node_proto::{
     InstallChannelScriptPackageRequest, OpenChannelRequest, OpenChannelResponse, PayRequest,
     PayResponse, PaymentRequest, WithdrawRequest, WithdrawResponse,
 };
-use sgchain::star_chain_client::ChainExplorer;
 use sgchain::{
     client_state_view::ClientStateView,
-    star_chain_client::{faucet_sync, ChainClient, StarChainClient},
+    star_chain_client::{faucet_sync, ChainClient, ChainExplorer, StarChainClient},
 };
 use sgcompiler::{Compiler, StateViewModuleLoader};
-use std::str::FromStr;
-use std::{convert::TryFrom, fs, path::Path, sync::Arc};
+use std::{convert::TryFrom, fs, path::Path, str::FromStr, sync::Arc};
 
 /// Enum used for error formatting.
 #[derive(Debug)]
@@ -98,7 +93,7 @@ impl SGClientProxy {
         _is_blocking: bool,
     ) -> Result<WithdrawResponse> {
         ensure!(
-            space_delim_strings.len() == 4,
+            space_delim_strings.len() == 3,
             "Invalid number of arguments for withdraw"
         );
         let response = self.node_client.withdraw(WithdrawRequest {
@@ -114,7 +109,7 @@ impl SGClientProxy {
         _is_blocking: bool,
     ) -> Result<DepositResponse> {
         ensure!(
-            space_delim_strings.len() == 4,
+            space_delim_strings.len() == 3,
             "Invalid number of arguments for deposit"
         );
         let response = self.node_client.deposit(DepositRequest {
