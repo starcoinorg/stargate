@@ -7,7 +7,7 @@ mod rpc_chain_test_helper;
 
 use anyhow::{Error, Result};
 use coerce_rt::actor::context::{ActorContext, ActorStatus};
-use common::setup_wallet;
+use common::{setup_wallet, with_init_wallet_async};
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_types::{
@@ -26,17 +26,30 @@ use sgwallet::{
 use std::{sync::Arc, time::Duration};
 
 #[test]
-fn run_test_channel_lock_and_then_resolve() {
-    if let Err(e) = run_with_rpc_client(|chain_client| {
+fn run_test_channel_lock_and_then_resolve() -> Result<()> {
+    let result = run_with_rpc_client(|chain_client| {
         let mut rt = tokio::runtime::Runtime::new()?;
-        rt.block_on(test_all(chain_client))
-    }) {
-        panic!("error, {:?}", e);
-    }
+        rt.block_on(test_all_sequential(chain_client))
+    });
+    dbg!(result)
+}
+
+#[allow(dead_code)]
+async fn test_all_sequential(chain_client: Arc<dyn ChainClient>) -> Result<()> {
+    with_init_wallet_async(chain_client.clone(), test_channel_lock_and_challenge).await?;
+    info!("test_channel_lock_and_challenge done");
+    with_init_wallet_async(chain_client.clone(), test_channel_lock_and_resolve).await?;
+    info!("test_channel_lock_and_resolve done");
+    with_init_wallet_async(chain_client.clone(), test_channel_lock_and_timeout).await?;
+    info!("test_channel_lock_and_timeout done");
+    with_init_wallet_async(chain_client.clone(), test_channel_restart).await?;
+    info!("test_channel_restart done");
+    Ok(())
 }
 
 /// One function to rule them all.
-async fn test_all(chain_client: Arc<dyn ChainClient>) -> Result<()> {
+#[allow(dead_code)]
+async fn test_all_parallel(chain_client: Arc<dyn ChainClient>) -> Result<()> {
     let init_amount = 10_000_000;
 
     let sender_wallet = Arc::new(setup_wallet(chain_client.clone(), init_amount).await?);
