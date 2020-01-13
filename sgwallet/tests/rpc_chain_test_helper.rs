@@ -13,8 +13,9 @@ where
     libra_logger::try_init_for_testing();
     let _ = slog_stdlog::init();
     let (config, _logger, _handler) = sgchain::main_node::run_node(None, false, true);
-    info!("node is running.");
     let ac_port = config.admission_control.admission_control_service_port;
     let rpc_client = Arc::new(StarChainClient::new("127.0.0.1", ac_port as u32));
-    f(rpc_client.clone())
+    let result = f(rpc_client.clone());
+    info!("run function with rpc client done");
+    result
 }

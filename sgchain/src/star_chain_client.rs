@@ -311,6 +311,46 @@ pub trait ChainClient: Send + Sync {
         );
         resp.into_get_transactions_response()
     }
+    async fn get_transaction_by_seq_num_async(
+        &self,
+        account_address: AccountAddress,
+        seq_num: u64,
+    ) -> Result<(Option<TransactionWithProof>, Option<AccountStateWithProof>)> {
+        let req = RequestItem::GetAccountTransactionBySequenceNumber {
+            account: account_address,
+            sequence_number: seq_num,
+            fetch_events: false,
+        };
+        let resp = parse_response(
+            self.update_to_latest_ledger_async(&build_request(req, None))
+                .await?,
+        );
+        resp.into_get_account_txn_by_seq_num_response()
+    }
+
+    async fn get_account_state_by_version(
+        &self,
+        account_address: AccountAddress,
+        version: u64,
+    ) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)> {
+        let req = RequestItem::GetAccountStateByVersion {
+            address: account_address,
+            version,
+        };
+        let resp = parse_response(
+            self.update_to_latest_ledger_async(&build_request(req, None))
+                .await?,
+        )
+        .into_get_account_state_response()?;
+        let proof = resp.proof;
+        let blob = resp.blob.map(|blob| blob.into());
+        //TODO should return whole proof.
+        Ok((
+            resp.version,
+            blob,
+            proof.transaction_info_to_account_proof().clone(),
+        ))
+    }
 }
 
 #[derive(Clone)]
