@@ -4,22 +4,17 @@ services:
     image: docker.pkg.github.com/starcoinorg/stargate/node:latest
     ports:
     - "9000:9000"
-    environment:
-      NODE_CONFIG: ./wallet/node.toml
-      KEYS_CONFIG: ./wallet/key
     volumes:
       - ./logs/nodelogs:/logs
+      - ./wallet:/opt/starcoin/etc
   gateway:
-    build:
-      context: .
-      dockerfile: docker/grpcgateway/gateway.Dockerfile
+    image: docker.pkg.github.com/starcoinorg/stargate/gateway:latest
     environment:
-        GATEWAY_PORT: ":8081"
+        GATEWAY_PORT: ":8080"
         NODE_PORT: ":9000"
     volumes:
         - ./logs/gatewaylogs:/gateway/log
     ports:
-    - "8081:8081"
+    - "8080:8080"
     depends_on:
       - wallet_node
-
