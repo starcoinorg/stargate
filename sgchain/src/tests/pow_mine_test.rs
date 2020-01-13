@@ -11,7 +11,7 @@ mod test {
     pub fn test_miner_service() {
         ::libra_logger::init_for_e2e_testing();
         let mut block_index = DummyBlockIndex::new();
-        let mut mine_state = MineStateManager::new(block_index.clone());
+        let mut mine_state = MineStateManager::new(block_index.clone(), true);
         let mut miner_grpc_srv =
             setup_minerproxy_service(mine_state.clone(), "127.0.0.1:4251".to_string());
         miner_grpc_srv.start();
