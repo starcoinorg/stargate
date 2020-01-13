@@ -1,0 +1,6 @@
+import {{stargame}}.TheFive;
+
+main(receiver: address) {
+    TheFive.timeout(move(receiver));
+    return;
+}

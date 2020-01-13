@@ -261,7 +261,7 @@
 			srv = document.getElementById("srvAddrInput").value;
 			pl2addr = document.getElementById("plname2Input").value;
 			sendTxnTimeout(srv, formatAddr(pl2addr));
-			var str = "对手超时，您的分数自动加1分！";
+			var str = "对手超时，您的分数增加1分！";
 			alert(str);
 			location.reload();
 		}
@@ -296,6 +296,7 @@
 				remote_addr: hexReceiver,
 				package_name: "scripts",
 				script_name: "new",
+				force_execute: false,
 				args: argsVec
 			};
 			$.ajax({
@@ -366,7 +367,8 @@
 			var para = {
 				remote_addr: hexReceiver,
 				package_name: "scripts",
-				script_name: "join"
+				script_name: "join",
+				force_execute: false
 			};
 			$.ajax({
 				url: testURL,
@@ -398,7 +400,8 @@
 			var para = {
 				remote_addr: hexReceiver,
 				package_name: "scripts",
-				script_name: "end"
+				script_name: "end",
+				force_execute: false
 			};
 			$.ajax({
 				url: testURL,
@@ -426,7 +429,8 @@
 			var para = {
 				remote_addr: hexReceiver,
 				package_name: "scripts",
-				script_name: "timeout"
+				script_name: "timeout",
+				force_execute: true
 			};
 			$.ajax({
 				url: testURL,
