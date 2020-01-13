@@ -28,8 +28,8 @@
 			<div class="menu">
 <!--				<a href="javascript:;" onclick="restartgui()">重新开始</a>-->
 <!--				<a href="javascript:;" onclick="gb.back();" id="backChessman">悔棋</a>-->
-				<a href="javascript:;" onclick="restartGame()">重新开始</a>
-				<a href="javascript:;" onclick="" id="backChessman">悔棋</a>
+				<a href="javascript:;" onclick="quitGame()">退出游戏</a>
+				<a href="javascript:;" onclick="forceMove()" id="backChessman">对手超时</a>
 
 			</div>
 		</div>
@@ -250,13 +250,20 @@
 			sendTxnEnd(srv, formatAddr(pl2addr));
 		}
 
-		function restartGame() {
-			var serveraddr = srvAddrInput.value;
-			var plyer2addr = plname2Input.value;
-		    endGame();
+		function quitGame() {
+			endGame();
+			var str = "您已退出游戏，分数减少1分！";
+			alert(str);
 		    location.reload();
-		    document.getElementById("srvAddrInput").value = serveraddr;
-			document.getElementById("plname2Input").value = plyer2addr;
+		}
+
+		function forceMove() {
+			srv = document.getElementById("srvAddrInput").value;
+			pl2addr = document.getElementById("plname2Input").value;
+			sendTxnTimeout(srv, formatAddr(pl2addr));
+			var str = "对手超时，您的分数自动加1分！";
+			alert(str);
+			location.reload();
 		}
 
 		function Str2Bytes(str) {
@@ -413,6 +420,28 @@
 			});
 		}
 
+		function sendTxnTimeout(server, receiver) {
+			var testURL = server.concat("/node/execute_script");
+			var hexReceiver = Str2Bytes(receiver);
+			var para = {
+				remote_addr: hexReceiver,
+				package_name: "scripts",
+				script_name: "timeout"
+			};
+			$.ajax({
+				url: testURL,
+				type: 'Post',
+				data: JSON.stringify(para),
+				dataType: "json",
+				crossDomain: true,
+				success: function(data){
+					console.log(data);
+				},
+				error: function(err){
+					console.log("请求失败："+err);
+				}
+			});
+		}
 	</script>
 
 </html>

@@ -413,7 +413,7 @@ module TheFive {
         return;
     }
 
-    public end_game() {
+    end_game(by_winner: bool) {
         let s_ref: &mut Self.Shared;
         let status: &mut u64;
 
@@ -421,12 +421,12 @@ module TheFive {
         status = &mut copy(s_ref).status;
         *copy(status) = 2;
 
-        Self.update_score();
+        Self.update_score(move(by_winner));
         return;
     }
 
 
-    update_score() {
+    update_score(by_winner: bool) {
         let score_ref: &mut Self.Score;
         let total_ref: &mut u64;
         let sender: address;
@@ -434,7 +434,14 @@ module TheFive {
         sender = get_txn_sender();
         score_ref = ChannelUtil.borrow_from_participant_mut<Self.Score>(copy(sender));
         total_ref = &mut copy(score_ref).total;
-        *copy(total_ref) = *copy(total_ref) + 1;
+        if (copy(by_winner)) {
+            *copy(total_ref) = *copy(total_ref) + 1;
+        } else {
+            if (*copy(total_ref) > 0) {
+                *copy(total_ref) = *copy(total_ref) - 1;
+            }
+        }
+        
         return;
     }
 
@@ -463,8 +470,7 @@ module TheFive {
         win = Self.is_five(move(x), move(y));
 
         if (move(win)) {
-            //Self.end_game(copy(receiver));
-            Self.end_game();
+            Self.end_game(true);
         }
         return 0;
     }
@@ -502,10 +508,14 @@ module TheFive {
         s_ref = ChannelUtil.borrow_from_shared<Self.Shared>();
         height_ref = &copy(s_ref).height;
         current_height = LibraSystem.get_current_block_height();
-        assert(move(current_height) > *copy(height_ref), 102);
+        assert(copy(current_height) > *copy(height_ref) + 3, copy(current_height));
 
-        //Self.end_game(copy(receiver));
-        Self.end_game();
+        Self.end_game(true); // receiver timeout, sender score++
+        return;
+    }
+
+    public quit() {
+        Self.end_game(false); // sender quit, receiver score++
         return;
     }
 }

@@ -1,6 +1,6 @@
 import {{starlab}}.TheFive;
 
 main(){
-    TheFive.end_game();
+    TheFive.quit();
     return;
 }
