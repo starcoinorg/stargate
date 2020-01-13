@@ -79,10 +79,12 @@ fn graph_storage_test() {
     use crate::graph_store::GraphStore;
     use crate::vertex::{Type, Vertex};
     extern crate rand;
+    use crate::storage::Storage;
     use libra_logger::prelude::*;
     use libra_types::account_address::AccountAddress;
     use rand::Rng;
     use std::path::Path;
+    use std::sync::Arc;
 
     libra_logger::init_for_e2e_testing();
 
@@ -99,7 +101,8 @@ fn graph_storage_test() {
 
     info!("tmp dir is {}", dir_str);
     let dir = Path::new(&dir_str);
-    let graph_store = GraphStore::new(true, Some(dir.clone())).unwrap();
+    let storage = Arc::new(Storage::new(dir.clone()));
+    let graph_store = GraphStore::new(true, Some(storage)).unwrap();
     graph_store.put_edge(&edge1, 1, false).unwrap();
     graph_store.put_edge(&edge2, 1, false).unwrap();
 
@@ -112,7 +115,8 @@ fn graph_storage_test() {
 
     info!("graph db droped.");
 
-    let graph_store = GraphStore::new(true, Some(dir)).unwrap();
+    let storage = Arc::new(Storage::new(dir.clone()));
+    let graph_store = GraphStore::new(true, Some(storage)).unwrap();
     graph_store.print_nodes(&vertex1);
 
     let result = graph_store.find_path(&vertex1, &vertex3);

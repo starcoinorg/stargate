@@ -110,7 +110,7 @@ impl Storage {
 }
 
 impl Storage {
-    pub fn _get<S: Schema>(
+    pub fn get<S: Schema>(
         &self,
         schema_key: &<S as Schema>::Key,
     ) -> Result<Option<<S as Schema>::Value>>
@@ -309,6 +309,29 @@ impl KeyCodec<VertexSchema> for AccountAddress {
 }
 
 impl ValueCodec<VertexSchema> for Vertex {
+    fn encode_value(&self) -> Result<Vec<u8>> {
+        lcs::to_bytes(self).map_err(Into::into)
+    }
+
+    fn decode_value(data: &[u8]) -> Result<Self> {
+        lcs::from_bytes(data).map_err(Into::into)
+    }
+}
+
+define_schema!(OffSetSchema, OffsetKey, Offset, "Offset");
+pub type Offset = u64;
+pub type OffsetKey = String;
+impl KeyCodec<OffSetSchema> for OffsetKey {
+    fn encode_key(&self) -> Result<Vec<u8>> {
+        lcs::to_bytes(self).map_err(Into::into)
+    }
+
+    fn decode_key(data: &[u8]) -> Result<Self> {
+        lcs::from_bytes(data).map_err(Into::into)
+    }
+}
+
+impl ValueCodec<OffSetSchema> for Offset {
     fn encode_value(&self) -> Result<Vec<u8>> {
         lcs::to_bytes(self).map_err(Into::into)
     }

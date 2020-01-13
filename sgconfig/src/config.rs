@@ -44,6 +44,7 @@ pub struct RpcConfig {
     pub timeout: u64,
     pub auto_approve: bool,
     pub router_type: String,
+    pub path: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -73,6 +74,7 @@ pub fn get_test_config(
     timeout: u64,
     auto_approve: bool,
     router_type: String,
+    path: Option<String>,
 ) -> NodeConfig {
     let network = RpcConfig {
         address: addr.clone(),
@@ -80,6 +82,7 @@ pub fn get_test_config(
         timeout,
         auto_approve,
         router_type,
+        path,
     };
     let rest = RestConfig {
         address: addr.clone(),

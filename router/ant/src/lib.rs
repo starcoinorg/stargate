@@ -47,6 +47,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use async_trait::async_trait;
+use std::path::Path;
 
 pub struct MixRouter {
     ant_router: AntRouter,
@@ -69,6 +70,7 @@ impl MixRouter {
         wallet: Arc<WalletHandle>,
         stats_mgr: Arc<Stats>,
         default_future_timeout: u64,
+        path: Option<&Path>,
     ) -> Self {
         let (ant_network_sender, ant_network_receiver) = futures::channel::mpsc::unbounded();
         let (table_network_sender, table_network_receiver) = futures::channel::mpsc::unbounded();
@@ -90,6 +92,7 @@ impl MixRouter {
             network_sender.clone(),
             table_network_receiver,
             stats_mgr.clone(),
+            path,
         );
 
         Self {
@@ -811,6 +814,7 @@ fn mix_router_test() {
         wallet1.clone(),
         Arc::new(Stats::new(executor.clone())),
         5000,
+        None,
     );
     router1.start().unwrap();
 
@@ -825,6 +829,7 @@ fn mix_router_test() {
         wallet2.clone(),
         Arc::new(Stats::new(executor.clone())),
         5000,
+        None,
     );
     router2.start().unwrap();
 
@@ -839,6 +844,7 @@ fn mix_router_test() {
         wallet3.clone(),
         Arc::new(Stats::new(executor.clone())),
         5000,
+        None,
     );
     router3.start().unwrap();
 
