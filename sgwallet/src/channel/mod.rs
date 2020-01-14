@@ -16,8 +16,7 @@ use libra_crypto::{
 use libra_types::{
     access_path::AccessPath,
     account_address::AccountAddress,
-    contract_event::ContractEvent,
-    transaction::{Transaction, TransactionArgument, TransactionInfo, TransactionOutput},
+    transaction::{TransactionArgument, TransactionOutput},
     write_set::{WriteOp, WriteSet},
 };
 use sgchain::star_chain_client::ChainClient;
@@ -34,6 +33,8 @@ mod channel;
 mod channel_event_stream;
 mod channel_handle;
 mod channel_stm;
+
+pub(crate) use channel::*;
 
 pub struct Channel {
     store: ChannelStore<ChannelDB>,
@@ -172,29 +173,6 @@ pub(crate) struct ApplyPendingTxn;
 /// return a (sender, seq_number) txn to watch if travel.
 impl Message for ApplyPendingTxn {
     type Result = Result<Option<(AccountAddress, u64)>>;
-}
-
-#[derive(Debug)]
-pub(crate) struct ApplySoloTxn {
-    pub txn: Transaction,
-    pub txn_info: TransactionInfo,
-    pub version: u64,
-    pub events: Vec<ContractEvent>,
-}
-
-impl Message for ApplySoloTxn {
-    type Result = Result<u64>;
-}
-
-#[derive(Debug)]
-pub(crate) struct ApplyCoSignedTxn {
-    pub txn: Transaction,
-    pub txn_info: TransactionInfo,
-    pub version: u64,
-    pub events: Vec<ContractEvent>,
-}
-impl Message for ApplyCoSignedTxn {
-    type Result = Result<u64>;
 }
 
 #[derive(Debug)]

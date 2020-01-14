@@ -3,8 +3,8 @@
 use crate::{
     chain_watcher::{ChainWatcher, ChainWatcherHandle},
     channel::{
-        ApplyCoSignedTxn, ApplyPendingTxn, ApplySoloTxn, CancelPendingTxn, Channel, ChannelEvent,
-        ChannelHandle, CollectProposalWithSigs, Execute, GrantProposal,
+        ApplyPendingTxn, CancelPendingTxn, Channel, ChannelEvent, ChannelHandle,
+        CollectProposalWithSigs, Execute, GrantProposal,
     },
     scripts::*,
 };
@@ -66,6 +66,7 @@ use std::{
     time::Duration,
 };
 
+use crate::channel::WatchAndApplyTravelTxn;
 use vm_runtime::{MoveVM, VMExecutor};
 
 lazy_static! {
@@ -560,24 +561,15 @@ impl WalletHandle {
             .await??
             .ok_or(format_err!("already travelling"))?;
 
-        let TransactionWithProof {
-            version,
-            transaction,
-            events,
-            proof,
-        } = watch_transaction(self.shared.client.clone(), txn_sender, seq_number).await?;
-        let gas = channel
+        channel
             .channel_ref()
-            .send(ApplySoloTxn {
-                version,
-                txn: transaction,
-                txn_info: proof.transaction_info().clone(),
-                events: events.unwrap_or_default(),
+            .send(WatchAndApplyTravelTxn {
+                sender: txn_sender,
+                seq_number,
             })
             .await
             .map_err(|_| format_err!("channel actor gone"))
-            .and_then(|r| r)?;
-        Ok(gas)
+            .and_then(|r| r)
     }
 
     pub async fn apply_txn(
@@ -598,26 +590,15 @@ impl WalletHandle {
         }
         let (txn_sender, seq_number) = option_watch.unwrap();
 
-        let TransactionWithProof {
-            version,
-            transaction,
-            events,
-            proof,
-        } = watch_transaction(self.shared.client.clone(), txn_sender, seq_number).await?;
-
-        let gas = channel
+        channel
             .channel_ref()
-            .send(ApplyCoSignedTxn {
-                version,
-                txn: transaction,
-                txn_info: proof.transaction_info().clone(),
-                events: events.unwrap_or_default(),
+            .send(WatchAndApplyTravelTxn {
+                sender: txn_sender,
+                seq_number,
             })
             .await
             .map_err(|_| format_err!("channel actor gone"))
-            .and_then(|r| r)?;
-
-        Ok(gas)
+            .and_then(|r| r)
     }
 
     /// Called by receiver to get proposal waiting user approval.

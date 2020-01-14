@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 use crate::{
     channel::{
-        access_local, channel_event_stream::ChannelEventStream, AccessingResource,
-        ApplyCoSignedTxn, ApplyPendingTxn, ApplySoloTxn, CancelPendingTxn, Channel, ChannelEvent,
-        CollectProposalWithSigs, Execute, GetPendingTxn, GrantProposal,
+        access_local, channel_event_stream::ChannelEventStream, AccessingResource, ApplyPendingTxn,
+        CancelPendingTxn, Channel, ChannelEvent, CollectProposalWithSigs, Execute, GetPendingTxn,
+        GrantProposal,
     },
     utils::contract::{
         channel_challenge_name, channel_close_name, channel_resolve_name, parse_channel_event,
@@ -441,36 +441,41 @@ impl Handler<GetPendingTxn> for Channel {
     }
 }
 
-#[derive(Debug)]
-struct ApplyTravelTxn {
-    pub txn: Transaction,
-    pub txn_info: TransactionInfo,
-    pub version: u64,
-    pub events: Vec<ContractEvent>,
+#[derive(Debug, Clone)]
+pub(crate) struct WatchAndApplyTravelTxn {
+    pub sender: AccountAddress,
+    pub seq_number: u64,
 }
-
-impl Message for ApplyTravelTxn {
-    type Result = Result<()>;
+impl Message for WatchAndApplyTravelTxn {
+    type Result = Result<u64>;
 }
 
 #[async_trait]
-impl Handler<ApplyTravelTxn> for Channel {
+impl Handler<WatchAndApplyTravelTxn> for Channel {
     async fn handle(
         &mut self,
-        message: ApplyTravelTxn,
+        message: WatchAndApplyTravelTxn,
         ctx: &mut ActorHandlerContext,
-    ) -> <ApplyTravelTxn as Message>::Result {
-        trace!("{} handle {:?}", ctx.id(), &message);
-
-        let ApplyTravelTxn {
-            txn,
-            txn_info,
+    ) -> <WatchAndApplyTravelTxn as Message>::Result {
+        debug!("{} handle msg {:?}", ctx.id(), &message);
+        let WatchAndApplyTravelTxn { sender, seq_number } = message;
+        let TransactionWithProof {
             version,
+            transaction,
             events,
-            ..
-        } = message;
-        let gas_used = txn_info.gas_used();
-        let is_solo = match txn.as_signed_user_txn()?.payload() {
+            proof,
+        } = watch_transaction(self.chain_client.clone(), sender, seq_number).await?;
+
+        let gas_used = proof.transaction_info().gas_used();
+        debug!(
+            "channel travel txn {}-{} gas used: {}",
+            sender, seq_number, gas_used
+        );
+
+        let txn_info = proof.transaction_info().clone();
+        let events = events.unwrap_or_default();
+
+        let is_solo = match transaction.as_signed_user_txn()?.payload() {
             TransactionPayload::Channel(ctp) => !ctp.is_authorized(),
             _ => bail!("invalid channel travel txn"),
         };
@@ -478,7 +483,7 @@ impl Handler<ApplyTravelTxn> for Channel {
             let _ = self
                 .handle(
                     ApplySoloTxn {
-                        txn,
+                        txn: transaction,
                         txn_info,
                         version,
                         events,
@@ -490,7 +495,7 @@ impl Handler<ApplyTravelTxn> for Channel {
             let _ = self
                 .handle(
                     ApplyCoSignedTxn {
-                        txn,
+                        txn: transaction,
                         txn_info,
                         version,
                         events,
@@ -499,10 +504,20 @@ impl Handler<ApplyTravelTxn> for Channel {
                 )
                 .await?;
         }
-        debug!("channel travel txn gas used: {}", gas_used);
 
-        Ok(())
+        Ok(gas_used)
     }
+}
+
+#[derive(Debug)]
+struct ApplyCoSignedTxn {
+    pub txn: Transaction,
+    pub txn_info: TransactionInfo,
+    pub version: u64,
+    pub events: Vec<ContractEvent>,
+}
+impl Message for ApplyCoSignedTxn {
+    type Result = Result<u64>;
 }
 
 #[async_trait]
@@ -634,6 +649,18 @@ impl Handler<ApplyCoSignedTxn> for Channel {
 
         Ok(gas_used)
     }
+}
+
+#[derive(Debug)]
+struct ApplySoloTxn {
+    pub txn: Transaction,
+    pub txn_info: TransactionInfo,
+    pub version: u64,
+    pub events: Vec<ContractEvent>,
+}
+
+impl Message for ApplySoloTxn {
+    type Result = Result<u64>;
 }
 
 #[async_trait]
@@ -978,51 +1005,6 @@ impl Handler<ChannelStageChange> for Channel {
         }
 
         Ok(())
-    }
-}
-
-#[derive(Debug, Clone)]
-struct WatchAndApplyTravelTxn {
-    sender: AccountAddress,
-    seq_number: u64,
-}
-impl Message for WatchAndApplyTravelTxn {
-    type Result = Result<u64>;
-}
-
-#[async_trait]
-impl Handler<WatchAndApplyTravelTxn> for Channel {
-    async fn handle(
-        &mut self,
-        message: WatchAndApplyTravelTxn,
-        ctx: &mut ActorHandlerContext,
-    ) -> <WatchAndApplyTravelTxn as Message>::Result {
-        debug!("{} handle msg {:?}", ctx.id(), &message);
-        let WatchAndApplyTravelTxn { sender, seq_number } = message;
-        let TransactionWithProof {
-            version,
-            transaction,
-            events,
-            proof,
-        } = watch_transaction(self.chain_client.clone(), sender, seq_number).await?;
-        let gas_used = proof.transaction_info().gas_used();
-
-        let next_action = ApplyTravelTxn {
-            txn: transaction,
-            txn_info: proof.transaction_info().clone(),
-            events: events.unwrap_or_default(),
-            version,
-        };
-        let result = self.handle(next_action, ctx).await;
-
-        if let Err(e) = &result {
-            error!(
-                "fail to apply travel txn,  {}-{}, error: {:?}",
-                sender, seq_number, e
-            );
-        }
-
-        result.map(|_| gas_used)
     }
 }
 
