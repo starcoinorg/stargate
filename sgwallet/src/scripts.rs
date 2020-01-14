@@ -73,7 +73,7 @@ impl PackageRegistry {
         let open_script = compiler.compile_script(open_script_source)?;
         let close_script_source = get_file_contents("close.mvir")?;
         let close_script = compiler.compile_script(close_script_source)?;
-        info!("{:?}", SCRIPTS_DIR.dirs());
+        debug!("{:?}", SCRIPTS_DIR.dirs());
         for dir in SCRIPTS_DIR.dirs() {
             let package_name = dir.path().to_str().unwrap();
             let script_files = dir

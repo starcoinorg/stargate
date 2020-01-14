@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate lazy_static;
+
 pub mod message_processor;
 
 use anyhow::{bail, ensure, Result};
@@ -8,6 +11,7 @@ use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::channel::oneshot;
 use futures::compat::Stream01CompatExt;
 use futures::stream::StreamExt;
+use graphdb::storage::{OffSetSchema, Storage};
 use graphdb::{edge::Edge, graph_store::GraphStore, vertex::Vertex};
 use libra_crypto::hash::CryptoHash;
 use libra_crypto::{
@@ -29,11 +33,16 @@ use sgwallet::wallet::{Wallet, WalletHandle};
 use sgwallet::{get_channel_events, ChannelChangeEvent};
 use stats::{DirectedChannel, PaymentInfo, Stats};
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 use std::{
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::runtime::Handle;
+
+lazy_static! {
+    static ref OFFSET_KEY: String = "Offset".to_string();
+}
 
 #[async_trait]
 pub trait Router: Send + Sync {
@@ -66,6 +75,7 @@ struct RouterInner {
     wallet: Arc<WalletHandle>,
     message_processor: MessageProcessor<RouterNetworkMessage>,
     stats_mgr: Arc<Stats>,
+    storage: Option<Arc<Storage>>,
 }
 
 enum RouterMessage {
@@ -84,17 +94,33 @@ impl TableRouter {
         network_sender: UnboundedSender<(AccountAddress, RouterNetworkMessage)>,
         network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
         stats_mgr: Arc<Stats>,
+        path: Option<&Path>,
     ) -> Self {
         let (sender, receiver) = futures::channel::mpsc::unbounded();
         let (control_sender, control_receiver) = futures::channel::mpsc::unbounded();
         let message_processor = MessageProcessor::new();
 
+        let storage: Option<Arc<Storage>>;
+        let graph_store: GraphStore;
+        match path {
+            Some(p) => {
+                let storage_arc = Arc::new(Storage::new(p));
+                graph_store = GraphStore::new(true, Some(storage_arc.clone())).unwrap();
+                storage = Some(storage_arc);
+            }
+            None => {
+                storage = None;
+                graph_store = GraphStore::new(false, None).unwrap();
+            }
+        }
+
         let inner = RouterInner {
             wallet,
             network_sender,
             message_processor,
-            graph_store: GraphStore::new(false, None).unwrap(),
             stats_mgr: stats_mgr.clone(),
+            storage,
+            graph_store,
         };
         Self {
             chain_client,
@@ -180,10 +206,27 @@ impl RouterInner {
         mut control_receiver: UnboundedReceiver<Event>,
         mut command_receiver: UnboundedReceiver<RouterMessage>,
         mut network_receiver: UnboundedReceiver<(AccountAddress, RouterNetworkMessage)>,
-    ) {
+    ) -> Result<()> {
         let client = chain_client.clone();
 
-        let stream = get_channel_events(client, 0, 100).fuse();
+        let mut start_number = 0;
+        let offset: Option<u64>;
+        match inner.storage.as_ref() {
+            Some(s) => {
+                offset = s.get::<OffSetSchema>(&OFFSET_KEY)?;
+            }
+            None => {
+                offset = None;
+            }
+        }
+
+        match offset {
+            Some(t) => {
+                start_number = t;
+            }
+            None => {}
+        }
+        let stream = get_channel_events(client, start_number, 100).fuse();
         let mut stream = Box::pin(stream);
 
         loop {
@@ -208,6 +251,7 @@ impl RouterInner {
             }
         }
         drop(stream);
+        Ok(())
     }
 
     async fn handle_router_network_msg(
@@ -345,7 +389,7 @@ impl RouterInner {
         }
     }
 
-    async fn handle_channel_stream(&self, _number: u64, event: ChannelChangeEvent) -> Result<()> {
+    async fn handle_channel_stream(&self, number: u64, event: ChannelChangeEvent) -> Result<()> {
         match event {
             ChannelChangeEvent::Opened {
                 channel_address,
@@ -371,6 +415,12 @@ impl RouterInner {
                 let edge = generate_edge(channel_address, balances)?;
                 self.graph_store.remove_edge(&edge)?;
             }
+        }
+        match self.storage.as_ref() {
+            Some(s) => {
+                s.put::<OffSetSchema>(&OFFSET_KEY, &number)?;
+            }
+            None => {}
         }
         Ok(())
     }
@@ -538,6 +588,7 @@ fn router_test() {
         rtx1,
         rrx1,
         Arc::new(Stats::new(executor.clone())),
+        None,
     );
     router1.start().unwrap();
 
@@ -551,6 +602,7 @@ fn router_test() {
         rtx2,
         rrx2,
         Arc::new(Stats::new(executor.clone())),
+        None,
     );
     router2.start().unwrap();
 
@@ -564,6 +616,7 @@ fn router_test() {
         rtx3,
         rrx3,
         Arc::new(Stats::new(executor.clone())),
+        None,
     );
     router3.start().unwrap();
 
@@ -577,6 +630,7 @@ fn router_test() {
         rtx4,
         rrx4,
         Arc::new(Stats::new(executor.clone())),
+        None,
     );
     router4.start().unwrap();
 
@@ -590,6 +644,7 @@ fn router_test() {
         rtx5,
         rrx5,
         Arc::new(Stats::new(executor.clone())),
+        None,
     );
     router5.start().unwrap();
 

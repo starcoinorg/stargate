@@ -441,6 +441,7 @@ pub struct ExecuteScriptRequest {
     pub remote_addr: AccountAddress,
     pub package_name: String,
     pub script_name: String,
+    pub force_execute: bool,
     pub args: Vec<TransactionArgument>,
 }
 
@@ -449,12 +450,14 @@ impl ExecuteScriptRequest {
         remote_addr: AccountAddress,
         package_name: String,
         script_name: String,
+        force_execute: bool,
         args: Vec<TransactionArgument>,
     ) -> Self {
         Self {
             remote_addr,
             package_name,
             script_name,
+            force_execute,
             args,
         }
     }
@@ -468,6 +471,7 @@ impl TryFrom<crate::proto::node::ExecuteScriptRequest> for ExecuteScriptRequest 
             remote_addr: value.remote_addr.try_into()?,
             package_name: value.package_name,
             script_name: value.script_name,
+            force_execute: value.force_execute,
             args: value
                 .args
                 .into_iter()
@@ -483,6 +487,7 @@ impl From<ExecuteScriptRequest> for crate::proto::node::ExecuteScriptRequest {
             remote_addr: value.remote_addr.into(),
             package_name: value.package_name,
             script_name: value.script_name,
+            force_execute: value.force_execute,
             args: value.args.into_iter().map(Into::into).collect(),
         }
     }

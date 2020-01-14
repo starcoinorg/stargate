@@ -73,10 +73,6 @@ impl ChannelStm {
         channel_address: AccountAddress,
         account_address: AccountAddress,
         participant_addresses: BTreeSet<AccountAddress>,
-        participant_keys: BTreeMap<AccountAddress, Ed25519PublicKey>,
-        channel_state: ChannelState,
-        witness: Witness,
-
         keypair: Arc<KeyPair<Ed25519PrivateKey, Ed25519PublicKey>>,
         script_registry: Arc<PackageRegistry>,
         chain_client: Arc<dyn ChainClient>,
@@ -85,12 +81,13 @@ impl ChannelStm {
             channel_address,
             account_address,
             participant_addresses,
-            participant_keys,
-            channel_state,
-            witness,
             keypair,
             script_registry,
             chain_client,
+
+            channel_state: ChannelState::empty(channel_address),
+            witness: Witness::default(),
+            participant_keys: BTreeMap::new(),
         }
     }
     fn get_local<T>(&self, access_path: &AccessPath) -> Result<Option<T>>
@@ -230,9 +227,7 @@ impl ChannelStm {
         );
 
         if pending_txn.get_signature(&sigs.address).is_none() {
-            let (payload_body, _) =
-                self.build_and_sign_channel_txn_payload_body(&proposal.channel_txn)?;
-            self.verify_txn_sigs(&payload_body, pending_txn.output(), &sigs)?;
+            self.verify_txn_sigs(&pending_txn, &sigs)?;
             pending_txn.add_signature(sigs);
 
             match proposal_lifecycle {
@@ -546,6 +541,12 @@ impl ChannelStm {
         };
         let witness_data = WitnessData::new(self.channel_sequence_number() + 1, ws);
         let witness_data_hash = CryptoHash::hash(&witness_data);
+        debug!(
+            "{} - generate witness hash {}, channel_sequence_number: {}",
+            self.account_address,
+            &witness_data_hash,
+            self.channel_sequence_number() + 1
+        );
         let witness_data_signature = self.keypair.private_key.sign_message(&witness_data_hash);
 
         let travel_output_witness_signature = if output.is_travel_txn() {
@@ -604,25 +605,38 @@ impl ChannelStm {
 
     fn verify_txn_sigs(
         &self,
-        payload_body: &ChannelTransactionPayloadBody,
-        output: &TransactionOutput,
+        pending_txn: &PendingTransaction,
         channel_txn_sigs: &ChannelTransactionSigs,
     ) -> Result<()> {
+        let (payload_body, _) =
+            self.build_and_sign_channel_txn_payload_body(&pending_txn.proposal().channel_txn)?;
+
         channel_txn_sigs.public_key.verify_signature(
-            &CryptoHash::hash(payload_body),
+            &CryptoHash::hash(&payload_body),
             &channel_txn_sigs.channel_payload_signature,
         )?;
 
+        let output = pending_txn.output();
         let ws = if output.is_travel_txn() {
             WriteSet::default()
         } else {
             output.write_set().clone()
         };
         let witness_data = WitnessData::new(self.channel_sequence_number() + 1, ws);
-
+        let witness_data_hash = CryptoHash::hash(&witness_data);
+        debug!(
+            "{} - verify witness: local hash {}, channel_sequence_number: {}, expected hash: {}",
+            self.account_address,
+            &witness_data_hash,
+            self.channel_sequence_number() + 1,
+            &channel_txn_sigs.witness_data_hash
+        );
         ensure!(
-            &CryptoHash::hash(&witness_data) == &channel_txn_sigs.witness_data_hash,
-            "witness hash mismatched"
+            &witness_data_hash == &channel_txn_sigs.witness_data_hash,
+            "next witness hash mismatched, local is {}, expected {}, proposal: {:?}",
+            &witness_data_hash,
+            &channel_txn_sigs.witness_data_hash,
+            &pending_txn.proposal(),
         );
         channel_txn_sigs.public_key.verify_signature(
             &channel_txn_sigs.witness_data_hash,

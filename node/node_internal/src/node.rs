@@ -31,6 +31,7 @@ use crate::message_processor::{MessageFuture, MessageProcessor};
 
 use crate::invoice::{Invoice, InvoiceManager};
 use crate::node_command::NodeMessage;
+use futures_01::sink::Sink;
 use futures_01::sync::{
     mpsc::{UnboundedReceiver, UnboundedSender},
     oneshot,
@@ -508,6 +509,7 @@ impl Node {
         receiver_address: AccountAddress,
         package_name: String,
         script_name: String,
+        force_execute: bool,
         transaction_args: Vec<TransactionArgument>,
     ) -> Result<futures::channel::oneshot::Receiver<Result<ExecuteScriptResponse>>> {
         let (resp_sender, resp_receiver) = futures::channel::oneshot::channel();
@@ -517,6 +519,7 @@ impl Node {
             receiver_address,
             package_name,
             script_name,
+            force_execute,
             transaction_args,
             responder,
         })?;
@@ -788,6 +791,7 @@ impl NodeInner {
                 receiver_address,
                 package_name,
                 script_name,
+                force_execute,
                 transaction_args,
                 responder,
             } => {
@@ -796,6 +800,7 @@ impl NodeInner {
                         receiver_address,
                         package_name,
                         script_name,
+                        force_execute,
                         transaction_args,
                         responder,
                     )
@@ -1319,6 +1324,7 @@ impl NodeInner {
         receiver_address: AccountAddress,
         package_name: String,
         script_name: String,
+        force_execute: bool,
         transaction_args: Vec<TransactionArgument>,
         responder: futures::channel::oneshot::Sender<Result<MessageFuture<u64>>>,
     ) {
@@ -1333,12 +1339,26 @@ impl NodeInner {
             .await
         {
             Ok(script_transaction) => {
-                let f = self.send_channel_request(
-                    receiver_address,
-                    script_transaction,
-                    MessageType::ChannelTransactionRequest,
-                );
-                respond_with(responder, f);
+                if force_execute == false {
+                    let f = self.send_channel_request(
+                        receiver_address,
+                        script_transaction,
+                        MessageType::ChannelTransactionRequest,
+                    );
+                    respond_with(responder, f);
+                } else {
+                    match self.wallet.force_travel_txn(receiver_address).await {
+                        Ok(gas) => {
+                            let (tx, rx) = futures_01::sync::mpsc::channel(1);
+                            let message_future = MessageFuture::new(rx);
+                            respond_with(responder, Ok(message_future));
+                            tx.send(Ok(gas)).compat().await.unwrap();
+                        }
+                        Err(e) => {
+                            respond_with(responder, Err(e));
+                        }
+                    }
+                }
             }
             Err(e) => {
                 respond_with(responder, Err(e));
