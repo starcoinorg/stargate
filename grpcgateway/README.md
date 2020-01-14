@@ -21,7 +21,6 @@ Stargate项目grpc转rest API的实现
 
 2. 生成gateway本身和依赖的proto文件对应的go文件。
     ```
-       建立proto文件目录：mkdir proto
        运行cmd/get.sh 获取proto文件
        运行cmd/gen_go.sh 生成go文件，相应修改--go_out=plugins=grpc,paths=source_relative:{{MODIFY_PATH}}
     ```
