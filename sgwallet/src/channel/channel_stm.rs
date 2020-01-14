@@ -164,6 +164,11 @@ impl ChannelStm {
         mut participant_keys: BTreeMap<AccountAddress, Ed25519PublicKey>,
     ) {
         if let Some(cs) = channel_state {
+            info!(
+                "channel {} - sync with chain in version {}",
+                self.channel_address,
+                cs.version()
+            );
             self.channel_state = cs;
         }
         self.witness = witness;
@@ -522,6 +527,12 @@ impl ChannelStm {
                 vm::gas_schedule::MAXIMUM_NUMBER_OF_GAS_UNITS.get()
             );
         }
+
+        debug!(
+            "{} - execute proposal output: {:?}",
+            self.channel_address,
+            &output.write_set()
+        );
 
         Ok((payload_body, payload_body_signature, output))
     }
