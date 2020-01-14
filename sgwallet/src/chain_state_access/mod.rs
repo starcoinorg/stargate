@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use coerce_rt::actor::{
     context::ActorHandlerContext,
     message::{Handler, Message},
-    Actor,
+    Actor, GetActorRef,
 };
 use futures::channel::oneshot;
 use libra_logger::prelude::*;
@@ -162,12 +162,8 @@ impl Handler<AccessState> for ChainStateAccessor {
                     self.add_to_waiting_list(key, data_path, tx);
                 } else {
                     let (cancel_tx, cancel_rx) = oneshot::channel();
-                    let my_actor_id = ctx.actor_id().clone();
-                    let mut myself = ctx
-                        .actor_context_mut()
-                        .get_actor::<Self>(my_actor_id.clone())
-                        .await
-                        .unwrap();
+                    let my_actor_id = ctx.id().clone();
+                    let mut myself = self.get_ref(ctx);
                     let remote_accessing = ChainStateAccessor::remote_access(
                         self.chain_client.clone(),
                         account,

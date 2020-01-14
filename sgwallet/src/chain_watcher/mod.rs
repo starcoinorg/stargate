@@ -19,9 +19,10 @@ use coerce_rt::{
     actor::{
         context::{ActorContext, ActorHandlerContext},
         message::Message,
-        ActorRef,
+        ActorRef, GetActorRef,
     },
 };
+
 use futures::future::{abortable, AbortHandle};
 use std::{any::type_name, time::Duration};
 use tokio::time::interval;
@@ -130,7 +131,7 @@ impl ChainWatcher {
     }
 
     pub async fn start(self, mut context: ActorContext) -> Result<ChainWatcherHandle> {
-        let actor_ref = context.new_actor(self).await?;
+        let actor_ref = context.new_tracked_actor(self).await?;
         Ok(ChainWatcherHandle { actor_ref })
     }
 
@@ -144,13 +145,7 @@ impl ChainWatcher {
 #[async_trait]
 impl actor::Actor for ChainWatcher {
     async fn started(&mut self, ctx: &mut ActorHandlerContext) {
-        // TODO: spawn txn stream
-        let my_actor_id = ctx.actor_id().clone();
-        let mut myself = ctx
-            .actor_context_mut()
-            .get_actor::<Self>(my_actor_id.clone())
-            .await
-            .unwrap();
+        let mut myself = self.get_ref(ctx);
         let mut myself_clone = myself.clone();
 
         let mut cleanup_interval = interval(Duration::from_secs(2)).fuse();
@@ -181,20 +176,12 @@ impl actor::Actor for ChainWatcher {
         self.sub_tasks.push(abort_handle);
         tokio::task::spawn(f);
 
-        info!(
-            "{}, {} started",
-            type_name::<ChainWatcher>(),
-            ctx.actor_id()
-        );
+        info!("{}, {} started", type_name::<ChainWatcher>(), ctx.id());
     }
 
     async fn stopped(&mut self, ctx: &mut ActorHandlerContext) {
         self.abort_sub_tasks();
-        info!(
-            "{}, {} stopped",
-            type_name::<ChainWatcher>(),
-            ctx.actor_id()
-        );
+        info!("{}, {} stopped", type_name::<ChainWatcher>(), ctx.id());
     }
 }
 

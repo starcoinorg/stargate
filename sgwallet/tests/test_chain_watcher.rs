@@ -39,7 +39,9 @@ fn run_test_chain_watcher(chain_client: Arc<dyn ChainClient>) -> Result<()> {
             .expect("spawn chain watcher should ok");
 
         let chain_state_accessor = ChainStateAccessor::new(chain_client.clone());
-        let mut actor_ref = actor_context.new_actor(chain_state_accessor).await?;
+        let mut actor_ref = actor_context
+            .new_tracked_actor(chain_state_accessor)
+            .await?;
 
         let mut receiver = chain_watcher_handle
             .add_interest(Box::new(|_txn| true))

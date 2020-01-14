@@ -16,10 +16,9 @@ use async_trait::async_trait;
 use coerce_rt::actor::{
     context::{ActorHandlerContext, ActorStatus},
     message::{Handler, Message},
-    Actor, ActorRef,
+    Actor, ActorRef, GetActorRef,
 };
-use futures::future::abortable;
-use futures::StreamExt;
+use futures::{future::abortable, StreamExt};
 use libra_crypto::hash::CryptoHash;
 use libra_logger::prelude::*;
 use libra_types::{
@@ -162,7 +161,7 @@ impl Actor for Channel {
                 c,
                 10,
             );
-            let myself = Self::actor_ref(ctx).await;
+            let myself = self.get_ref(ctx);
             let (sub_task, abort_handle) =
                 abortable(channel_event_loop(channel_event_stream, myself));
             self.sub_tasks.push(abort_handle);
@@ -197,7 +196,7 @@ impl Handler<Execute> for Channel {
         message: Execute,
         ctx: &mut ActorHandlerContext,
     ) -> <Execute as Message>::Result {
-        trace!("{} handle {:?}", ctx.actor_id(), &message);
+        trace!("{} handle {:?}", ctx.id(), &message);
         let Execute { channel_op, args } = message;
         let proposal = self.stm.generate_proposal(channel_op, args)?;
         let mut pending_txn = self.pending_txn();
@@ -340,7 +339,7 @@ impl Handler<CancelPendingTxn> for Channel {
         message: CancelPendingTxn,
         ctx: &mut ActorHandlerContext,
     ) -> <CancelPendingTxn as Message>::Result {
-        trace!("{} handle {:?}", ctx.actor_id(), &message);
+        trace!("{} handle {:?}", ctx.id(), &message);
         let CancelPendingTxn { channel_txn_id } = message;
 
         let pending_txn = self.pending_txn();
@@ -371,7 +370,7 @@ impl Handler<ApplyPendingTxn> for Channel {
         message: ApplyPendingTxn,
         ctx: &mut ActorHandlerContext,
     ) -> <ApplyPendingTxn as Message>::Result {
-        trace!("{} handle {:?}", ctx.actor_id(), &message);
+        trace!("{} handle {:?}", ctx.id(), &message);
 
         let pending_txn = self.pending_txn();
         ensure!(pending_txn.is_some(), "should have txn to apply");
@@ -461,7 +460,7 @@ impl Handler<ApplyTravelTxn> for Channel {
         message: ApplyTravelTxn,
         ctx: &mut ActorHandlerContext,
     ) -> <ApplyTravelTxn as Message>::Result {
-        trace!("{} handle {:?}", ctx.actor_id(), &message);
+        trace!("{} handle {:?}", ctx.id(), &message);
 
         let ApplyTravelTxn {
             txn,
@@ -513,7 +512,7 @@ impl Handler<ApplyCoSignedTxn> for Channel {
         message: ApplyCoSignedTxn,
         ctx: &mut ActorHandlerContext,
     ) -> <ApplyCoSignedTxn as Message>::Result {
-        trace!("{} handle {:?}", ctx.actor_id(), &message);
+        trace!("{} handle {:?}", ctx.id(), &message);
 
         let ApplyCoSignedTxn {
             txn,
@@ -618,7 +617,7 @@ impl Handler<ApplyCoSignedTxn> for Channel {
                     channel_resource.event_handle().count(),
                     10,
                 );
-                let myself = Self::actor_ref(ctx).await;
+                let myself = self.get_ref(ctx);
                 let (task, abort_handle) =
                     abortable(channel_event_loop(channel_event_stream, myself));
                 tokio::task::spawn(task);
@@ -644,7 +643,7 @@ impl Handler<ApplySoloTxn> for Channel {
         message: ApplySoloTxn,
         ctx: &mut ActorHandlerContext,
     ) -> <ApplySoloTxn as Message>::Result {
-        trace!("{} handle {:?}", ctx.actor_id(), &message);
+        trace!("{} handle {:?}", ctx.id(), &message);
 
         let ApplySoloTxn {
             txn,
@@ -818,7 +817,7 @@ impl Handler<ChannelLockTimeout> for Channel {
         message: ChannelLockTimeout,
         ctx: &mut ActorHandlerContext,
     ) -> <ChannelLockTimeout as Message>::Result {
-        trace!("{} handle {:?}", ctx.actor_id(), &message);
+        trace!("{} handle {:?}", ctx.id(), &message);
         let ChannelLockTimeout {
             block_height,
             time_lock,
@@ -884,7 +883,7 @@ async fn channel_event_loop<A>(
             Err(e) => error!("get channel state change error, {}", e),
             Ok(t) => match actor_ref.send(t).await {
                 Err(_) => {
-                    info!("actor {:?} is gone, stop now", &actor_ref);
+                    info!("actor {} is gone, stop now", &actor_ref);
                     break;
                 }
                 Ok(Err(e)) => error!("fail to handle channel stage change event, {:?}", e),
@@ -998,7 +997,7 @@ impl Handler<WatchAndApplyTravelTxn> for Channel {
         message: WatchAndApplyTravelTxn,
         ctx: &mut ActorHandlerContext,
     ) -> <WatchAndApplyTravelTxn as Message>::Result {
-        debug!("{} handle msg {:?}", ctx.actor_id(), &message);
+        debug!("{} handle msg {:?}", ctx.id(), &message);
         let WatchAndApplyTravelTxn { sender, seq_number } = message;
         let TransactionWithProof {
             version,
@@ -1049,7 +1048,7 @@ impl Channel {
             .await?
             .ok_or(format_err!("expect solo channel txn not applying"))?;
 
-        let mut actor_ref = Self::actor_ref(ctx).await;
+        let mut actor_ref = self.get_ref(ctx);
         // TODO: what should we do if watch_and_apply_travel_txn failed?
         actor_ref
             .notify(WatchAndApplyTravelTxn { sender, seq_number })
@@ -1161,16 +1160,6 @@ impl Channel {
         Ok(())
     }
 
-    /// helper method to get self actor ref from `ctx`
-    async fn actor_ref(ctx: &mut ActorHandlerContext) -> ActorRef<Self> {
-        let self_id = ctx.actor_id().clone();
-        let self_ref = ctx
-            .actor_context_mut()
-            .get_actor::<Self>(self_id)
-            .await
-            .expect("get self actor ref should be ok");
-        self_ref
-    }
     async fn watch_channel_lock_timeout(&self, ctx: &mut ActorHandlerContext) -> Result<()> {
         let lock_by = self
             .stm
@@ -1183,7 +1172,7 @@ impl Channel {
             .chain_txn_watcher
             .add_interest(Box::new(move |txn| txn.block_height > time_lock))
             .await?;
-        let mut self_ref = Self::actor_ref(ctx).await;
+        let mut self_ref = self.get_ref(ctx);
 
         tokio::task::spawn(async move {
             while let Some(txn_info) = timeout_receiver.next().await {

@@ -14,7 +14,7 @@ use chrono::Utc;
 use coerce_rt::actor::{
     context::{ActorContext, ActorHandlerContext, ActorStatus},
     message::{Handler, Message},
-    Actor, ActorRef,
+    Actor, ActorRef, GetActorRef,
 };
 use lazy_static::lazy_static;
 use libra_config::config::VMConfig;
@@ -722,7 +722,7 @@ impl WalletHandle {
 
     pub async fn stop(&self) -> Result<()> {
         if let Err(_) = self.actor_ref.clone().stop().await {
-            warn!("actor {:?} already stopped", &self.actor_ref);
+            warn!("actor {} already stopped", &self.actor_ref);
         }
         self.actor_context.terminate().await;
         Ok(())
@@ -775,6 +775,7 @@ pub struct Wallet {
     channels: HashMap<AccountAddress, Arc<ChannelHandle>>,
     sgdb: Arc<SgStorage>,
     chain_txn_handle: Option<ChainWatcherHandle>,
+    actor_context: Option<ActorContext>,
 }
 
 impl Wallet {
@@ -810,16 +811,18 @@ impl Wallet {
             channels: HashMap::new(),
             sgdb: sgdb.clone(),
             chain_txn_handle: None,
+            actor_context: None,
         };
         Ok(wallet)
     }
 
-    pub async fn start(self) -> Result<WalletHandle> {
+    pub async fn start(mut self) -> Result<WalletHandle> {
         // TODO: should keep actor context
         let mut actor_context = ActorContext::new();
         let shared = self.inner.clone();
         let sgdb = self.sgdb.clone();
-        let actor_ref = actor_context.new_actor(self).await?;
+        self.actor_context = Some(actor_context.clone());
+        let actor_ref = actor_context.new_tracked_actor(self).await?;
         Ok(WalletHandle {
             actor_ref,
             shared,
@@ -848,7 +851,7 @@ impl Actor for Wallet {
         let chain_txn_watcher =
             ChainWatcher::new(self.inner.client.clone(), account_state.version(), 16);
         let chain_txn_handle = chain_txn_watcher
-            .start(ctx.actor_context_mut().clone())
+            .start(self.actor_context.as_ref().unwrap().clone())
             .await
             .expect("start chain watcher should ok");
         self.chain_txn_handle = Some(chain_txn_handle);
@@ -1136,21 +1139,13 @@ impl Wallet {
         self.channels.contains_key(channel_address)
     }
 
-    async fn actor_ref(ctx: &mut ActorHandlerContext) -> ActorRef<Self> {
-        let actor_id = ctx.actor_id().clone();
-        ctx.actor_context_mut()
-            .get_actor::<Self>(actor_id)
-            .await
-            .expect("get self actor ref should be ok")
-    }
-
     async fn spawn_channel(
         &mut self,
         channel_address: AccountAddress,
         initial_participants: Option<BTreeSet<AccountAddress>>,
         ctx: &mut ActorHandlerContext,
     ) -> Result<()> {
-        let my_actor_ref = Self::actor_ref(ctx).await;
+        let my_actor_ref = self.get_ref(ctx);
 
         let channel = Channel::load(
             channel_address,
@@ -1164,7 +1159,9 @@ impl Wallet {
             self.inner.client.clone(),
         );
 
-        let channel_handle = channel.start(ctx.actor_context_mut().clone()).await?;
+        let channel_handle = channel
+            .start(self.actor_context.as_ref().unwrap().clone())
+            .await?;
 
         // TODO: should wait signal of channel saying it's started
         self.channels

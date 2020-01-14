@@ -102,7 +102,7 @@ impl Channel {
         let participant_addresses = self.participant_addresses().clone();
 
         let actor_ref = context
-            .new_actor(self)
+            .new_tracked_actor(self)
             .await
             .expect("actor context is closed");
 
