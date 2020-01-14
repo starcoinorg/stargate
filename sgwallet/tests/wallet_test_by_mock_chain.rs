@@ -82,7 +82,11 @@ fn run_test_wallet_install_package() -> Result<()> {
 }
 
 fn run_test_deploy_custom_module_by_mock_client() -> Result<()> {
-    run_with_mock_client(|chain_client| test_deploy_custom_module(chain_client))
+    run_with_mock_client(|chain_client| {
+        common::with_wallet(chain_client, |rt, alice, bob| {
+            rt.block_on(test_deploy_custom_module(alice, bob))
+        })
+    })
 }
 
 fn run_test_gobang() -> Result<()> {

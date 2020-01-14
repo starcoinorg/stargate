@@ -32,9 +32,8 @@ use libra_types::{
     account_config::{coin_struct_tag, AccountResource},
     byte_array::ByteArray,
     channel::{
-        channel_mirror_struct_tag, channel_struct_tag, user_channels_struct_tag,
-        ChannelMirrorResource, ChannelParticipantAccountResource, ChannelResource,
-        UserChannelsResource,
+        channel_mirror_struct_tag, user_channels_struct_tag, ChannelMirrorResource,
+        ChannelParticipantAccountResource, UserChannelsResource,
     },
     language_storage::StructTag,
     libra_resource::{make_resource, LibraResource},
@@ -50,9 +49,7 @@ use sgconfig::config::WalletConfig;
 use sgstorage::{channel_db::ChannelDB, channel_store::ChannelStore, storage::SgStorage};
 use sgtypes::{
     account_resource_ext,
-    account_state::AccountState,
     applied_channel_txn::AppliedChannelTxn,
-    channel::ChannelState,
     channel_transaction::{
         ChannelOp, ChannelTransactionProposal, ChannelTransactionRequest,
         ChannelTransactionResponse,
@@ -87,6 +84,7 @@ pub struct WalletHandle {
     actor_ref: ActorRef<Wallet>,
     shared: Shared,
     sgdb: Arc<SgStorage>,
+    actor_context: ActorContext,
 }
 
 impl WalletHandle {
@@ -708,10 +706,25 @@ impl WalletHandle {
         self.actor_ref.clone().send(GetAllChannels).await?
     }
 
+    pub async fn stop_channel(&self, participant: AccountAddress) -> Result<()> {
+        self.actor_ref
+            .clone()
+            .send(StopChannel { participant })
+            .await??;
+        Ok(())
+    }
+
+    pub async fn start_channel(&self, participant: AccountAddress) -> Result<()> {
+        let (channel_address, ps) = generate_channel_address(participant, self.shared.account);
+        let _ = self.spawn_new_channel(channel_address, ps).await?;
+        Ok(())
+    }
+
     pub async fn stop(&self) -> Result<()> {
         if let Err(_) = self.actor_ref.clone().stop().await {
             warn!("actor {:?} already stopped", &self.actor_ref);
         }
+        self.actor_context.terminate().await;
         Ok(())
     }
 
@@ -811,6 +824,7 @@ impl Wallet {
             actor_ref,
             shared,
             sgdb,
+            actor_context,
         })
     }
 }
@@ -824,7 +838,8 @@ impl Actor for Wallet {
             .get_account_state(self.inner.account, None);
         if let Err(e) = account_state {
             error!("fail to get account state from chain, e: {}", e);
-            return ();
+            ctx.set_status(ActorStatus::Stopping);
+            return;
         }
         let account_state = account_state.unwrap();
 
@@ -844,19 +859,11 @@ impl Actor for Wallet {
             self.channel_enabled = true;
             let user_channels: UserChannelsResource =
                 make_resource(blob.as_slice()).expect("parse user channels should work");
-            let channels = self
-                .refresh_channels(user_channels, account_state.version())
-                .await;
-            match channels {
-                Ok(c) => {
-                    for (channel_address, (participants, channel_state)) in c.into_iter() {
-                        self.spawn_channel(channel_address, participants, channel_state, ctx)
-                            .await;
-                    }
-                }
-                Err(_e) => {
-                    error!("fail to get channel states from chain");
+            for channel_address in user_channels.channels() {
+                if let Err(e) = self.spawn_channel(channel_address.clone(), None, ctx).await {
+                    error!("fail to start channel {}, {}", channel_address, e);
                     ctx.set_status(ActorStatus::Stopping);
+                    break;
                 }
             }
         } else {
@@ -929,8 +936,8 @@ impl Handler<SpawnNewChannel> for Wallet {
             channel_address,
             participants,
         } = message;
-        self.spawn_channel(channel_address, participants, AccountState::new(), ctx)
-            .await;
+        self.spawn_channel(channel_address, Some(participants), ctx)
+            .await?;
         let channel = self.get_channel(&channel_address);
         channel
     }
@@ -1051,42 +1058,6 @@ impl Handler<ChannelNotifyEvent> for Wallet {
 }
 
 impl Wallet {
-    async fn refresh_channels(
-        &mut self,
-        user_channels: UserChannelsResource,
-        version: u64,
-    ) -> Result<HashMap<AccountAddress, (BTreeSet<AccountAddress>, AccountState)>> {
-        let mut channel_states = HashMap::new();
-        for channel_address in user_channels.channels().iter() {
-            let channel_account_state = self
-                .inner
-                .client
-                .get_account_state(channel_address.clone(), Some(version))?;
-
-            let channel_resource_blob = channel_account_state
-                .get_state(&DataPath::onchain_resource_path(channel_struct_tag()))
-                .expect(
-                    format!(
-                        "Channel resource should exists in channel {}",
-                        channel_address
-                    )
-                    .as_str(),
-                );
-            let channel_resource = ChannelResource::make_from(channel_resource_blob).unwrap();
-            let participants = channel_resource
-                .participants()
-                .iter()
-                .map(Clone::clone)
-                .collect::<BTreeSet<_>>();
-
-            channel_states.insert(
-                channel_address.clone(),
-                (participants, channel_account_state),
-            );
-        }
-        Ok(channel_states)
-    }
-
     fn get_channel(&self, participant: &AccountAddress) -> Result<Arc<ChannelHandle>> {
         let channel = match self.channels.get(&participant) {
             Some(channel) => Ok(channel.clone()),
@@ -1176,17 +1147,15 @@ impl Wallet {
     async fn spawn_channel(
         &mut self,
         channel_address: AccountAddress,
-        participants: BTreeSet<AccountAddress>,
-        channel_account_state: AccountState,
+        initial_participants: Option<BTreeSet<AccountAddress>>,
         ctx: &mut ActorHandlerContext,
-    ) {
+    ) -> Result<()> {
         let my_actor_ref = Self::actor_ref(ctx).await;
 
         let channel = Channel::load(
             channel_address,
             self.inner.account,
-            participants,
-            ChannelState::new(channel_address, channel_account_state),
+            initial_participants,
             self.get_channel_db(channel_address),
             self.chain_txn_handle.as_ref().unwrap().clone(),
             my_actor_ref,
@@ -1195,12 +1164,13 @@ impl Wallet {
             self.inner.client.clone(),
         );
 
-        let channel_handle = channel.start(ctx.actor_context_mut().clone()).await;
+        let channel_handle = channel.start(ctx.actor_context_mut().clone()).await?;
 
         // TODO: should wait signal of channel saying it's started
         self.channels
             .insert(channel_address, Arc::new(channel_handle));
         info!("Init new channel {:?}", channel_address);
+        Ok(())
     }
 
     #[inline]
