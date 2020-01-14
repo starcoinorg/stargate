@@ -64,6 +64,7 @@ pub fn gen_node(
         rtx1,
         rrx2,
         Arc::new(stats_mgr),
+        None,
     );
     router.start().unwrap();
 

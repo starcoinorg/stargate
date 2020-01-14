@@ -28,8 +28,8 @@
 			<div class="menu">
 <!--				<a href="javascript:;" onclick="restartgui()">重新开始</a>-->
 <!--				<a href="javascript:;" onclick="gb.back();" id="backChessman">悔棋</a>-->
-				<a href="javascript:;" onclick="restartGame()">重新开始</a>
-				<a href="javascript:;" onclick="" id="backChessman">悔棋</a>
+				<a href="javascript:;" onclick="quitGame()">退出游戏</a>
+				<a href="javascript:;" onclick="forceMove()" id="backChessman">对手超时</a>
 
 			</div>
 		</div>
@@ -111,6 +111,8 @@
 		document.getElementById("newgame").addEventListener("click", function() {
 		    srv = document.getElementById("srvAddrInput").value;
 			pl2addr = document.getElementById("plname2Input").value;
+			localStorage.srv=srv;
+			localStorage.pl2addr=pl2addr;
 			sendTxnNew(srv, formatAddr(pl2addr));
 		});
 		document.getElementById("joingame").addEventListener("click", function() {
@@ -202,10 +204,12 @@
 					pl2obj.removeAttribute("class", "curr");
 					if (c2d.player == 1) {
 						pl2obj.setAttribute("class", "curr");
+						document.getElementById("backChessman").disabled=true;
 					} else {
 						pl1obj.setAttribute("class", "curr");
+						document.getElementById("backChessman").disabled=false;
 					}
-					document.getElementById("backChessman").innerHTML="悔棋("+c2d.canBackTimes+")";
+					//document.getElementById("backChessman").innerHTML="悔棋("+c2d.canBackTimes+")";
 				} else {
 					var winname = c2d.winer == 1 ? opt.playAName : opt.playBName;
 					var str = "恭喜，【" + winname + "】赢了！"
@@ -231,6 +235,12 @@
 		});
 
 		//document.getElementById("openComputer").checked="checked";
+		if (localStorage.srv) {
+			document.getElementById("srvAddrInput").value = localStorage.srv;
+		}
+		if (localStorage.pl2addr) {
+			document.getElementById("plname2Input").value = localStorage.pl2addr;
+		}
 
 		//重新开始
 		function restartgui() {
@@ -250,13 +260,20 @@
 			sendTxnEnd(srv, formatAddr(pl2addr));
 		}
 
-		function restartGame() {
-			var serveraddr = srvAddrInput.value;
-			var plyer2addr = plname2Input.value;
-		    endGame();
+		function quitGame() {
+			endGame();
+			var str = "您已退出游戏，分数减少1分！";
+			alert(str);
 		    location.reload();
-		    document.getElementById("srvAddrInput").value = serveraddr;
-			document.getElementById("plname2Input").value = plyer2addr;
+		}
+
+		function forceMove() {
+			srv = document.getElementById("srvAddrInput").value;
+			pl2addr = document.getElementById("plname2Input").value;
+			sendTxnTimeout(srv, formatAddr(pl2addr));
+			var str = "对手超时，您将增加1分！";
+			alert(str);
+			location.reload();
 		}
 
 		function Str2Bytes(str) {
@@ -289,6 +306,7 @@
 				remote_addr: hexReceiver,
 				package_name: "scripts",
 				script_name: "new",
+				force_execute: false,
 				args: argsVec
 			};
 			$.ajax({
@@ -359,7 +377,8 @@
 			var para = {
 				remote_addr: hexReceiver,
 				package_name: "scripts",
-				script_name: "join"
+				script_name: "join",
+				force_execute: false
 			};
 			$.ajax({
 				url: testURL,
@@ -391,7 +410,8 @@
 			var para = {
 				remote_addr: hexReceiver,
 				package_name: "scripts",
-				script_name: "end"
+				script_name: "end",
+				force_execute: false
 			};
 			$.ajax({
 				url: testURL,
@@ -401,11 +421,6 @@
 				crossDomain: true,
 				success: function(data){
 					console.log(data);
-					var txn_exe_success = data.status;
-					if (txn_exe_success) {
-					} else {
-						// failed
-					}
 				},
 				error: function(err){
 					console.log("请求失败："+err);
@@ -413,6 +428,36 @@
 			});
 		}
 
+		function sendTxnTimeout(server, receiver) {
+			var testURL = server.concat("/node/execute_script");
+			var hexReceiver = Str2Bytes(receiver);
+			var arg1 = {
+				arg_type: "ADDRESS", 
+				arg_value: hexReceiver
+			};
+			var argsVec = new Array();
+			argsVec.push(arg1);
+			var para = {
+				remote_addr: hexReceiver,
+				package_name: "scripts",
+				script_name: "timeout",
+				force_execute: true,
+				args: argsVec
+			};
+			$.ajax({
+				url: testURL,
+				type: 'Post',
+				data: JSON.stringify(para),
+				dataType: "json",
+				crossDomain: true,
+				success: function(data){
+					console.log(data);
+				},
+				error: function(err){
+					console.log("请求失败："+err);
+				}
+			});
+		}
 	</script>
 
 </html>

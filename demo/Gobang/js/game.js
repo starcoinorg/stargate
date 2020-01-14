@@ -684,6 +684,7 @@
 				remote_addr: hexReceiver,
 				package_name: "scripts",
 				script_name: "play",
+				force_execute: false,
 				args: argsVec
 			};
             $.ajax({
@@ -756,7 +757,8 @@
 			var para = {
 				remote_addr: hexReceiver,
 				package_name: "scripts",
-				script_name: "end"
+				script_name: "end",
+				force_execute: false
 			};
 			$.ajax({
 				url: testURL,

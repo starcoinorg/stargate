@@ -23,6 +23,7 @@ use sg_config::config::{load_from, NodeConfig, WalletConfig};
 use sgchain::star_chain_client::StarChainClient;
 use sgwallet::wallet::*;
 use stats::Stats;
+use std::path::Path;
 use structopt::StructOpt;
 use tokio::runtime::{Handle, Runtime};
 
@@ -110,6 +111,7 @@ fn gen_node(
     timeout: u64,
     auto_approve: bool,
     router_type: &String,
+    path: Option<&Path>,
 ) -> Result<Node> {
     let wallet = Arc::new(wallet);
     info!("account resource is {:?}", wallet.account_resource());
@@ -129,6 +131,7 @@ fn gen_node(
             tx_router,
             rx_router,
             stats,
+            path,
         );
         router.start().unwrap();
         boxed_router = Box::new(router);
@@ -152,6 +155,7 @@ fn gen_node(
             wallet.clone(),
             stats,
             timeout,
+            path,
         );
         router.start().unwrap();
         boxed_router = Box::new(router);
@@ -189,6 +193,16 @@ fn main() {
 
     let wallet = create_wallet(keypair.clone(), &swarm.config.wallet).unwrap();
     let wallet = rt.block_on(start_wallet(wallet)).unwrap();
+
+    let path: Option<&Path>;
+    match &swarm.config.rpc_config.path {
+        Some(p) => {
+            path = Some(Path::new(p));
+        }
+        None => {
+            path = None;
+        }
+    };
     let mut node = gen_node(
         executor.clone(),
         wallet,
@@ -199,6 +213,7 @@ fn main() {
         swarm.config.rpc_config.timeout,
         swarm.config.rpc_config.auto_approve,
         &swarm.config.rpc_config.router_type,
+        path,
     )
     .unwrap();
 

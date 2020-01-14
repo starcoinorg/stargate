@@ -188,7 +188,8 @@ message ExecuteScriptRequest {
     bytes remote_addr = 1;
     string package_name = 2;
     string script_name = 3;
-    repeated types.TransactionArgument args = 4;
+    bool force_execute = 4;
+    repeated types.TransactionArgument args = 5;
 }
 
 message ExecuteScriptResponse {

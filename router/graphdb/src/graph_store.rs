@@ -11,7 +11,7 @@ use petgraph::Graph;
 use schemadb::ReadOptions;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::sync::Arc;
 
 pub struct GraphStore {
     graph: RefCell<Graph<Vertex, Edge, Undirected>>,
@@ -19,37 +19,27 @@ pub struct GraphStore {
     index_node_map: RefCell<HashMap<NodeIndex, Vertex>>,
     edge_index_map: RefCell<HashMap<Edge, EdgeIndex>>,
     persist_data: bool,
-    storage: Option<Storage>,
+    storage: Option<Arc<Storage>>,
 }
 
 unsafe impl Send for GraphStore {}
 unsafe impl Sync for GraphStore {}
 
 impl GraphStore {
-    pub fn new(persist_data: bool, path: Option<&Path>) -> Result<Self> {
-        if persist_data {
-            let storage = Storage::new(path.expect("should have path"));
-
-            let result = Self {
-                graph: RefCell::new(Graph::new_undirected()),
-                node_index_map: RefCell::new(HashMap::new()),
-                index_node_map: RefCell::new(HashMap::new()),
-                edge_index_map: RefCell::new(HashMap::new()),
-                persist_data,
-                storage: Some(storage),
-            };
-
-            result.recovery_data()?;
-            return Ok(result);
-        }
-        Ok(Self {
+    pub fn new(persist_data: bool, storage: Option<Arc<Storage>>) -> Result<Self> {
+        let result = Self {
             graph: RefCell::new(Graph::new_undirected()),
             node_index_map: RefCell::new(HashMap::new()),
             index_node_map: RefCell::new(HashMap::new()),
             edge_index_map: RefCell::new(HashMap::new()),
             persist_data,
-            storage: None,
-        })
+            storage,
+        };
+
+        if persist_data {
+            result.recovery_data()?;
+        }
+        Ok(result)
     }
 
     pub fn recovery_data(&self) -> Result<()> {
