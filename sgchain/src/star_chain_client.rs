@@ -210,10 +210,16 @@ pub trait ChainClient: Send + Sync {
         account_address: &AccountAddress,
         version: Option<Version>,
     ) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)> {
-        let req = RequestItem::GetAccountState {
-            address: account_address.clone(),
+        let req = match version {
+            Some(v) => RequestItem::GetAccountStateByVersion {
+                address: account_address.clone(),
+                version: v,
+            },
+            None => RequestItem::GetAccountState {
+                address: account_address.clone(),
+            },
         };
-        let resp = parse_response(self.do_request(&build_request(req, version)))
+        let resp = parse_response(self.do_request(&build_request(req, None)))
             .into_get_account_state_response()?;
         let proof = resp.proof;
         let blob = resp.blob.map(|blob| blob.into());
