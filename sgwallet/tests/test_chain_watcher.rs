@@ -4,7 +4,7 @@
 use anyhow::{Error, Result};
 use coerce_rt::actor::context::ActorContext;
 use futures::StreamExt;
-use libra_logger::{debug, error};
+use libra_logger::{error, info};
 use libra_types::{
     access_path::DataPath,
     account_address::AccountAddress,
@@ -32,7 +32,7 @@ fn run_test_chain_watcher(chain_client: Arc<dyn ChainClient>) -> Result<()> {
     let mut rt = tokio::runtime::Runtime::new().expect("create tokio runtime should ok");
     rt.block_on(async move {
         let mut actor_context = ActorContext::new();
-        let chain_watcher = ChainWatcher::new(chain_client.clone(), 0, 100);
+        let chain_watcher = ChainWatcher::new(chain_client.clone(), 1, 100);
         let chain_watcher_handle = chain_watcher
             .start(actor_context.clone())
             .await
@@ -49,8 +49,7 @@ fn run_test_chain_watcher(chain_client: Arc<dyn ChainClient>) -> Result<()> {
         let txn: Option<TransactionWithInfo> = receiver.next().await;
         assert!(txn.is_some());
         let txn = txn.unwrap();
-        let signed_txn = txn.txn.as_signed_user_txn()?;
-        debug!("watched txn: {:#?}", signed_txn);
+        info!("watched txn: {:#?}", &txn);
 
         let state_receiver = actor_ref
             .send(AccessState {

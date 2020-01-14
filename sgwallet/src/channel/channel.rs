@@ -18,6 +18,7 @@ use coerce_rt::actor::{
     message::{Handler, Message},
     Actor, ActorRef,
 };
+use futures::future::abortable;
 use futures::StreamExt;
 use libra_crypto::hash::CryptoHash;
 use libra_logger::prelude::*;
@@ -99,33 +100,6 @@ impl Channel {
 
         Ok(())
     }
-
-    async fn watch_and_apply_travel_txn(
-        &mut self,
-        txn_sender: AccountAddress,
-        seq_number: u64,
-        ctx: &mut ActorHandlerContext,
-    ) -> Result<()> {
-        let TransactionWithProof {
-            version,
-            transaction,
-            events,
-            proof,
-        } = watch_transaction(self.chain_client.clone(), txn_sender, seq_number).await?;
-
-        self.handle(
-            ApplyTravelTxn {
-                txn: transaction,
-                txn_info: proof.transaction_info().clone(),
-                events: events.unwrap_or_default(),
-                version,
-            },
-            ctx,
-        )
-        .await?;
-
-        Ok(())
-    }
 }
 
 #[async_trait]
@@ -141,7 +115,13 @@ impl Actor for Channel {
                     }
                     Ok(Some((txn_sender, seq_number))) => {
                         if let Err(e) = self
-                            .watch_and_apply_travel_txn(txn_sender, seq_number, ctx)
+                            .handle(
+                                WatchAndApplyTravelTxn {
+                                    sender: txn_sender,
+                                    seq_number,
+                                },
+                                ctx,
+                            )
                             .await
                         {
                             error!("fail to handle travelling pending txn, {}", e);
@@ -154,7 +134,13 @@ impl Actor for Channel {
                     let txn_sender = pending_proposal.proposal().channel_txn.proposer();
                     let seq_number = pending_proposal.proposal().channel_txn.sequence_number();
                     if let Err(e) = self
-                        .watch_and_apply_travel_txn(txn_sender, seq_number, ctx)
+                        .handle(
+                            WatchAndApplyTravelTxn {
+                                sender: txn_sender,
+                                seq_number,
+                            },
+                            ctx,
+                        )
                         .await
                     {
                         error!("fail to handle travelling pending txn, {}", e);
@@ -177,11 +163,15 @@ impl Actor for Channel {
                 10,
             );
             let myself = Self::actor_ref(ctx).await;
-            tokio::task::spawn(channel_event_loop(channel_event_stream, myself));
+            let (sub_task, abort_handle) =
+                abortable(channel_event_loop(channel_event_stream, myself));
+            self.sub_tasks.push(abort_handle);
+            tokio::task::spawn(sub_task);
         }
     }
 
     async fn stopped(&mut self, _ctx: &mut ActorHandlerContext) {
+        self.abort_sub_tasks();
         if let Err(e) = self
             .channel_event_sender
             .notify(ChannelNotifyEvent {
@@ -629,7 +619,10 @@ impl Handler<ApplyCoSignedTxn> for Channel {
                     10,
                 );
                 let myself = Self::actor_ref(ctx).await;
-                tokio::task::spawn(channel_event_loop(channel_event_stream, myself));
+                let (task, abort_handle) =
+                    abortable(channel_event_loop(channel_event_stream, myself));
+                tokio::task::spawn(task);
+                self.sub_tasks.push(abort_handle);
             }
         } else if channel_resource.closed() {
             debug!(
@@ -989,6 +982,51 @@ impl Handler<ChannelStageChange> for Channel {
     }
 }
 
+#[derive(Debug, Clone)]
+struct WatchAndApplyTravelTxn {
+    sender: AccountAddress,
+    seq_number: u64,
+}
+impl Message for WatchAndApplyTravelTxn {
+    type Result = Result<u64>;
+}
+
+#[async_trait]
+impl Handler<WatchAndApplyTravelTxn> for Channel {
+    async fn handle(
+        &mut self,
+        message: WatchAndApplyTravelTxn,
+        ctx: &mut ActorHandlerContext,
+    ) -> <WatchAndApplyTravelTxn as Message>::Result {
+        debug!("{} handle msg {:?}", ctx.actor_id(), &message);
+        let WatchAndApplyTravelTxn { sender, seq_number } = message;
+        let TransactionWithProof {
+            version,
+            transaction,
+            events,
+            proof,
+        } = watch_transaction(self.chain_client.clone(), sender, seq_number).await?;
+        let gas_used = proof.transaction_info().gas_used();
+
+        let next_action = ApplyTravelTxn {
+            txn: transaction,
+            txn_info: proof.transaction_info().clone(),
+            events: events.unwrap_or_default(),
+            version,
+        };
+        let result = self.handle(next_action, ctx).await;
+
+        if let Err(e) = &result {
+            error!(
+                "fail to apply travel txn,  {}-{}, error: {:?}",
+                sender, seq_number, e
+            );
+        }
+
+        result.map(|_| gas_used)
+    }
+}
+
 impl Channel {
     async fn solo_action(
         &mut self,
@@ -1010,31 +1048,13 @@ impl Channel {
             .handle(ApplyPendingTxn, ctx)
             .await?
             .ok_or(format_err!("expect solo channel txn not applying"))?;
-        let TransactionWithProof {
-            version,
-            transaction,
-            events,
-            proof,
-        } = watch_transaction(self.chain_client.clone(), sender, seq_number).await?;
+
         let mut actor_ref = Self::actor_ref(ctx).await;
-        tokio::task::spawn(async move {
-            let result = actor_ref
-                .send(ApplySoloTxn {
-                    txn: transaction,
-                    txn_info: proof.transaction_info().clone(),
-                    events: events.unwrap_or_default(),
-                    version,
-                })
-                .await
-                .map_err(|_| format_err!("channel actor gone"))
-                .and_then(|r| r);
-            if let Err(e) = result {
-                error!(
-                    "fail to apply solo txn, {}, {:?}, error: {:?}",
-                    &channel_op, &args, e
-                );
-            }
-        });
+        // TODO: what should we do if watch_and_apply_travel_txn failed?
+        actor_ref
+            .notify(WatchAndApplyTravelTxn { sender, seq_number })
+            .await
+            .expect("self actor should be running");
         Ok(())
     }
 

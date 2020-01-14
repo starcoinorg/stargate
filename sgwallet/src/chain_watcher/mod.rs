@@ -22,9 +22,9 @@ use coerce_rt::{
         ActorRef,
     },
 };
-use std::time::Duration;
+use futures::future::{abortable, AbortHandle};
+use std::{any::type_name, time::Duration};
 use tokio::time::interval;
-
 use uuid::Uuid;
 
 pub use txn_stream::TransactionWithInfo;
@@ -116,6 +116,7 @@ pub struct ChainWatcher {
     down_streams: HashMap<Uuid, DownStream>,
     start_version: u64,
     limit: u64,
+    sub_tasks: Vec<AbortHandle>,
 }
 impl ChainWatcher {
     pub fn new(chain_client: Arc<dyn ChainClient>, start_version: u64, limit: u64) -> Self {
@@ -124,12 +125,19 @@ impl ChainWatcher {
             down_streams: HashMap::new(),
             start_version,
             limit,
+            sub_tasks: Vec::new(),
         }
     }
 
     pub async fn start(self, mut context: ActorContext) -> Result<ChainWatcherHandle> {
         let actor_ref = context.new_actor(self).await?;
         Ok(ChainWatcherHandle { actor_ref })
+    }
+
+    fn abort_sub_tasks(&self) {
+        for t in self.sub_tasks.iter().rev() {
+            t.abort();
+        }
     }
 }
 
@@ -146,7 +154,7 @@ impl actor::Actor for ChainWatcher {
         let mut myself_clone = myself.clone();
 
         let mut cleanup_interval = interval(Duration::from_secs(2)).fuse();
-        tokio::task::spawn(async move {
+        let (f, abort_handle) = abortable(async move {
             while let Some(_) = cleanup_interval.next().await {
                 if let Err(_e) = myself.notify(Cleanup).await {
                     info!("parent task is gone, stop now");
@@ -154,13 +162,15 @@ impl actor::Actor for ChainWatcher {
                 }
             }
         });
+        self.sub_tasks.push(abort_handle);
+        tokio::task::spawn(f);
+
         let mut txn_stream = txn_stream::TxnStream::new_from_chain_client(
             self.chain_client.clone(),
             self.start_version,
             self.limit,
         );
-
-        tokio::task::spawn(async move {
+        let (f, abort_handle) = abortable(async move {
             while let Some(txn) = txn_stream.next().await {
                 if let Err(_e) = myself_clone.send(NewTxn { txn }).await {
                     info!("parent task is gone, stop now");
@@ -168,12 +178,23 @@ impl actor::Actor for ChainWatcher {
                 }
             }
         });
+        self.sub_tasks.push(abort_handle);
+        tokio::task::spawn(f);
 
-        info!("chain watcher started, id: {}", ctx.actor_id());
+        info!(
+            "{}, {} started",
+            type_name::<ChainWatcher>(),
+            ctx.actor_id()
+        );
     }
 
     async fn stopped(&mut self, ctx: &mut ActorHandlerContext) {
-        info!("chain watcher stopped, id : {}", ctx.actor_id());
+        self.abort_sub_tasks();
+        info!(
+            "{}, {} stopped",
+            type_name::<ChainWatcher>(),
+            ctx.actor_id()
+        );
     }
 }
 

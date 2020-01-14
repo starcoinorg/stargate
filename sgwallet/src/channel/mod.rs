@@ -7,6 +7,7 @@ use coerce_rt::actor::{context::ActorContext, message::Message, ActorRef};
 
 use crate::{channel::channel_stm::ChannelStm, wallet::Wallet};
 pub use channel_handle::ChannelHandle;
+use futures::future::AbortHandle;
 use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
@@ -45,7 +46,15 @@ pub struct Channel {
     // watch onchain channel txn of this channel
     chain_txn_watcher: ChainWatcherHandle,
     stm: ChannelStm,
+    sub_tasks: Vec<AbortHandle>,
 }
+
+impl Drop for Channel {
+    fn drop(&mut self) {
+        self.abort_sub_tasks();
+    }
+}
+
 impl Channel {
     /// load channel from storage
     pub fn load(
@@ -81,6 +90,7 @@ impl Channel {
             channel_event_sender: supervisor_ref,
             chain_txn_watcher,
             stm,
+            sub_tasks: Vec::new(),
         };
         inner
     }
@@ -112,6 +122,12 @@ impl Channel {
     }
     pub fn participant_addresses(&self) -> &BTreeSet<AccountAddress> {
         &self.stm.participant_addresses
+    }
+
+    fn abort_sub_tasks(&self) {
+        for t in self.sub_tasks.iter().rev() {
+            t.abort();
+        }
     }
 }
 
