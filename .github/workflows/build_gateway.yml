@@ -1,0 +1,26 @@
+name: Build Docker
+on:
+  push:
+    # only build master
+    branches:
+      - 'master'
+    paths-ignore:
+      - '**.md'
+jobs:
+  build-gateway-docker:
+    name: build gateway docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          submodules: recursive
+      - uses: elgohr/Publish-Docker-Github-Action@master
+        env:
+          GIT_REV: $GITHUB_SHA
+        with:
+          name: starcoinorg/stargate/gateway
+          username: $GITHUB_ACTOR
+          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: docker.pkg.github.com
+          dockerfile: docker/grpcgateway/gateway.Dockerfile
+          buildargs: GIT_REV
