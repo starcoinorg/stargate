@@ -9,6 +9,7 @@ FROM toolchain as builder
 # docker build --build-arg https_proxy=http://fwdproxy:8080 --build-arg http_proxy=http://fwdproxy:8080
 ENV RUST_BACKTRACE "1"
 
+RUN apt-get update; apt-get install -y clang
 WORKDIR /starcoin
 COPY . /starcoin
 RUN cargo build -p node && cd target/debug && rm -r build deps incremental
@@ -19,9 +20,9 @@ FROM debian:buster As prod
 
 RUN mkdir -p /opt/starcoin/bin /opt/starcoin/etc
 COPY --from=builder /starcoin/target/debug/node /opt/starcoin/bin
-RUN cd /opt/starcoin/etc &&  echo "$NODE_CONFIG" > node.toml && echo "$KEYS_CONFIG" > key
+#RUN cd /opt/starcoin/etc &&  echo "$NODE_CONFIG" > node.toml && echo "$KEYS_CONFIG" > key
 
-ENTRYPOINT ["/opt/libra/bin/node"]
+ENTRYPOINT ["/opt/starcoin/bin/node"]
 CMD ["-c", "/opt/starcoin/etc", "-f", "/opt/starcoin/etc/key", "-n", "0"]
 
 # node port

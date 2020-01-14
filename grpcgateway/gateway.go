@@ -42,7 +42,7 @@ func preflightHandler(w http.ResponseWriter, r *http.Request) {
 	glog.Infof("preflight request for %s", r.URL.Path)
 }
 
-func run() error {
+func run(gatewayaddr ,nodeaddr string) error {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -54,17 +54,17 @@ func run() error {
 	opts := []grpc.DialOption{grpc.WithInsecure()}
 
 	//RegisterNodeHandlerFromEndpoint
-	err := gw.RegisterNodeHandlerFromEndpoint(ctx, mux, *grpcServerEndpoint, opts)
+	err := gw.RegisterNodeHandlerFromEndpoint(ctx, mux, nodeaddr, opts)
 	if err != nil {
 		glog.Errorln("connect to node grpc error:", err)
 		return err
 	}
 
 	s := &http.Server{
-		Addr:    ":8080",
+		Addr:    gatewayaddr,
 		Handler: allowCORS(mux),
 	}
-	fmt.Println("Starting listening at 8080 ")
+	fmt.Println("Starting listening at :", s.Addr)
 	if err := s.ListenAndServe(); err != http.ErrServerClosed {
 		glog.Errorf("Failed to listen and serve: %v", err)
 		return err
@@ -73,10 +73,13 @@ func run() error {
 }
 
 func main() {
+	var gateway_port, node_port  string
+	flag.StringVar(&gateway_port,"gateway_addr", ":8081", "gateway listening addr and port")
+	flag.StringVar(&node_port,"node_addr", "127.0.0.1:9000", "wallet node listening addr and port")
 	flag.Parse()
 	defer glog.Flush()
 
-	if err := run(); err != nil {
+	if err := run(gateway_port, node_port); err != nil {
 		glog.Fatal(err)
 	}
 }

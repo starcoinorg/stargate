@@ -1,4 +1,7 @@
 #!/bin/sh
+mkdir -p libra/types
+mkdir node
+mkdir sgtypes
 cd ./proto
 echo "generate node pb..."
 protoc -I. -I./types -I./sgtypes \
