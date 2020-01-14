@@ -76,9 +76,9 @@ impl Channel {
                     let txn_with_proof = txn_with_proof.unwrap();
                     let (version, blob, proof) = self
                         .chain_client
-                        .get_account_state_by_version(
+                        .get_account_state_with_proof_inner_async(
                             self.channel_address().clone(),
-                            txn_with_proof.version,
+                            Some(txn_with_proof.version),
                         )
                         .await?;
                     let blob = blob.ok_or(format_err!("channel state should exists"))?;
