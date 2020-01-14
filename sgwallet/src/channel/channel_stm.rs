@@ -541,6 +541,12 @@ impl ChannelStm {
         };
         let witness_data = WitnessData::new(self.channel_sequence_number() + 1, ws);
         let witness_data_hash = CryptoHash::hash(&witness_data);
+        debug!(
+            "{} - generate witness hash {}, channel_sequence_number: {}",
+            self.account_address,
+            &witness_data_hash,
+            self.channel_sequence_number() + 1
+        );
         let witness_data_signature = self.keypair.private_key.sign_message(&witness_data_hash);
 
         let travel_output_witness_signature = if output.is_travel_txn() {
@@ -617,12 +623,20 @@ impl ChannelStm {
             output.write_set().clone()
         };
         let witness_data = WitnessData::new(self.channel_sequence_number() + 1, ws);
-
+        let witness_data_hash = CryptoHash::hash(&witness_data);
+        debug!(
+            "{} - verify witness: local hash {}, channel_sequence_number: {}, expected hash: {}",
+            self.account_address,
+            &witness_data_hash,
+            self.channel_sequence_number() + 1,
+            &channel_txn_sigs.witness_data_hash
+        );
         ensure!(
-            &CryptoHash::hash(&witness_data) == &channel_txn_sigs.witness_data_hash,
-            "next witness hash mismatched, local is {:?}, proposal: {:?}",
-            &witness_data,
-            &pending_txn.proposal()
+            &witness_data_hash == &channel_txn_sigs.witness_data_hash,
+            "next witness hash mismatched, local is {}, expected {}, proposal: {:?}",
+            &witness_data_hash,
+            &channel_txn_sigs.witness_data_hash,
+            &pending_txn.proposal(),
         );
         channel_txn_sigs.public_key.verify_signature(
             &channel_txn_sigs.witness_data_hash,
