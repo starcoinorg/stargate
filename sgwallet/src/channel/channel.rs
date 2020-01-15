@@ -180,11 +180,7 @@ impl Actor for Channel {
             })
             .await
         {
-            error!(
-                "channel[{:?}]: fail to emit stopped event, error: {:?}",
-                &self.channel_address(),
-                e
-            );
+            error!("{}, fail to emit stopped event, error: {:?}", &self.stm, e);
         }
         crit!("channel {} task terminated", self.channel_address());
     }
@@ -194,9 +190,9 @@ impl Handler<Execute> for Channel {
     async fn handle(
         &mut self,
         message: Execute,
-        ctx: &mut ActorHandlerContext,
+        _ctx: &mut ActorHandlerContext,
     ) -> <Execute as Message>::Result {
-        trace!("{} handle {:?}", ctx.id(), &message);
+        debug!("{} handle {:?}", &self.stm, &message);
         let Execute { channel_op, args } = message;
         let proposal = self.stm.generate_proposal(channel_op, args)?;
         let mut pending_txn = self.pending_txn();
@@ -232,8 +228,8 @@ impl Handler<CollectProposalWithSigs> for Channel {
         debug_assert_ne!(self.account_address(), &sigs.address);
         debug!(
             "{} - collect proposal signature from {}",
-            &self.account_address(),
-            &sigs.address
+            &self.stm,
+            sigs.address.short_str()
         );
         // if found an already applied txn in local storage,
         // we can return directly after check the hash of transaction and signatures.
@@ -271,11 +267,7 @@ impl Handler<CollectProposalWithSigs> for Channel {
             .contains_key(self.account_address())
             && self.stm.can_auto_sign_pending_proposal(&pending_txn)?
         {
-            debug!(
-                "{}/{} - auto sign channel txn",
-                &self.account_address(),
-                &self.channel_address()
-            );
+            debug!("{} auto sign channel txn", &self.stm);
 
             let my_signature = self
                 .stm
@@ -300,13 +292,9 @@ impl Handler<GrantProposal> for Channel {
         _ctx: &mut ActorHandlerContext,
     ) -> <GrantProposal as Message>::Result {
         let GrantProposal { channel_txn_id } = message;
-        debug!(
-            "{} grant proposal {}",
-            &self.account_address(),
-            &channel_txn_id
-        );
+        debug!("{} grant proposal {}", &self.stm, &channel_txn_id);
         let pending_txn = self.pending_txn();
-        ensure!(pending_txn.is_some(), "no pending txn");
+        ensure!(pending_txn.is_some(), "{} has no pending txn", &self.stm);
         let mut pending_txn = pending_txn.unwrap();
         let proposal = pending_txn.proposal();
         if channel_txn_id != CryptoHash::hash(&proposal.channel_txn) {
@@ -339,7 +327,7 @@ impl Handler<CancelPendingTxn> for Channel {
         message: CancelPendingTxn,
         ctx: &mut ActorHandlerContext,
     ) -> <CancelPendingTxn as Message>::Result {
-        trace!("{} handle {:?}", ctx.id(), &message);
+        debug!("{} handle {:?}", &self.stm, &message);
         let CancelPendingTxn { channel_txn_id } = message;
 
         let pending_txn = self.pending_txn();
@@ -368,9 +356,9 @@ impl Handler<ApplyPendingTxn> for Channel {
     async fn handle(
         &mut self,
         message: ApplyPendingTxn,
-        ctx: &mut ActorHandlerContext,
+        _ctx: &mut ActorHandlerContext,
     ) -> <ApplyPendingTxn as Message>::Result {
-        trace!("{} handle {:?}", ctx.id(), &message);
+        debug!("{} handle {:?}", &self.stm, &message);
 
         let pending_txn = self.pending_txn();
         ensure!(pending_txn.is_some(), "should have txn to apply");
@@ -415,11 +403,7 @@ impl Handler<AccessingResource> for Channel {
         _ctx: &mut ActorHandlerContext,
     ) -> <AccessingResource as Message>::Result {
         let AccessingResource { path } = message;
-        debug!(
-            "{} accessing resource {:?}",
-            self.account_address(),
-            path.data_path()
-        );
+        debug!("{} accessing resource {:?}", &self.stm, path.data_path());
         access_local(
             self.stm.witness().write_set(),
             self.stm.channel_state(),
@@ -436,7 +420,7 @@ impl Handler<GetPendingTxn> for Channel {
         _message: GetPendingTxn,
         _ctx: &mut ActorHandlerContext,
     ) -> <GetPendingTxn as Message>::Result {
-        debug!("{} get pending txn", &self.account_address());
+        debug!("{} get pending txn", &self.stm);
         self.pending_txn()
     }
 }
@@ -457,7 +441,7 @@ impl Handler<WatchAndApplyTravelTxn> for Channel {
         message: WatchAndApplyTravelTxn,
         ctx: &mut ActorHandlerContext,
     ) -> <WatchAndApplyTravelTxn as Message>::Result {
-        debug!("{} handle msg {:?}", ctx.id(), &message);
+        debug!("{} handle {:?}", &self.stm, &message);
         let WatchAndApplyTravelTxn { sender, seq_number } = message;
         let TransactionWithProof {
             version,
@@ -527,7 +511,7 @@ impl Handler<ApplyCoSignedTxn> for Channel {
         message: ApplyCoSignedTxn,
         ctx: &mut ActorHandlerContext,
     ) -> <ApplyCoSignedTxn as Message>::Result {
-        trace!("{} handle {:?}", ctx.id(), &message);
+        debug!("{} handle {:?}", &self.stm, &message);
 
         let ApplyCoSignedTxn {
             txn,
@@ -615,16 +599,14 @@ impl Handler<ApplyCoSignedTxn> for Channel {
         if channel_resource.opened() {
             // nothing to do. everything is good now.
             debug!(
-                "{}/{} - channel resource seq number: {}",
-                self.account_address(),
-                self.channel_address(),
+                "{}, synced channel resource seq number: {}",
+                &self.stm,
                 channel_resource.channel_sequence_number()
             );
             if channel_resource.channel_sequence_number() == 1 {
                 debug!(
-                    "{}/{} - just open channel, start watch channel event",
-                    self.account_address(),
-                    self.channel_address()
+                    "{}, just open channel, start watch channel event",
+                    &self.stm
                 );
                 let channel_event_stream = ChannelEventStream::new_from_chain_client(
                     self.chain_client.clone(),
@@ -639,11 +621,7 @@ impl Handler<ApplyCoSignedTxn> for Channel {
                 self.sub_tasks.push(abort_handle);
             }
         } else if channel_resource.closed() {
-            debug!(
-                "{}/{} - applied a action which close channel",
-                self.account_address(),
-                self.channel_address(),
-            );
+            debug!("{}, applied a action which close channel", &self.stm);
             ctx.set_status(ActorStatus::Stopping);
         }
 
@@ -670,7 +648,7 @@ impl Handler<ApplySoloTxn> for Channel {
         message: ApplySoloTxn,
         ctx: &mut ActorHandlerContext,
     ) -> <ApplySoloTxn as Message>::Result {
-        trace!("{} handle {:?}", ctx.id(), &message);
+        debug!("{} handle {:?}", &self.stm, &message);
 
         let ApplySoloTxn {
             txn,
@@ -681,7 +659,7 @@ impl Handler<ApplySoloTxn> for Channel {
         } = message;
         debug!(
             "{} apply solo txn at version {}",
-            &self.account_address(),
+            self.account_address().short_str(),
             version
         );
         let signed_txn = match txn {
@@ -740,9 +718,8 @@ impl Handler<ApplySoloTxn> for Channel {
                     } else {
                         // dual submits a stale txn, I need to challenge him
                         debug!(
-                            "{}/{} - unauthorized channel txn, going challenge dual",
-                            self.account_address(),
-                            self.channel_address(),
+                            "{}, unauthorized channel txn, going challenge dual",
+                            &self.stm
                         );
                         // so I submit a challenge to chain.
                         let _ = self
@@ -773,25 +750,20 @@ impl Handler<ApplySoloTxn> for Channel {
             .channel_resource()
             .ok_or(format_err!("channel resource should exists in local"))?;
         if channel_resource.locked() {
-            debug!(
-                "{}/{} - applied a action which lock channel",
-                self.account_address(),
-                self.channel_address(),
-            );
+            debug!("{}, applied a action which lock channel", &self.stm);
             if self.account_address() == &txn_sender {
                 // I lock the channel, wait sender to resolve
                 // TODO: move the timeout check into a timer
                 let time_lock = self.stm.channel_lock_by_resource().unwrap().time_lock;
                 debug!(
-                    "{}/{} - the solo txn I submitted applied locally, wait receiver timeout, time_lock: {}",
-                    self.account_address(), self.channel_address(), time_lock
+                    "{}, the solo txn I submitted applied locally, wait receiver timeout, time_lock: {}",
+                    &self.stm, time_lock
                 );
                 self.watch_channel_lock_timeout(ctx).await?;
             } else {
                 debug!(
-                    "{}/{} - receiver a txn which lock channel, going to resolve it",
-                    self.account_address(),
-                    self.channel_address(),
+                    "{}, receiver a txn which lock channel, going to resolve it",
+                    &self.stm
                 );
 
                 // drop the receiver, as I don't need wait the result
@@ -809,18 +781,13 @@ impl Handler<ApplySoloTxn> for Channel {
             }
         } else if channel_resource.closed() {
             // no matter who close ths channel, the channel is done. we just live with it.
-            debug!(
-                "{}/{} - applied a action which close channel",
-                self.account_address(),
-                self.channel_address(),
-            );
+            debug!("{}, applied a action which close channel", &self.stm);
             ctx.set_status(ActorStatus::Stopping);
         } else {
             // nothing to do. everything is good now.
             debug!(
-                "{}/{} - channel resolved now, channel sequence number: {}",
-                self.account_address(),
-                self.channel_address(),
+                "{}, channel resolved now, synced channel sequence number: {}",
+                &self.stm,
                 channel_resource.channel_sequence_number()
             );
         }
@@ -844,20 +811,21 @@ impl Handler<ChannelLockTimeout> for Channel {
         message: ChannelLockTimeout,
         ctx: &mut ActorHandlerContext,
     ) -> <ChannelLockTimeout as Message>::Result {
-        trace!("{} handle {:?}", ctx.id(), &message);
+        debug!("{} handle {:?}", &self.stm, &message);
         let ChannelLockTimeout {
             block_height,
             time_lock,
         } = message;
-        debug!(
-            "{}/{} - channel lock timeout-ed, block_height: {}, time_lock: {}, close channel now!",
-            self.account_address(),
-            self.channel_address(),
-            block_height,
-            time_lock
+        ensure!(
+            time_lock < block_height,
+            "invalid lock timeout msg {:?}",
+            &message
         );
         if self.stm.channel_lock_by_resource().is_none() {
-            info!("channel {} already resolved", self.channel_address());
+            info!(
+                "channel {} already resolved",
+                self.channel_address().short_str()
+            );
             return Ok(());
         }
 
@@ -951,11 +919,8 @@ impl Handler<ChannelStageChange> for Channel {
 
         if version <= self.stm.channel_state().version() {
             info!(
-                "{}/{}, outdated channel event, version: {}, local version: {}, ignore it",
-                &self.account_address(),
-                &self.channel_address(),
-                version,
-                self.stm.channel_state().version()
+                "{}, outdated channel event, version: {}, ignore it",
+                &self.stm, version
             );
             return Ok(());
         }

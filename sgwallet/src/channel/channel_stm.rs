@@ -68,6 +68,19 @@ pub struct ChannelStm {
     chain_client: Arc<dyn ChainClient>,
 }
 
+impl std::fmt::Display for ChannelStm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}[{}],sv: {}, csq {}",
+            self.account_address.short_str(),
+            self.channel_address.short_str(),
+            self.channel_state.version(),
+            self.channel_sequence_number()
+        )
+    }
+}
+
 impl ChannelStm {
     pub fn new(
         channel_address: AccountAddress,
