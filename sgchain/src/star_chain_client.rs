@@ -12,27 +12,30 @@ use core::borrow::Borrow;
 use futures::channel::oneshot::Sender;
 use futures_timer::Delay;
 use grpcio::{ChannelBuilder, EnvBuilder};
-use libra_config::config::{ConsensusType, NodeConfig};
-use libra_config::generator;
+use libra_config::{
+    config::{ConsensusType, NodeConfig},
+    generator,
+};
 use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
 use libra_logger::prelude::*;
-use libra_types::access_path::AccessPath;
-use libra_types::contract_event::EventWithProof;
-use libra_types::crypto_proxies::LedgerInfoWithSignatures;
-use libra_types::get_with_proof::ResponseItem;
-use libra_types::ledger_info::LedgerInfo;
-use libra_types::transaction::{Transaction, TransactionListWithProof};
 use libra_types::{
+    access_path::AccessPath,
     account_address::AccountAddress,
     account_config::{association_address, AccountResource},
     account_state_blob::{AccountStateBlob, AccountStateWithProof},
-    get_with_proof::RequestItem,
+    contract_event::EventWithProof,
+    crypto_proxies::LedgerInfoWithSignatures,
+    get_with_proof::{RequestItem, ResponseItem},
+    ledger_info::LedgerInfo,
     proof::SparseMerkleProof,
     proto::types::{
         BlockRequestItem, BlockResponseItem, TxnRequestItem, TxnResponseItem,
         UpdateToLatestLedgerRequest, UpdateToLatestLedgerResponse,
     },
-    transaction::{RawTransaction, SignedTransaction, TransactionWithProof, Version},
+    transaction::{
+        RawTransaction, SignedTransaction, Transaction, TransactionListWithProof,
+        TransactionWithProof, Version,
+    },
 };
 use sgtypes::account_state::AccountState;
 use std::{
@@ -210,11 +213,46 @@ pub trait ChainClient: Send + Sync {
         account_address: &AccountAddress,
         version: Option<Version>,
     ) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)> {
-        let req = RequestItem::GetAccountState {
-            address: account_address.clone(),
+        let req = match version {
+            Some(v) => RequestItem::GetAccountStateByVersion {
+                address: account_address.clone(),
+                version: v,
+            },
+            None => RequestItem::GetAccountState {
+                address: account_address.clone(),
+            },
         };
-        let resp = parse_response(self.do_request(&build_request(req, version)))
+        let resp = parse_response(self.do_request(&build_request(req, None)))
             .into_get_account_state_response()?;
+        let proof = resp.proof;
+        let blob = resp.blob.map(|blob| blob.into());
+        //TODO should return whole proof.
+        Ok((
+            resp.version,
+            blob,
+            proof.transaction_info_to_account_proof().clone(),
+        ))
+    }
+
+    async fn get_account_state_with_proof_inner_async(
+        &self,
+        account_address: AccountAddress,
+        version: Option<u64>,
+    ) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)> {
+        let req = match version {
+            Some(v) => RequestItem::GetAccountStateByVersion {
+                address: account_address.clone(),
+                version: v,
+            },
+            None => RequestItem::GetAccountState {
+                address: account_address.clone(),
+            },
+        };
+        let resp = parse_response(
+            self.update_to_latest_ledger_async(&build_request(req, None))
+                .await?,
+        )
+        .into_get_account_state_response()?;
         let proof = resp.proof;
         let blob = resp.blob.map(|blob| blob.into());
         //TODO should return whole proof.
@@ -326,30 +364,6 @@ pub trait ChainClient: Send + Sync {
                 .await?,
         );
         resp.into_get_account_txn_by_seq_num_response()
-    }
-
-    async fn get_account_state_by_version(
-        &self,
-        account_address: AccountAddress,
-        version: u64,
-    ) -> Result<(Version, Option<Vec<u8>>, SparseMerkleProof)> {
-        let req = RequestItem::GetAccountStateByVersion {
-            address: account_address,
-            version,
-        };
-        let resp = parse_response(
-            self.update_to_latest_ledger_async(&build_request(req, None))
-                .await?,
-        )
-        .into_get_account_state_response()?;
-        let proof = resp.proof;
-        let blob = resp.blob.map(|blob| blob.into());
-        //TODO should return whole proof.
-        Ok((
-            resp.version,
-            blob,
-            proof.transaction_info_to_account_proof().clone(),
-        ))
     }
 }
 

@@ -7,6 +7,7 @@ use coerce_rt::actor::{context::ActorContext, message::Message, ActorRef};
 
 use crate::{channel::channel_stm::ChannelStm, wallet::Wallet};
 pub use channel_handle::ChannelHandle;
+use futures::future::AbortHandle;
 use libra_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
     test_utils::KeyPair,
@@ -15,8 +16,7 @@ use libra_crypto::{
 use libra_types::{
     access_path::AccessPath,
     account_address::AccountAddress,
-    contract_event::ContractEvent,
-    transaction::{Transaction, TransactionArgument, TransactionInfo, TransactionOutput},
+    transaction::{TransactionArgument, TransactionOutput},
     write_set::{WriteOp, WriteSet},
 };
 use sgchain::star_chain_client::ChainClient;
@@ -34,6 +34,8 @@ mod channel_event_stream;
 mod channel_handle;
 mod channel_stm;
 
+pub(crate) use channel::*;
+
 pub struct Channel {
     store: ChannelStore<ChannelDB>,
     chain_client: Arc<dyn ChainClient>,
@@ -45,7 +47,15 @@ pub struct Channel {
     // watch onchain channel txn of this channel
     chain_txn_watcher: ChainWatcherHandle,
     stm: ChannelStm,
+    sub_tasks: Vec<AbortHandle>,
 }
+
+impl Drop for Channel {
+    fn drop(&mut self) {
+        self.abort_sub_tasks();
+    }
+}
+
 impl Channel {
     /// load channel from storage
     pub fn load(
@@ -81,6 +91,7 @@ impl Channel {
             channel_event_sender: supervisor_ref,
             chain_txn_watcher,
             stm,
+            sub_tasks: Vec::new(),
         };
         inner
     }
@@ -92,7 +103,7 @@ impl Channel {
         let participant_addresses = self.participant_addresses().clone();
 
         let actor_ref = context
-            .new_actor(self)
+            .new_tracked_actor(self)
             .await
             .expect("actor context is closed");
 
@@ -112,6 +123,12 @@ impl Channel {
     }
     pub fn participant_addresses(&self) -> &BTreeSet<AccountAddress> {
         &self.stm.participant_addresses
+    }
+
+    fn abort_sub_tasks(&self) {
+        for t in self.sub_tasks.iter().rev() {
+            t.abort();
+        }
     }
 }
 
@@ -156,29 +173,6 @@ pub(crate) struct ApplyPendingTxn;
 /// return a (sender, seq_number) txn to watch if travel.
 impl Message for ApplyPendingTxn {
     type Result = Result<Option<(AccountAddress, u64)>>;
-}
-
-#[derive(Debug)]
-pub(crate) struct ApplySoloTxn {
-    pub txn: Transaction,
-    pub txn_info: TransactionInfo,
-    pub version: u64,
-    pub events: Vec<ContractEvent>,
-}
-
-impl Message for ApplySoloTxn {
-    type Result = Result<u64>;
-}
-
-#[derive(Debug)]
-pub(crate) struct ApplyCoSignedTxn {
-    pub txn: Transaction,
-    pub txn_info: TransactionInfo,
-    pub version: u64,
-    pub events: Vec<ContractEvent>,
-}
-impl Message for ApplyCoSignedTxn {
-    type Result = Result<u64>;
 }
 
 #[derive(Debug)]

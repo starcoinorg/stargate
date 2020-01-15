@@ -29,7 +29,8 @@ use std::{sync::Arc, time::Duration};
 fn run_test_channel_lock_and_then_resolve() -> Result<()> {
     let result = run_with_rpc_client(|chain_client| {
         let mut rt = tokio::runtime::Runtime::new()?;
-        rt.block_on(test_all_sequential(chain_client))
+        //        rt.block_on(test_all_sequential(chain_client))
+        rt.block_on(test_all_parallel(chain_client))
     });
     dbg!(result)
 }

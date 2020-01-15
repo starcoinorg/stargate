@@ -68,6 +68,19 @@ pub struct ChannelStm {
     chain_client: Arc<dyn ChainClient>,
 }
 
+impl std::fmt::Display for ChannelStm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}[{}],sv: {}, csq {}",
+            self.account_address.short_str(),
+            self.channel_address.short_str(),
+            self.channel_state.version(),
+            self.channel_sequence_number()
+        )
+    }
+}
+
 impl ChannelStm {
     pub fn new(
         channel_address: AccountAddress,
@@ -164,6 +177,11 @@ impl ChannelStm {
         mut participant_keys: BTreeMap<AccountAddress, Ed25519PublicKey>,
     ) {
         if let Some(cs) = channel_state {
+            info!(
+                "channel {} - sync with chain in version {}",
+                self.channel_address,
+                cs.version()
+            );
             self.channel_state = cs;
         }
         self.witness = witness;
@@ -522,6 +540,12 @@ impl ChannelStm {
                 vm::gas_schedule::MAXIMUM_NUMBER_OF_GAS_UNITS.get()
             );
         }
+
+        debug!(
+            "{} - execute proposal output: {:?}",
+            self.channel_address,
+            &output.write_set()
+        );
 
         Ok((payload_body, payload_body_signature, output))
     }
