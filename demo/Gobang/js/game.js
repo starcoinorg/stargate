@@ -36,6 +36,7 @@
 		};
 
 		self.operate;
+		self.enableTimeoutMenu;
 
 		//合并属性
 		for (var a in option) {
@@ -630,7 +631,10 @@
 				if (!my.gameover && !(my.ComputerThinking || self.Opt.isWaiting)) {
 					logic(ps);
                     sendTxnPlay(self.Opt.srvAddr, self.Opt.ply2Addr, ps.I, ps.J);
-                    self.Opt.isWaiting = true;
+					self.Opt.isWaiting = true;
+					if (self.enableTimeoutMenu && typeof self.enableTimeoutMenu == "function") {
+						self.enableTimeoutMenu();
+					}
 					if (my.playerBIsComputer && my.switcher == 2) {
 						my.ComputerThinking = true;
 						var pp = AI.analysis(my.goBackC2d.I, my.goBackC2d.J);
@@ -754,11 +758,18 @@
 		function sendTxnEnd(server, receiver) {
 			var testURL = server.concat("/node/execute_script");
 			var hexReceiver = Str2Bytes(receiver);
+			var arg1 = {
+				arg_type: "ADDRESS", 
+				arg_value: hexReceiver
+			};
+			var argsVec = new Array();
+			argsVec.push(arg1);
 			var para = {
 				remote_addr: hexReceiver,
 				package_name: "scripts",
 				script_name: "end",
-				force_execute: false
+				force_execute: false,
+				args: argsVec
 			};
 			$.ajax({
 				url: testURL,
