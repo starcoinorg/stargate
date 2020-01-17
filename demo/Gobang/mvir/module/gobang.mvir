@@ -2,6 +2,8 @@ module TheFive {
     import 0x0.ChannelUtil;
     import 0x0.Vector;
     import 0x0.LibraSystem;
+    import 0x0.LibraCoin;
+    import 0x0.LibraAccount;
 
     resource T {
         grid: Vector.T<Vector.T<bool>>,  // 22x22, include borders
@@ -11,6 +13,14 @@ module TheFive {
         whose_turn: address,  // Alternate between black and white
         height: u64,
         status: u64,  // 0 newed, 1 joined, 2 closed
+    }
+
+    resource Deposit_1 {
+        coins: LibraCoin.T,  // deposit from player1
+    }
+
+    resource Deposit_2 {
+        coins: LibraCoin.T,  // deposit from player2
     }
 
     resource Score {
@@ -30,6 +40,7 @@ module TheFive {
         let t: Self.T;
         let grid: Vector.T<Vector.T<bool>>;
         let s: Self.Shared;
+        let d: Self.Deposit_1;
         let whose_turn: address;
         let row: Vector.T<bool>;
         let x: u64;
@@ -38,6 +49,7 @@ module TheFive {
         let t1: Self.Score;
         let sender: address;
         let status: u64;
+        let coins: LibraCoin.T;
 
         sender = get_txn_sender();
         if (!ChannelUtil.exist_channel_participant<Self.Score>(copy(sender))) {
@@ -80,6 +92,14 @@ module TheFive {
             };
             ChannelUtil.move_to_participant<Self.T>(copy(sender), move(t));
 
+            if (!ChannelUtil.exist_channel_shared<Self.Deposit_1>()) {
+                coins = LibraAccount.withdraw_from_channel(5);
+                d = Deposit_1 {
+                    coins: move(coins),
+                };
+                ChannelUtil.move_to_shared<Self.Deposit_1>(move(d));
+            }
+
             s = Shared {
                 whose_turn: copy(sender),
                 height: LibraSystem.get_current_block_height(),
@@ -105,6 +125,8 @@ module TheFive {
         let s_ref: &mut Self.Shared;
         let status_ref: &mut u64;
         let is_black: bool;
+        let d: Self.Deposit_2;
+        let coins: LibraCoin.T;
 
         sender = get_txn_sender();
         if (!ChannelUtil.exist_channel_participant<Self.Score>(copy(sender))) {
@@ -145,6 +167,14 @@ module TheFive {
                 grid: move(grid),
             };
             ChannelUtil.move_to_participant<Self.T>(copy(sender), move(t));
+
+            if (!ChannelUtil.exist_channel_shared<Self.Deposit_2>()) {
+                coins = LibraAccount.withdraw_from_channel(5);
+                d = Deposit_2 {
+                    coins: move(coins),
+                };
+                ChannelUtil.move_to_shared<Self.Deposit_2>(move(d));
+            }
 
             s_ref = ChannelUtil.borrow_from_shared_mut<Self.Shared>();
             status_ref = &mut copy(s_ref).status;
@@ -413,7 +443,28 @@ module TheFive {
         return;
     }
 
-    end_game(by_winner: bool) {
+    clean_deposit(by_winner: bool, receiver: address) {
+        let d1: Self.Deposit_1;
+        let d2: Self.Deposit_2;
+        let coins1: LibraCoin.T;
+        let coins2: LibraCoin.T;
+        let coins: LibraCoin.T;
+
+        d1 = ChannelUtil.move_from_shared<Self.Deposit_1>();
+        d2 = ChannelUtil.move_from_shared<Self.Deposit_2>();
+        Deposit_1 { coins1 } = move(d1);
+        Deposit_2 { coins2 } = move(d2);
+        coins = LibraCoin.join(move(coins1), move(coins2));
+        if (copy(by_winner)) {
+            LibraAccount.deposit_to_channel(move(coins));
+        } else {
+            LibraAccount.deposit_to_participant(move(receiver), move(coins));
+        }
+
+        return;
+    }
+
+    end_game(by_winner: bool, receiver: address) {
         let s_ref: &mut Self.Shared;
         let status: &mut u64;
 
@@ -421,6 +472,7 @@ module TheFive {
         status = &mut copy(s_ref).status;
         *copy(status) = 2;
 
+        Self.clean_deposit(copy(by_winner), move(receiver));
         Self.update_score(move(by_winner));
         return;
     }
@@ -470,7 +522,7 @@ module TheFive {
         win = Self.is_five(move(x), move(y));
 
         if (move(win)) {
-            Self.end_game(true);
+            Self.end_game(true, move(receiver));
         }
         return 0;
     }
@@ -510,12 +562,12 @@ module TheFive {
         current_height = LibraSystem.get_current_block_height();
         assert(copy(current_height) > *copy(height_ref) + 3, copy(current_height));
 
-        Self.end_game(true); // receiver timeout, sender score++
+        Self.end_game(true, move(receiver)); // receiver timeout, sender score++
         return;
     }
 
-    public quit() {
-        Self.end_game(false); // sender quit, receiver score++
+    public quit(receiver: address) {
+        Self.end_game(false, move(receiver)); // sender quit, receiver score++
         return;
     }
 }

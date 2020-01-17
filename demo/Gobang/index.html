@@ -204,11 +204,11 @@
 					pl2obj.removeAttribute("class", "curr");
 					if (c2d.player == 1) {
 						pl2obj.setAttribute("class", "curr");
-						document.getElementById("backChessman").disabled=true;
 					} else {
 						pl1obj.setAttribute("class", "curr");
-						document.getElementById("backChessman").disabled=false;
 					}
+					$("#backChessman").attr("disabled",true);
+					$("#backChessman").css("pointer-events","none");
 					//document.getElementById("backChessman").innerHTML="悔棋("+c2d.canBackTimes+")";
 				} else {
 					var winname = c2d.winer == 1 ? opt.playAName : opt.playBName;
@@ -220,6 +220,10 @@
 					document.getElementById("scoreA").innerHTML = c2d.playScoreA;
 					document.getElementById("scoreB").innerHTML = c2d.playScoreB;
 				}
+			}
+			gb.enableTimeoutMenu = function() {
+				$("#backChessman").attr("disabled",false);
+				$("#backChessman").css("pointer-events","auto");
 			}
 			gb.start();
 		};
@@ -271,9 +275,6 @@
 			srv = document.getElementById("srvAddrInput").value;
 			pl2addr = document.getElementById("plname2Input").value;
 			sendTxnTimeout(srv, formatAddr(pl2addr));
-			var str = "对手超时，您将增加1分！";
-			alert(str);
-			location.reload();
 		}
 
 		function Str2Bytes(str) {
@@ -407,11 +408,18 @@
 		function sendTxnEnd(server, receiver) {
 			var testURL = server.concat("/node/execute_script");
 			var hexReceiver = Str2Bytes(receiver);
+			var arg1 = {
+				arg_type: "ADDRESS", 
+				arg_value: hexReceiver
+			};
+			var argsVec = new Array();
+			argsVec.push(arg1);
 			var para = {
 				remote_addr: hexReceiver,
 				package_name: "scripts",
 				script_name: "end",
-				force_execute: false
+				force_execute: false,
+				args: argsVec
 			};
 			$.ajax({
 				url: testURL,
@@ -452,6 +460,9 @@
 				crossDomain: true,
 				success: function(data){
 					console.log(data);
+					var str = "对手超时，您将增加1分！";
+					alert(str);
+					location.reload();
 				},
 				error: function(err){
 					console.log("请求失败："+err);

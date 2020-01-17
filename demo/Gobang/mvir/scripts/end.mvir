@@ -1,6 +1,6 @@
 import {{starlab}}.TheFive;
 
-main(){
-    TheFive.quit();
+main(receiver: address){
+    TheFive.quit(move(receiver));
     return;
 }
