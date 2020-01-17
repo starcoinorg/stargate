@@ -39,5 +39,15 @@ https://download.developer.apple.com/Developer_Tools/Command_Line_Tools_macOS_10
 或者直接升级操作系统版本到Catalina也可以解决。
 ```
 
+#### failed to build croaring-sys
 
+```
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/11.0.0/include/avx512fintrin.h:966:10: error: invalid conversion between vector type '__m512d' (vector of 8 'double' values) and integer type 'int' of different size, err: true
+```
 
+* 解决办法:
+
+```
+brew uninstall llvm
+or other version,such as llvm@4
+```
