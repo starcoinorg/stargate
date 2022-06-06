@@ -10,7 +10,7 @@ futures = "0.1.28"
 grpcio = { version = "=0.5.0-alpha.4", default-features = false, features = ["prost-codec"] }
 proptest = { version = "0.9.2", optional = true }
 proptest-derive = { version = "0.1.0", optional = true }
-prost = "0.5.0"
+prost = "0.6.1"
 protobuf = "2.7"
 
 libra-crypto = { path = "../../libra/crypto/crypto", version = "0.1.0" }

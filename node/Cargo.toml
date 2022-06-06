@@ -34,7 +34,7 @@ router = { path = "../router" }
 ant = { path = "../router/ant" }
 stats = { path = "../router/stats" }
 
-prost = "0.5.0"
+prost = "0.6.1"
 anyhow = "1.0"
 node_internal = { path = "./node_internal" }
 env_logger = { version = "0.6" }
