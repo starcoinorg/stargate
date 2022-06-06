@@ -12,7 +12,7 @@ futures = { version = "=0.3.0-alpha.19", package = "futures-preview", features =
 bincode = "1.1.1"
 grpcio = { version = "=0.5.0-alpha.4", default-features = false, features = ["prost-codec"] }
 hex = "0.3.2"
-hyper = "0.12.33"
+hyper = "0.14.3"
 itertools = "0.8.0"
 rustyline = "4.1.0"
 tokio = { version = "0.2", features = ["full"] }
