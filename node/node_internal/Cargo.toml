@@ -30,7 +30,7 @@ router = { path = "../../router" }
 stats = { path = "../../router/stats" }
 
 libra-crypto = { path = "../../libra/crypto/crypto"}
-prost = "0.5.0"
+prost = "0.6.1"
 anyhow = "1.0"
 hex = { version = "0.3.2", default-features = false }
 lcs = { path = "../../libra/common/lcs", package = "libra-canonical-serialization" }

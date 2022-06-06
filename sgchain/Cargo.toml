@@ -9,7 +9,7 @@ edition = "2018"
 
 [dependencies]
 grpcio = { version = "=0.5.0-alpha.4", default-features = false, features = ["prost-codec"] }
-prost = "0.5.0"
+prost = "0.6.1"
 libra-prost-ext = { path = "../libra/common/prost-ext" }
 protobuf = "2.7"
 grpc-helpers = { path = "../libra/common/grpc-helpers" }
